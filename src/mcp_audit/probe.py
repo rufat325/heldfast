@@ -163,8 +163,18 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
     except (OSError, subprocess.TimeoutExpired):
         try:
             proc.kill()
-        except OSError:
+            proc.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
             pass
+    # Close the pipes explicitly. A scan probes every configured server in
+    # turn, so leaked descriptors accumulate across a run rather than being
+    # reclaimed between them.
+    for stream in (proc.stdin, proc.stdout, proc.stderr):
+        if stream is not None:
+            try:
+                stream.close()
+            except OSError:
+                pass
 
     if timed_out:
         detail = f"; stderr: {stderr_tail[-1]}" if stderr_tail else ""

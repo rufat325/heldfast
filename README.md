@@ -46,6 +46,7 @@ mcp-audit scan --no-user-configs .         # project only, ignore ~/ configs
 mcp-audit scan --probe                     # also read live tool descriptions
 mcp-audit approve --probe                  # write .mcp-audit.lock
 mcp-audit rules                            # list the rules
+mcp-audit serve                            # run as an MCP server
 ```
 
 It finds configuration for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed, and Cline, on Windows, macOS, and Linux, plus `SKILL.md` files in the scanned tree.
@@ -120,6 +121,43 @@ Suppressed findings are reported as a count — with `-v`, individually, naming 
 | MCPA018 | high | Semantic classifier flagged agent-facing text (opt-in, `--llm`) |
 
 `MCPA010` distinguishes tool descriptions from skill bodies. A `SKILL.md` is *supposed* to instruct the agent, so imperative mood there is normal and is not flagged; in a tool description it is anomalous. Without that distinction the scanner is unusable on any real skills directory.
+
+## Use it from an agent
+
+`mcp-audit serve` runs the scanner *as* an MCP server, so an agent can check a
+configuration before a human installs it:
+
+```json
+{
+  "mcpServers": {
+    "mcp-audit": { "command": "mcp-audit", "args": ["serve"] }
+  }
+}
+```
+
+Then: *"Here's an MCP server config I found in a README - is it safe to install?"*
+
+Three tools: `check_config` analyzes configuration supplied as JSON text without
+writing it anywhere, `list_rules` returns the catalog, `explain_rule` describes one
+check.
+
+The server is deliberately narrow, because a tool an agent can call is a tool an
+attacker who controls the agent can call:
+
+- Every tool is read-only analysis. Nothing writes, deletes, or executes.
+- **Probing is not exposed at all.** `--probe` launches local processes, and
+  reaching that over a tool call would turn "an agent read a web page" into "an
+  agent started a process". The CLI keeps that capability; the server does not.
+- Path scanning is off unless a deployment sets `MCP_AUDIT_ALLOW_PATH_SCAN`, since
+  an agent that can scan arbitrary paths can use findings as a filesystem oracle.
+- Unparseable input raises rather than returning zero findings - "0 findings" for a
+  config nothing could read is a clean bill of health that was never earned.
+- Findings pass the same redaction chokepoint as every other output.
+
+The tool descriptions are written the way this scanner would want to read them: no
+imperatives aimed at the agent, no mandated side effects. A test asserts that
+`mcp-audit`'s own server passes `mcp-audit`'s own rules, because a scanner whose
+server fails its own checks has no business reporting on anyone else's.
 
 ## The semantic tier (`--llm`)
 

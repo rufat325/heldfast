@@ -102,6 +102,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_scan_arguments(approve)
 
     sub.add_parser("rules", help="list the built-in rules")
+
+    sub.add_parser(
+        "serve",
+        help="run mcp-audit as an MCP server over stdio",
+        description=(
+            "Expose the scanner's analysis over MCP so an agent can check a server "
+            "configuration before a human installs it. Read-only: no probing, and "
+            "path scanning only when MCP_AUDIT_ALLOW_PATH_SCAN is set."
+        ),
+    )
     return parser
 
 
@@ -326,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     argv = list(sys.argv[1:] if argv is None else argv)
     # Make `scan` the default command so bare `mcp-audit` and `mcp-audit .` work.
-    known = {"scan", "approve", "rules"}
+    known = {"scan", "approve", "rules", "serve"}
     if not argv or (argv[0] not in known and not argv[0].startswith("-")):
         argv = ["scan", *argv]
     elif argv and argv[0].startswith("-") and argv[0] not in ("-h", "--help", "--version"):
@@ -338,6 +348,9 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_approve(args)
         if args.command == "rules":
             return cmd_rules(args)
+        if args.command == "serve":
+            from .server import main as serve_main
+            return serve_main()
         return cmd_scan(args)
     except KeyboardInterrupt:
         print("\nmcp-audit: interrupted", file=sys.stderr)
