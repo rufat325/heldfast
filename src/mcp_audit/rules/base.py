@@ -17,6 +17,9 @@ class AuditContext:
     config_errors: list[str] = field(default_factory=list)
     # Populated by the lockfile stage; rules for rug-pull detection read it.
     lock: dict[str, Any] = field(default_factory=dict)
+    # Populated by the optional --llm stage, keyed by target label. Empty
+    # unless the classifier ran, so MCPA018 stays silent by default.
+    llm_verdicts: dict[str, Any] = field(default_factory=dict)
     options: dict[str, Any] = field(default_factory=dict)
 
 

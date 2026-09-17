@@ -321,3 +321,73 @@ def skill_permissions(ctx: AuditContext) -> Iterable[Finding]:
                 cwe=["CWE-269"],
                 tags=["skills", "permissions"],
             )
+
+
+# Severity for a model verdict. A classifier is a heuristic tier, so even a
+# confident "malicious" never reaches the certainty of a deterministic match.
+_VERDICT_SEVERITY = {
+    ("malicious", True): Severity.CRITICAL,
+    ("malicious", False): Severity.HIGH,
+    ("suspicious", True): Severity.MEDIUM,
+    ("suspicious", False): Severity.MEDIUM,
+}
+
+
+@rule("MCPA018", "Semantic classifier flagged agent-facing text", Severity.HIGH)
+def llm_semantic(ctx: AuditContext) -> Iterable[Finding]:
+    """Model-judged poisoning: paraphrase, logic drift, implicit exfiltration."""
+    verdicts = ctx.llm_verdicts
+    if not verdicts:
+        return
+    by_label = {t.label: t for t in _targets(ctx)}
+
+    for label, v in sorted(verdicts.items()):
+        verdict = getattr(v, "verdict", None)
+        if verdict not in ("suspicious", "malicious"):
+            continue
+        tgt = by_label.get(label)
+        confidence = min(float(getattr(v, "confidence", 0.5)), 0.95)
+        severity = _VERDICT_SEVERITY[(verdict, confidence >= 0.8)]
+        quote = (getattr(v, "quote", "") or "").strip()
+        reasoning = (getattr(v, "reasoning", "") or "").strip()
+
+        evidence = f"{label}: [{getattr(v, 'category', 'none')}] {reasoning}"
+        if quote:
+            evidence += f"\n      quoted: {quote[:160]!r}"
+
+        yield Finding(
+            rule_id="MCPA018",
+            title=f"Semantic classifier flagged agent-facing text ({verdict})",
+            severity=severity,
+            location=(Location(path=tgt.path, line=tgt.anchor, snippet=quote[:200])
+                      if tgt else Location(path="", line=0, snippet=quote[:200])),
+            evidence=evidence,
+            remediation=(
+                "Read the full text yourself before acting. This finding comes from a "
+                "model judging the text, not from a deterministic match, so treat it as "
+                "a prompt to review rather than a verdict. If the text is legitimate, "
+                "suppress MCPA018 for this server and record why."
+            ),
+            server=tgt.server if tgt else None,
+            atlas=["AML.T0051.001", "AML.T0053"],
+            cwe=["CWE-77"],
+            confidence=confidence,
+            tags=["poisoning", "llm", str(getattr(v, "category", "none"))],
+        )
+
+
+def classifier_targets(ctx: AuditContext, min_chars: int = 40) -> list[tuple[str, str]]:
+    """(label, text) pairs worth sending to the semantic classifier.
+
+    Tool descriptions come first: they are the surface nobody reviews, and if
+    a run hits its item cap that is where the budget should go. Very short
+    texts are skipped -- the blatant one-liners are already the regex tier's
+    job, and the classifier earns its cost on nuance, which needs length.
+    """
+    tools, skills = [], []
+    for t in _targets(ctx):
+        text = t.text.strip()
+        if len(text) < min_chars:
+            continue
+        (tools if t.kind.startswith("tool") else skills).append((t.label, text))
+    return tools + skills

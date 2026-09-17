@@ -14,7 +14,8 @@ from .model import ServerSpec, SkillSpec, ToolSpec
 from .parsers import discover_skills, parse_config
 from .probe import probe
 from .report import render_json, render_sarif, render_terminal
-from .rules import AuditContext, all_rules, run_rules
+from .rules import AuditContext, all_rules, classifier_targets, run_rules
+from . import llm as llm_mod
 from . import suppressions as supp
 
 EXIT_OK = 0
@@ -74,6 +75,24 @@ def build_parser() -> argparse.ArgumentParser:
                       help=f"suppression file (default: ./{supp.DEFAULT_IGNORE_NAME} if present)")
     scan.add_argument("--no-ignore", action="store_true",
                       help="ignore the suppression file and report everything")
+    llm_group = scan.add_argument_group(
+        "semantic classifier (optional)",
+        "Sends tool descriptions and skill text to the Anthropic API for judgement. "
+        "Needs: pip install 'mcp-audit[llm]' and ANTHROPIC_API_KEY.",
+    )
+    llm_group.add_argument("--llm", action="store_true",
+                           help="enable MCPA018. NOTE: this transmits agent-facing text "
+                                "off this machine (credentials are redacted first)")
+    llm_group.add_argument("--llm-model", default=llm_mod.DEFAULT_MODEL, metavar="MODEL")
+    llm_group.add_argument("--llm-effort", default=llm_mod.DEFAULT_EFFORT,
+                           choices=("low", "medium", "high", "xhigh", "max"))
+    llm_group.add_argument("--llm-max-items", type=int, default=50, metavar="N",
+                           help="maximum classifications per run (default: 50)")
+    llm_group.add_argument("--llm-cache", metavar="PATH", default=None,
+                           help=f"verdict cache (default: ./{llm_mod.CACHE_NAME}; "
+                                "unchanged text is never re-sent)")
+    llm_group.add_argument("--no-llm-cache", action="store_true",
+                           help="do not read or write the verdict cache")
 
     approve = sub.add_parser(
         "approve",
@@ -181,6 +200,30 @@ def cmd_scan(args: argparse.Namespace) -> int:
         lock={"servers": lock.servers, "skills": lock.skills},
         options={"probed": data.probed},
     )
+    if getattr(args, "llm", False):
+        targets = classifier_targets(ctx)
+        if targets:
+            cache_path = None
+            if not args.no_llm_cache:
+                cache_path = Path(args.llm_cache) if args.llm_cache else Path.cwd() / llm_mod.CACHE_NAME
+            print(
+                f"mcp-audit: --llm will send up to {min(len(targets), args.llm_max_items)} "
+                f"text(s) to the Anthropic API ({args.llm_model}).\n"
+                "           Credentials are redacted first; cached verdicts are not re-sent.",
+                file=sys.stderr,
+            )
+            try:
+                llm_result = llm_mod.classify(
+                    targets, model=args.llm_model, effort=args.llm_effort,
+                    cache_path=cache_path, max_items=args.llm_max_items,
+                    verbose=args.verbose,
+                )
+            except llm_mod.LLMUnavailable as exc:
+                print(f"mcp-audit: {exc}", file=sys.stderr)
+                return EXIT_ERROR
+            ctx.llm_verdicts = llm_result.verdicts
+            data.errors.extend(llm_result.errors)
+
     findings: list[Finding] = run_rules(ctx, enabled=only, disabled=disabled)
 
     floor = Severity.parse(args.min_severity)

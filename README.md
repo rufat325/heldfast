@@ -10,7 +10,7 @@ uvx mcp-audit                 # later: find out what changed behind your back
 
 ## The problem this exists for
 
-Most scanners answer **"is this config dangerous?"** — they read your MCP configuration, pattern-match it, and print warnings. That is worth doing, and `mcp-audit` does it: seventeen rules covering shell invocation, unpinned packages, typosquats, plaintext credentials, cleartext transports, and unauthenticated endpoints.
+Most scanners answer **"is this config dangerous?"** — they read your MCP configuration, pattern-match it, and print warnings. That is worth doing, and `mcp-audit` does it: thirteen static rules covering shell invocation, unpinned packages, typosquats, plaintext credentials, cleartext transports, and unauthenticated endpoints.
 
 But it is the wrong question on its own, because a tool description is not part of your config. It lives on the server, it is injected verbatim into your agent's context, and the server can change it at any time without touching a single byte on your disk.
 
@@ -117,8 +117,35 @@ Suppressed findings are reported as a count — with `-v`, individually, naming 
 | MCPA015 | critical | **Tool definition changed since approval** |
 | MCPA016 | high | Server launch command changed since approval |
 | MCPA017 | high | Skill content changed since approval |
+| MCPA018 | high | Semantic classifier flagged agent-facing text (opt-in, `--llm`) |
 
 `MCPA010` distinguishes tool descriptions from skill bodies. A `SKILL.md` is *supposed* to instruct the agent, so imperative mood there is normal and is not flagged; in a tool description it is anomalous. Without that distinction the scanner is unusable on any real skills directory.
+
+## The semantic tier (`--llm`)
+
+The regex rules catch known phrasings. They cannot catch a paraphrase, a description whose prose contradicts its own schema, or an appeal to authority aimed at the agent — the class that published MCP threat taxonomies consistently find least covered by existing tooling.
+
+```bash
+pip install 'mcp-audit[llm]'
+export ANTHROPIC_API_KEY=...
+mcp-audit scan . --probe --llm
+```
+
+The `anthropic` SDK is an optional extra, so the scanner everyone else installs stays dependency-free.
+
+**This tier sends data off your machine.** Credentials are redacted before transmission, verdicts are cached by content hash so unchanged text is never re-sent, `--llm-max-items` caps spend, and the CLI states what is being sent before it sends it. Findings land as MCPA018 with the model's own confidence, capped below certainty and tagged `llm` so you can filter or suppress them separately from the deterministic rules.
+
+### Classifying adversarial text safely
+
+This component reads text that is adversarial by construction — and puts it in front of an LLM. The defenses are structural rather than advisory:
+
+- Untrusted text is fenced with a **per-request random nonce**, so content cannot forge the closing delimiter and escape its region.
+- The classification directive comes **after** the fenced block, so injected text cannot position itself as the last instruction.
+- The system prompt states that fenced content is data under analysis, and that an instruction found inside it is *evidence for a malicious verdict*, not a command to follow.
+- Output is constrained to a **closed JSON schema**, so even a fully successful injection can only produce a wrong verdict — never arbitrary output, never a tool call.
+- **One item per request.** Batching adversarial texts would let a poisoned description influence the verdict on its neighbours.
+
+None of this makes the classifier unfoolable. It means a successful attack degrades to a wrong answer rather than to control of the scanner.
 
 ## Probing, honestly
 
@@ -138,6 +165,7 @@ The tradeoff is real and unavoidable: tool descriptions are the highest-value th
 - It does not execute tools, only `initialize` and `tools/list`.
 - It cannot tell you a tool description is malicious, only that it is *anomalous* or *changed*. Findings below 100% confidence are heuristics and are labeled as such.
 - Its typosquat baseline is a static list of well-known packages, so it will miss impersonations of servers it has never heard of.
+- The `--llm` tier is a judgement, not a proof. It will disagree with itself across runs on borderline text, and it can be fooled; treat MCPA018 as a prompt to read the text yourself.
 - `MCPA006` is POSIX-only; Windows ACLs are not evaluated.
 
 ## Design notes
