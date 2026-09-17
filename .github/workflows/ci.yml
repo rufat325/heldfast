@@ -39,6 +39,61 @@ jobs:
       - name: Verify the classifier request shape
         run: python -m unittest tests.test_wire_shape -v
 
+  # Exercises action.yml itself. Nothing else in this repo runs it, and an
+  # action that has never executed is an action that does not work.
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate fixtures
+        run: python tests/fixtures/make_fixtures.py
+
+      - name: Run against a clean tree
+        id: clean
+        uses: ./
+        with:
+          path: tests/fixtures/clean
+          format: json
+          output: clean.json
+          upload-sarif: "false"
+          fail-on: high
+
+      - name: Clean tree must report nothing
+        env:
+          FINDINGS: ${{ steps.clean.outputs.findings }}
+          HIGHEST: ${{ steps.clean.outputs.highest-severity }}
+        run: |
+          test "$FINDINGS" = "0" || { echo "expected 0 findings, got $FINDINGS"; exit 1; }
+          test "$HIGHEST" = "none" || { echo "expected none, got $HIGHEST"; exit 1; }
+          test -f clean.json || { echo "report file was not written"; exit 1; }
+          echo "clean tree passed and wrote its report"
+
+      - name: Run against a vulnerable tree
+        id: vuln
+        continue-on-error: true
+        uses: ./
+        with:
+          path: tests/fixtures/vulnerable
+          format: sarif
+          output: vuln.sarif
+          upload-sarif: "false"
+          fail-on: high
+
+      - name: Gate must have failed, and the SARIF must still exist
+        env:
+          OUTCOME: ${{ steps.vuln.outcome }}
+          FINDINGS: ${{ steps.vuln.outputs.findings }}
+          HIGHEST: ${{ steps.vuln.outputs.highest-severity }}
+        run: |
+          test "$OUTCOME" = "failure" || { echo "gate did not fire on a vulnerable tree"; exit 1; }
+          test "$HIGHEST" = "critical" || { echo "expected critical, got $HIGHEST"; exit 1; }
+          test -f vuln.sarif || { echo "a failing gate must still leave the report"; exit 1; }
+          python -c "import json;d=json.load(open('vuln.sarif'));assert d['version']=='2.1.0';print(len(d['runs'][0]['results']),'SARIF results')"
+          echo "gate fired correctly with $FINDINGS finding(s)"
+
   self-scan:
     runs-on: ubuntu-latest
     permissions:

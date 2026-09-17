@@ -37,6 +37,10 @@ inputs:
     description: "Upload the SARIF report to GitHub code scanning"
     required: false
     default: "true"
+  python-version:
+    description: "Python version used to run the scanner"
+    required: false
+    default: "3.12"
 
 outputs:
   findings:
@@ -45,6 +49,9 @@ outputs:
   highest-severity:
     description: "Highest severity observed, or 'none'"
     value: ${{ steps.scan.outputs.highest-severity }}
+  report:
+    description: "Path to the written report file"
+    value: ${{ steps.scan.outputs.report }}
 
 runs:
   using: "composite"
@@ -52,33 +59,69 @@ runs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.12"
+        python-version: ${{ inputs.python-version }}
 
     - name: Install mcp-audit
       shell: bash
-      run: python -m pip install --disable-pip-version-check --quiet "${{ github.action_path }}"
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: python -m pip install --disable-pip-version-check --quiet "$ACTION_PATH"
 
     - name: Scan
       id: scan
       shell: bash
+      # Every input is passed through the environment rather than interpolated
+      # into the script body. A ${{ }} expansion inside `run:` is textual
+      # substitution before bash ever sees it, which makes any input that can
+      # carry a quote a shell injection. That is worth avoiding anywhere; in a
+      # security tool's own action it is not optional.
+      env:
+        IN_PATH: ${{ inputs.path }}
+        IN_FORMAT: ${{ inputs.format }}
+        IN_OUTPUT: ${{ inputs.output }}
+        IN_PROBE: ${{ inputs.probe }}
+        IN_USER_CONFIGS: ${{ inputs.scan-user-configs }}
       run: |
-        set -uo pipefail
-        args=(scan "${{ inputs.path }}" --format "${{ inputs.format }}" --output "${{ inputs.output }}")
-        [ "${{ inputs.probe }}" = "true" ] && args+=(--probe)
-        [ "${{ inputs.scan-user-configs }}" = "true" ] || args+=(--no-user-configs)
+        set -euo pipefail
 
-        # Always produce the report; decide pass/fail from the JSON summary so
-        # a failing job still uploads its findings.
-        python -m mcp_audit "${args[@]}" --fail-on never
-        python -m mcp_audit scan "${{ inputs.path }}" --format json --output .mcp-audit-summary.json \
-          $([ "${{ inputs.scan-user-configs }}" = "true" ] || echo --no-user-configs) \
-          --fail-on never
+        # One flag set, used by every invocation below. The previous version
+        # built different flags for the report, the summary and the gate, so a
+        # finding that needed --probe was reported but never enforced.
+        common=(scan "$IN_PATH")
+        if [ "$IN_PROBE" = "true" ]; then
+          common+=(--probe)
+        fi
+        if [ "$IN_USER_CONFIGS" != "true" ]; then
+          common+=(--no-user-configs)
+        fi
 
-        total=$(python -c "import json;print(json.load(open('.mcp-audit-summary.json'))['summary']['total'])")
-        highest=$(python -c "import json;d=json.load(open('.mcp-audit-summary.json'));print(d['summary']['highest'] if d['summary']['total'] else 'none')")
-        echo "findings=$total" >> "$GITHUB_OUTPUT"
-        echo "highest-severity=$highest" >> "$GITHUB_OUTPUT"
-        echo "mcp-audit: $total finding(s), highest severity: $highest"
+        summary="$RUNNER_TEMP/mcp-audit-summary.json"
+        mcp-audit "${common[@]}" --format json --output "$summary" --fail-on never
+
+        if [ "$IN_FORMAT" = "json" ]; then
+          cp "$summary" "$IN_OUTPUT"
+        else
+          mcp-audit "${common[@]}" --format "$IN_FORMAT" --output "$IN_OUTPUT" --fail-on never
+        fi
+
+        total=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['summary']['total'])" "$summary")
+        highest=$(python -c "import json,sys;d=json.load(open(sys.argv[1]))['summary'];print(d['highest'] if d['total'] else 'none')" "$summary")
+
+        {
+          echo "findings=$total"
+          echo "highest-severity=$highest"
+          echo "report=$IN_OUTPUT"
+        } >> "$GITHUB_OUTPUT"
+
+        # Print the findings into the log. A report written only to a file is
+        # a report nobody reads.
+        mcp-audit "${common[@]}" --format text --fail-on never --no-color || true
+
+        {
+          echo "### mcp-audit"
+          echo ""
+          echo "\`$total\` finding(s), highest severity: \`$highest\`"
+        } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Upload SARIF
       if: ${{ inputs.upload-sarif == 'true' && inputs.format == 'sarif' && hashFiles(inputs.output) != '' }}
@@ -90,7 +133,28 @@ runs:
     - name: Enforce threshold
       if: ${{ inputs.fail-on != 'never' }}
       shell: bash
+      env:
+        IN_FAIL_ON: ${{ inputs.fail-on }}
+        FINDINGS: ${{ steps.scan.outputs.findings }}
+        HIGHEST: ${{ steps.scan.outputs.highest-severity }}
+      # Decided from the scan that already ran, so the gate enforces exactly
+      # what the report showed. Re-scanning here would be a third pass and
+      # could disagree with the artifact that was just uploaded.
       run: |
-        python -m mcp_audit scan "${{ inputs.path }}" \
-          $([ "${{ inputs.scan-user-configs }}" = "true" ] || echo --no-user-configs) \
-          --fail-on "${{ inputs.fail-on }}" --format text
+        set -euo pipefail
+        python - <<'EOF'
+        import os, sys
+        order = ["info", "low", "medium", "high", "critical"]
+        threshold = os.environ["IN_FAIL_ON"]
+        highest = os.environ["HIGHEST"]
+        total = int(os.environ["FINDINGS"] or 0)
+        if total == 0 or highest == "none":
+            print("mcp-audit: no findings")
+            sys.exit(0)
+        if order.index(highest) >= order.index(threshold):
+            print(f"mcp-audit: {total} finding(s); highest '{highest}' "
+                  f"meets or exceeds the '{threshold}' threshold")
+            sys.exit(1)
+        print(f"mcp-audit: {total} finding(s); highest '{highest}' is below "
+              f"the '{threshold}' threshold")
+        EOF
