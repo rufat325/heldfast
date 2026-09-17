@@ -186,6 +186,12 @@ python -m unittest discover -s tests -v
 
 The fixtures are generated rather than checked in because several contain invisible Unicode, which does not survive editors, diffs, or code review — which is of course exactly why it is worth testing.
 
+The `--llm` request shape is verified against the real Anthropic SDK without
+spending anything: `tests/test_wire_shape.py` points the SDK at a local stub
+server via `base_url`, so a genuine request is built and serialized and the
+assertions run on the bytes that would have been sent. Install the extra to
+run them (`pip install '.[llm]'`); they skip otherwise.
+
 `tests/fixtures/fake_server.py` is a minimal MCP server that rewrites its own tool descriptions when `MCP_AUDIT_FIXTURE_MODE=poisoned`, so the drift path can be exercised end to end:
 
 ```bash
