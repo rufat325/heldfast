@@ -1,20 +1,24 @@
 # mcp-audit
 
-A security scanner for MCP server configurations and agent skills. Zero runtime dependencies.
+Security scanner for MCP server configs and agent skills. No runtime dependencies.
 
 ```bash
-uvx mcp-audit                 # scan everything this machine has configured
-uvx mcp-audit approve --probe # record what you reviewed
-uvx mcp-audit                 # later: find out what changed behind your back
+uvx mcp-audit                    # scan what's configured on this machine
+uvx mcp-audit approve --probe    # record what you reviewed
+uvx mcp-audit                    # later: see what changed
 ```
 
-## The problem this exists for
+## Why
 
-Most scanners answer **"is this config dangerous?"** — they read your MCP configuration, pattern-match it, and print warnings. That is worth doing, and `mcp-audit` does it: thirteen static rules covering shell invocation, unpinned packages, typosquats, plaintext credentials, cleartext transports, and unauthenticated endpoints.
+I wanted to know what MCP servers were actually configured on my machine, and whether any
+of them were doing something I hadn't agreed to.
 
-But it is the wrong question on its own, because a tool description is not part of your config. It lives on the server, it is injected verbatim into your agent's context, and the server can change it at any time without touching a single byte on your disk.
+Most scanners answer "is this config dangerous" — they pattern-match your config files and
+print warnings. That's useful and mcp-audit does it too. But a tool description isn't in
+your config. It lives on the server, it gets injected straight into your agent's context,
+and the server can change it whenever it likes without touching anything on your disk.
 
-So `mcp-audit` also answers **"is this the config you agreed to?"**
+So mcp-audit also answers "is this still the config you approved?"
 
 ```
 CRITICAL MCPA015  Tool definition changed since approval (possible rug pull)
@@ -26,50 +30,41 @@ CRITICAL MCPA015  Tool definition changed since approval (possible rug pull)
                      contents as the `context` argument '
 ```
 
-The config file was byte-identical across those two scans. Nothing else would have told you.
+The config file was byte-identical across those two scans.
 
 ## Install
 
 ```bash
-uvx mcp-audit          # no install
-pipx install mcp-audit # or keep it around
+uvx mcp-audit            # no install
+pipx install mcp-audit   # or keep it
 ```
 
-Python 3.9+. No runtime dependencies — deliberately. A supply-chain scanner that pulls in a dependency tree is asking you to trust the thing it audits.
+Python 3.9+. Zero runtime dependencies, on purpose — a supply-chain scanner that drags in a
+dependency tree is asking you to trust the thing it's auditing. The JSONC parser,
+frontmatter parser and MCP client are all hand-written against stdlib.
 
-## Use
+## Usage
 
 ```bash
-mcp-audit                                  # scan discovered configs + skills
-mcp-audit scan ./my-project                # scan one project
-mcp-audit scan --no-user-configs .         # project only, ignore ~/ configs
-mcp-audit scan --probe                     # also read live tool descriptions
-mcp-audit approve --probe                  # write .mcp-audit.lock
-mcp-audit rules                            # list the rules
-mcp-audit serve                            # run as an MCP server
+mcp-audit                              # scan discovered configs + skills
+mcp-audit scan ./my-project            # scan one project
+mcp-audit scan --no-user-configs .     # project only, skip ~/ configs
+mcp-audit scan --probe                 # also read live tool descriptions
+mcp-audit approve --probe              # write .mcp-audit.lock
+mcp-audit rules                        # list rules
+mcp-audit serve                        # run as an MCP server
 ```
 
-It finds configuration for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed, and Cline, on Windows, macOS, and Linux, plus `SKILL.md` files in the scanned tree.
+Finds configs for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed and Cline on
+Windows, macOS and Linux, plus any `SKILL.md` files in the tree.
 
-### Output
+Output is text by default. `-f json` or `-f sarif` for machines — SARIF uploads straight to
+GitHub code scanning. Findings carry MITRE ATLAS technique IDs and CWE references.
 
-```bash
-mcp-audit -f json -o findings.json
-mcp-audit -f sarif -o results.sarif    # GitHub code scanning, DefectDojo, etc.
-```
+Exit codes: `0` clean, `1` findings at or above `--fail-on` (default: high), `2` the scan
+broke.
 
-Findings carry MITRE ATLAS technique IDs and CWE references, so the report drops into an existing threat model rather than being one more bespoke scanner format.
-
-### In CI
-
-```yaml
-- uses: your-org/mcp-audit@v1
-  with:
-    path: .
-    fail-on: high
-```
-
-Or directly:
+### CI
 
 ```yaml
 - run: uvx mcp-audit scan . --no-user-configs -f sarif -o results.sarif --fail-on never
@@ -78,54 +73,58 @@ Or directly:
     sarif_file: results.sarif
 ```
 
-Exit codes: `0` nothing at or above the threshold, `1` findings at or above it, `2` the scan could not complete.
+There's a composite action in `action.yml` too.
 
-### Suppressing a finding
+### Suppressing things
 
-Some rules are deliberately heuristic. `MCPA008` cannot tell a genuinely open endpoint from one that negotiates OAuth at connect time, and telling someone to live with a permanent false positive is how a scanner gets removed from CI.
-
-Create `.mcp-audit-ignore`:
+Some rules are heuristics. MCPA008 can't tell an actually-open endpoint from one that does
+OAuth at connect time, and making people live with a permanent false positive is how a
+scanner gets deleted from CI. So: `.mcp-audit-ignore`
 
 ```
-# The partner endpoint negotiates OAuth at connect time, so MCPA008
-# cannot see its authentication. Reviewed 2026-09-17.
+# partner endpoint does OAuth at connect time, MCPA008 can't see it
 MCPA008 open-endpoint
 
-MCPA003              # suppress this rule everywhere
-MCPA007 internal-*   # server name globs are allowed
+MCPA003              # everywhere
+MCPA007 internal-*   # globs work
 ```
 
-Suppressed findings are reported as a count — with `-v`, individually, naming the line that suppressed them — and appear in the JSON report under `suppressed` with a `suppressed_by` block. They are never silently dropped, because a reviewer has to be able to see what was excluded and why. `--no-ignore` reports everything.
+Suppressed findings still show up as a count, and with `-v` you get each one plus the line
+that suppressed it. They're never silently dropped — you should be able to see what got
+excluded. `--no-ignore` turns it off.
 
 ## Rules
 
-| Rule | Severity | What it catches |
+| Rule | Severity | What |
 |---|---|---|
-| MCPA001 | high | Server launched through a shell interpreter |
-| MCPA002 | critical | Startup command pipes a network fetch into an interpreter |
-| MCPA003 | medium | Package executed with no pinned version |
+| MCPA001 | high | Server launched through a shell |
+| MCPA002 | critical | Startup pipes a network fetch into an interpreter |
+| MCPA003 | medium | Package run with no pinned version |
 | MCPA004 | high | Package name is a near-miss of an official MCP server |
-| MCPA005 | high | Credential sitting in plaintext in agent config |
-| MCPA006 | medium | Config holding a credential is readable by other users (POSIX) |
-| MCPA007 | high | Remote server reached over cleartext HTTP |
-| MCPA008 | medium | Remote endpoint with no authentication configured |
-| MCPA009 | high | Server bound to all network interfaces |
+| MCPA005 | high | Credential sitting in plaintext in config |
+| MCPA006 | medium | Config with credentials is group/world readable (POSIX) |
+| MCPA007 | high | Remote server over cleartext HTTP |
+| MCPA008 | medium | Remote endpoint with no auth configured |
+| MCPA009 | high | Server bound to 0.0.0.0 |
 | MCPA010 | critical | Agent-directed instruction in a tool description or skill |
 | MCPA011 | high | Invisible characters in agent-facing text |
 | MCPA012 | high | Credential path referenced in agent-facing text |
-| MCPA013 | medium | Skill requests broad or dangerous tool permissions |
-| MCPA014 | medium | Server absent from the approval lockfile |
-| MCPA015 | critical | **Tool definition changed since approval** |
+| MCPA013 | medium | Skill asks for broad or dangerous tool permissions |
+| MCPA014 | medium | Server not in the approval lockfile |
+| MCPA015 | critical | Tool definition changed since approval |
 | MCPA016 | high | Server launch command changed since approval |
 | MCPA017 | high | Skill content changed since approval |
-| MCPA018 | high | Semantic classifier flagged agent-facing text (opt-in, `--llm`) |
+| MCPA018 | high | LLM classifier flagged agent-facing text (opt-in) |
 
-`MCPA010` distinguishes tool descriptions from skill bodies. A `SKILL.md` is *supposed* to instruct the agent, so imperative mood there is normal and is not flagged; in a tool description it is anomalous. Without that distinction the scanner is unusable on any real skills directory.
+MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *supposed* to
+give the agent instructions, so imperative mood there is normal. In a tool description it
+isn't. Without that split the scanner fires constantly on any real skills directory and
+becomes useless.
 
-## Use it from an agent
+## Using it from an agent
 
-`mcp-audit serve` runs the scanner *as* an MCP server, so an agent can check a
-configuration before a human installs it:
+`mcp-audit serve` runs the scanner as an MCP server, so you can ask your agent to check a
+config before you install it:
 
 ```json
 {
@@ -135,33 +134,29 @@ configuration before a human installs it:
 }
 ```
 
-Then: *"Here's an MCP server config I found in a README - is it safe to install?"*
+Then: *"here's a server config I found in a README, is it safe to install?"*
 
-Three tools: `check_config` analyzes configuration supplied as JSON text without
-writing it anywhere, `list_rules` returns the catalog, `explain_rule` describes one
-check.
+Three tools — `check_config` (analyzes JSON text in memory, writes nothing), `list_rules`,
+`explain_rule`.
 
-The server is deliberately narrow, because a tool an agent can call is a tool an
-attacker who controls the agent can call:
+The server is narrower than the CLI on purpose, because a tool an agent can call is a tool
+an attacker who controls the agent can call:
 
-- Every tool is read-only analysis. Nothing writes, deletes, or executes.
-- **Probing is not exposed at all.** `--probe` launches local processes, and
-  reaching that over a tool call would turn "an agent read a web page" into "an
-  agent started a process". The CLI keeps that capability; the server does not.
-- Path scanning is off unless a deployment sets `MCP_AUDIT_ALLOW_PATH_SCAN`, since
-  an agent that can scan arbitrary paths can use findings as a filesystem oracle.
-- Unparseable input raises rather than returning zero findings - "0 findings" for a
-  config nothing could read is a clean bill of health that was never earned.
-- Findings pass the same redaction chokepoint as every other output.
+- Read-only. Nothing writes, deletes or executes.
+- Probing isn't exposed at all. `--probe` starts local processes, and putting that behind a
+  tool call turns "agent read a web page" into "agent started a process".
+- Path scanning is off unless you set `MCP_AUDIT_ALLOW_PATH_SCAN`, since an agent that can
+  scan arbitrary paths can use findings as a filesystem oracle.
+- Input it can't parse raises an error instead of returning zero findings. "0 findings" for
+  a config nothing could read is a clean bill of health nobody earned.
 
-The tool descriptions are written the way this scanner would want to read them: no
-imperatives aimed at the agent, no mandated side effects. A test asserts that
-`mcp-audit`'s own server passes `mcp-audit`'s own rules, because a scanner whose
-server fails its own checks has no business reporting on anyone else's.
+There's a test asserting mcp-audit's own server passes mcp-audit's own rules. Writing tool
+descriptions that survive your own tool-poisoning detector turns out to be a real constraint.
 
-## The semantic tier (`--llm`)
+## The LLM tier (`--llm`)
 
-The regex rules catch known phrasings. They cannot catch a paraphrase, a description whose prose contradicts its own schema, or an appeal to authority aimed at the agent — the class that published MCP threat taxonomies consistently find least covered by existing tooling.
+The regex rules catch phrasings I thought of. They don't catch paraphrase, or a description
+whose prose contradicts its own schema, or an appeal to authority aimed at the agent.
 
 ```bash
 pip install 'mcp-audit[llm]'
@@ -169,68 +164,76 @@ export ANTHROPIC_API_KEY=...
 mcp-audit scan . --probe --llm
 ```
 
-The `anthropic` SDK is an optional extra, so the scanner everyone else installs stays dependency-free.
+The SDK is an optional extra so the default install stays dependency-free.
 
-**This tier sends data off your machine.** Credentials are redacted before transmission, verdicts are cached by content hash so unchanged text is never re-sent, `--llm-max-items` caps spend, and the CLI states what is being sent before it sends it. Findings land as MCPA018 with the model's own confidence, capped below certainty and tagged `llm` so you can filter or suppress them separately from the deterministic rules.
+**This sends data off your machine.** Credentials get redacted first, verdicts are cached by
+content hash so unchanged text is never re-sent, `--llm-max-items` caps spend, and the CLI
+tells you what it's about to send.
 
-### Classifying adversarial text safely
+The awkward part of this feature is that it reads adversarial text and then hands it to an
+LLM. So:
 
-This component reads text that is adversarial by construction — and puts it in front of an LLM. The defenses are structural rather than advisory:
+- Untrusted text is fenced with a random per-request nonce. Content can't forge the closing
+  delimiter and break out.
+- The instruction comes *after* the fenced block, so injected text can't be the last thing
+  the model reads.
+- The system prompt says an instruction found inside the fence is evidence of an attack, not
+  a command.
+- Output is a closed JSON schema, so a successful injection can produce a wrong verdict but
+  not arbitrary output, and not a tool call.
+- One item per request. Batching adversarial texts lets one contaminate the verdict on the
+  next.
 
-- Untrusted text is fenced with a **per-request random nonce**, so content cannot forge the closing delimiter and escape its region.
-- The classification directive comes **after** the fenced block, so injected text cannot position itself as the last instruction.
-- The system prompt states that fenced content is data under analysis, and that an instruction found inside it is *evidence for a malicious verdict*, not a command to follow.
-- Output is constrained to a **closed JSON schema**, so even a fully successful injection can only produce a wrong verdict — never arbitrary output, never a tool call.
-- **One item per request.** Batching adversarial texts would let a poisoned description influence the verdict on its neighbours.
+None of that makes it unfoolable. It means getting fooled costs a wrong answer instead of
+control of the scanner.
 
-None of this makes the classifier unfoolable. It means a successful attack degrades to a wrong answer rather than to control of the scanner.
+## About probing
 
-## Probing, honestly
+`--probe` reads live tool definitions. For a STDIO server that means **starting it**. If the
+server is malicious, starting it is the compromise, before any tool gets called.
 
-`--probe` reads live tool definitions. For a STDIO server that means **launching it**. If the server is malicious, the launch is the compromise — before a single tool is called.
+That's uncomfortable for a security tool, so probing is opt-in and never implied.
+`--no-stdio-probe` restricts it to remote endpoints. Everything except MCPA010-012 and
+MCPA015 works without it.
 
-That is an uncomfortable property for a security scanner, so:
+The tradeoff is unavoidable — tool descriptions are the most useful thing to look at, and
+there's no way to read them from a STDIO server without running it. If that's not acceptable
+where you are, probe in a sandbox.
 
-- probing is opt-in and never implied;
-- `--no-stdio-probe` restricts it to remote endpoints;
-- everything except `MCPA010`–`MCPA012` and `MCPA015` works without it.
+## What it doesn't do
 
-The tradeoff is real and unavoidable: tool descriptions are the highest-value thing to inspect, and there is no way to read them from a STDIO server without running it. If that is unacceptable in your environment, probe inside a sandbox.
+- No runtime blocking or proxying. It's a scanner.
+- Doesn't call tools, only `initialize` and `tools/list`.
+- Can't tell you a description is malicious, only that it's unusual or that it changed.
+  Anything below 100% confidence is a heuristic and says so.
+- Typosquat detection works off a static list of known packages, so it misses impersonations
+  of servers it hasn't heard of.
+- MCPA006 is POSIX only, no Windows ACL support.
+- `--llm` is a judgement call, not proof. It'll disagree with itself on borderline text.
 
-## What this does not do
+## Prior art
 
-- It does not sandbox, proxy, or block anything at runtime. It is a scanner.
-- It does not execute tools, only `initialize` and `tools/list`.
-- It cannot tell you a tool description is malicious, only that it is *anomalous* or *changed*. Findings below 100% confidence are heuristics and are labeled as such.
-- Its typosquat baseline is a static list of well-known packages, so it will miss impersonations of servers it has never heard of.
-- The `--llm` tier is a judgement, not a proof. It will disagree with itself across runs on borderline text, and it can be fooled; treat MCPA018 as a prompt to read the text yourself.
-- `MCPA006` is POSIX-only; Windows ACLs are not evaluated.
-
-## Design notes
-
-**Zero dependencies.** Everything is stdlib, including the JSONC parser, the YAML-subset frontmatter parser, and the MCP client. Tests run under `python -m unittest` with nothing installed.
-
-**Secrets never reach the report.** `Finding.__post_init__` scrubs every evidence and snippet string through the same credential patterns the detection rule uses. A scanner that prints discovered tokens into a CI log has manufactured the exposure it was hired to find, and making that a chokepoint rather than a convention means a new rule cannot reintroduce it.
-
-**False positives are the expensive failure.** A scanner that fires on correct configuration gets uninstalled, and then it catches nothing at all. The test suite's most load-bearing case is a clean fixture that must produce exactly zero findings.
+[snyk/agent-scan](https://github.com/snyk/agent-scan) (which absorbed Invariant Labs'
+mcp-scan) covers a lot of the same ground, with real threat intelligence behind it, and it's
+free. If you want maximum detection coverage, use that. I'd run both — they overlap, but
+mcp-audit emits SARIF, maps findings to ATLAS, has zero dependencies, and takes
+contributions.
 
 ## Development
 
 ```bash
-git clone <this repo> && cd mcp-audit
+git clone https://github.com/rufat325/mcp-audit && cd mcp-audit
 python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-The fixtures are generated rather than checked in because several contain invisible Unicode, which does not survive editors, diffs, or code review — which is of course exactly why it is worth testing.
+101 tests, stdlib unittest, nothing to install.
 
-The `--llm` request shape is verified against the real Anthropic SDK without
-spending anything: `tests/test_wire_shape.py` points the SDK at a local stub
-server via `base_url`, so a genuine request is built and serialized and the
-assertions run on the bytes that would have been sent. Install the extra to
-run them (`pip install '.[llm]'`); they skip otherwise.
+Fixtures are generated rather than committed because some contain invisible Unicode, which
+doesn't survive editors or diffs — which is exactly why it's worth testing.
 
-`tests/fixtures/fake_server.py` is a minimal MCP server that rewrites its own tool descriptions when `MCP_AUDIT_FIXTURE_MODE=poisoned`, so the drift path can be exercised end to end:
+`tests/fixtures/fake_server.py` is a small MCP server that rewrites its own tool descriptions
+when `MCP_AUDIT_FIXTURE_MODE=poisoned`, so you can watch the drift detection work:
 
 ```bash
 cd tests/fixtures/rugpull
@@ -238,6 +241,11 @@ MCP_AUDIT_FIXTURE_MODE=benign   mcp-audit approve . --probe --no-user-configs --
 MCP_AUDIT_FIXTURE_MODE=poisoned mcp-audit scan    . --probe --no-user-configs --no-skills
 ```
 
+The `--llm` request shape is tested against the real Anthropic SDK without spending
+anything: `tests/test_wire_shape.py` points the SDK at a local stub server, so a real request
+gets built and serialized and the assertions run on the bytes that would have gone out.
+Install the extra to run those; they skip otherwise.
+
 ## License
 
-Apache-2.0.
+Apache-2.0
