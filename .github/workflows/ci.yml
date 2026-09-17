@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.9", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Generate fixtures
+        run: python tests/fixtures/make_fixtures.py
+      - name: Test
+        run: python -m unittest discover -s tests -v
+
+  self-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Scan this repository
+        run: |
+          python tests/fixtures/make_fixtures.py
+          PYTHONPATH=src python -m mcp_audit scan . \
+            --no-user-configs --format sarif --output mcp-audit.sarif --fail-on never
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: mcp-audit.sarif
+          category: mcp-audit

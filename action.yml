@@ -1,0 +1,96 @@
+name: "mcp-audit"
+description: "Scan MCP server configurations and agent skills for security issues"
+author: "mcp-audit"
+branding:
+  icon: "shield"
+  color: "orange"
+
+inputs:
+  path:
+    description: "Directory or file to scan"
+    required: false
+    default: "."
+  fail-on:
+    description: "Minimum severity that fails the job (critical, high, medium, low, info, never)"
+    required: false
+    default: "high"
+  format:
+    description: "Report format written to `output` (text, json, sarif)"
+    required: false
+    default: "sarif"
+  output:
+    description: "Path for the report file"
+    required: false
+    default: "mcp-audit.sarif"
+  probe:
+    description: >-
+      Connect to servers and read live tool descriptions. This LAUNCHES local
+      STDIO servers, so leave it off unless the runner is disposable and you
+      trust the servers enough to execute them.
+    required: false
+    default: "false"
+  scan-user-configs:
+    description: "Also scan per-user config locations on the runner"
+    required: false
+    default: "false"
+  upload-sarif:
+    description: "Upload the SARIF report to GitHub code scanning"
+    required: false
+    default: "true"
+
+outputs:
+  findings:
+    description: "Total number of findings reported"
+    value: ${{ steps.scan.outputs.findings }}
+  highest-severity:
+    description: "Highest severity observed, or 'none'"
+    value: ${{ steps.scan.outputs.highest-severity }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install mcp-audit
+      shell: bash
+      run: python -m pip install --disable-pip-version-check --quiet "${{ github.action_path }}"
+
+    - name: Scan
+      id: scan
+      shell: bash
+      run: |
+        set -uo pipefail
+        args=(scan "${{ inputs.path }}" --format "${{ inputs.format }}" --output "${{ inputs.output }}")
+        [ "${{ inputs.probe }}" = "true" ] && args+=(--probe)
+        [ "${{ inputs.scan-user-configs }}" = "true" ] || args+=(--no-user-configs)
+
+        # Always produce the report; decide pass/fail from the JSON summary so
+        # a failing job still uploads its findings.
+        python -m mcp_audit "${args[@]}" --fail-on never
+        python -m mcp_audit scan "${{ inputs.path }}" --format json --output .mcp-audit-summary.json \
+          $([ "${{ inputs.scan-user-configs }}" = "true" ] || echo --no-user-configs) \
+          --fail-on never
+
+        total=$(python -c "import json;print(json.load(open('.mcp-audit-summary.json'))['summary']['total'])")
+        highest=$(python -c "import json;d=json.load(open('.mcp-audit-summary.json'));print(d['summary']['highest'] if d['summary']['total'] else 'none')")
+        echo "findings=$total" >> "$GITHUB_OUTPUT"
+        echo "highest-severity=$highest" >> "$GITHUB_OUTPUT"
+        echo "mcp-audit: $total finding(s), highest severity: $highest"
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' && inputs.format == 'sarif' && hashFiles(inputs.output) != '' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.output }}
+        category: mcp-audit
+
+    - name: Enforce threshold
+      if: ${{ inputs.fail-on != 'never' }}
+      shell: bash
+      run: |
+        python -m mcp_audit scan "${{ inputs.path }}" \
+          $([ "${{ inputs.scan-user-configs }}" = "true" ] || echo --no-user-configs) \
+          --fail-on "${{ inputs.fail-on }}" --format text
