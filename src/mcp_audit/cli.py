@@ -131,6 +131,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     explain_p.add_argument("rule_id", metavar="RULE", help="a rule id, e.g. MCPA015")
 
+    verify_p = sub.add_parser(
+        "verify-log",
+        help="check that a guard audit log has not been altered",
+        description=(
+            "Walks the hash chain written by `guard --log` and reports the first "
+            "entry that does not follow the one before it. Proves the file has not "
+            "been edited since it was written; it does not prove who wrote it."
+        ),
+    )
+    verify_p.add_argument("path", metavar="PATH", help="the log file to check")
+
     guard_p = sub.add_parser(
         "guard",
         help="proxy a server and enforce the approval lockfile at runtime",
@@ -156,6 +167,9 @@ def build_parser() -> argparse.ArgumentParser:
     guard_p.add_argument("--strict", action="store_true",
                          help="fail closed on internal errors too, not just on drift")
     guard_p.add_argument("--quiet", action="store_true", help="suppress stderr diagnostics")
+    guard_p.add_argument("--log", metavar="PATH", default=None,
+                         help="append a hash-chained record of the session to PATH "
+                              "(tool names and decisions; never arguments)")
     guard_p.add_argument("--deny-sampling", action="store_true",
                          help="refuse sampling/createMessage requests, which ask your "
                               "model to generate on the server's behalf")
@@ -181,6 +195,10 @@ def build_parser() -> argparse.ArgumentParser:
             "path scanning only when MCP_AUDIT_ALLOW_PATH_SCAN is set."
         ),
     )
+    # The command names come from the parser rather than a second list.
+    # A hardcoded set is how `verify-log` was silently treated as a path
+    # to scan for its first few minutes of existence.
+    parser.mcp_commands = set(sub.choices)
     return parser
 
 
@@ -474,7 +492,18 @@ def cmd_guard(args: argparse.Namespace) -> int:
         deny_elicitation=args.deny_elicitation,
         deny_roots=args.deny_roots,
         result_policy=args.result_policy,
+        log_path=Path(args.log) if getattr(args, "log", None) else None,
     )
+
+
+def cmd_verify_log(args: argparse.Namespace) -> int:
+    from .auditlog import verify
+
+    result = verify(args.path)
+    print(f"mcp-audit: {result.summary()}")
+    for problem in result.problems[1:]:
+        print(f"           also line {problem.line}: {problem.reason}")
+    return EXIT_OK if result.ok else EXIT_FINDINGS
 
 
 def cmd_explain(args: argparse.Namespace) -> int:
@@ -519,7 +548,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     argv = list(sys.argv[1:] if argv is None else argv)
     # Make `scan` the default command so bare `mcp-audit` and `mcp-audit .` work.
-    known = {"scan", "approve", "rules", "serve", "inspect", "explain", "guard"}
+    known = getattr(parser, "mcp_commands", set())
     if not argv or (argv[0] not in known and not argv[0].startswith("-")):
         argv = ["scan", *argv]
     elif argv and argv[0].startswith("-") and argv[0] not in ("-h", "--help", "--version"):
@@ -535,6 +564,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_rules(args)
         if args.command == "explain":
             return cmd_explain(args)
+        if args.command == "verify-log":
+            return cmd_verify_log(args)
         if args.command == "guard":
             return cmd_guard(args)
         if args.command == "serve":

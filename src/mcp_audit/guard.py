@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any
 
 from .findings import Severity
+from .auditlog import AuditLog
 from .lifetime import bind_child, posix_preexec
 from .lockfile import DEFAULT_LOCK_NAME, Lock
 from .model import ServerSpec, ToolSpec, instructions_fingerprint
@@ -479,11 +480,43 @@ class Guard:
         return ", ".join(bits)
 
 
+def _record_request(trail: AuditLog, line: str) -> None:
+    """Note what the client asked for. Never what it asked with.
+
+    `params.arguments` is where a credential or a customer's data would be, so
+    the tool's name is recorded and its arguments are not. The size is kept
+    because it is occasionally the only clue that something odd went past, and
+    a byte count discloses nothing.
+    """
+    try:
+        message = json.loads(line)
+    except (ValueError, TypeError):
+        return
+    if not isinstance(message, dict):
+        return
+    method = str(message.get("method") or "")
+    if not method:
+        return
+    params = message.get("params")
+    subject = ""
+    detail = ""
+    if method == "tools/call" and isinstance(params, dict):
+        subject = str(params.get("name") or "")
+        arguments = params.get("arguments")
+        if arguments is not None:
+            try:
+                detail = f"argument_bytes={len(json.dumps(arguments))}"
+            except (TypeError, ValueError):
+                detail = "argument_bytes=?"
+    trail.record("request", subject=subject or method, detail=detail or method)
+
+
 def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         server_name: str | None = None, strict: bool = False,
         block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
         deny_sampling: bool = False, deny_elicitation: bool = False,
-        deny_roots: bool = False, result_policy: str = "annotate") -> int:
+        deny_roots: bool = False, result_policy: str = "annotate",
+        log_path: Path | None = None) -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("mcp-audit guard: no server command given", file=sys.stderr)
@@ -502,6 +535,17 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
                   block_severity=block_severity, quiet=quiet,
                   deny_sampling=deny_sampling, deny_elicitation=deny_elicitation,
                   deny_roots=deny_roots, result_policy=result_policy)
+
+    trail: AuditLog | None = None
+    if log_path is not None:
+        trail = AuditLog(log_path, name)
+        if trail.failed:
+            guard.log(f"audit log unavailable: {trail.failed}")
+            trail = None
+        else:
+            trail.record("session_start", subject=name,
+                         detail=f"policy={policy} result_policy={result_policy}")
+            guard.log(f"audit trail: {log_path}")
 
     if guard._locked_tools is None:
         guard.log(
@@ -532,6 +576,10 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
             for line in sys.stdin:
                 if proc.stdin is None:
                     break
+                # Parsing this direction costs nothing when no trail is kept,
+                # which is why it is inside the branch rather than above it.
+                if trail is not None:
+                    _record_request(trail, line)
                 proc.stdin.write(line)
                 proc.stdin.flush()
         except (OSError, ValueError):
@@ -567,7 +615,16 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
             sys.stdout.flush()
     except (OSError, ValueError) as exc:
         guard.log(f"transport error: {exc}")
+        if trail is not None:
+            trail.record("transport_error", detail=str(exc)[:200])
     finally:
+        if trail is not None:
+            trail.record(
+                "session_end",
+                detail=(f"forwarded={guard.stats.forwarded} "
+                        f"tools_blocked={len(guard.stats.tools_blocked)} "
+                        f"results_flagged={guard.stats.results_flagged}"),
+            )
         for stream in (proc.stdin, proc.stdout):
             if stream is not None:
                 try:

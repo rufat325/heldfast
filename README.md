@@ -63,6 +63,8 @@ mcp-audit inspect                      # what is configured, no judgement
 mcp-audit rules                        # list rules
 mcp-audit explain MCPA015              # describe one rule in full
 mcp-audit guard -- npx -y pkg@1.0.0    # proxy a server, enforce the lockfile
+mcp-audit guard --log trail.jsonl -- npx pkg   # proxy and record the session
+mcp-audit verify-log trail.jsonl       # check the record was not altered
 mcp-audit serve                        # run as an MCP server
 ```
 
@@ -153,6 +155,33 @@ MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *s
 give the agent instructions, so imperative mood there is normal. In a tool description it
 isn't. Without that split the scanner fires constantly on any real skills directory and
 becomes useless.
+
+## Proving what the guard did
+
+`mcp-audit guard` enforces the lockfile at runtime. `--log` makes it leave evidence that
+it did, and that nobody rewrote the story afterwards.
+
+```bash
+mcp-audit guard --log trail.jsonl -- npx -y @scope/server@1.0.0
+mcp-audit verify-log trail.jsonl
+# mcp-audit: 412 entries, chain intact
+```
+
+Each entry carries the hash of the entry before it, so editing a line, deleting one,
+reordering two or appending a forged one all break the chain, and `verify-log` names the
+line and says which happened. Deleting is the case worth caring about: a log you can
+quietly shorten is not evidence, because the call someone wants gone is exactly the one
+that goes missing.
+
+**Arguments are never written to it.** A tool call's arguments are where a credential or a
+customer's record lives, and a security tool that copies both into a file on disk has built
+the problem it was installed to find. The log records the tool name, the decision and the
+argument size — never the values. There is a test that runs a real session with a token in
+the arguments and greps the log for it.
+
+This is the cheap half of the idea, and it says so: it proves the file was not edited after
+the fact. It does not prove who wrote it, because that needs a signing key, and a key needs
+somewhere to live — which a zero-dependency scanner has no business inventing.
 
 ## Reading the server's own source
 
@@ -499,7 +528,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-330 tests, stdlib unittest, nothing to install.
+340 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
