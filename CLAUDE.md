@@ -236,11 +236,16 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`, `serve`.
   commits while this file said otherwise, because a test called a utility
   this machine still has and the runners no longer do. Local success says the
   code works *here*.
-- **Competitors are a source of ideas, not of methods.** Fourteen were read in
-  one cycle. Every good idea taken from them had to be reimplemented, because
-  each one inferred capability from description prose — the thing this project
-  deleted after measuring it at 27% false positives on live tools. A README
-  claiming "deterministic, no LLM needed" describes regexes over prose.
+- **Competitors are a source of ideas, not of methods** — but be exact about
+  which part is weak. Fourteen were read in one cycle. MCPhound's cross-server
+  attack graph is the best idea in the field and its capability inference is
+  bare substrings (`"run"`, `"api"`, `"read"`) over tool descriptions, which
+  this project measured at 27% false positives on live tools. mcprobe is not
+  guilty of that: its injection patterns are phrase regexes much like MCPA010,
+  and its shadow check is real — it just needs baseline files you collected by
+  hand and has no idea which client configures which server, so it cannot tell
+  a genuine collision from two servers that never meet. Take the idea, check
+  the implementation, and say precisely what was wrong with it.
 - **The two halves of the repo can drift apart.** `probe.py` was taught the
   current protocol revision; `server.py` was not, and nothing compared them
   for four cycles. When one side of a client/server pair learns something,
