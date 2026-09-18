@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 31 commits, 287 tests, 26 rules, CI across Linux/macOS/Windows
+complete unit. 33 commits, 312 tests, 29 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -84,14 +84,30 @@ The cycles, most recent last:
     badge, and made the README's test count a thing a test checks. It said
     275 while the suite had 286.
 
+15. `4115c8b` — read the source of fourteen other MCP and AI security tools.
+    Added MCPA027 (tool shadowing), MCPA028 (exfiltration reach across a pair
+    of servers) and MCPA029 (a command allowlist naming binaries that run
+    anything). The theme is findings that exist only in the *combination* of
+    servers, which per-server scanners cannot see and this one is unusually
+    placed to compute.
+
 ### If the loop resumes, change source
 
 **The spec is near exhausted.** The remaining unscreened methods
 (`completion/complete`, `notifications/message`, `subscriptions/listen`)
 carry little model-facing text. Better sources now:
 
+- **other tools' source, read properly.** Cycle 15 cloned fourteen of them and
+  the pattern that worked was: take the *idea*, reject the *implementation*.
+  Their best ideas were real (cross-server attack paths, tool shadowing,
+  allowlist bypass) and their detection was description-substring matching,
+  which this project already proved fires on everything. Do not read their
+  READMEs and stop there — the READMEs claim precision the code does not have.
+  Clones are in a scratch dir, not the repo.
 - more real-world corpora — only 4 of 15 endpoints were reachable, and the
-  harvested config corpus was 98 blocks from 250 repos out of 4,129 available
+  harvested config corpus was 98 blocks from 250 repos out of 4,129 available.
+  Grepping the cloned repos for real env-var names was cheap and caught a
+  false positive before it shipped; do that for any new config-shape rule.
 - running the LLM tier against the live API once; it is stub-verified only
   and has never made a real call
 - the owner's items below, which are worth more than another rule
@@ -220,6 +236,11 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`, `serve`.
   commits while this file said otherwise, because a test called a utility
   this machine still has and the runners no longer do. Local success says the
   code works *here*.
+- **Competitors are a source of ideas, not of methods.** Fourteen were read in
+  one cycle. Every good idea taken from them had to be reimplemented, because
+  each one inferred capability from description prose — the thing this project
+  deleted after measuring it at 27% false positives on live tools. A README
+  claiming "deterministic, no LLM needed" describes regexes over prose.
 - **The two halves of the repo can drift apart.** `probe.py` was taught the
   current protocol revision; `server.py` was not, and nothing compared them
   for four cycles. When one side of a client/server pair learns something,
