@@ -128,11 +128,36 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA016 | high | Server launch command changed since approval |
 | MCPA017 | high | Skill content changed since approval |
 | MCPA018 | high | LLM classifier flagged agent-facing text (opt-in) |
+| MCPA019 | critical | Server instructions changed since approval |
+| MCPA020 | high | Prompt or resource changed since approval |
 
 MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *supposed* to
 give the agent instructions, so imperative mood there is normal. In a tool description it
 isn't. Without that split the scanner fires constantly on any real skills directory and
 becomes useless.
+
+## What a server actually controls
+
+A server has four channels into the model, not one. `--probe` reads all of them and the
+lockfile pins all of them:
+
+| Surface | Where it comes from | Why it matters |
+|---|---|---|
+| `instructions` | the `initialize` response | The spec says this "can be thought of like a hint to the model. For example, this information **MAY be added to the system prompt**." Highest privilege text on the connection. |
+| tools | `tools/list` | Descriptions and input schemas, injected as tool metadata |
+| prompts | `prompts/list` | Template and argument descriptions |
+| resources | `resources/list` | Resource descriptions |
+
+Pinning only tools leaves the other three free to change unnoticed - and `instructions`
+outranks every tool description, because it is not scoped to one tool. A server that
+rewrites it has rewritten the agent's standing orders while the config file stays
+byte-identical.
+
+`guard` withholds changed instructions at the connection, replacing them with a notice
+rather than passing them to the model.
+
+Prompts and resources are only requested from servers that declare those capabilities, so
+well-behaved servers are never asked for something they do not have.
 
 ## Using it from an agent
 
@@ -296,7 +321,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-155 tests, stdlib unittest, nothing to install.
+182 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

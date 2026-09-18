@@ -24,10 +24,10 @@ import sys
 import threading
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from .model import ServerSpec, ToolSpec
+from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec
 
 PROTOCOL_VERSION = "2024-11-05"
 CLIENT_INFO = {"name": "mcp-audit", "version": "0.1.0"}
@@ -38,6 +38,12 @@ class ProbeResult:
     server: str
     tools: list[ToolSpec]
     error: str | None = None
+    # The server's `instructions` string from the initialize response. The
+    # spec says it MAY be added to the system prompt, which makes it the
+    # highest-privilege text a server controls.
+    instructions: str = ""
+    prompts: list[PromptSpec] = field(default_factory=list)
+    resources: list[ResourceSpec] = field(default_factory=list)
 
 
 def _initialize_params() -> dict[str, Any]:
@@ -46,6 +52,32 @@ def _initialize_params() -> dict[str, Any]:
         "capabilities": {},
         "clientInfo": CLIENT_INFO,
     }
+
+
+def _parse_prompts(server: str, payload: dict[str, Any]) -> list[PromptSpec]:
+    out: list[PromptSpec] = []
+    for p in (payload.get("result") or {}).get("prompts") or []:
+        if isinstance(p, dict):
+            args = p.get("arguments") or []
+            out.append(PromptSpec(
+                server=server, name=str(p.get("name") or ""),
+                description=str(p.get("description") or ""),
+                arguments=[a for a in args if isinstance(a, dict)],
+            ))
+    return out
+
+
+def _parse_resources(server: str, payload: dict[str, Any]) -> list[ResourceSpec]:
+    out: list[ResourceSpec] = []
+    for r in (payload.get("result") or {}).get("resources") or []:
+        if isinstance(r, dict):
+            out.append(ResourceSpec(
+                server=server, uri=str(r.get("uri") or ""),
+                name=str(r.get("name") or ""),
+                description=str(r.get("description") or ""),
+                mime_type=str(r.get("mimeType") or ""),
+            ))
+    return out
 
 
 def _parse_tools(server: str, payload: dict[str, Any]) -> list[ToolSpec]:
@@ -105,10 +137,13 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
     drainer.start()
 
     result: dict[str, Any] = {}
+    init_result: dict[str, Any] = {}
+    prompts_result: dict[str, Any] = {}
+    resources_result: dict[str, Any] = {}
     error: str | None = None
 
     def converse() -> None:
-        nonlocal result, error
+        nonlocal result, error, init_result, prompts_result, resources_result
         assert proc.stdin is not None and proc.stdout is not None
         try:
             def send(msg: dict[str, Any]) -> None:
@@ -139,6 +174,7 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
             if "error" in init:
                 error = f"initialize failed: {init['error']}"
                 return
+            init_result = init
             send({"jsonrpc": "2.0", "method": "notifications/initialized"})
             send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
             listed = read_reply(2)
@@ -149,6 +185,23 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
                 error = f"tools/list failed: {listed['error']}"
                 return
             result = listed
+
+            # Ask for prompts and resources only where the server said it has
+            # them. Calling an unsupported method returns an error the server
+            # is entitled to send, and treating that as a probe failure would
+            # make well-behaved servers look broken.
+            caps = (init.get("result") or {}).get("capabilities") or {}
+            if isinstance(caps, dict):
+                if isinstance(caps.get("prompts"), dict):
+                    send({"jsonrpc": "2.0", "id": 3, "method": "prompts/list", "params": {}})
+                    reply = read_reply(3)
+                    if reply and "error" not in reply:
+                        prompts_result = reply
+                if isinstance(caps.get("resources"), dict):
+                    send({"jsonrpc": "2.0", "id": 4, "method": "resources/list", "params": {}})
+                    reply = read_reply(4)
+                    if reply and "error" not in reply:
+                        resources_result = reply
         except (OSError, ValueError) as exc:
             error = f"transport error: {exc}"
 
@@ -182,7 +235,13 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
     if error:
         detail = f"; stderr: {stderr_tail[-1]}" if stderr_tail else ""
         return ProbeResult(s.name, [], f"{error}{detail}")
-    return ProbeResult(s.name, _parse_tools(s.name, result))
+    return ProbeResult(
+        s.name,
+        _parse_tools(s.name, result),
+        instructions=str((init_result.get("result") or {}).get("instructions") or ""),
+        prompts=_parse_prompts(s.name, prompts_result),
+        resources=_parse_resources(s.name, resources_result),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +287,31 @@ def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
         )
         if "error" in listed:
             return ProbeResult(s.name, [], f"tools/list failed: {listed['error']}")
-        return ProbeResult(s.name, _parse_tools(s.name, listed))
+
+        caps = (init.get("result") or {}).get("capabilities") or {}
+        prompts_payload: dict[str, Any] = {}
+        resources_payload: dict[str, Any] = {}
+        if isinstance(caps, dict):
+            if isinstance(caps.get("prompts"), dict):
+                reply = _post_jsonrpc(s.url, s.headers,
+                                      {"jsonrpc": "2.0", "id": 3, "method": "prompts/list",
+                                       "params": {}}, timeout)
+                if "error" not in reply:
+                    prompts_payload = reply
+            if isinstance(caps.get("resources"), dict):
+                reply = _post_jsonrpc(s.url, s.headers,
+                                      {"jsonrpc": "2.0", "id": 4, "method": "resources/list",
+                                       "params": {}}, timeout)
+                if "error" not in reply:
+                    resources_payload = reply
+
+        return ProbeResult(
+            s.name,
+            _parse_tools(s.name, listed),
+            instructions=str((init.get("result") or {}).get("instructions") or ""),
+            prompts=_parse_prompts(s.name, prompts_payload),
+            resources=_parse_resources(s.name, resources_payload),
+        )
     except urllib.error.HTTPError as exc:
         return ProbeResult(s.name, [], f"HTTP {exc.code} {exc.reason}")
     except (urllib.error.URLError, OSError, ValueError) as exc:

@@ -20,7 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .model import ServerSpec, SkillSpec, ToolSpec
+from .model import (PromptSpec, ResourceSpec, ServerSpec, SkillSpec, ToolSpec,
+                    instructions_fingerprint)
 
 LOCK_VERSION = 1
 DEFAULT_LOCK_NAME = ".mcp-audit.lock"
@@ -90,11 +91,28 @@ class Lock:
     # -- building ----------------------------------------------------------
 
     def record(self, servers: list[ServerSpec], tools: list[ToolSpec],
-               skills: list[SkillSpec]) -> None:
-        """Replace the lock contents with the current observed state."""
+               skills: list[SkillSpec],
+               prompts: list[PromptSpec] | None = None,
+               resources: list[ResourceSpec] | None = None,
+               instructions: dict[str, str] | None = None) -> None:
+        """Replace the lock contents with the current observed state.
+
+        Covers every surface a server controls that reaches the model, not
+        just tools: `instructions` (which the spec allows a client to add to
+        the system prompt), prompt templates, and resource descriptions. A
+        lockfile that pinned only tools would let a server rewrite the agent's
+        standing orders without tripping anything.
+        """
         by_server: dict[str, list[ToolSpec]] = {}
         for t in tools:
             by_server.setdefault(t.server, []).append(t)
+        prompts_by_server: dict[str, list[PromptSpec]] = {}
+        for pr in prompts or []:
+            prompts_by_server.setdefault(pr.server, []).append(pr)
+        resources_by_server: dict[str, list[ResourceSpec]] = {}
+        for rs in resources or []:
+            resources_by_server.setdefault(rs.server, []).append(rs)
+        instructions = instructions or {}
 
         self.servers = {}
         for s in servers:
@@ -107,6 +125,27 @@ class Lock:
                 "url": s.url,
                 "approved_at": _now(),
             }
+            if s.name in instructions:
+                text = instructions[s.name]
+                entry["instructions"] = {
+                    "fingerprint": instructions_fingerprint(text),
+                    "preview": text[:160],
+                    "length": len(text),
+                }
+            observed_prompts = prompts_by_server.get(s.name)
+            if observed_prompts is not None:
+                entry["prompts"] = {
+                    pr.name: {"fingerprint": pr.fingerprint(),
+                              "description_preview": (pr.description or "")[:160]}
+                    for pr in sorted(observed_prompts, key=lambda x: x.name)
+                }
+            observed_resources = resources_by_server.get(s.name)
+            if observed_resources is not None:
+                entry["resources"] = {
+                    rs.uri: {"fingerprint": rs.fingerprint(),
+                             "description_preview": (rs.description or "")[:160]}
+                    for rs in sorted(observed_resources, key=lambda x: x.uri)
+                }
             observed = by_server.get(s.name)
             if observed is not None:
                 entry["tools"] = {
@@ -131,10 +170,14 @@ class Lock:
         discard the tool baseline and permanently blind the drift check.
         """
         for ident, entry in self.servers.items():
-            if "tools" in entry:
-                continue
             old = previous.servers.get(ident)
-            if isinstance(old, dict) and "tools" in old:
-                entry["tools"] = old["tools"]
+            if not isinstance(old, dict):
+                continue
+            carried = False
+            for key in ("tools", "prompts", "resources", "instructions"):
+                if key not in entry and key in old:
+                    entry[key] = old[key]
+                    carried = True
+            if carried:
                 entry["approved_at"] = old.get("approved_at", entry["approved_at"])
-                entry["tools_carried_forward"] = True
+                entry["carried_forward"] = True

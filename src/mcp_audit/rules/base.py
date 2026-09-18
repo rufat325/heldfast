@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
 
 from ..findings import Finding, Severity
-from ..model import ServerSpec, SkillSpec, ToolSpec
+from ..model import PromptSpec, ResourceSpec, ServerSpec, SkillSpec, ToolSpec
 
 
 @dataclass
@@ -14,6 +14,12 @@ class AuditContext:
     servers: list[ServerSpec] = field(default_factory=list)
     skills: list[SkillSpec] = field(default_factory=list)
     tools: list[ToolSpec] = field(default_factory=list)
+    prompts: list[PromptSpec] = field(default_factory=list)
+    resources: list[ResourceSpec] = field(default_factory=list)
+    # server name -> the `instructions` string from its initialize response.
+    # The spec permits a client to paste this into the system prompt, so it is
+    # the highest-privilege text a server controls.
+    instructions: dict[str, str] = field(default_factory=dict)
     config_errors: list[str] = field(default_factory=list)
     # Populated by the lockfile stage; rules for rug-pull detection read it.
     lock: dict[str, Any] = field(default_factory=dict)

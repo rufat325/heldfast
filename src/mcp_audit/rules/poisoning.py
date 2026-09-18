@@ -176,6 +176,36 @@ def _targets(ctx: AuditContext) -> list[Target]:
     }
 
     out: list[Target] = []
+
+    # Server instructions first: the spec says this MAY be added to the system
+    # prompt, which outranks every tool description on the server. Treated
+    # like a skill body -- imperative mood is its job, so only the universal
+    # signals (concealment, override, exfiltration) apply.
+    for server_name, text in ctx.instructions.items():
+        if not text:
+            continue
+        path, line = declared.get(server_name, ("", 0))
+        out.append(Target("server-instructions", f"{server_name} (instructions)",
+                          path, line, text, True, server_name))
+
+    for p in ctx.prompts:
+        path, line = declared.get(p.server, ("", 0))
+        if p.description:
+            out.append(Target("prompt", f"{p.server}/{p.name}", path, line,
+                              p.description, False, p.server))
+        for arg in p.arguments:
+            desc = arg.get("description") if isinstance(arg, dict) else None
+            if desc:
+                out.append(Target("prompt-arg",
+                                  f"{p.server}/{p.name}.{arg.get('name', '?')}",
+                                  path, line, str(desc), False, p.server))
+
+    for r in ctx.resources:
+        path, line = declared.get(r.server, ("", 0))
+        if r.description:
+            out.append(Target("resource", f"{r.server}/{r.name or r.uri}", path, line,
+                              r.description, False, r.server))
+
     for t in ctx.tools:
         path, line = declared.get(t.server, ("", 0))
         if t.description:

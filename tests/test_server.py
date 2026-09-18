@@ -144,8 +144,11 @@ class TestTools(unittest.TestCase):
             srv.tool_check_config({"config": {"mcpServers": {}}})
 
     def test_list_rules(self) -> None:
+        """Assert against the registry rather than a literal, which goes stale."""
+        from mcp_audit.rules import all_rules
         rules = srv.tool_list_rules({})["rules"]
-        self.assertEqual(18, len(rules))
+        self.assertEqual(len(all_rules()), len(rules))
+        self.assertEqual({r.id for r in all_rules()}, {r["id"] for r in rules})
         self.assertIn("MCPA015", {r["id"] for r in rules})
 
     def test_explain_rule(self) -> None:

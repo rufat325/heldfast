@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Iterable
 
 from ..findings import Finding, Location, Severity
+from ..model import instructions_fingerprint
 from .base import AuditContext, rule
 
 
@@ -197,3 +198,113 @@ def skill_drift(ctx: AuditContext) -> Iterable[Finding]:
             atlas=["AML.T0010", "AML.T0051.001"],
             tags=["drift", "skills"],
         )
+
+
+def _entry_for(known: dict, server_name: str) -> dict | None:
+    return next(
+        (e for e in known.values()
+         if isinstance(e, dict) and e.get("name") == server_name),
+        None,
+    )
+
+
+@rule("MCPA019", "Server instructions changed since approval", Severity.CRITICAL)
+def instructions_drift(ctx: AuditContext) -> Iterable[Finding]:
+    """The server rewrote the text that may become the agent's system prompt."""
+    lock = _lock(ctx)
+    if not lock:
+        return
+    known = lock["servers"]
+
+    for server_name, text in sorted(ctx.instructions.items()):
+        entry = _entry_for(known, server_name)
+        if not entry or "instructions" not in entry:
+            continue
+        recorded = entry["instructions"]
+        if not isinstance(recorded, dict):
+            continue
+        if recorded.get("fingerprint") == instructions_fingerprint(text):
+            continue
+        yield Finding(
+            rule_id="MCPA019",
+            title="Server instructions changed since approval",
+            severity=Severity.CRITICAL,
+            location=Location(path=str(entry.get("source") or ""), line=0,
+                              snippet=f"{server_name} (instructions)"),
+            evidence=(
+                f"server {server_name!r} changed its `instructions`\n"
+                f"      was: {str(recorded.get('preview') or '')!r}\n"
+                f"      now: {text[:160]!r}"
+            ),
+            remediation=(
+                "Read the new text in full before using this server again. The protocol "
+                "permits a client to add `instructions` to the system prompt, so this is "
+                "the highest-privilege text the server controls -- a change here rewrites "
+                "the agent's standing orders, not just one tool's description."
+            ),
+            server=server_name,
+            atlas=["AML.T0051.001", "AML.T0053"],
+            cwe=["CWE-77"],
+            tags=["drift", "rug-pull", "instructions"],
+        )
+
+
+@rule("MCPA020", "Prompt or resource changed since approval", Severity.HIGH)
+def prompt_resource_drift(ctx: AuditContext) -> Iterable[Finding]:
+    """A prompt template or resource description changed after approval."""
+    lock = _lock(ctx)
+    if not lock:
+        return
+    known = lock["servers"]
+
+    groups: dict[str, dict[str, object]] = {}
+    for p in ctx.prompts:
+        groups.setdefault(p.server, {}).setdefault("prompts", {})[p.name] = p  # type: ignore[index]
+    for r in ctx.resources:
+        groups.setdefault(r.server, {}).setdefault("resources", {})[r.uri] = r  # type: ignore[index]
+
+    for server_name, observed in sorted(groups.items()):
+        entry = _entry_for(known, server_name)
+        if not entry:
+            continue
+        source = str(entry.get("source") or "")
+        for kind, label in (("prompts", "prompt"), ("resources", "resource")):
+            current = observed.get(kind) or {}
+            locked = entry.get(kind)
+            if not isinstance(locked, dict):
+                continue
+            for key, spec in sorted(current.items()):  # type: ignore[union-attr]
+                recorded = locked.get(key)
+                if recorded is None:
+                    yield Finding(
+                        rule_id="MCPA020",
+                        title=f"{label.capitalize()} added since approval",
+                        severity=Severity.MEDIUM,
+                        location=Location(path=source, line=0, snippet=f"{server_name}/{key}"),
+                        evidence=f"{label} {key!r} was not present at approval",
+                        remediation=f"Review the new {label}, then re-approve.",
+                        server=server_name,
+                        atlas=["AML.T0010"],
+                        tags=["drift", label],
+                    )
+                    continue
+                if recorded.get("fingerprint") == spec.fingerprint():  # type: ignore[union-attr]
+                    continue
+                yield Finding(
+                    rule_id="MCPA020",
+                    title=f"{label.capitalize()} changed since approval",
+                    severity=Severity.HIGH,
+                    location=Location(path=source, line=0, snippet=f"{server_name}/{key}"),
+                    evidence=(
+                        f"{label} {key!r} fingerprint changed\n"
+                        f"      was: {str(recorded.get('description_preview') or '')!r}\n"
+                        f"      now: {getattr(spec, 'description', '')[:160]!r}"
+                    ),
+                    remediation=(
+                        f"Diff the {label} before using it again. Prompt and resource text "
+                        "reaches the model the same way a tool description does."
+                    ),
+                    server=server_name,
+                    atlas=["AML.T0010", "AML.T0051.001"],
+                    tags=["drift", "rug-pull", label],
+                )

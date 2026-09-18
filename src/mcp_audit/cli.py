@@ -176,6 +176,9 @@ class Collected:
         self.servers: list[ServerSpec] = []
         self.skills: list[SkillSpec] = []
         self.tools: list[ToolSpec] = []
+        self.prompts: list = []
+        self.resources: list = []
+        self.instructions: dict[str, str] = {}
         self.errors: list[str] = []
         self.config_count = 0
         self.probed = False
@@ -216,6 +219,10 @@ def collect(args: argparse.Namespace) -> Collected:
         out.probed = True
         for res in results:
             out.tools.extend(res.tools)
+            out.prompts.extend(res.prompts)
+            out.resources.extend(res.resources)
+            if res.instructions:
+                out.instructions[res.server] = res.instructions
             if res.error:
                 out.errors.append(f"probe {res.server}: {res.error}")
     return out
@@ -258,6 +265,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
         servers=data.servers,
         skills=data.skills,
         tools=data.tools,
+        prompts=data.prompts,
+        resources=data.resources,
+        instructions=data.instructions,
         config_errors=data.errors,
         lock={"servers": lock.servers, "skills": lock.skills},
         options={"probed": data.probed},
@@ -360,15 +370,25 @@ def cmd_approve(args: argparse.Namespace) -> int:
         )
 
     lock = Lock(path=lock_path)
-    lock.record(data.servers, data.tools, data.skills)
+    lock.record(data.servers, data.tools, data.skills,
+                prompts=data.prompts, resources=data.resources,
+                instructions=data.instructions)
     lock.merge_unprobed(previous)
     written = lock.save()
 
     tool_total = sum(len(e.get("tools") or {}) for e in lock.servers.values())
-    print(
-        f"mcp-audit: approved {len(lock.servers)} server(s), {tool_total} tool(s), "
-        f"{len(lock.skills)} skill(s) -> {written}"
-    )
+    prompt_total = sum(len(e.get("prompts") or {}) for e in lock.servers.values())
+    res_total = sum(len(e.get("resources") or {}) for e in lock.servers.values())
+    instr_total = sum(1 for e in lock.servers.values() if e.get("instructions"))
+    parts = [f"{len(lock.servers)} server(s)", f"{tool_total} tool(s)"]
+    if instr_total:
+        parts.append(f"{instr_total} instruction block(s)")
+    if prompt_total:
+        parts.append(f"{prompt_total} prompt(s)")
+    if res_total:
+        parts.append(f"{res_total} resource(s)")
+    parts.append(f"{len(lock.skills)} skill(s)")
+    print(f"mcp-audit: approved " + ", ".join(parts) + f" -> {written}")
     return EXIT_OK
 
 

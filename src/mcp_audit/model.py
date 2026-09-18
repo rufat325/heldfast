@@ -94,3 +94,55 @@ class SkillSpec:
             ensure_ascii=False,
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+@dataclass
+class PromptSpec:
+    """A prompt template a server advertises via prompts/list.
+
+    Prompts are templates the user can invoke; their text and argument
+    descriptions reach the model exactly like a tool description does.
+    """
+
+    server: str
+    name: str
+    description: str = ""
+    arguments: list[dict[str, Any]] = field(default_factory=list)
+
+    def fingerprint(self) -> str:
+        payload = json.dumps(
+            {"name": self.name, "description": self.description,
+             "arguments": self.arguments},
+            sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+@dataclass
+class ResourceSpec:
+    """A resource a server advertises via resources/list."""
+
+    server: str
+    uri: str
+    name: str = ""
+    description: str = ""
+    mime_type: str = ""
+
+    def fingerprint(self) -> str:
+        payload = json.dumps(
+            {"uri": self.uri, "name": self.name, "description": self.description,
+             "mime_type": self.mime_type},
+            sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def instructions_fingerprint(text: str) -> str:
+    """Hash of a server's `instructions` string.
+
+    The spec says this "MAY be added to the system prompt", which makes it the
+    highest-privilege text a server controls -- above tool descriptions, which
+    at least arrive as tool metadata. A server that changes it has changed the
+    agent's standing orders.
+    """
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
