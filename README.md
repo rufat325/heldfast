@@ -409,6 +409,21 @@ approval. It cannot be used. Run `mcp-audit approve --probe` after reviewing the
 tools keep their name on purpose - a tool that silently vanishes looks like a broken server
 and sends people hunting the wrong problem.
 
+**A server that is not in the lockfile has its tools withheld.** This used to forward
+untouched, on the reasoning that nothing was approved so there was nothing to enforce. That
+is backwards: an approval lockfile that stops applying the moment a server is missing from
+it is not an allowlist, and "missing from the lockfile" is exactly what an unreviewed
+server looks like - including one that was added to your config while you weren't watching.
+Run `mcp-audit approve --probe` to review and pin it, or pass `--allow-unapproved` for the
+old behaviour.
+
+**Name the server as `client:name` when two clients use the same name.** Lock entries are
+keyed that way because Cursor's `github` and Claude Desktop's `github` are not the same
+server. `--name github` is still fine when it is unambiguous; when it isn't, the guard says
+which entries it matched and withholds the tools rather than guessing - it used to take
+whichever entry came first in the file, which could enforce one client's approvals against
+another's server.
+
 **The thing that makes this different from other wrappers: it reads the same lockfile the CI
 gate reads.** Other tools keep a private pin store, so what your pipeline approved and what
 your machine enforces are two separate facts that can drift apart. Here they are one file,
@@ -528,7 +543,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-340 tests, stdlib unittest, nothing to install.
+344 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

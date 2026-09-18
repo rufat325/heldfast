@@ -44,13 +44,71 @@ def raw_tool(name: str, description: str) -> dict:
     return {"name": name, "description": description, "inputSchema": {"type": "object"}}
 
 
-class TestEnforcement(unittest.TestCase):
-    def test_unknown_server_forwards_untouched(self) -> None:
-        """No lock entry means nothing was approved, so nothing is enforced."""
+class TestUnapprovedServers(unittest.TestCase):
+    """This used to forward an unknown server untouched, on the reasoning that
+    nothing was approved so there was nothing to enforce.
+
+    That reasoning is backwards. An approval lockfile that stops applying the
+    moment a server is missing from it is not an allowlist, and "missing from
+    the lockfile" is exactly what an unreviewed server looks like -- including
+    one an attacker just added to the config. The default is now to withhold
+    its tools, and the old behaviour is a flag you have to ask for.
+    """
+
+    def test_an_unknown_server_has_its_tools_withheld(self) -> None:
         g = Guard("svc", Lock(), quiet=True)
+        out = g.filter_tools([raw_tool("a", BENIGN)])
+        self.assertIn("BLOCKED BY mcp-audit", out[0]["description"])
+        self.assertEqual(["a"], g.stats.tools_blocked)
+
+    def test_allow_unapproved_restores_the_old_behaviour(self) -> None:
+        g = Guard("svc", Lock(), quiet=True, allow_unapproved=True)
         tools = [raw_tool("a", BENIGN)]
         self.assertEqual(tools, g.filter_tools(tools))
         self.assertEqual([], g.stats.tools_blocked)
+
+
+class TestServerIdentity(unittest.TestCase):
+    """Lock entries are keyed `client:name`, because two clients can each
+    configure a server called `github` and they are not the same server.
+
+    The guard matched on the bare name and took whichever entry came first in
+    the file, so it could enforce Cursor's approvals against Claude Desktop's
+    server -- denying a tool that was approved, or allowing one that was
+    approved somewhere else entirely.
+    """
+
+    def _two_clients(self) -> Lock:
+        lock = Lock()
+        lock.servers = {
+            "cursor:github": {"name": "github", "client": "cursor",
+                              "tools": {"safe_read": {"fingerprint": "AAA"}}},
+            "claude-desktop:github": {"name": "github", "client": "claude-desktop",
+                                      "tools": {"delete_repo": {"fingerprint": "BBB"}}},
+        }
+        return lock
+
+    def test_a_bare_name_matching_two_clients_is_not_guessed(self) -> None:
+        g = Guard("github", self._two_clients(), quiet=True)
+        self.assertIsNone(g._locked_tools)
+        self.assertEqual(["claude-desktop:github", "cursor:github"], g.ambiguous)
+        verdict, reason = g._verdict(ToolSpec(server="github", name="safe_read"))
+        self.assertEqual("deny", verdict)
+        self.assertIn("--name client:name", reason)
+
+    def test_client_name_resolves_exactly(self) -> None:
+        g = Guard("claude-desktop:github", self._two_clients(), quiet=True)
+        self.assertEqual({"delete_repo": "BBB"}, g._locked_tools)
+        self.assertEqual([], g.ambiguous)
+
+    def test_a_bare_name_still_works_when_it_is_unambiguous(self) -> None:
+        """The common case is one client, and it must not need the prefix."""
+        g = Guard("svc", make_lock({"read": BENIGN}), quiet=True)
+        self.assertIsNotNone(g._locked_tools)
+        self.assertIn("read", g._locked_tools)
+
+
+class TestEnforcement(unittest.TestCase):
 
     def test_approved_tool_passes(self) -> None:
         g = Guard("svc", make_lock({"read": BENIGN}), quiet=True)

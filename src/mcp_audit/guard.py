@@ -82,7 +82,8 @@ class Guard:
                  quiet: bool = False, deny_sampling: bool = False,
                  deny_elicitation: bool = False,
                  deny_roots: bool = False,
-                 result_policy: str = "annotate") -> None:
+                 result_policy: str = "annotate",
+                 allow_unapproved: bool = False) -> None:
         self.server_name = server_name
         self.lock = lock
         self.policy = policy
@@ -93,38 +94,71 @@ class Guard:
         self.deny_elicitation = deny_elicitation
         self.deny_roots = deny_roots
         self.result_policy = result_policy
+        self.allow_unapproved = allow_unapproved
         # Set by run() so a denied server request can be answered without
         # the client ever seeing it.
         self.respond_to_server = None
         self.stats = GuardStats()
+        # Names of lock entries this server could be, when the name alone is
+        # not enough to tell. Set by _resolve_entry().
+        self.ambiguous: list[str] = []
         self._locked_tools = self._load_locked_tools()
         self._locked_instructions = self._load_locked_instructions()
 
     # -- lockfile ----------------------------------------------------------
 
-    def _load_locked_tools(self) -> dict[str, str] | None:
-        """Approved name -> fingerprint, or None when the server is unknown."""
-        for entry in self.lock.servers.values():
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("name") != self.server_name:
-                continue
-            tools = entry.get("tools")
-            if isinstance(tools, dict):
-                return {
-                    name: meta.get("fingerprint", "")
-                    for name, meta in tools.items()
-                    if isinstance(meta, dict)
-                }
-            return {}
+    def _resolve_entry(self) -> dict[str, Any] | None:
+        """The one lock entry this server is, or None.
+
+        Lock entries are keyed `client:name`, because two clients can each
+        configure a server called `github` and they are not the same server.
+        Matching on the bare name took whichever entry came first in the file,
+        so the guard could enforce Cursor's approvals against Claude
+        Desktop's server -- denying a tool that was approved, or worse,
+        allowing one that was approved somewhere else.
+
+        `--name` therefore accepts either form. A bare name is resolved only
+        when it is unambiguous; when it is not, the candidates are recorded
+        and the server is treated as unapproved rather than guessed at.
+        """
+        entries = {key: value for key, value in self.lock.servers.items()
+                   if isinstance(value, dict)}
+
+        # An explicit client:name wins outright.
+        if ":" in self.server_name and self.server_name in entries:
+            return entries[self.server_name]
+
+        matches = {key: value for key, value in entries.items()
+                   if value.get("name") == self.server_name}
+        if not matches:
+            return None
+        if len(matches) == 1:
+            return next(iter(matches.values()))
+
+        self.ambiguous = sorted(matches)
         return None
 
+    def _load_locked_tools(self) -> dict[str, str] | None:
+        """Approved name -> fingerprint, or None when the server is unknown."""
+        entry = self._resolve_entry()
+        if entry is None:
+            return None
+        tools = entry.get("tools")
+        if isinstance(tools, dict):
+            return {
+                name: meta.get("fingerprint", "")
+                for name, meta in tools.items()
+                if isinstance(meta, dict)
+            }
+        return {}
+
     def _load_locked_instructions(self) -> str | None:
-        for entry in self.lock.servers.values():
-            if isinstance(entry, dict) and entry.get("name") == self.server_name:
-                recorded = entry.get("instructions")
-                if isinstance(recorded, dict):
-                    return str(recorded.get("fingerprint") or "")
+        entry = self._resolve_entry()
+        if entry is None:
+            return None
+        recorded = entry.get("instructions")
+        if isinstance(recorded, dict):
+            return str(recorded.get("fingerprint") or "")
         return None
 
     def check_instructions(self, text: str) -> str:
@@ -164,7 +198,17 @@ class Guard:
     def _verdict(self, tool: ToolSpec) -> tuple[str, str]:
         """Return (verdict, reason). Verdict is 'allow' or 'deny'."""
         if self._locked_tools is None:
-            return "allow", "server not in lockfile; nothing to enforce"
+            # An approval lockfile that stops applying the moment a server is
+            # absent from it is not an allowlist, and "not in the lockfile" is
+            # what an unreviewed server looks like. Blocking is the default;
+            # the old forward-everything behaviour is --allow-unapproved.
+            if self.allow_unapproved:
+                return "allow", "server not in lockfile; --allow-unapproved is set"
+            if self.ambiguous:
+                return "deny", (f"{self.server_name!r} matches "
+                                f"{len(self.ambiguous)} lock entries; pass "
+                                f"--name client:name to say which")
+            return "deny", "server is not in the lockfile"
 
         locked = self._locked_tools.get(tool.name)
         if locked is None:
@@ -516,7 +560,7 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
         deny_sampling: bool = False, deny_elicitation: bool = False,
         deny_roots: bool = False, result_policy: str = "annotate",
-        log_path: Path | None = None) -> int:
+        log_path: Path | None = None, allow_unapproved: bool = False) -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("mcp-audit guard: no server command given", file=sys.stderr)
@@ -534,7 +578,8 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
     guard = Guard(name, lock, policy=policy, strict=strict,
                   block_severity=block_severity, quiet=quiet,
                   deny_sampling=deny_sampling, deny_elicitation=deny_elicitation,
-                  deny_roots=deny_roots, result_policy=result_policy)
+                  deny_roots=deny_roots, result_policy=result_policy,
+                  allow_unapproved=allow_unapproved)
 
     trail: AuditLog | None = None
     if log_path is not None:
@@ -547,10 +592,22 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
                          detail=f"policy={policy} result_policy={result_policy}")
             guard.log(f"audit trail: {log_path}")
 
-    if guard._locked_tools is None:
+    if guard.ambiguous:
         guard.log(
-            f"server {name!r} is not in {lock_path.name}; forwarding without enforcement. "
-            "Run `mcp-audit approve --probe` to pin it."
+            f"{name!r} matches {len(guard.ambiguous)} entries in {lock_path.name} "
+            f"({', '.join(guard.ambiguous)}). Pass --name client:name to say which. "
+            "Until then its tools are withheld."
+        )
+    elif guard._locked_tools is None and allow_unapproved:
+        guard.log(
+            f"server {name!r} is not in {lock_path.name}; forwarding without "
+            "enforcement because --allow-unapproved is set."
+        )
+    elif guard._locked_tools is None:
+        guard.log(
+            f"server {name!r} is not in {lock_path.name}, so its tools are withheld. "
+            "Run `mcp-audit approve --probe` to review and pin it, or pass "
+            "--allow-unapproved to forward it unchecked."
         )
     else:
         guard.log(f"enforcing {len(guard._locked_tools)} approved tool(s) for {name!r} "

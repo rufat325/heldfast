@@ -167,6 +167,9 @@ def build_parser() -> argparse.ArgumentParser:
     guard_p.add_argument("--strict", action="store_true",
                          help="fail closed on internal errors too, not just on drift")
     guard_p.add_argument("--quiet", action="store_true", help="suppress stderr diagnostics")
+    guard_p.add_argument("--allow-unapproved", action="store_true",
+                         help="forward a server that is not in the lockfile instead of "
+                              "withholding its tools (the pre-0.2 behaviour)")
     guard_p.add_argument("--log", metavar="PATH", default=None,
                          help="append a hash-chained record of the session to PATH "
                               "(tool names and decisions; never arguments)")
@@ -493,6 +496,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
         deny_roots=args.deny_roots,
         result_policy=args.result_policy,
         log_path=Path(args.log) if getattr(args, "log", None) else None,
+        allow_unapproved=args.allow_unapproved,
     )
 
 
