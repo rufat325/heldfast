@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 69 commits, 497 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 74 commits, 507 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -201,6 +201,17 @@ The cycles, most recent last:
     policy allowing `C:/workspace`. Drive letters fold, Windows comparison
     ignores case, POSIX stays case-sensitive (asserted).
 
+33. `bdf496e` — fuzzed the hand-written parsers (2,904 inputs) and the guard
+    against malformed JSON-RPC (561 shapes). Zero exceptions in both, so
+    nothing to fix; pinned as tests so a later change cannot remove the
+    property. Fuzzing has stopped finding bugs here — real data still does.
+34. `84fdd55`, `d1c6fc4` — the corpora so far were the ecosystem's *own*
+    repos, which are not a fair sample of what gets published. Cloned 86
+    servers sampled across the 4,133-repo community index: 1,317 more
+    handlers, 99 configs from 20,589 fenced blocks. Zero source findings;
+    configs produce only MCPA003 (48%, LOW) and MCPA008 (8%, all public
+    endpoints, its documented false positive). **4,815 handlers total, zero.**
+
 ### If the loop resumes, change source
 
 **The spec is near exhausted.** The remaining unscreened methods
@@ -210,7 +221,9 @@ carry little model-facing text. Better sources now:
 - **the ecosystem's own repositories** — now including `anthropics/skills` and
   `anthropics/claude-cookbooks` for SKILL.md text, and
   `modelcontextprotocol/typescript-sdk` for TS handlers. This is the best
-  corpus available
+  corpus available, and the **community index** (`punkpeye/awesome-mcp-servers`,
+  4,133 repos) is the fair-sample counterpart: clone the index, sample across
+  it, harvest configs from fenced blocks. Corpora live in a scratch dir
   and it costs one `git clone`. The official servers repo, the Python SDK and
   FastMCP give ~2,800 handlers, 694 tool definitions and 27 configs, all of it
   text users literally copy. Cycles 24–26 each found something real in it:
@@ -388,6 +401,12 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   handlers only, and the same gap reappeared one layer down — caught by
   enumerating real decorator usage, not by remembering. When adding anything
   that reads "what the model can influence", check all four channels.
+- **A scanner that finds nothing looks the same as one that looks at nothing.**
+  Zero findings across 4,815 handlers only means something because the corpus
+  was checked for the defect: 185 community files import `child_process`, two
+  of them also register a handler, and the one real `execSync` with a template
+  literal takes its pid from `process.ppid`. Always go and find what the true
+  positive would have been.
 - **Enumerate the shapes; do not assume your tests are the set.** Writing out
   every way a handler reads its argument found 4 missed shapes of 9 in the
   JavaScript scanner and 1 of 13 in the Python one, hours after shipping both
