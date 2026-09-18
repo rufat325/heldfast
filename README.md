@@ -154,6 +154,23 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA030 | critical | Tool parameter reaches a shell in the server's own source |
 | MCPA031 | high | Server script changed since approval |
 
+### One attack per rule
+
+The clean corpus proves the scanner is quiet on correct configuration, which on its own
+proves very little — a scanner with every rule deleted is perfectly quiet. So there is a
+matching corpus of attacks: one realistic instance per rule, written the way an attacker
+would write it.
+
+The load-bearing part is the last assertion in that file. **Every rule in the registry must
+appear there**, so adding a rule without an attack demonstrating it fails the build, exactly
+as adding one without documentation already does. Two rules are exempt and say why: MCPA006
+reads POSIX file modes, and MCPA018 is the opt-in model tier that never runs without a key.
+
+Writing it found a gap. `admin:org` is how GitHub spells organisation-wide administrative
+access, and MCPA025 matched only a bare `admin` or an explicit `x:*` — so that whole family
+of scopes went unreported. Narrow scopes like `repo:status` and `read:user` still don't
+fire, which is asserted alongside it.
+
 ### Measured against tool text somebody shipped
 
 The poisoning rules read text a server controls, which makes them exactly the rules that go
@@ -745,7 +762,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-507 tests, stdlib unittest, nothing to install.
+540 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

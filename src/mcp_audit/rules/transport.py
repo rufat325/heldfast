@@ -274,8 +274,14 @@ def metadata_endpoint(ctx: AuditContext) -> Iterable[Finding]:
         )
 
 
-_BROAD_SCOPE = re.compile(r"^(?:\*|all|full[_\-]?access|admin|root|everything|.*:\*)$",
-                          re.IGNORECASE)
+# `admin:org`, `admin:repo_hook` and the rest of that family are how GitHub
+# and GitLab spell organisation-wide administrative access, and they are
+# over-broad for a tool server whatever follows the colon. Added after writing
+# an attack sample with `admin:org` in it and watching the rule stay quiet:
+# only a bare `admin` or an explicit `x:*` was matched.
+_BROAD_SCOPE = re.compile(
+    r"^(?:\*|all|full[_\-]?access|admin|root|everything|admin:.+|.*:\*)$",
+    re.IGNORECASE)
 _SCOPE_KEYS = ("scope", "scopes", "oauthScopes", "oauth_scopes", "requiredScopes")
 
 
