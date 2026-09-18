@@ -124,7 +124,7 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 |---|---|---|
 | MCPA001 | high | Server launched through a shell |
 | MCPA002 | critical | Startup pipes a network fetch into an interpreter |
-| MCPA003 | medium | Package run with no pinned version |
+| MCPA003 | low | Package run with no pinned version |
 | MCPA004 | high | Package name is a near-miss of an official MCP server |
 | MCPA005 | high | Credential sitting in plaintext in config |
 | MCPA006 | medium | Config with credentials is group/world readable (POSIX) |
@@ -601,6 +601,12 @@ your machine enforces are two separate facts that can drift apart. Here they are
 committed to the repo - a changed tool description shows up as a diff in code review, fails
 the build, and is refused at the call site, all from the artifact the reviewer looked at.
 
+**`guard` is stdio only.** It launches the server as a child process and sits between the
+two pipes, so a remote server configured with a `url` has nothing for it to wrap. `scan
+--probe` reads remote servers over HTTP and reports drift in them exactly the same way;
+what you do not get is refusal at the call site. Said plainly because the alternative is
+someone assuming they are covered.
+
 `guard` also ties the server's lifetime to its own - a Job Object on Windows,
 `PR_SET_PDEATHSIG` on Linux. Its cleanup handles a normal exit, but if the guard is killed
 outright that never runs, and a server which ignores stdin close would otherwise outlive it
@@ -714,7 +720,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-481 tests, stdlib unittest, nothing to install.
+484 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

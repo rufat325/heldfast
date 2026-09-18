@@ -222,3 +222,39 @@ class TestNewCommands(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheReadmeMatchesTheCode(unittest.TestCase):
+    """Numbers and tables in a README go stale silently.
+
+    The test count was pinned earlier for this reason. Then the rule table was
+    checked by hand and MCPA003 was listed as medium while the code had said
+    low since it was downgraded for firing on 77% of real configs. A table
+    nothing verifies is a table that describes an older version of the tool.
+    """
+
+    def _readme(self) -> str:
+        return (ROOT / "README.md").read_text(encoding="utf-8")
+
+    def test_every_rule_is_in_the_table_and_nothing_else_is(self) -> None:
+        listed = set(re.findall(r"^\| (MCPA\d+) \|", self._readme(), re.M))
+        known = {r.id for r in all_rules()}
+        self.assertEqual(known, listed,
+                         "missing: %s   extra: %s"
+                         % (sorted(known - listed), sorted(listed - known)))
+
+    def test_the_table_severities_match_the_registry(self) -> None:
+        by_id = {r.id: r.default_severity.label.lower() for r in all_rules()}
+        for line in self._readme().splitlines():
+            match = re.match(r"^\| (MCPA\d+) \| (\w+) \|", line)
+            if not match:
+                continue
+            rule_id, stated = match.group(1), match.group(2).lower()
+            with self.subTest(rule=rule_id):
+                self.assertEqual(by_id.get(rule_id), stated,
+                                 "%s: the table says %s" % (rule_id, stated))
+
+    def test_the_client_count_is_true(self) -> None:
+        match = re.search(r"Finds configs for (\d+) clients", self._readme())
+        self.assertIsNotNone(match, "the README no longer states a client count")
+        self.assertEqual(len(clients.CLIENTS), int(match.group(1)))
