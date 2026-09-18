@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 36 commits, 330 tests, 30 rules, CI across Linux/macOS/Windows
+complete unit. 38 commits, 340 tests, 30 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -97,6 +97,12 @@ The cycles, most recent last:
     the fix gets ignored. Follows one hop into a local helper, because every
     real server uses the dispatcher shape and stopping at the handler finds
     only tutorials. Validated on 41 handlers across 14 repos before shipping.
+
+17. `d6284f1` — `auditlog.py`: the guard can now leave a hash-chained record
+    (`guard --log`, `verify-log`). Idea from mcp-firewall, minus the Ed25519
+    signing, because a key needs somewhere to live. Arguments are never
+    written -- that is the design, not an omission. Also fixed a hardcoded
+    command list in `main()` that silently parsed `verify-log` as a path.
 
 ### If the loop resumes, change source
 
@@ -200,14 +206,17 @@ owner removed it deliberately. Revisit only if asked.
                     legacy initialize handshake
     lockfile.py     .mcp-audit.lock — what you approved
     guard.py        stdio proxy that enforces the lockfile at runtime
+    auditlog.py     hash-chained record of a guarded session
+    sourcescan.py   AST taint: tool parameter -> shell, in the server's own code
     lifetime.py     ties the wrapped server's lifetime to the guard's
     server.py       mcp-audit *as* an MCP server (`serve`)
     inspect.py      what is configured, with no judgements
     llm.py          optional semantic classifier (extra: mcp-audit[llm])
-    rules/          26 rules, MCPA001–MCPA026
+    rules/          30 rules, MCPA001–MCPA030
     rule_docs.py    long-form docs; docs/rules.md is generated from this
 
-Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`, `serve`.
+Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
+`verify-log`, `serve`.
 
 ## Lessons that cost something
 
