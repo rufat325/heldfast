@@ -175,6 +175,13 @@ give the agent instructions, so imperative mood there is normal. In a tool descr
 isn't. Without that split the scanner fires constantly on any real skills directory and
 becomes useless.
 
+MCPA012 draws the same line for a different reason. A SKILL.md documenting setup will say
+"put your key in `.env.local`", and three of Anthropic's own skills do — that is
+instruction, not instruction injection. A *tool description* naming your `.env` is another
+matter, because a server has nothing to say about it. So project dotfiles are exempt in a
+skill body and nowhere else; an ssh key, `~/.aws/credentials` or `/etc/shadow` is reported
+wherever it appears, since no setup instruction needs those.
+
 ## When a server changes its mind mid-session
 
 The protocol lets a server send `notifications/tools/list_changed` to tell the client its
@@ -720,7 +727,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-484 tests, stdlib unittest, nothing to install.
+489 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
