@@ -258,8 +258,18 @@ class Policy:
 
         values = _strings_in(arguments)
 
-        paths = rule.get("paths")
-        if isinstance(paths, list) and paths:
+        # Policy is hand-written, so it arrives malformed sooner or later --
+        # a null left in a list, a string where a list belongs. Non-strings
+        # are dropped rather than crashed on: this runs inside the proxy's
+        # pump, and an exception here would hang the agent rather than
+        # failing open the way the guard promises to.
+        def entries(value: Any) -> list[str]:
+            if not isinstance(value, list):
+                return []
+            return [item for item in value if isinstance(item, str) and item.strip()]
+
+        paths = entries(rule.get("paths"))
+        if paths:
             for value in values:
                 if looks_like_path(value) and not path_is_allowed(value, paths):
                     return Decision(
@@ -268,8 +278,8 @@ class Policy:
                         f"({', '.join(paths)})",
                         "paths", value)
 
-        domains = rule.get("domains")
-        if isinstance(domains, list) and domains:
+        domains = entries(rule.get("domains"))
+        if domains:
             for value in values:
                 if looks_like_url(value) and not host_is_allowed(value, domains):
                     host = urlsplit(value).hostname or value
@@ -279,8 +289,8 @@ class Policy:
                         f"({', '.join(domains)})",
                         "domains", value)
 
-        operations = rule.get("sql")
-        if isinstance(operations, list) and operations:
+        operations = entries(rule.get("sql"))
+        if operations:
             for value in values:
                 if looks_like_sql(value):
                     ok, why = sql_is_allowed(value, operations)

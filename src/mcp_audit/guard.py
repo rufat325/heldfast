@@ -246,7 +246,19 @@ class Guard:
             return None
 
         name = str(params.get("name") or "")
-        decision = self.call_policy.check(name, params.get("arguments"))
+        try:
+            decision = self.call_policy.check(name, params.get("arguments"))
+        except Exception as exc:
+            # Same posture as the rest of this module: a security event fails
+            # closed, an internal error fails open and says so. This runs on
+            # the pump thread, so an escaping exception would stop forwarding
+            # entirely and hang the agent -- a worse outcome than one
+            # unchecked call, and a much more confusing one.
+            self.stats.internal_errors.append(f"policy raised: {exc}")
+            self.log(f"INTERNAL ERROR checking {name}: {exc}")
+            if self.strict:
+                raise
+            return None
         if decision.allowed:
             return None
 

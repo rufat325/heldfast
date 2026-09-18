@@ -267,3 +267,66 @@ class TestSuggestion(unittest.TestCase):
         policy = Policy(self._suggest())
         self.assertFalse(policy.check("read_file", {"path": "/home/me/notes.txt"}))
         self.assertFalse(policy.check("fetch_page", {"url": "https://example.com/x"}))
+
+
+class TestMalformedPolicyCannotBreakTheProxy(unittest.TestCase):
+    """Policy is hand-written, so it arrives malformed sooner or later. This
+    runs on the guard's pump thread, where an exception does not fail open --
+    it stops forwarding and hangs the agent, which is worse than one unchecked
+    call and far more confusing to debug.
+
+    Found by fuzzing: a null left in a list raised TypeError out of
+    normalize_path, and a null in a sql list raised AttributeError.
+    """
+
+    MALFORMED = [
+        {"t": {"paths": [None]}},
+        {"t": {"paths": "not-a-list"}},
+        {"t": {"sql": [None]}},
+        {"t": {"domains": [""]}},
+        {"t": {"paths": []}},
+        {"t": None},
+        {"t": {}},
+    ]
+
+    AWKWARD = [
+        None, "", 0, [], {}, {"a": None}, {"a": 1}, {"a": True},
+        {"a": "\x00"}, {"a": "~" * 4000}, {"a": "/" * 4000},
+        {"a": "://"}, {"a": "http://"}, {"a": "\ud800"},
+        {"a": "/w/" + "../" * 500 + "etc/passwd"},
+    ]
+
+    def test_nothing_raises(self) -> None:
+        for rules in self.MALFORMED:
+            for arguments in self.AWKWARD:
+                with self.subTest(rules=rules, arguments=str(arguments)[:30]):
+                    Policy(rules).check("t", arguments)
+
+    def test_a_structure_that_refers_to_itself_terminates(self) -> None:
+        loop: dict = {"p": "/etc/passwd"}
+        loop["self"] = loop
+        Policy({"t": {"paths": ["/w/**"]}}).check("t", loop)
+
+    def test_a_malformed_rule_does_not_silently_permit_a_good_one(self) -> None:
+        """Dropping the broken entry must not drop the whole constraint."""
+        policy = Policy({"t": {"paths": [None, "/w/**"]}})
+        self.assertTrue(policy.check("t", {"p": "/w/ok"}))
+        self.assertFalse(policy.check("t", {"p": "/etc/passwd"}))
+
+    def test_the_guard_fails_open_and_says_so(self) -> None:
+        class Exploding:
+            def __bool__(self):
+                return True
+
+            def check(self, *_args):
+                raise RuntimeError("boom")
+
+        lock = Lock()
+        lock.servers = {"test:h": {"name": "h", "client": "test", "tools": {}}}
+        guard = Guard("h", lock, quiet=True)
+        guard.call_policy = Exploding()
+
+        refusal = guard.check_call({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                    "params": {"name": "t", "arguments": {}}})
+        self.assertIsNone(refusal, "an internal error must not block the call")
+        self.assertTrue(guard.stats.internal_errors)
