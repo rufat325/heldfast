@@ -1,5 +1,7 @@
 # mcp-audit
 
+[![ci](https://github.com/rufat325/mcp-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/rufat325/mcp-audit/actions/workflows/ci.yml)
+
 Security scanner for MCP server configs and agent skills. No runtime dependencies.
 
 ```bash

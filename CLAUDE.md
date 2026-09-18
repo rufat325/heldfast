@@ -12,11 +12,16 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 
 ## Where this stopped
 
-**Nothing is half-finished.** Working tree clean, CI green, the last commit
-is a complete unit. 26 commits, 284 tests, 26 rules, CI across
-Linux/macOS/Windows on Python 3.9/3.12/3.13 plus a wire-shape job, a job that
-exercises `action.yml` itself, and a release workflow that publishes on a
-version tag.
+**Nothing is half-finished.** Working tree clean, the last commit is a
+complete unit. 29 commits, 286 tests, 26 rules, CI across Linux/macOS/Windows
+on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
+`action.yml` itself, and a release workflow that publishes on a version tag.
+
+**CI is green, and that was checked rather than assumed.** It had been red on
+all three Windows jobs from `6b7fbe1` through `903f6a2` while this file
+claimed otherwise. Confirm it against the API before repeating it:
+`https://api.github.com/repos/rufat325/mcp-audit/actions/runs?per_page=1`.
+Reading job *logs* needs a signed-in session; the run and job status do not.
 
 The last stretch ran as a loop: the owner said "keep researching and
 building" repeatedly, and each cycle picked one source, found a gap, built
@@ -63,6 +68,17 @@ The cycles, most recent last:
     and all four were run before being written down. Added `release.yml`:
     trusted publishing on a version tag, no stored token, and it refuses to
     publish a wheel that pulled in a dependency.
+
+12. `9a6115a` — CI had been red on Windows since cycle 9 and nobody looked.
+    The orphan test shelled out to `wmic`, which current Windows runner
+    images no longer ship, so it raised FileNotFoundError; it passed locally
+    only because this machine is old enough to still have wmic. The fixture
+    now reports its own pid and liveness is an OpenProcess check. Whole suite
+    went from 28 seconds to 15.
+13. `cdf6fb2` — `serve` answered only the legacy handshake while `probe`
+    spoke both eras, so mcp-audit's own server was two revisions behind the
+    thing that checks for exactly that. It now answers `server/discover`, and
+    the end-to-end test asserts which era the two halves settle on.
 
 ### If the loop resumes, change source
 
@@ -196,6 +212,14 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`, `serve`.
   it from an unrelated directory found a walk that appears to hang, in the
   exact command the README opens with. Nothing in 275 passing tests could
   have caught it; they all ran from the source tree against fixtures.
+- **A green local suite is not a green CI.** Windows CI was red for six
+  commits while this file said otherwise, because a test called a utility
+  this machine still has and the runners no longer do. Local success says the
+  code works *here*.
+- **The two halves of the repo can drift apart.** `probe.py` was taught the
+  current protocol revision; `server.py` was not, and nothing compared them
+  for four cycles. When one side of a client/server pair learns something,
+  check the other.
 
 ## Environment traps on this machine
 
