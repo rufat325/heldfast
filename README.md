@@ -65,6 +65,7 @@ mcp-audit explain MCPA015              # describe one rule in full
 mcp-audit guard -- npx -y pkg@1.0.0    # proxy a server, enforce the lockfile
 mcp-audit guard --log trail.jsonl -- npx pkg   # proxy and record the session
 mcp-audit verify-log trail.jsonl       # check the record was not altered
+mcp-audit guard --dry-run -- npx pkg   # what would the policy block?
 mcp-audit serve                        # run as an MCP server
 ```
 
@@ -155,6 +156,65 @@ MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *s
 give the agent instructions, so imperative mood there is normal. In a tool description it
 isn't. Without that split the scanner fires constantly on any real skills directory and
 becomes useless.
+
+## Constraining what a tool may be asked to do
+
+The lockfile answers whether a tool is the one you approved. That is integrity, and it is a
+different question from authority: a `delete_file` whose definition hasn't changed by a byte
+is still the tool that deletes `~/.ssh/id_rsa` when something talks the agent into asking
+for it.
+
+So a server's lock entry can carry argument limits:
+
+```json
+"policy": {
+  "read_file":   {"paths": ["/workspace/**", "/tmp"]},
+  "query":       {"sql": ["SELECT"]},
+  "fetch":       {"domains": ["api.github.com"]},
+  "run_command": {"deny": true}
+}
+```
+
+`guard` then refuses the call before it reaches the server, and tells the model why:
+
+```
+[BLOCKED BY mcp-audit] read_file was not called. /etc/passwd is outside the approved
+paths (/workspace/**). This boundary is recorded in the approval lockfile; it is not a
+fault in the server, and retrying the same arguments will not change it.
+```
+
+That comes back as a tool *result* with `isError`, not a JSON-RPC error, so the model reads
+it in the same channel as every other answer and can ask for something permitted instead. A
+protocol error just tells it the connection broke, and it retries the same call.
+
+It lives in `.mcp-audit.lock` on purpose. One committed file already governs code review, CI
+and runtime enforcement; a second policy file in another format would let the thing a
+reviewer reads and the thing a machine enforces drift apart. `approve` preserves it — policy
+is written by a person, everything else in an entry is observed and rebuilt.
+
+The checks are deterministic, and most of the work is in not being fooled:
+
+| Written | Also blocks |
+|---|---|
+| `"paths": ["/workspace/**"]` | `/workspace/../../etc/passwd`, `~/.ssh/id_rsa`, `/workspace-evil/x`, a second path hidden in another argument |
+| `"domains": ["api.github.com"]` | `api.github.com.evil.io`, `169.254.169.254` |
+| `"sql": ["SELECT"]` | `SELECT 1; DROP TABLE users` |
+
+Paths are normalized before they are matched, `*` stays inside one directory while `**`
+spans them, domains match on label boundaries rather than substrings, and every string
+anywhere in the arguments is checked — including nested ones — because the interesting
+request is the one that hides a path in a field nobody thought about.
+
+### Trying it before enforcing it
+
+```bash
+mcp-audit guard --dry-run -- npx -y @scope/server@1.0.0
+# mcp-audit guard: 3 call(s) WOULD be refused [read_file: paths] -- dry run, nothing was blocked
+```
+
+Nobody adopts an enforcement tool they can't try first. `--dry-run` evaluates the policy
+against real traffic and forwards the call anyway. It works against live calls rather than
+a replay, because the audit log holds no arguments by design and there is nothing to replay.
 
 ## Proving what the guard did
 
@@ -543,7 +603,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-344 tests, stdlib unittest, nothing to install.
+376 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

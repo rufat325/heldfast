@@ -114,6 +114,15 @@ class Lock:
             resources_by_server.setdefault(rs.server, []).append(rs)
         instructions = instructions or {}
 
+        # Argument policy is written by a person, not observed from a server,
+        # so re-approving must not throw it away. Everything else in an entry
+        # is a fact about what was seen and is rebuilt from scratch.
+        kept_policies = {
+            key: value["policy"]
+            for key, value in self.servers.items()
+            if isinstance(value, dict) and isinstance(value.get("policy"), dict)
+        }
+
         self.servers = {}
         for s in servers:
             entry: dict[str, Any] = {
@@ -146,6 +155,9 @@ class Lock:
                              "description_preview": (rs.description or "")[:160]}
                     for rs in sorted(observed_resources, key=lambda x: x.uri)
                 }
+            carried = kept_policies.get(s.identity())
+            if carried:
+                entry["policy"] = carried
             observed = by_server.get(s.name)
             if observed is not None:
                 entry["tools"] = {

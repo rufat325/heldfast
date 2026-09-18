@@ -49,6 +49,7 @@ from .findings import Severity
 from .auditlog import AuditLog
 from .lifetime import bind_child, posix_preexec
 from .lockfile import DEFAULT_LOCK_NAME, Lock
+from .policy import Policy
 from .model import ServerSpec, ToolSpec, instructions_fingerprint
 from .rules import AuditContext, run_rules, scan_untrusted_text
 
@@ -73,6 +74,8 @@ class GuardStats:
     tools_unapproved: list[str] = field(default_factory=list)
     tools_drifted: list[str] = field(default_factory=list)
     findings_blocked: list[str] = field(default_factory=list)
+    calls_denied: list[str] = field(default_factory=list)
+    calls_would_deny: list[str] = field(default_factory=list)
     internal_errors: list[str] = field(default_factory=list)
 
 
@@ -83,7 +86,8 @@ class Guard:
                  deny_elicitation: bool = False,
                  deny_roots: bool = False,
                  result_policy: str = "annotate",
-                 allow_unapproved: bool = False) -> None:
+                 allow_unapproved: bool = False,
+                 dry_run: bool = False) -> None:
         self.server_name = server_name
         self.lock = lock
         self.policy = policy
@@ -95,6 +99,7 @@ class Guard:
         self.deny_roots = deny_roots
         self.result_policy = result_policy
         self.allow_unapproved = allow_unapproved
+        self.dry_run = dry_run
         # Set by run() so a denied server request can be answered without
         # the client ever seeing it.
         self.respond_to_server = None
@@ -103,6 +108,9 @@ class Guard:
         # not enough to tell. Set by _resolve_entry().
         self.ambiguous: list[str] = []
         self._locked_tools = self._load_locked_tools()
+        # Distinct from self.policy, which is the block/strip/warn mode for
+        # tool *definitions*. This one constrains tool *arguments*.
+        self.call_policy = Policy.from_lock_entry(self._resolve_entry())
         self._locked_instructions = self._load_locked_instructions()
 
     # -- lockfile ----------------------------------------------------------
@@ -218,6 +226,58 @@ class Guard:
             self.stats.tools_drifted.append(tool.name)
             return "deny", "tool definition changed since approval"
         return "allow", "matches approved fingerprint"
+
+    def check_call(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        """A refusal to send back, or None to forward the call.
+
+        The lockfile says this tool is the one that was approved. Policy says
+        what it may be asked to do, which is a different question: a
+        `delete_file` whose definition has not changed by a byte is still the
+        tool that deletes ~/.ssh/id_rsa when something talks the agent into
+        asking for that.
+        """
+        if not self.call_policy:
+            return None
+        if message.get("method") != "tools/call":
+            return None
+        params = message.get("params")
+        if not isinstance(params, dict):
+            return None
+
+        name = str(params.get("name") or "")
+        decision = self.call_policy.check(name, params.get("arguments"))
+        if decision.allowed:
+            return None
+
+        if self.dry_run:
+            # Nobody adopts an enforcement tool they cannot try first. A dry
+            # run answers "what would this policy have broken" against real
+            # traffic, which is the only honest way to ask it -- the audit log
+            # holds no arguments, by design, so there is nothing to replay.
+            self.stats.calls_would_deny.append(f"{name}: {decision.constraint}")
+            self.log(f"WOULD DENY {name}: {decision.reason}")
+            return None
+
+        self.stats.calls_denied.append(f"{name}: {decision.constraint}")
+        self.log(f"DENIED {name}: {decision.reason}")
+        # An error *result* rather than a JSON-RPC error: the model is shown
+        # why, in the same channel it reads every other answer in, so it can
+        # ask for something permitted instead. A protocol error tells it the
+        # connection is broken and it retries the same call.
+        return {
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "result": {
+                "content": [{
+                    "type": "text",
+                    "text": (f"[BLOCKED BY mcp-audit] {name} was not called. "
+                             f"{decision.reason}. This boundary is recorded in the "
+                             f"approval lockfile; it is not a fault in the server, "
+                             f"and retrying the same arguments will not change it."),
+                }],
+                "isError": True,
+            },
+        }
 
     def _content_verdict(self, tool: ToolSpec) -> tuple[str, str]:
         """Run the poisoning rules over this tool's own text."""
@@ -517,6 +577,13 @@ class Guard:
         if s.results_flagged:
             cats = ", ".join(sorted(set(s.result_categories)))
             bits.append(f"{s.results_flagged} flagged result(s) [{cats}]")
+        if s.calls_denied:
+            bits.append(f"{len(s.calls_denied)} call(s) refused by policy "
+                        f"[{', '.join(sorted(set(s.calls_denied)))}]")
+        if s.calls_would_deny:
+            bits.append(f"{len(s.calls_would_deny)} call(s) WOULD be refused "
+                        f"[{', '.join(sorted(set(s.calls_would_deny)))}] -- dry run, "
+                        f"nothing was blocked")
         if s.server_requests_denied:
             bits.append(f"{s.server_requests_denied} denied")
         if s.internal_errors:
@@ -524,7 +591,7 @@ class Guard:
         return ", ".join(bits)
 
 
-def _record_request(trail: AuditLog, line: str) -> None:
+def _record_request(trail: AuditLog, message: dict[str, Any]) -> None:
     """Note what the client asked for. Never what it asked with.
 
     `params.arguments` is where a credential or a customer's data would be, so
@@ -532,12 +599,6 @@ def _record_request(trail: AuditLog, line: str) -> None:
     because it is occasionally the only clue that something odd went past, and
     a byte count discloses nothing.
     """
-    try:
-        message = json.loads(line)
-    except (ValueError, TypeError):
-        return
-    if not isinstance(message, dict):
-        return
     method = str(message.get("method") or "")
     if not method:
         return
@@ -560,7 +621,8 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
         deny_sampling: bool = False, deny_elicitation: bool = False,
         deny_roots: bool = False, result_policy: str = "annotate",
-        log_path: Path | None = None, allow_unapproved: bool = False) -> int:
+        log_path: Path | None = None, allow_unapproved: bool = False,
+        dry_run: bool = False) -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("mcp-audit guard: no server command given", file=sys.stderr)
@@ -579,7 +641,7 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
                   block_severity=block_severity, quiet=quiet,
                   deny_sampling=deny_sampling, deny_elicitation=deny_elicitation,
                   deny_roots=deny_roots, result_policy=result_policy,
-                  allow_unapproved=allow_unapproved)
+                  allow_unapproved=allow_unapproved, dry_run=dry_run)
 
     trail: AuditLog | None = None
     if log_path is not None:
@@ -628,15 +690,36 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
     # server that ignores stdin close would be orphaned indefinitely.
     guard.log(f"child lifetime: {bind_child(proc)}")
 
+    stdout_lock = threading.Lock()
+
     def pump_client_to_server() -> None:
         try:
             for line in sys.stdin:
                 if proc.stdin is None:
                     break
-                # Parsing this direction costs nothing when no trail is kept,
-                # which is why it is inside the branch rather than above it.
-                if trail is not None:
-                    _record_request(trail, line)
+                # This direction is only parsed when something needs it: a
+                # policy to enforce, or a trail to write.
+                if guard.call_policy or trail is not None:
+                    try:
+                        message = json.loads(line)
+                    except (ValueError, TypeError):
+                        message = None
+                    if isinstance(message, dict):
+                        if trail is not None:
+                            _record_request(trail, message)
+                        refusal = guard.check_call(message)
+                        if refusal is not None:
+                            if trail is not None:
+                                trail.record(
+                                    "denied",
+                                    subject=str((message.get("params") or {}).get("name") or ""),
+                                    decision="block")
+                            # Answer the client ourselves and do not forward.
+                            # stdout has two writers now, so it is serialized.
+                            with stdout_lock:
+                                sys.stdout.write(json.dumps(refusal) + "\n")
+                                sys.stdout.flush()
+                            continue
                 proc.stdin.write(line)
                 proc.stdin.flush()
         except (OSError, ValueError):
@@ -663,13 +746,15 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
             except json.JSONDecodeError:
                 # Not JSON. Pass it through untouched rather than dropping it;
                 # some servers emit banner text before the protocol starts.
-                sys.stdout.write(line)
-                sys.stdout.flush()
+                with stdout_lock:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
                 continue
             if isinstance(message, dict):
                 message = guard.handle_server_message(message)
-            sys.stdout.write(json.dumps(message) + "\n")
-            sys.stdout.flush()
+            with stdout_lock:
+                sys.stdout.write(json.dumps(message) + "\n")
+                sys.stdout.flush()
     except (OSError, ValueError) as exc:
         guard.log(f"transport error: {exc}")
         if trail is not None:
