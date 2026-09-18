@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -130,6 +131,37 @@ def build_parser() -> argparse.ArgumentParser:
         description="What a check looks for, why it matters, how to fix it, and when it is wrong.",
     )
     explain_p.add_argument("rule_id", metavar="RULE", help="a rule id, e.g. MCPA015")
+
+    policy_p = sub.add_parser(
+        "policy",
+        help="propose argument limits for the tools a server exposes",
+        description=(
+            "Reads the tools a server actually exposes and proposes a starter "
+            "policy: path limits for tools that take a path, destination limits "
+            "for tools that take a URL, operation limits for tools that take a "
+            "query, and an outright deny for tools named after something "
+            "destructive. Every value is a placeholder you have to edit -- a "
+            "generated policy that quietly permitted your home directory would "
+            "read like a boundary and be a rubber stamp."
+        ),
+    )
+    policy_p.add_argument("paths", nargs="*", help="files or directories to scan")
+    policy_p.add_argument("--probe", action="store_true",
+                          help="connect to servers to read their live tool schemas "
+                               "(this LAUNCHES local stdio servers)")
+    policy_p.add_argument("--probe-timeout", type=float, default=10.0, metavar="SECONDS")
+    policy_p.add_argument("--no-stdio-probe", action="store_true")
+    policy_p.add_argument("--no-user-configs", action="store_true")
+    policy_p.add_argument("--no-skills", action="store_true", default=True,
+                          help=argparse.SUPPRESS)
+    policy_p.add_argument("--no-source", action="store_true", default=True,
+                          help=argparse.SUPPRESS)
+    policy_p.add_argument("--depth", type=int, default=6, metavar="N")
+    policy_p.add_argument("--lock", metavar="PATH", default=None)
+    policy_p.add_argument("--write", action="store_true",
+                          help="merge the proposal into the lockfile, leaving any "
+                               "rule already there untouched")
+    policy_p.add_argument("-v", "--verbose", action="store_true")
 
     verify_p = sub.add_parser(
         "verify-log",
@@ -504,6 +536,67 @@ def cmd_guard(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_policy(args: argparse.Namespace) -> int:
+    from .policy import suggest
+    from .rules.annotations import MUTATING_VERBS
+
+    lock_path = _resolve_lock_path(args)
+    try:
+        lock = Lock.load(lock_path)
+    except ValueError as exc:
+        print(f"mcp-audit: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    data = collect(args)
+    if not data.tools:
+        print("mcp-audit: no tools to propose limits for. Argument limits are "
+              "written against a tool's schema, so this needs --probe.",
+              file=sys.stderr)
+        return EXIT_OK
+
+    by_server: dict[str, list] = {}
+    for tool in data.tools:
+        by_server.setdefault(tool.server, []).append(tool)
+
+    identities = {s.name: s.identity() for s in data.servers}
+    proposal: dict[str, dict] = {}
+    for server_name, tools in sorted(by_server.items()):
+        rules = suggest(tools, MUTATING_VERBS)
+        if rules:
+            proposal[identities.get(server_name, server_name)] = rules
+
+    if not proposal:
+        print("mcp-audit: no tool takes a path, a destination or a query. "
+              "Nothing to limit.")
+        return EXIT_OK
+
+    if not args.write:
+        print(json.dumps({"policy": proposal}, indent=2))
+        print("\n  Placeholders above are deliberate: edit them, then re-run with",
+              file=sys.stderr)
+        print("  --write, or paste the rules under the matching server in the lockfile.",
+              file=sys.stderr)
+        return EXIT_OK
+
+    added, kept = 0, 0
+    for identity, rules in proposal.items():
+        entry = lock.servers.get(identity)
+        if not isinstance(entry, dict):
+            continue
+        existing = entry.setdefault("policy", {})
+        for tool, rule in rules.items():
+            if tool in existing:
+                kept += 1      # never overwrite a decision somebody made
+                continue
+            existing[tool] = rule
+            added += 1
+    lock.save(lock_path)
+    print(f"mcp-audit: added {added} rule(s) to {lock_path}, left {kept} untouched.")
+    print("           Every added value is a placeholder and will refuse every call "
+          "until you edit it.")
+    return EXIT_OK
+
+
 def cmd_verify_log(args: argparse.Namespace) -> int:
     from .auditlog import verify
 
@@ -572,6 +665,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_rules(args)
         if args.command == "explain":
             return cmd_explain(args)
+        if args.command == "policy":
+            return cmd_policy(args)
         if args.command == "verify-log":
             return cmd_verify_log(args)
         if args.command == "guard":

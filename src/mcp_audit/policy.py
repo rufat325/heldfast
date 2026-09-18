@@ -292,3 +292,68 @@ class Policy:
                             "sql", value)
 
         return ALLOWED
+
+
+# ---------------------------------------------------------------------------
+# Proposing a starter policy
+# ---------------------------------------------------------------------------
+#
+# A policy nobody writes protects nothing, and writing one from scratch means
+# reading every tool's schema by hand. This proposes one from what a probe
+# already saw, so the job becomes reviewing and tightening rather than
+# starting from an empty object.
+#
+# Everything it proposes is deliberately a placeholder that will not work
+# until someone edits it. A generated policy that silently permitted the
+# machine's actual home directory would be worse than no policy: it would read
+# like a boundary and be a rubber stamp.
+
+_PATH_PARAM = re.compile(
+    r"^(?:path|paths|file|files|filename|filepath|dir|directory|folder|"
+    r"source|destination|target|src|dst|location)$", re.IGNORECASE)
+_URL_PARAM = re.compile(
+    r"^(?:url|uri|endpoint|webhook|callback|callback_url|target_url|"
+    r"upload_url|host|address)$", re.IGNORECASE)
+_SQL_PARAM = re.compile(
+    r"^(?:sql|query|statement|command_text|expression)$", re.IGNORECASE)
+
+PATH_PLACEHOLDER = "/REPLACE-ME/**"
+DOMAIN_PLACEHOLDER = "replace-me.example.com"
+
+
+def _property_names(schema: Any) -> list[str]:
+    properties = (schema or {}).get("properties") if isinstance(schema, dict) else None
+    return [str(name) for name in properties] if isinstance(properties, dict) else []
+
+
+def suggest(tools: Any, destructive_verbs: tuple = ()) -> dict[str, dict[str, Any]]:
+    """A starter policy for these tools, as {tool: constraints}.
+
+    Only tools whose schema actually takes a path, a destination or a query
+    get a constraint. Proposing something for every tool would train people
+    to delete most of the file, and the ones they kept would be the ones they
+    stopped reading.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for tool in tools:
+        name = getattr(tool, "name", "") or ""
+        properties = _property_names(getattr(tool, "input_schema", None))
+        rule: dict[str, Any] = {}
+
+        if any(_PATH_PARAM.match(p) for p in properties):
+            rule["paths"] = [PATH_PLACEHOLDER]
+        if any(_URL_PARAM.match(p) for p in properties):
+            rule["domains"] = [DOMAIN_PLACEHOLDER]
+        if any(_SQL_PARAM.match(p) for p in properties):
+            rule["sql"] = ["SELECT"]
+
+        lowered = name.lower()
+        if any(verb in lowered for verb in destructive_verbs):
+            # Named like it destroys something. Denying outright is the safe
+            # proposal; whoever reviews this can downgrade it to a path limit
+            # if the tool is genuinely needed.
+            rule = {"deny": True}
+
+        if rule:
+            out[name] = rule
+    return dict(sorted(out.items()))

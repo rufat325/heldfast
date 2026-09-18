@@ -66,6 +66,7 @@ mcp-audit guard -- npx -y pkg@1.0.0    # proxy a server, enforce the lockfile
 mcp-audit guard --log trail.jsonl -- npx pkg   # proxy and record the session
 mcp-audit verify-log trail.jsonl       # check the record was not altered
 mcp-audit guard --dry-run -- npx pkg   # what would the policy block?
+mcp-audit policy --probe               # propose argument limits to review
 mcp-audit serve                        # run as an MCP server
 ```
 
@@ -204,6 +205,26 @@ Paths are normalized before they are matched, `*` stays inside one directory whi
 spans them, domains match on label boundaries rather than substrings, and every string
 anywhere in the arguments is checked — including nested ones — because the interesting
 request is the one that hides a path in a field nobody thought about.
+
+### Getting a first draft
+
+Writing this by hand means reading every tool's schema, so `mcp-audit policy --probe`
+proposes one from what a probe already saw — a path limit for tools that take a path, a
+destination limit for tools that take a URL, an operation limit for tools that take a
+query, and an outright deny for tools named after something destructive. Tools that take
+none of those get no rule; proposing something for every tool trains people to delete most
+of the file, and the ones they keep are the ones they stop reading.
+
+```json
+"policy": {
+  "scan_path": {"paths": ["/REPLACE-ME/**"]}
+}
+```
+
+Every generated value is a placeholder that refuses every call until you edit it. That is
+the safe direction: a generated policy that quietly permitted your home directory would
+read like a boundary and be a rubber stamp. `--write` merges the proposal into the lockfile
+and never touches a rule that is already there.
 
 ### Trying it before enforcing it
 
@@ -603,7 +624,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-376 tests, stdlib unittest, nothing to install.
+382 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

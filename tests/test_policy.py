@@ -216,3 +216,54 @@ class TestPolicySurvivesApproval(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestSuggestion(unittest.TestCase):
+    """A policy nobody writes protects nothing, so one is proposed from the
+    schemas a probe already saw. Everything proposed is a placeholder that
+    refuses every call until edited: a generated policy that quietly permitted
+    the machine's home directory would read like a boundary and be a rubber
+    stamp."""
+
+    def _tools(self):
+        from mcp_audit.model import ToolSpec
+        return [
+            ToolSpec(server="s", name="read_file",
+                     input_schema={"properties": {"path": {}}}),
+            ToolSpec(server="s", name="fetch_page",
+                     input_schema={"properties": {"url": {}}}),
+            ToolSpec(server="s", name="run_query",
+                     input_schema={"properties": {"sql": {}}}),
+            ToolSpec(server="s", name="delete_repository",
+                     input_schema={"properties": {"name": {}}}),
+            ToolSpec(server="s", name="list_items",
+                     input_schema={"properties": {"limit": {}}}),
+        ]
+
+    def _suggest(self):
+        from mcp_audit.policy import suggest
+        from mcp_audit.rules.annotations import MUTATING_VERBS
+        return suggest(self._tools(), MUTATING_VERBS)
+
+    def test_a_path_parameter_gets_a_path_limit(self) -> None:
+        self.assertIn("paths", self._suggest()["read_file"])
+
+    def test_a_url_parameter_gets_a_destination_limit(self) -> None:
+        self.assertIn("domains", self._suggest()["fetch_page"])
+
+    def test_a_query_parameter_gets_an_operation_limit(self) -> None:
+        self.assertEqual(["SELECT"], self._suggest()["run_query"]["sql"])
+
+    def test_a_destructive_name_is_proposed_as_denied(self) -> None:
+        self.assertEqual({"deny": True}, self._suggest()["delete_repository"])
+
+    def test_a_tool_with_nothing_risky_gets_no_rule(self) -> None:
+        """Proposing something for every tool trains people to delete most of
+        the file, and the ones they keep are the ones they stop reading."""
+        self.assertNotIn("list_items", self._suggest())
+
+    def test_the_placeholder_refuses_rather_than_permits(self) -> None:
+        """If a generated value were permissive it would be worse than none."""
+        policy = Policy(self._suggest())
+        self.assertFalse(policy.check("read_file", {"path": "/home/me/notes.txt"}))
+        self.assertFalse(policy.check("fetch_page", {"url": "https://example.com/x"}))
