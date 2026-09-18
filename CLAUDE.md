@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 45 commits, 396 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 47 commits, 401 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -130,6 +130,12 @@ The cycles, most recent last:
     a config line can stay byte-identical while `server.js` is rewritten.
     Interpreters resolved from PATH are deliberately not hashed -- a rule that
     fires on every Node patch gets turned off.
+
+22. `25d4281` — the guard now notices `notifications/tools/list_changed`.
+    Only `result` objects were inspected, and a notification has neither a
+    result nor an id, so the one moment a rug pull announces itself went past
+    unread. Still forwarded on purpose: the re-fetch it triggers is what hands
+    the new definitions to the approval check.
 
 ### If the loop resumes, change source
 
