@@ -54,6 +54,7 @@ mcp-audit approve --probe              # write .mcp-audit.lock
 mcp-audit inspect                      # what is configured, no judgement
 mcp-audit rules                        # list rules
 mcp-audit explain MCPA015              # describe one rule in full
+mcp-audit guard -- npx -y pkg@1.0.0    # proxy a server, enforce the lockfile
 mcp-audit serve                        # run as an MCP server
 ```
 
@@ -165,6 +166,50 @@ an attacker who controls the agent can call:
 There's a test asserting mcp-audit's own server passes mcp-audit's own rules. Writing tool
 descriptions that survive your own tool-poisoning detector turns out to be a real constraint.
 
+## Enforcing it at runtime (`guard`)
+
+`scan` tells you a server changed. `guard` refuses to pass the change through.
+
+```
+client  --stdio-->  mcp-audit guard  --stdio-->  real server
+```
+
+Point your client at the guard instead of the server:
+
+```json
+{
+  "mcpServers": {
+    "invoices": {
+      "command": "mcp-audit",
+      "args": ["guard", "--name", "invoices", "--", "npx", "-y", "invoice-mcp@1.0.0"]
+    }
+  }
+}
+```
+
+Everything is forwarded untouched except the `tools/list` response. Each tool is
+fingerprinted against `.mcp-audit.lock`; anything unapproved or changed is replaced with a
+stub explaining why, before the client ever sees it:
+
+```
+[BLOCKED BY mcp-audit] This tool is not approved: tool definition changed since
+approval. It cannot be used. Run `mcp-audit approve --probe` after reviewing the change.
+```
+
+`--policy strip` removes the tool instead; `--policy warn` lets it through and logs. Blocked
+tools keep their name on purpose - a tool that silently vanishes looks like a broken server
+and sends people hunting the wrong problem.
+
+**The thing that makes this different from other wrappers: it reads the same lockfile the CI
+gate reads.** Other tools keep a private pin store, so what your pipeline approved and what
+your machine enforces are two separate facts that can drift apart. Here they are one file,
+committed to the repo - a changed tool description shows up as a diff in code review, fails
+the build, and is refused at the call site, all from the artifact the reviewer looked at.
+
+Two failure modes, two deliberate answers. A *security* event (drift, unapproved tool) fails
+closed. An *internal* error (corrupt lockfile, a rule raising) fails open and says so loudly
+on stderr, because a scanner bug should not take down your agent. `--strict` inverts that.
+
 ## The LLM tier (`--llm`)
 
 The regex rules catch phrasings I thought of. They don't catch paraphrase, or a description
@@ -259,7 +304,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-138 tests, stdlib unittest, nothing to install.
+155 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

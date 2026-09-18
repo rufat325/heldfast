@@ -128,6 +128,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     explain_p.add_argument("rule_id", metavar="RULE", help="a rule id, e.g. MCPA015")
 
+    guard_p = sub.add_parser(
+        "guard",
+        help="proxy a server and enforce the approval lockfile at runtime",
+        description=(
+            "Sit between the client and an MCP server, and refuse to pass through tools "
+            "that are unapproved or whose definition changed since approval. Reads the "
+            "same .mcp-audit.lock the CI gate reads, so one artifact governs both. "
+            "Usage: mcp-audit guard -- <server command...>"
+        ),
+    )
+    guard_p.add_argument("--lock", metavar="PATH", default=None,
+                         help=f"approval lockfile (default: ./{DEFAULT_LOCK_NAME})")
+    guard_p.add_argument("--name", metavar="NAME", default=None,
+                         help="server name as it appears in the lockfile "
+                              "(default: inferred from the command)")
+    guard_p.add_argument("--policy", choices=("block", "strip", "warn"), default="block",
+                         help="what to do with a rejected tool: replace it with a blocked "
+                              "stub (default), remove it, or allow it and log")
+    guard_p.add_argument("--block-severity", default="critical",
+                         choices=[s.label for s in Severity],
+                         help="minimum content-rule severity that rejects a tool "
+                              "(default: critical)")
+    guard_p.add_argument("--strict", action="store_true",
+                         help="fail closed on internal errors too, not just on drift")
+    guard_p.add_argument("--quiet", action="store_true", help="suppress stderr diagnostics")
+    guard_p.add_argument("server_command", nargs=argparse.REMAINDER, metavar="-- COMMAND")
+
     sub.add_parser(
         "serve",
         help="run mcp-audit as an MCP server over stdio",
@@ -373,6 +400,30 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_guard(args: argparse.Namespace) -> int:
+    from . import guard as guard_mod
+
+    argv = list(args.server_command or [])
+    if argv and argv[0] == "--":
+        argv = argv[1:]
+    if not argv:
+        print("mcp-audit: guard needs a server command, for example\n"
+              "           mcp-audit guard -- npx -y @scope/server@1.0.0",
+              file=sys.stderr)
+        return EXIT_ERROR
+
+    lock_path = Path(args.lock) if args.lock else Path.cwd() / DEFAULT_LOCK_NAME
+    return guard_mod.run(
+        argv,
+        lock_path=lock_path,
+        policy=args.policy,
+        server_name=args.name,
+        strict=args.strict,
+        block_severity=Severity.parse(args.block_severity),
+        quiet=args.quiet,
+    )
+
+
 def cmd_explain(args: argparse.Namespace) -> int:
     from . import rule_docs
 
@@ -415,7 +466,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     argv = list(sys.argv[1:] if argv is None else argv)
     # Make `scan` the default command so bare `mcp-audit` and `mcp-audit .` work.
-    known = {"scan", "approve", "rules", "serve", "inspect", "explain"}
+    known = {"scan", "approve", "rules", "serve", "inspect", "explain", "guard"}
     if not argv or (argv[0] not in known and not argv[0].startswith("-")):
         argv = ["scan", *argv]
     elif argv and argv[0].startswith("-") and argv[0] not in ("-h", "--help", "--version"):
@@ -431,6 +482,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_rules(args)
         if args.command == "explain":
             return cmd_explain(args)
+        if args.command == "guard":
+            return cmd_guard(args)
         if args.command == "serve":
             from .server import main as serve_main
             return serve_main()
