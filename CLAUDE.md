@@ -123,6 +123,57 @@ before changing one.
   or launched. Protocol robustness is covered by `hostile_server.py`, which
   misbehaves deliberately but touches no files, network or subprocesses.
 
+## Where this stopped
+
+The last stretch ran as a loop: the owner said "keep researching and
+building" repeatedly, and each cycle picked one source, found a gap, built
+it, tested it and committed. Reading the **specification** turned out to be a
+far better source than reading competitors — most cycles found a defect in
+this tool rather than a missing feature.
+
+The cycles, most recent last:
+
+1. `cb339a4` — a server controls four channels into the model, not one. Added
+   `instructions` (the spec permits a client to put it in the system prompt),
+   prompts and resources to probing, fingerprinting and scanning.
+2. `d916356` — tool annotations (`readOnlyHint`) are a self-declared claim
+   clients use to skip approval prompts; added MCPA021/022 and put
+   annotations in the fingerprint.
+3. `eda37e4` — the spec's security document yielded MCPA023/024/025:
+   dangerous URL schemes, cloud metadata addresses, over-broad OAuth scopes.
+4. `64c630e` — the probe was negotiating a protocol two revisions old. Now
+   dual-era: `server/discover` and the legacy handshake, resolved on
+   whichever answers.
+5. `6d916ff` — MRTR means elicitation and sampling arrive differently on
+   current servers; the guard screened only the legacy shape.
+6. `41e18d5` — `title` is the display name the user actually reads and was
+   unscanned; added MCPA026 and resource templates.
+7. `0d475a5`, `ccdf630` — screen what servers *return*, not just what they
+   declare. The second commit fixed the first: it screened `content` but not
+   `contents` or `messages`.
+8. `03d8dc3` — probed 15 real public endpoints, got 56 real tools, and found
+   the rules were 27% false-positive. Narrowed MCPA021 to destructive verbs
+   in the tool name only and deleted a signal that fired on the canonical
+   good tool description.
+9. `6b7fbe1` — `hostile_server.py`, eleven deliberate protocol failure modes.
+   Found that killing the guard orphaned the wrapped server; `lifetime.py`
+   fixes it with a Windows Job Object / Linux PDEATHSIG.
+
+**The spec is now near exhausted as a source.** The remaining unscreened
+methods (`completion/complete`, `notifications/message`,
+`subscriptions/listen`) carry little model-facing text. If the loop resumes,
+better sources are:
+
+- more real-world corpora — only 4 of 15 endpoints were reachable, and the
+  harvested config corpus was 98 blocks from 250 repos out of 4,129 available
+- an LLM-backed semantic tier that has actually been run once against the
+  live API (currently stub-verified only)
+- the owner's account-side items below, which are worth more than another
+  rule: an unpublished tool with no profile earns nothing
+
+Nothing is half-finished. The working tree is clean, CI is green, and the
+last commit is a complete unit.
+
 ## State and what is outstanding
 
 21 commits, 275 tests, 26 rules, CI green across Linux/macOS/Windows on
