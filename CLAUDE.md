@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 74 commits, 507 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 77 commits, 540 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -212,6 +212,12 @@ The cycles, most recent last:
     configs produce only MCPA003 (48%, LOW) and MCPA008 (8%, all public
     endpoints, its documented false positive). **4,815 handlers total, zero.**
 
+35. `87847c5` — `tests/test_attack_corpus.py`: one realistic attack per rule,
+    plus an assertion that **every rule in the registry appears there**, so a
+    new rule without a demonstration fails the build. The clean corpus proved
+    quiet; this proves it detects. 31 of 32 passed first run; the one failure
+    found a real gap (`admin:org` scopes went unreported).
+
 ### If the loop resumes, change source
 
 **The spec is near exhausted.** The remaining unscreened methods
@@ -299,6 +305,12 @@ new rule cannot reintroduce a leak.
 **Docs are generated from code.** Add a rule, add a `RuleDoc`, regenerate
 with `mcp-audit rules --markdown -o docs/rules.md`. Tests fail if a rule is
 undocumented or the checked-in file is stale.
+
+**Adding a rule takes four things, all enforced.** The rule, a `RuleDoc`, a
+row in the README table with the right severity, and an attack in
+`tests/test_attack_corpus.py` that demonstrates it. Miss any one and the build
+fails, which is deliberate: an undemonstrated rule is one nobody has shown to
+work, and an undocumented one is one nobody can act on.
 
 **Tests pin decisions, not just behaviour.** Where a test looks oddly
 specific it is usually recording a bug that shipped. Read the docstring
@@ -401,6 +413,10 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   handlers only, and the same gap reappeared one layer down — caught by
   enumerating real decorator usage, not by remembering. When adding anything
   that reads "what the model can influence", check all four channels.
+- **Precision evidence and recall evidence are separate artifacts.** The
+  clean corpus and the attack corpus each prove nothing alone. Both together
+  are the claim. Adding a rule now requires: the rule, a doc entry, a README
+  table row, and an attack — all four enforced by tests.
 - **A scanner that finds nothing looks the same as one that looks at nothing.**
   Zero findings across 4,815 handlers only means something because the corpus
   was checked for the defect: 185 community files import `child_process`, two
