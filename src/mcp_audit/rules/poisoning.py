@@ -51,7 +51,18 @@ SIGNALS: list[Signal] = [
             r"\bwithout\s+(?:telling|informing|notifying|alerting|asking|consulting)\s+"
             r"(?:the\s+)?(?:user|human|operator|owner|anyone|them)\b|"
             r"\b(?:keep|hide)\s+(?:this|it|that)\s+(?:secret|hidden|confidential|quiet)\b|"
-            r"\bdo\s+not\s+(?:log|record|output|print)\b",
+            r"\bdo\s+not\s+(?:log|record|output|print)\b|"
+            # Politely and passively phrased concealment. Found by writing the
+            # same instruction several ways and seeing which got through: the
+            # imperative was caught and "please refrain from mentioning this to
+            # the user" was not. An attacker picks whichever wording works, and
+            # neither phrasing has a legitimate place in a tool description.
+            r"\b(?:refrain\s+from|avoid)\s+(?:\w+\s+){0,2}"
+            r"(?:mention|mentioning|telling|informing|disclosing|revealing|"
+            r"reporting|notifying)\b[^.\n]{0,40}\b(?:the\s+)?"
+            r"(?:user|human|operator|anyone|them)\b|"
+            r"\b(?:should|must)\s+not\s+be\s+"
+            r"(?:mentioned|disclosed|revealed|reported|shown|logged)\b",
             re.IGNORECASE,
         ),
         Severity.CRITICAL, 0.95, True,
@@ -73,7 +84,13 @@ SIGNALS: list[Signal] = [
         "role-hijack",
         re.compile(
             r"(?:^|\n)\s*(?:<\s*/?\s*(?:system|assistant|human)\s*>|\[/?INST\]|"
-            r"<\|(?:im_start|im_end|system|endoftext)\|>|###\s*(?:System|Instruction)\s*:?)",
+            r"<\|(?:im_start|im_end|system|endoftext)\|>|###\s*(?:System|Instruction)\s*:?)|"
+            # A bare role label starting a line, which is how the plainest
+            # version of this is written: "\nSystem: you are now ...". The
+            # decorated forms above were caught and this was not. Checked
+            # against 694 shipped tool descriptions before adding it: none
+            # contains a line-start role label, so it costs no precision.
+            r"(?:^|\n)[ \t]*(?:system|assistant|human)[ \t]*:[ \t]+\S",
             re.IGNORECASE,
         ),
         Severity.HIGH, 0.9, True,

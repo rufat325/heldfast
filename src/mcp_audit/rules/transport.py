@@ -225,6 +225,54 @@ def dangerous_url_scheme(ctx: AuditContext) -> Iterable[Finding]:
         )
 
 
+def canonical_host(host: str) -> str:
+    """The host as an address, with the usual SSRF encodings resolved.
+
+    169.254.169.254 can be written as 2852039166, 0xa9fea9fe,
+    0251.0376.0251.0376 or [::ffff:169.254.169.254], and a trailing dot makes
+    a name that resolves identically look different. Every one of those is a
+    documented filter bypass, and every one of them reached the metadata
+    service while this rule compared strings.
+
+    Anything that is not an address comes back unchanged and lowercased, so
+    hostnames still match by name.
+    """
+    host = (host or "").strip().lower().rstrip(".")
+    if not host:
+        return ""
+
+    # [::ffff:169.254.169.254] and other v6 spellings of a v4 address.
+    try:
+        parsed = ipaddress.ip_address(host)
+        mapped = getattr(parsed, "ipv4_mapped", None)
+        return str(mapped or parsed)
+    except ValueError:
+        pass
+
+    # A bare integer, or dotted parts in octal or hex.
+    try:
+        if host.startswith(("0x", "0X")):
+            return str(ipaddress.ip_address(int(host, 16)))
+        if host.isdigit():
+            return str(ipaddress.ip_address(int(host)))
+        parts = host.split(".")
+        if len(parts) == 4 and all(parts):
+            octets = []
+            for part in parts:
+                if part.startswith(("0x", "0X")):
+                    octets.append(int(part, 16))
+                elif part.startswith("0") and len(part) > 1:
+                    octets.append(int(part, 8))
+                else:
+                    octets.append(int(part))
+            if all(0 <= o <= 255 for o in octets):
+                return ".".join(str(o) for o in octets)
+    except (ValueError, OverflowError, ipaddress.AddressValueError):
+        pass
+
+    return host
+
+
 # 169.254.0.0/16 is link-local. 169.254.169.254 is the cloud instance metadata
 # endpoint on AWS, GCP and Azure, and returns IAM credentials to anything that
 # can reach it. Nothing legitimately configures it as an MCP server.
@@ -242,7 +290,7 @@ def metadata_endpoint(ctx: AuditContext) -> Iterable[Finding]:
     for s in ctx.servers:
         if not s.url:
             continue
-        host = _host_of(s.url)
+        host = canonical_host(_host_of(s.url))
         if not host:
             continue
 
