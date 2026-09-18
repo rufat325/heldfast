@@ -347,10 +347,18 @@ same module, because the low-level SDK shape is a `call_tool` dispatcher that fo
 arguments; two hops needs a call graph, and a half-built one invents paths. Silence means
 no flow of this shape, not a safe server. `--no-source` turns it off.
 
-Measured against 14 cloned MCP and security repositories: 536 Python files, 140 matching
-the marker, 29 with real tool handlers, 41 handlers analyzed, 3 flows — all three inside
-one deliberately vulnerable fixture. The 38 servers wrapping nmap, sqlmap and ghidra use
-the argv form throughout and report nothing, which is the correct answer.
+It reads tools, resources and prompts, because all three take model-chosen input — a
+resource template binds its parameters from the URI the model asks for, and a prompt's
+arguments arrive in `prompts/get`. CLI entry points like `click.command` are not model
+input and are left alone.
+
+Measured against the official MCP Python SDK, the official servers repository and FastMCP:
+1,711 Python files, 1,423 matching the marker, **2,769 handlers analyzed across 478 files,
+zero findings**. That is a true negative rather than a blind spot — exactly one file in the
+corpus uses a shell at all, and it is the SDK's own CLI, not a handler. Across 14 security
+repositories scanned separately, 3 flows, all three inside one deliberately vulnerable
+fixture; the 38 servers wrapping nmap, sqlmap and ghidra use the argv form throughout and
+report nothing, which is the correct answer.
 
 ## Protocol versions
 
@@ -672,7 +680,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-405 tests, stdlib unittest, nothing to install.
+411 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

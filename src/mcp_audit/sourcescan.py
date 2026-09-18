@@ -31,6 +31,8 @@ worse than one that does less:
 - Python only. JavaScript MCP servers are at least as common, but doing this
   to JavaScript means parsing JavaScript, and a regex pretending to be a
   parser is a downgrade, not a feature.
+- Tools, resources and prompts, because all three take model-chosen input.
+  Not CLI entry points: click.command is driven by whoever is at the keyboard.
 - One hop. A tool parameter handed to a helper defined in the same module is
   followed into it, because that is how real servers are written -- the
   low-level SDK shape is a `call_tool` dispatcher that forwards to helpers,
@@ -55,10 +57,25 @@ _MCP_MARKERS = (
     "call_tool", "mcp.tool", "FastMCP", "list_tools",
 )
 
-# Decorators that mark a function as reachable from a tool call. FastMCP uses
-# @mcp.tool(); the low-level SDK uses @server.call_tool(), whose handler takes
-# the tool name and the argument dict straight off the wire.
-_TOOL_DECORATORS = {"tool", "call_tool"}
+# Decorators that mark a function as reachable with model-chosen input. Only
+# the receiver's *attribute* is matched, never the object it hangs off: real
+# code writes mcp.tool, server.tool, app.tool, provider.tool, sub_app.tool and
+# a dozen other names, and matching the receiver would cover one of them.
+#
+# Tools are not the whole surface, which is the same mistake this project made
+# once already one layer up. A resource template's parameters come out of the
+# URI the model asks for -- @mcp.resource("greeting://{name}") binds `name`
+# from the request -- and a prompt's arguments arrive in prompts/get. Both are
+# as model-controlled as a tool argument and were going unread.
+#
+# list_tools, list_resources and list_prompts take no input and are absent.
+# So is `command`: click.command and app.command are CLI entry points, driven
+# by whoever is at the keyboard rather than by whatever is steering the agent.
+_TOOL_DECORATORS = {
+    "tool", "call_tool",
+    "resource", "read_resource",
+    "prompt", "get_prompt",
+}
 
 # Functions that always involve a shell, whatever else is passed.
 _ALWAYS_SHELL = {

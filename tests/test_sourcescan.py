@@ -206,3 +206,68 @@ class TestTheRule(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheWholeHandlerSurface(unittest.TestCase):
+    """Tools are not the only thing that takes model-chosen input, which is
+    the same mistake this project made once already one layer up.
+
+    Found by enumerating the decorator styles in 1,711 Python files from the
+    official MCP SDK, the official servers repository and FastMCP: 1,373
+    @mcp.tool, and also 392 @mcp.resource and 174 @mcp.prompt that were going
+    unread. A resource template binds its parameters from the URI the model
+    asks for; a prompt's arguments arrive in prompts/get.
+    """
+
+    def test_a_resource_template_parameter_is_model_chosen(self) -> None:
+        found = analyze_source(
+            "from mcp.server.fastmcp import FastMCP\nimport subprocess\n"
+            "mcp = FastMCP('x')\n"
+            "@mcp.resource('notes://{name}')\n"
+            "def note(name: str):\n"
+            "    return subprocess.run(f'cat notes/{name}', shell=True)\n", "<t>")
+        self.assertEqual(1, len(found))
+        self.assertEqual("name", found[0].parameter)
+
+    def test_a_prompt_argument_is_model_chosen(self) -> None:
+        found = analyze_source(
+            "from mcp.server.fastmcp import FastMCP\nimport os\n"
+            "mcp = FastMCP('x')\n"
+            "@mcp.prompt()\n"
+            "def review(target: str):\n"
+            "    os.system('git log ' + target)\n", "<t>")
+        self.assertEqual(1, len(found))
+
+    def test_the_low_level_read_resource_handler(self) -> None:
+        found = analyze_source(
+            "from mcp.server import Server\nimport subprocess\nserver = Server('x')\n"
+            "@server.read_resource()\n"
+            "async def read(uri: str):\n"
+            "    return subprocess.run('cat ' + uri, shell=True)\n", "<t>")
+        self.assertEqual(1, len(found))
+
+    def test_a_cli_command_is_not_model_input(self) -> None:
+        """click.command and app.command are driven by whoever is at the
+        keyboard, not by whatever is steering the agent. 12 of them are in the
+        corpus and none is an attack surface."""
+        self.assertEqual([], analyze_source(
+            "import click, os\nfrom mcp.server.fastmcp import FastMCP\n"
+            "@click.command()\n"
+            "def main(path):\n    os.system('ls ' + path)\n", "<t>"))
+
+    def test_listing_handlers_take_no_input(self) -> None:
+        self.assertEqual([], analyze_source(
+            "from mcp.server import Server\nimport os\nserver = Server('x')\n"
+            "@server.list_tools()\n"
+            "async def ls():\n    os.system('echo hi')\n", "<t>"))
+
+    def test_the_receiver_name_does_not_matter(self) -> None:
+        """Real code writes mcp.tool, server.tool, app.tool, provider.tool,
+        sub_app.tool and a dozen others; only the attribute is matched."""
+        for receiver in ("mcp", "server", "app", "provider", "sub_app", "child"):
+            found = analyze_source(
+                "from mcp.server.fastmcp import FastMCP\nimport os\n"
+                f"{receiver} = FastMCP('x')\n"
+                f"@{receiver}.tool()\n"
+                "def go(t: str):\n    os.system('echo ' + t)\n", "<t>")
+            self.assertEqual(1, len(found), receiver)
