@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 47 commits, 401 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 49 commits, 405 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -136,6 +136,12 @@ The cycles, most recent last:
     result nor an id, so the one moment a rug pull announces itself went past
     unread. Still forwarded on purpose: the re-fetch it triggers is what hands
     the new definitions to the approval check.
+
+23. `d13a10b` — fuzzed the new policy engine: 8 of 312 combinations crashed
+    on a *malformed policy*, which matters because hand-editing the lockfile
+    is the intended workflow and the check runs on the pump thread, where an
+    exception hangs the agent instead of failing open. Hardened the parser and
+    made `check_call` catch anything, per the posture the module documents.
 
 ### If the loop resumes, change source
 
@@ -300,6 +306,11 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   hand and has no idea which client configures which server, so it cannot tell
   a genuine collision from two servers that never meet. Take the idea, check
   the implementation, and say precisely what was wrong with it.
+- **Fuzz new code the same day you write it.** The policy engine passed 38
+  hand-written tests and crashed on 8 of 312 fuzzed combinations, all from
+  *malformed policy* rather than malicious arguments — the shape nobody writes
+  a test for because nobody means to write it. It ran on the proxy's pump
+  thread, where an exception hangs the agent rather than failing open.
 - **Ask someone to read the code, not the README.** One outside review found
   two genuine security-model holes in `guard` that eighteen cycles of
   self-directed work had walked past, because both were *defaults* rather than
