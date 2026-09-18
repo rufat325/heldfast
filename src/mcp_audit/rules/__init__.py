@@ -2,7 +2,7 @@
 
 from . import annotations, credentials, drift, execution, poisoning, transport  # noqa: F401
 from .base import AuditContext, Rule, all_rules, get_rule, run_rules, rule
-from .poisoning import classifier_targets
+from .poisoning import classifier_targets, scan_untrusted_text
 
 __all__ = ["AuditContext", "Rule", "all_rules", "classifier_targets", "get_rule",
-           "run_rules", "rule"]
+           "run_rules", "rule", "scan_untrusted_text"]

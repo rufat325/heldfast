@@ -163,6 +163,11 @@ def build_parser() -> argparse.ArgumentParser:
     guard_p.add_argument("--deny-roots", action="store_true",
                          help="refuse roots/list requests, which ask which "
                               "filesystem roots you expose")
+    guard_p.add_argument("--result-policy", default="annotate",
+                         choices=("annotate", "block", "off"),
+                         help="what to do when a tool RESULT contains injection "
+                              "signals: fence it as untrusted data (default), "
+                              "withhold it, or only log")
 
     sub.add_parser(
         "serve",
@@ -456,6 +461,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
         deny_sampling=args.deny_sampling,
         deny_elicitation=args.deny_elicitation,
         deny_roots=args.deny_roots,
+        result_policy=args.result_policy,
     )
 
 

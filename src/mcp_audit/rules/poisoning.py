@@ -434,3 +434,20 @@ def classifier_targets(ctx: AuditContext, min_chars: int = 40) -> list[tuple[str
             continue
         (tools if t.kind.startswith("tool") else skills).append((t.label, text))
     return tools + skills
+
+
+def scan_untrusted_text(text: str) -> list[tuple[str, str, float]]:
+    """Signals in text that arrived as data rather than as a definition.
+
+    Used by the guard on tool results, where the content is whatever a web
+    page, file or email happened to contain. Only the universal signals apply:
+    ordinary documents are full of imperative mood, and flagging that would
+    make every result suspicious. Concealment, instruction override, role
+    markers and exfiltration are anomalous in data no matter the source.
+
+    Returns (category, matched_text, confidence).
+    """
+    out: list[tuple[str, str, float]] = []
+    for sig, m in _scan_text(text or "", strict=True):
+        out.append((sig.category, m.group(0)[:80], sig.confidence))
+    return out
