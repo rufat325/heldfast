@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 41 commits, 376 tests, 30 rules, CI across Linux/macOS/Windows
+complete unit. 43 commits, 382 tests, 30 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -118,6 +118,12 @@ The cycles, most recent last:
     approved"; this answers "may it be asked to do *that*". Most of the tests
     are evasions -- traversal, `/workspace-evil`, `api.github.com.evil.io`,
     stacked SQL, a path hidden in a nested argument.
+
+20. `8578c12` — `mcp-audit policy --probe` proposes a starter policy from
+    observed tool schemas, because one nobody writes protects nothing. Every
+    generated value is a placeholder that *refuses* until edited: a generated
+    policy that quietly permitted the home directory would read like a
+    boundary and be a rubber stamp.
 
 ### If the loop resumes, change source
 
@@ -235,7 +241,7 @@ owner removed it deliberately. Revisit only if asked.
     rule_docs.py    long-form docs; docs/rules.md is generated from this
 
 Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
-`verify-log`, `serve`.
+`policy`, `verify-log`, `serve`.
 
 ## Lessons that cost something
 
