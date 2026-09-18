@@ -379,7 +379,7 @@ DOCS: dict[str, RuleDoc] = {
                    "flagged; the rule can see the list but not the checker.",
     ),
     "MCPA030": RuleDoc(
-        what="A Python MCP server whose own source hands a tool parameter to a shell: "
+        what="An MCP server whose own source hands a handler parameter to a shell: "
              "an argument of a function decorated with @mcp.tool() or @server.call_tool() "
              "reaching subprocess with shell=True, os.system, os.popen, "
              "asyncio.create_subprocess_shell, eval or exec.",
@@ -397,8 +397,11 @@ DOCS: dict[str, RuleDoc] = {
             "shlex.quote().",
         wrong_when="This is parsed rather than pattern-matched, so shlex.quote() clears "
                    "the taint and the argv form is never reported -- flagging the fix "
-                   "would be the worst outcome available. It is Python only: a regex "
-                   "pretending to parse JavaScript would be a downgrade. It follows one "
+                   "would be the worst outcome available. Python is parsed with ast; "
+                   "JavaScript and TypeScript get a tokenizer, because the hard part "
+                   "there is that `exec(` is usually a RegExp or a database handle and "
+                   "only child_process makes it a shell -- which needs the import "
+                   "binding, not a pattern. It follows one "
                    "hop into a helper defined in the same module, because the low-level "
                    "SDK shape is a dispatcher that forwards arguments, but not two. "
                    "Silence means no flow of this shape, not a safe server.",

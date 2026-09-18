@@ -490,6 +490,29 @@ def shell_injection_in_source(ctx: AuditContext) -> Iterable[Finding]:
     """A model-controlled argument interpolated into a command string."""
     for flow in ctx.source_flows:
         via = f" (via {flow.via})" if getattr(flow, "via", "") else ""
+        # The fix is spelled differently per language, and a remediation that
+        # names subprocess.run to somebody writing TypeScript is one they will
+        # read past.
+        javascript = str(flow.path).lower().endswith(
+            (".ts", ".tsx", ".js", ".mjs", ".cjs"))
+        if javascript:
+            remediation = (
+                "Pass an argument list instead of a command string: "
+                "execFile(\"wc\", [\"-l\", path]) never reaches a shell, and "
+                "neither does spawn() without shell: true. Where a shell is "
+                "genuinely required, quote every interpolated value. A handler "
+                "parameter is chosen by whatever is steering the agent, so this "
+                "is remote code execution wearing a schema."
+            )
+        else:
+            remediation = (
+                "Pass an argument list instead of a command string: "
+                "subprocess.run([\"wc\", \"-l\", path]) never involves a shell. "
+                "Where a shell is genuinely required, wrap every interpolated "
+                "value in shlex.quote(); this rule follows that and stays "
+                "quiet. A tool parameter is chosen by whatever is steering the "
+                "agent, so this is remote code execution wearing a schema."
+            )
         yield Finding(
             rule_id="MCPA030",
             title="Tool parameter reaches a shell in the server's own source",
@@ -499,14 +522,7 @@ def shell_injection_in_source(ctx: AuditContext) -> Iterable[Finding]:
                 f"{flow.function}(): parameter {flow.parameter!r} reaches "
                 f"{flow.sink}{via}"
             ),
-            remediation=(
-                "Pass an argument list instead of a command string: "
-                "subprocess.run([\"wc\", \"-l\", path]) never involves a shell. "
-                "Where a shell is genuinely required, wrap every interpolated "
-                "value in shlex.quote(); this rule follows that and stays "
-                "quiet. A tool parameter is chosen by whatever is steering the "
-                "agent, so this is remote code execution wearing a schema."
-            ),
+            remediation=remediation,
             atlas=["AML.T0053"],
             cwe=["CWE-78"],
             confidence=getattr(flow, "confidence", 1.0),

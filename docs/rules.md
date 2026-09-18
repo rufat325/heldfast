@@ -491,7 +491,7 @@ filesystem server rooted at "~" alongside a fetch server whose tool accepts {"ur
 
 **Tool parameter reaches a shell in the server's own source** - severity `critical`
 
-**What it looks for.** A Python MCP server whose own source hands a tool parameter to a shell: an argument of a function decorated with @mcp.tool() or @server.call_tool() reaching subprocess with shell=True, os.system, os.popen, asyncio.create_subprocess_shell, eval or exec.
+**What it looks for.** An MCP server whose own source hands a handler parameter to a shell: an argument of a function decorated with @mcp.tool() or @server.call_tool() reaching subprocess with shell=True, os.system, os.popen, asyncio.create_subprocess_shell, eval or exec.
 
 **Why it matters.** A tool parameter is chosen by whatever is steering the agent, which is not always the user -- a poisoned tool description, a document the agent was asked to summarize, a web page it was told to read. When that value is interpolated into a command string the author has written remote code execution into their own tool, and every other rule in this catalog will pass the server, because its config and its declarations are all perfectly normal.
 
@@ -503,7 +503,7 @@ def count(path: str):
 
 **How to fix it.** Pass an argument list: subprocess.run(["wc", "-l", path]) never reaches a shell. Where a shell is genuinely needed, wrap each interpolated value in shlex.quote().
 
-**When it is wrong.** This is parsed rather than pattern-matched, so shlex.quote() clears the taint and the argv form is never reported -- flagging the fix would be the worst outcome available. It is Python only: a regex pretending to parse JavaScript would be a downgrade. It follows one hop into a helper defined in the same module, because the low-level SDK shape is a dispatcher that forwards arguments, but not two. Silence means no flow of this shape, not a safe server.
+**When it is wrong.** This is parsed rather than pattern-matched, so shlex.quote() clears the taint and the argv form is never reported -- flagging the fix would be the worst outcome available. Python is parsed with ast; JavaScript and TypeScript get a tokenizer, because the hard part there is that `exec(` is usually a RegExp or a database handle and only child_process makes it a shell -- which needs the import binding, not a pattern. It follows one hop into a helper defined in the same module, because the low-level SDK shape is a dispatcher that forwards arguments, but not two. Silence means no flow of this shape, not a safe server.
 
 ## MCPA031
 

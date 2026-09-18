@@ -28,9 +28,12 @@ This is parsed, not grepped. The distinction matters more than it sounds:
 Scope, stated plainly because a security tool that overstates its reach is
 worse than one that does less:
 
-- Python only. JavaScript MCP servers are at least as common, but doing this
-  to JavaScript means parsing JavaScript, and a regex pretending to be a
-  parser is a downgrade, not a feature.
+- Python here; JavaScript and TypeScript in jsscan.py, which had to be given
+  a tokenizer of its own. Same question, different machinery, because one
+  language ships a parser in the standard library and the other does not.
+  Neither is a regex: in JavaScript the whole difficulty is that `exec(` is
+  usually a RegExp or a database, and telling those from child_process needs
+  the import binding.
 - Tools, resources and prompts, because all three take model-chosen input.
   Not CLI entry points: click.command is driven by whoever is at the keyboard.
 - One hop. A tool parameter handed to a helper defined in the same module is
@@ -48,7 +51,7 @@ import ast
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 # Only files that look like an MCP server are parsed. Walking a repository and
 # parsing every .py file would cost far more than it finds.
@@ -385,15 +388,36 @@ def looks_like_mcp_server(text: str) -> bool:
     return any(marker in text for marker in _MCP_MARKERS)
 
 
+_JS_SUFFIXES = (".ts", ".tsx", ".js", ".mjs", ".cjs")
+_SOURCE_SUFFIXES = (".py",) + _JS_SUFFIXES
+
+
+def _as_source_flow(flow: Any) -> SourceFlow:
+    """A JsFlow, in the shape the rest of the package already speaks."""
+    return SourceFlow(
+        path=flow.path, line=flow.line, function=flow.function,
+        parameter=flow.parameter, sink=flow.sink, snippet=flow.snippet,
+        via=getattr(flow, "via", ""), confidence=getattr(flow, "confidence", 1.0),
+    )
+
+
 def scan_source_tree(roots: Iterable[Path], max_depth: int = 6) -> list[SourceFlow]:
-    """Every Python MCP server under these roots, analyzed."""
+    """Every MCP server under these roots, analyzed.
+
+    Python here, JavaScript and TypeScript in jsscan. They answer the same
+    question and are separate because the answer is reached differently: one
+    has a parser in the standard library and the other needed a tokenizer
+    written for it.
+    """
+    from . import jsscan
+
     flows: list[SourceFlow] = []
     seen_files: set[str] = set()
 
     for root in roots:
         root = Path(root).resolve()
         if root.is_file():
-            candidates = [root] if root.suffix == ".py" else []
+            candidates = [root] if root.suffix in _SOURCE_SUFFIXES else []
         elif root.is_dir():
             candidates = []
             root_depth = len(root.parts)
@@ -403,7 +427,9 @@ def scan_source_tree(roots: Iterable[Path], max_depth: int = 6) -> list[SourceFl
                     dirnames[:] = []
                     continue
                 dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-                candidates.extend(here / f for f in filenames if f.endswith(".py"))
+                candidates.extend(here / f for f in filenames
+                                  if f.endswith(_SOURCE_SUFFIXES)
+                                  and not f.endswith(".d.ts"))
         else:
             continue
 
@@ -418,8 +444,11 @@ def scan_source_tree(roots: Iterable[Path], max_depth: int = 6) -> list[SourceFl
                 text = file.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            if not looks_like_mcp_server(text):
-                continue
-            flows.extend(analyze_source(text, str(file)))
+
+            if file.suffix == ".py":
+                if looks_like_mcp_server(text):
+                    flows.extend(analyze_source(text, str(file)))
+            elif jsscan.looks_like_mcp_js(text):
+                flows.extend(_as_source_flow(f) for f in jsscan.analyze_js(text, str(file)))
 
     return flows

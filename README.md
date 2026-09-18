@@ -357,20 +357,38 @@ cmd = "nmap " + target; os.system(cmd)          # reported: taint survives the v
 Those first two *are the fix*. A line-based scanner sees `subprocess.run` next to a
 variable and reports them anyway, which is how a scanner teaches people to ignore it.
 
-Scope, stated plainly: Python only — doing this to JavaScript means parsing JavaScript, and
-a regex pretending to be a parser is a downgrade. It follows one hop into a helper in the
-same module, because the low-level SDK shape is a `call_tool` dispatcher that forwards
-arguments; two hops needs a call graph, and a half-built one invents paths. Silence means
-no flow of this shape, not a safe server. `--no-source` turns it off.
+It reads Python, JavaScript and TypeScript. For a long time this was Python only, on the
+grounds that doing JavaScript meant parsing JavaScript and a regex pretending to be a parser
+is a downgrade. Both halves were right, so JavaScript got a tokenizer instead — comments,
+quotes, template literals with nested `${}`, the regex-literal ambiguity — plus import
+binding and brace-matched scopes.
+
+The binding is the whole point, because `exec(` in TypeScript is almost never a shell:
+
+```ts
+const match = /^description:\s*(.+)$/m.exec(markdown);  // RegExp — silent
+db.exec(`CREATE TABLE ${args.name}`);                   // sqlite — silent
+await exec(`wc -l ${args.path}`);                       // child_process — reported
+const run = promisify(exec); await run(cmd);            // aliased — still reported
+```
+
+A pattern reports all four or none. Knowing which `exec` is which means tracking what the
+name is bound to, which is the one thing a line scanner cannot do. `execFile("wc", ["-l",
+path])` and `spawn` without `shell: true` are the fixes and are never reported.
+
+It follows one hop into a helper in the same module, because the low-level SDK shape is a
+`call_tool` dispatcher that forwards arguments; two hops needs a call graph, and a half-built
+one invents paths. Silence means no flow of this shape, not a safe server. `--no-source`
+turns it off.
 
 It reads tools, resources and prompts, because all three take model-chosen input — a
 resource template binds its parameters from the URI the model asks for, and a prompt's
 arguments arrive in `prompts/get`. CLI entry points like `click.command` are not model
 input and are left alone.
 
-Measured against the official MCP Python SDK, the official servers repository and FastMCP:
-1,711 Python files, 1,423 matching the marker, **2,769 handlers analyzed across 478 files,
-zero findings**. That is a true negative rather than a blind spot — exactly one file in the
+Measured against the official MCP Python SDK, the official servers repository, the official
+TypeScript SDK and FastMCP: **2,769 Python handlers across 478 files and 729 TypeScript and
+JavaScript handlers across 192 files, zero findings** and no tokenizer failures. That is a true negative rather than a blind spot — exactly one file in the
 corpus uses a shell at all, and it is the SDK's own CLI, not a handler. Across 14 security
 repositories scanned separately, 3 flows, all three inside one deliberately vulnerable
 fixture; the 38 servers wrapping nmap, sqlmap and ghidra use the argv form throughout and
@@ -696,7 +714,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-426 tests, stdlib unittest, nothing to install.
+455 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
