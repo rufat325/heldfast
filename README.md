@@ -57,6 +57,7 @@ mcp-audit                              # scan discovered configs + skills
 mcp-audit scan ./my-project            # scan one project
 mcp-audit scan --no-user-configs .     # project only, skip ~/ configs
 mcp-audit scan --probe                 # also read live tool descriptions
+mcp-audit scan --no-source             # skip reading server source
 mcp-audit approve --probe              # write .mcp-audit.lock
 mcp-audit inspect                      # what is configured, no judgement
 mcp-audit rules                        # list rules
@@ -146,11 +147,52 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA027 | medium | Two servers in one client expose the same tool name |
 | MCPA028 | high | One server reads the home directory while another can post anywhere |
 | MCPA029 | high | Command allowlist includes a binary that runs arbitrary commands |
+| MCPA030 | critical | Tool parameter reaches a shell in the server's own source |
 
 MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *supposed* to
 give the agent instructions, so imperative mood there is normal. In a tool description it
 isn't. Without that split the scanner fires constantly on any real skills directory and
 becomes useless.
+
+## Reading the server's own source
+
+Everything above reads what a server *declares*. MCPA030 reads what it *is*. If you point
+the scanner at a directory containing a Python MCP server, it parses it and looks for one
+thing: a tool parameter reaching a shell.
+
+```python
+@mcp.tool()
+def count_lines(path: str) -> str:
+    return subprocess.run(f"wc -l {path}", shell=True)   # MCPA030
+```
+
+A tool parameter is chosen by whatever is steering the agent — which is not always the
+user. A poisoned tool description, a document the agent was asked to summarize, a web page
+it was told to read. Interpolating that into a command string is remote code execution
+wearing a schema, and every other rule here will pass the server, because its config and
+its declarations are all perfectly normal.
+
+This is parsed, not grepped, and that is the whole point:
+
+```python
+subprocess.run(["wc", "-l", path])              # never reported: argv, no shell
+subprocess.run(f"wc -l {shlex.quote(path)}")    # never reported: sanitized
+cmd = "nmap " + target; os.system(cmd)          # reported: taint survives the variable
+```
+
+Those first two *are the fix*. A line-based scanner sees `subprocess.run` next to a
+variable and reports them anyway, which is how a scanner teaches people to ignore it.
+
+Scope, stated plainly: Python only — doing this to JavaScript means parsing JavaScript, and
+a regex pretending to be a parser is a downgrade. It follows one hop into a helper in the
+same module, because the low-level SDK shape is a `call_tool` dispatcher that forwards
+arguments; two hops needs a call graph, and a half-built one invents paths. Silence means
+no flow of this shape, not a safe server. `--no-source` turns it off.
+
+Measured against 14 cloned MCP and security repositories: 536 Python files, 140 matching
+the marker, 29 with real tool handlers, 41 handlers analyzed, 3 flows — all three inside
+one deliberately vulnerable fixture. The 38 servers wrapping nmap, sqlmap and ghidra use
+the argv form throughout and report nothing, which is the correct answer.
 
 ## Protocol versions
 
@@ -457,7 +499,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-312 tests, stdlib unittest, nothing to install.
+330 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

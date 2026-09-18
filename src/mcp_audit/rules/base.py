@@ -20,6 +20,9 @@ class AuditContext:
     # The spec permits a client to paste this into the system prompt, so it is
     # the highest-privilege text a server controls.
     instructions: dict[str, str] = field(default_factory=dict)
+    # Shell-injection flows found by reading the servers' own source.
+    # Populated only when a path was scanned, never by the user-config sweep.
+    source_flows: list = field(default_factory=list)
     config_errors: list[str] = field(default_factory=list)
     # Populated by the lockfile stage; rules for rug-pull detection read it.
     lock: dict[str, Any] = field(default_factory=dict)

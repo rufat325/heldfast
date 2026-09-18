@@ -34,6 +34,7 @@ Do not edit by hand.
 | [MCPA027](#mcpa027) | medium | Two servers in one client expose the same tool name |
 | [MCPA028](#mcpa028) | high | One server reads the home directory while another can post anywhere |
 | [MCPA029](#mcpa029) | high | Command allowlist includes a binary that runs arbitrary commands |
+| [MCPA030](#mcpa030) | critical | Tool parameter reaches a shell in the server's own source |
 
 ## MCPA001
 
@@ -484,4 +485,22 @@ filesystem server rooted at "~" alongside a fetch server whose tool accepts {"ur
 **How to fix it.** Remove those entries, or stop treating the allowlist as the boundary and sandbox the server instead. If git really is needed, the check has to inspect the whole argument list, not argv[0].
 
 **When it is wrong.** Whether a variable names an allowlist is decided on whole tokens, so DISALLOWED_COMMANDS and BLOCKED_BINARIES are read as denylists and left alone -- substring matching would invert their meaning, since DISALLOW contains ALLOW. A server that does inspect full argv is still flagged; the rule can see the list but not the checker.
+
+## MCPA030
+
+**Tool parameter reaches a shell in the server's own source** - severity `critical`
+
+**What it looks for.** A Python MCP server whose own source hands a tool parameter to a shell: an argument of a function decorated with @mcp.tool() or @server.call_tool() reaching subprocess with shell=True, os.system, os.popen, asyncio.create_subprocess_shell, eval or exec.
+
+**Why it matters.** A tool parameter is chosen by whatever is steering the agent, which is not always the user -- a poisoned tool description, a document the agent was asked to summarize, a web page it was told to read. When that value is interpolated into a command string the author has written remote code execution into their own tool, and every other rule in this catalog will pass the server, because its config and its declarations are all perfectly normal.
+
+```
+@mcp.tool()
+def count(path: str):
+    subprocess.run(f"wc -l {path}", shell=True)
+```
+
+**How to fix it.** Pass an argument list: subprocess.run(["wc", "-l", path]) never reaches a shell. Where a shell is genuinely needed, wrap each interpolated value in shlex.quote().
+
+**When it is wrong.** This is parsed rather than pattern-matched, so shlex.quote() clears the taint and the argv form is never reported -- flagging the fix would be the worst outcome available. It is Python only: a regex pretending to parse JavaScript would be a downgrade. It follows one hop into a helper defined in the same module, because the low-level SDK shape is a dispatcher that forwards arguments, but not two. Silence means no flow of this shape, not a safe server.
 

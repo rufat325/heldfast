@@ -378,6 +378,31 @@ DOCS: dict[str, RuleDoc] = {
                    "DISALLOW contains ALLOW. A server that does inspect full argv is still "
                    "flagged; the rule can see the list but not the checker.",
     ),
+    "MCPA030": RuleDoc(
+        what="A Python MCP server whose own source hands a tool parameter to a shell: "
+             "an argument of a function decorated with @mcp.tool() or @server.call_tool() "
+             "reaching subprocess with shell=True, os.system, os.popen, "
+             "asyncio.create_subprocess_shell, eval or exec.",
+        why="A tool parameter is chosen by whatever is steering the agent, which is not "
+            "always the user -- a poisoned tool description, a document the agent was "
+            "asked to summarize, a web page it was told to read. When that value is "
+            "interpolated into a command string the author has written remote code "
+            "execution into their own tool, and every other rule in this catalog will "
+            "pass the server, because its config and its declarations are all perfectly "
+            "normal.",
+        example='@mcp.tool()\ndef count(path: str):\n'
+                '    subprocess.run(f"wc -l {path}", shell=True)',
+        fix="Pass an argument list: subprocess.run([\"wc\", \"-l\", path]) never reaches a "
+            "shell. Where a shell is genuinely needed, wrap each interpolated value in "
+            "shlex.quote().",
+        wrong_when="This is parsed rather than pattern-matched, so shlex.quote() clears "
+                   "the taint and the argv form is never reported -- flagging the fix "
+                   "would be the worst outcome available. It is Python only: a regex "
+                   "pretending to parse JavaScript would be a downgrade. It follows one "
+                   "hop into a helper defined in the same module, because the low-level "
+                   "SDK shape is a dispatcher that forwards arguments, but not two. "
+                   "Silence means no flow of this shape, not a safe server.",
+    ),
 }
 
 

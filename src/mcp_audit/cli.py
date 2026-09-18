@@ -13,6 +13,7 @@ from .lockfile import DEFAULT_LOCK_NAME, Lock
 from .model import ServerSpec, SkillSpec, ToolSpec
 from .parsers import discover_skills, parse_config
 from .probe import probe
+from .sourcescan import scan_source_tree
 from .report import render_json, render_sarif, render_terminal
 from .rules import AuditContext, all_rules, classifier_targets, run_rules
 from . import llm as llm_mod
@@ -29,6 +30,8 @@ def _add_scan_arguments(p: argparse.ArgumentParser) -> None:
     p.add_argument("--no-user-configs", action="store_true",
                    help="skip well-known per-user config locations; scan only the given paths")
     p.add_argument("--no-skills", action="store_true", help="skip SKILL.md discovery")
+    p.add_argument("--no-source", action="store_true",
+                   help="skip reading MCP server source for shell-injection flows")
     p.add_argument("--probe", action="store_true",
                    help="connect to each server and read its tool definitions. "
                         "WARNING: this launches local STDIO servers")
@@ -197,6 +200,7 @@ class Collected:
         self.errors: list[str] = []
         self.config_count = 0
         self.probed = False
+        self.source_flows: list = []
 
 
 def collect(args: argparse.Namespace) -> Collected:
@@ -223,6 +227,13 @@ def collect(args: argparse.Namespace) -> Collected:
             max_depth=args.depth + 2,
             scan_user=not args.no_user_configs,
         )
+
+    # Reading the servers' own source only makes sense for a path the user
+    # named. The user-config sweep finds servers installed from packages, and
+    # their source is not in the tree being scanned.
+    if not getattr(args, "no_source", False):
+        out.source_flows = scan_source_tree(
+            [r for r in roots if r.exists()], max_depth=args.depth + 2)
 
     if args.probe:
         results = probe(
@@ -286,6 +297,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         instructions=data.instructions,
         config_errors=data.errors,
         lock={"servers": lock.servers, "skills": lock.skills},
+        source_flows=data.source_flows,
         options={"probed": data.probed},
     )
     if getattr(args, "llm", False):

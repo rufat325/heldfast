@@ -431,3 +431,33 @@ def allowlist_bypass(ctx: AuditContext) -> Iterable[Finding]:
                 cwe=["CWE-183"],
                 tags=["execution", "allowlist"],
             )
+
+
+@rule("MCPA030", "Tool parameter reaches a shell in the server's own source",
+      Severity.CRITICAL)
+def shell_injection_in_source(ctx: AuditContext) -> Iterable[Finding]:
+    """A model-controlled argument interpolated into a command string."""
+    for flow in ctx.source_flows:
+        via = f" (via {flow.via})" if getattr(flow, "via", "") else ""
+        yield Finding(
+            rule_id="MCPA030",
+            title="Tool parameter reaches a shell in the server's own source",
+            severity=Severity.CRITICAL,
+            location=Location(path=flow.path, line=flow.line, snippet=flow.snippet),
+            evidence=(
+                f"{flow.function}(): parameter {flow.parameter!r} reaches "
+                f"{flow.sink}{via}"
+            ),
+            remediation=(
+                "Pass an argument list instead of a command string: "
+                "subprocess.run([\"wc\", \"-l\", path]) never involves a shell. "
+                "Where a shell is genuinely required, wrap every interpolated "
+                "value in shlex.quote(); this rule follows that and stays "
+                "quiet. A tool parameter is chosen by whatever is steering the "
+                "agent, so this is remote code execution wearing a schema."
+            ),
+            atlas=["AML.T0053"],
+            cwe=["CWE-78"],
+            confidence=getattr(flow, "confidence", 1.0),
+            tags=["execution", "source", "injection"],
+        )
