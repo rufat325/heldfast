@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 55 commits, 426 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 59 commits, 463 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -166,6 +166,18 @@ The cycles, most recent last:
     sentences to prove recall. Precision without recall is a rule that never
     fires.
 
+27. `f452cf1` — `jsscan.py`: MCPA030 now reads JavaScript and TypeScript, via
+    a tokenizer (comments, template literals with nested `${}`, the
+    regex-vs-division ambiguity) plus **import binding**. The binding is the
+    point: `exec(` in real TS is usually a RegExp or a sqlite handle, and only
+    child_process makes it a shell. 729 handlers across 192 real files, zero
+    findings, recall proven by injecting into six real files. Then fuzzed:
+    4,496 inputs, zero exceptions.
+28. `5f65942` — an end-to-end test that drives the real CLI through the whole
+    claim. It found a bug no unit test could: `cmd_approve` builds a *fresh*
+    Lock, so the policy-preservation logic read an empty dict and a
+    hand-written policy was dropped on the next `approve --probe`.
+
 ### If the loop resumes, change source
 
 **The spec is near exhausted.** The remaining unscreened methods
@@ -280,7 +292,8 @@ owner removed it deliberately. Revisit only if asked.
     auditlog.py     hash-chained record of a guarded session
     policy.py       argument limits for an approved tool; deterministic
     artifacts.py    digests of the scripts a launch command actually runs
-    sourcescan.py   AST taint: tool parameter -> shell, in the server's own code
+    sourcescan.py   AST taint: handler parameter -> shell (Python)
+    jsscan.py       the same for JS/TS: tokenizer + import binding
     lifetime.py     ties the wrapped server's lifetime to the guard's
     server.py       mcp-audit *as* an MCP server (`serve`)
     inspect.py      what is configured, with no judgements
@@ -349,6 +362,11 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   handlers only, and the same gap reappeared one layer down — caught by
   enumerating real decorator usage, not by remembering. When adding anything
   that reads "what the model can influence", check all four channels.
+- **Unit tests cannot see who owns the object.** Policy preservation was
+  correct and tested, and still broken in production, because the test reused
+  one in-memory Lock while the CLI builds a fresh one. Only driving the real
+  command line found it. Anything that "carries forward" state needs an
+  end-to-end test, not a unit test.
 - **Fuzz new code the same day you write it.** The policy engine passed 38
   hand-written tests and crashed on 8 of 312 fuzzed combinations, all from
   *malformed policy* rather than malicious arguments — the shape nobody writes
