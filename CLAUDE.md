@@ -13,9 +13,10 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, CI green, the last commit
-is a complete unit. 21 commits, 275 tests, 26 rules, CI across
-Linux/macOS/Windows on Python 3.9/3.12/3.13 plus a wire-shape job and a job
-that exercises `action.yml` itself.
+is a complete unit. 26 commits, 284 tests, 26 rules, CI across
+Linux/macOS/Windows on Python 3.9/3.12/3.13 plus a wire-shape job, a job that
+exercises `action.yml` itself, and a release workflow that publishes on a
+version tag.
 
 The last stretch ran as a loop: the owner said "keep researching and
 building" repeatedly, and each cycle picked one source, found a gap, built
@@ -50,6 +51,18 @@ The cycles, most recent last:
 9. `6b7fbe1` — `hostile_server.py`, eleven deliberate protocol failure modes.
    Found that killing the guard orphaned the wrapped server; `lifetime.py`
    fixes it with a Windows Job Object / Linux PDEATHSIG.
+10. `6b7393c` — the source changed from the spec to **the tool as a user
+    meets it**: build the wheel, install it clean, run it from outside the
+    source tree. `mcp-audit` with no arguments scans the current directory,
+    so running it in a home directory walks AppData: 30 seconds in it had
+    covered 5,599 directories and was not finished. Now about a second.
+    Pruned the cache trees, answered client paths from the directory listing
+    instead of 12 stats per directory, and stopped following junctions twice.
+11. `903f6a2` — the README opened with `uvx mcp-audit`, which fails because
+    the package is not on PyPI. Every install line now names the repository
+    and all four were run before being written down. Added `release.yml`:
+    trusted publishing on a version tag, no stored token, and it refuses to
+    publish a wheel that pulled in a dependency.
 
 ### If the loop resumes, change source
 
@@ -65,8 +78,11 @@ carry little model-facing text. Better sources now:
 
 ### Outstanding, and needing the owner rather than an agent
 
-- **PyPI.** The README says `uvx mcp-audit`, which does not work until it is
-  published. That is the one false claim left in the repo.
+- **PyPI.** `release.yml` does the publishing; it needs a pending publisher
+  created once at pypi.org -> Publishing (project `mcp-audit`, owner
+  `rufat325`, workflow `release.yml`, environment `pypi`), then
+  `git tag v0.1.0 && git push --tags`. Afterwards the README's install lines
+  shorten to `uvx mcp-audit` and `pipx install mcp-audit`.
 - **GitHub profile.** Bio, location and "available for hire" are empty; a
   profile README is drafted on the Desktop in `rufat325-profile/`.
 - **Global git email** is still `rufatm726@email.com`, so every other repo on
@@ -170,12 +186,26 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`, `serve`.
 - **TLS verification failures are often local.** Seven of fifteen real
   endpoints reported expired certificates; every chain was in date and the
   local CA bundle was stale. Do not blame the server.
+- **Check that a new test fails without the fix.** Two tests written for the
+  walk's symlink handling passed with the fix removed, twice over: `os.walk`
+  never follows symlinks, and the findings dict is keyed on the resolved
+  path, so a tree walked twice collapses to the same result. The defect was
+  real — junctions *are* followed, `os.path.islink()` returns False for one —
+  but the tests had to count directories entered, not configs found.
+- **Run the thing the way a stranger will.** Installing the wheel and running
+  it from an unrelated directory found a walk that appears to hang, in the
+  exact command the README opens with. Nothing in 275 passing tests could
+  have caught it; they all ran from the source tree against fixtures.
 
 ## Environment traps on this machine
 
-- **Bash heredocs mangle escapes.** `\\` collapses and `\n` becomes a real
-  newline, which has broken source files repeatedly. For anything containing
-  escapes use the Write tool, or write a patch script to a file and run it.
+- **Bash heredocs mangle escapes, including quoted ones.** `\\` collapses to
+  `\` and `\n` becomes a real newline, which has broken source files
+  repeatedly. `<<'EOF'` does *not* save you: a `\\` written inside a
+  single-quoted heredoc still arrived as one `\`, and because it sat at the
+  end of a line, Python then read `\` + newline as a line continuation and
+  silently joined the two lines. The string matched nothing and the patch
+  failed. Use the Write tool for anything containing a backslash.
 - **Windows path length.** The project lives at a short path deliberately;
   deep nesting under Temp hits the 248-character directory limit.
 - **CRLF.** `.gitattributes` normalizes to LF; the warnings on commit are
