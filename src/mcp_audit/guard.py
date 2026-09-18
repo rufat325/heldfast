@@ -76,6 +76,7 @@ class GuardStats:
     findings_blocked: list[str] = field(default_factory=list)
     calls_denied: list[str] = field(default_factory=list)
     calls_would_deny: list[str] = field(default_factory=list)
+    list_changed: list[str] = field(default_factory=list)
     internal_errors: list[str] = field(default_factory=list)
 
 
@@ -534,9 +535,46 @@ class Guard:
             },
         }
 
+    # A server announcing that its own catalogue changed. The spec has the
+    # client re-fetch when it sees one.
+    LIST_CHANGED = {
+        "notifications/tools/list_changed": "tools",
+        "notifications/prompts/list_changed": "prompts",
+        "notifications/resources/list_changed": "resources",
+        "notifications/resources/updated": "a resource",
+    }
+
+    def note_notification(self, message: dict[str, Any]) -> None:
+        """Record a server telling the client its catalogue just changed.
+
+        This is the rug pull announcing itself. A server whose tool list
+        changes *after* the client approved it is the exact event the lockfile
+        exists to catch, and until now it went past unread: only `result`
+        objects were inspected, and a notification has neither a result nor an
+        id.
+
+        It is still forwarded. Swallowing it would leave the client holding a
+        list the server has disowned, and the re-fetch it triggers is what
+        hands the new definitions to filter_tools -- which is where they get
+        checked against the approval. Suppressing the notification would
+        suppress the check.
+        """
+        subject = self.LIST_CHANGED.get(str(message.get("method") or ""))
+        if not subject:
+            return
+        self.stats.list_changed.append(subject)
+        if self._locked_tools is None:
+            self.log(f"server says its {subject} changed mid-session")
+        else:
+            self.log(f"ALERT: server says its {subject} changed mid-session, after "
+                     f"approval. Whatever it sends next is checked against the "
+                     f"lockfile; if you did not expect this, stop here.")
+
     def handle_server_message(self, message: dict[str, Any]) -> dict[str, Any]:
         """Inspect a message travelling server -> client."""
         try:
+            if "id" not in message and message.get("method"):
+                self.note_notification(message)
             result = message.get("result")
             if isinstance(result, dict):
                 if isinstance(result.get("tools"), list):
@@ -577,6 +615,9 @@ class Guard:
         if s.results_flagged:
             cats = ", ".join(sorted(set(s.result_categories)))
             bits.append(f"{s.results_flagged} flagged result(s) [{cats}]")
+        if s.list_changed:
+            bits.append(f"{len(s.list_changed)} list-changed notification(s) "
+                        f"[{', '.join(sorted(set(s.list_changed)))}]")
         if s.calls_denied:
             bits.append(f"{len(s.calls_denied)} call(s) refused by policy "
                         f"[{', '.join(sorted(set(s.calls_denied)))}]")

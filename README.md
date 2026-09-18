@@ -159,6 +159,22 @@ give the agent instructions, so imperative mood there is normal. In a tool descr
 isn't. Without that split the scanner fires constantly on any real skills directory and
 becomes useless.
 
+## When a server changes its mind mid-session
+
+The protocol lets a server send `notifications/tools/list_changed` to tell the client its
+catalogue just changed and should be re-fetched. That is the rug pull announcing itself,
+and `guard` now says so:
+
+```
+mcp-audit guard: ALERT: server says its tools changed mid-session, after approval.
+                 Whatever it sends next is checked against the lockfile; if you did
+                 not expect this, stop here.
+```
+
+The notification is still forwarded. Swallowing it would leave the client holding a list
+the server has disowned — and the re-fetch it triggers is exactly what hands the new
+definitions to the approval check. Suppressing the notification would suppress the check.
+
 ## Pinning the code, not just the command
 
 MCPA016 notices when `"command": "node", "args": ["server.js"]` becomes something else. It
@@ -656,7 +672,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-396 tests, stdlib unittest, nothing to install.
+401 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

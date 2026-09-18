@@ -483,3 +483,47 @@ class TestAllResultShapes(unittest.TestCase):
     def test_every_documented_key_is_screened(self) -> None:
         """If a new result key is added, this catches the omission."""
         self.assertEqual(("content", "contents", "messages"), Guard.RESULT_TEXT_KEYS)
+
+
+class TestCatalogueChangeNotifications(unittest.TestCase):
+    """A server announcing that its own tool list just changed is the rug pull
+    announcing itself, and it went past unread: only `result` objects were
+    inspected, and a notification has neither a result nor an id."""
+
+    def _guard(self, locked: bool = True) -> Guard:
+        return Guard("svc", make_lock({"read": BENIGN}) if locked else Lock(),
+                     quiet=True, allow_unapproved=True)
+
+    def test_a_tools_list_changed_notification_is_recorded(self) -> None:
+        guard = self._guard()
+        guard.handle_server_message(
+            {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+        self.assertEqual(["tools"], guard.stats.list_changed)
+        self.assertIn("list-changed", guard.summary())
+
+    def test_prompts_and_resources_count_too(self) -> None:
+        guard = self._guard()
+        for method in ("notifications/prompts/list_changed",
+                       "notifications/resources/list_changed",
+                       "notifications/resources/updated"):
+            guard.handle_server_message({"jsonrpc": "2.0", "method": method})
+        self.assertEqual(3, len(guard.stats.list_changed))
+
+    def test_it_is_still_forwarded_untouched(self) -> None:
+        """Swallowing it would leave the client holding a list the server has
+        disowned, and the re-fetch it triggers is what hands the new
+        definitions to filter_tools -- which is where they get checked."""
+        message = {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}
+        self.assertEqual(message, self._guard().handle_server_message(dict(message)))
+
+    def test_an_ordinary_notification_is_not_counted(self) -> None:
+        guard = self._guard()
+        guard.handle_server_message(
+            {"jsonrpc": "2.0", "method": "notifications/message",
+             "params": {"level": "info", "data": "hello"}})
+        self.assertEqual([], guard.stats.list_changed)
+
+    def test_a_reply_is_not_mistaken_for_a_notification(self) -> None:
+        guard = self._guard()
+        guard.handle_server_message({"jsonrpc": "2.0", "id": 1, "result": {}})
+        self.assertEqual([], guard.stats.list_changed)
