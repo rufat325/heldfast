@@ -269,13 +269,48 @@ class Guard:
 
     # -- tool results ------------------------------------------------------
 
-    def screen_tool_result(self, result: dict[str, Any]) -> dict[str, Any]:
-        """Inspect the content a tool returned before the model reads it.
+    # Result shapes that carry text into the model, and the key each uses.
+    #
+    #   tools/call                -> content   (ContentBlock[])
+    #   resources/read            -> contents  (TextResourceContents[])
+    #   prompts/get               -> messages  (PromptMessage[]) + description
+    #
+    # `content` and `contents` differ by one letter and are different types.
+    # Screening only the first left resources/read -- an agent reading a
+    # document, which is the canonical way injected text arrives -- entirely
+    # unscreened.
+    RESULT_TEXT_KEYS = ("content", "contents", "messages")
+
+    def _text_blocks(self, result: dict[str, Any]) -> list[dict[str, Any]]:
+        """Every dict in the result that owns a `text` string, whatever the shape."""
+        found: list[dict[str, Any]] = []
+        for key in self.RESULT_TEXT_KEYS:
+            items = result.get(key)
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                # tools/call blocks and resources/read contents hold text
+                # directly; a prompts/get message wraps one block in `content`.
+                if isinstance(item.get("text"), str):
+                    found.append(item)
+                inner = item.get("content")
+                if isinstance(inner, dict) and isinstance(inner.get("text"), str):
+                    found.append(inner)
+                elif isinstance(inner, list):
+                    found.extend(b for b in inner
+                                 if isinstance(b, dict) and isinstance(b.get("text"), str))
+        return found
+
+    def screen_result_text(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Inspect text a server returned before the model reads it.
 
         This is the indirect injection surface, and the one that actually
         happens. A tool description is written once by whoever wrote the
-        server; a tool *result* is whatever a web page, file, ticket or email
+        server; a *result* is whatever a web page, file, ticket or email
         happened to contain, and it lands in the model's context as text.
+        Covers tools/call, resources/read and prompts/get alike.
 
         The default response is to fence rather than block. Results are real
         data and a tool that legitimately returns the phrase "ignore previous
@@ -285,15 +320,10 @@ class Guard:
         you. That is a mitigation, not a guarantee, and the notice says so
         rather than implying the content is now safe.
         """
-        blocks = result.get("content")
-        if not isinstance(blocks, list):
-            return result
         if self.result_policy == "off":
             return result
 
-        for block in blocks:
-            if not isinstance(block, dict) or block.get("type") != "text":
-                continue
+        for block in self._text_blocks(result):
             text = block.get("text")
             if not isinstance(text, str) or not text.strip():
                 continue
@@ -411,8 +441,9 @@ class Guard:
                     result["instructions"] = self.check_instructions(result["instructions"])
                 if result.get("resultType") == "input_required" or "inputRequests" in result:
                     message["result"] = self.screen_input_required(result)
-                elif isinstance(result.get("content"), list):
-                    message["result"] = self.screen_tool_result(result)
+                elif any(isinstance(result.get(k), list)
+                         for k in self.RESULT_TEXT_KEYS):
+                    message["result"] = self.screen_result_text(result)
         except Exception as exc:
             self.stats.internal_errors.append(str(exc))
             self.log(f"INTERNAL ERROR inspecting message: {exc}")

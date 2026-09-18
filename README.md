@@ -197,12 +197,24 @@ the fingerprint too, so flipping the flag after approval registers as drift.
 Prompts and resources are only requested from servers that declare those capabilities, so
 well-behaved servers are never asked for something they do not have.
 
-### Tool results
+### Results
 
-Everything above is about what a server *declares*. `guard` also looks at what a tool
+Everything above is about what a server *declares*. `guard` also looks at what it
 *returns*, which is a different problem: a description is written once by whoever wrote the
 server, but a result is whatever a web page, ticket, file or email happened to contain, and
 it lands in the model's context as text. That is where injection actually arrives.
+
+Three result types carry text and they use three different keys:
+
+| Request | Key | What it is |
+|---|---|---|
+| `tools/call` | `content` | whatever the tool returned |
+| `resources/read` | `contents` | the document the agent just read |
+| `prompts/get` | `messages` | the expanded prompt template |
+
+`content` and `contents` differ by one letter and are different types. Screening only the
+first left `resources/read` unscreened, which is the canonical way injected text arrives -
+an agent reading a poisoned file.
 
 The default is to fence, not block:
 
@@ -412,7 +424,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-248 tests, stdlib unittest, nothing to install.
+255 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
