@@ -21,7 +21,13 @@ SHELL_BINARIES = {
 
 # Tokens that only mean something to a shell. Their presence in argv implies
 # the arguments are being interpreted rather than passed straight to execve.
-SHELL_METACHARS = re.compile(r"\|\||&&|[;|]|\$\(|\$\{|>>|<\(|\x60")
+#
+# ${VAR} is deliberately absent. It is the variable indirection that clients
+# like VS Code define, and that MCPA005's own remediation tells people to use
+# -- flagging it would penalise the exact practice this scanner recommends.
+# Args reach execve, not a shell, so it is inert there; and if a shell really
+# is involved, the shell-binary branch of MCPA001 catches that directly.
+SHELL_METACHARS = re.compile(r"\|\||&&|[;|]|\$\(|>>|<\(|\x60")
 
 PIPE_TO_INTERPRETER = re.compile(
     r"(?:curl|wget|iwr|invoke-webrequest|invoke-restmethod|irm)\b[^|]*\|\s*"
@@ -176,7 +182,12 @@ _FLOATING = re.compile(
     r"^(?:latest|next|canary|beta|alpha|\*|x|\^|~(?!=)|>=|<=|~=|!=|>|<|\d+\.x|\d+\.\d+\.x)")
 
 
-@rule("MCPA003", "Package executed without a pinned version", Severity.MEDIUM)
+# Severity LOW, not MEDIUM: `npx -y <pkg>` is the ecosystem's universal
+# idiom. Measured against 83 real-world configs it accounted for 77% of all
+# findings, which drowns everything else. It is a real supply-chain risk and
+# stays reported -- but a rule that fires on essentially every config is
+# hygiene advice, not a finding.
+@rule("MCPA003", "Package executed without a pinned version", Severity.LOW)
 def unpinned_package(ctx: AuditContext) -> Iterable[Finding]:
     """npx/uvx will silently fetch and run the newest publish on every start."""
     for s in _active(ctx):
@@ -194,7 +205,7 @@ def unpinned_package(ctx: AuditContext) -> Iterable[Finding]:
         yield Finding(
             rule_id="MCPA003",
             title="Package executed without a pinned version",
-            severity=Severity.MEDIUM,
+            severity=Severity.LOW,
             location=_server_location(s),
             evidence=(
                 f"{s.command} resolves {name!r} with {detail}; a new publish is executed "

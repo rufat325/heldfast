@@ -211,6 +211,26 @@ where you are, probe in a sandbox.
 - MCPA006 is POSIX only, no Windows ACL support.
 - `--llm` is a judgement call, not proof. It'll disagree with itself on borderline text.
 
+## Tuning
+
+The rules are tuned against real configs, not just my own fixtures. I harvested 98 config
+blocks out of the READMEs of 65 public MCP repos (that is where people actually copy configs
+from) and ran every one through the scanner. Nothing crashed, but the first pass produced 1
+critical and 11 high findings, and most of them were wrong:
+
+- `0x<your-wallet-private-key>` reported as a live secret - the placeholder check was
+  anchored to the start of the value, so any prefix defeated it.
+- `${ACCESS_TOKEN}` in an argument flagged as a shell metacharacter - which penalised the
+  exact indirection the credential rule tells you to use.
+- Unpinned `npx -y <pkg>` was 69% of all findings. It is a real supply-chain risk, but a rule
+  that fires on essentially every config in the ecosystem is hygiene advice, not a finding,
+  so it is LOW now.
+- Public read-only endpoints scored as high-severity missing auth, including the one in
+  Anthropic's own servers repo.
+
+After fixing those: 0 critical, 1 high, and the false positives are gone. Those cases are
+pinned as regression tests.
+
 ## Prior art
 
 [snyk/agent-scan](https://github.com/snyk/agent-scan) (which absorbed Invariant Labs'
@@ -227,7 +247,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-101 tests, stdlib unittest, nothing to install.
+110 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

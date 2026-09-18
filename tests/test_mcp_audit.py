@@ -386,5 +386,100 @@ class TestCli(unittest.TestCase):
         self.assertIn("MCPA015", r.stdout)
 
 
+class TestRealWorldRegressions(unittest.TestCase):
+    """Cases taken from 98 config blocks harvested from public MCP repos.
+
+    Every one of these was a false positive or a mis-scored finding produced
+    against real configuration. They are pinned here because fixtures I wrote
+    myself could not have found them -- the author of a detector is the worst
+    person to invent its test data.
+    """
+
+    def _server(self, **kw) -> ServerSpec:
+        base = dict(name="s", source="/tmp/.mcp.json", client="test",
+                    transport="stdio", command="npx", args=[], env={})
+        base.update(kw)
+        return ServerSpec(**base)
+
+    # -- credentials -------------------------------------------------------
+
+    def test_placeholder_with_prefix_is_not_a_secret(self) -> None:
+        """'0x<your-wallet-private-key>' was reported as a live key."""
+        from mcp_audit.rules.credentials import classify_secret
+        for value in ("0x<your-base-wallet-private-key>",
+                      "0xYOUR_PRIVATE_KEY_HERE",
+                      "0xREPLACE_ME_WITH_YOUR_KEY",
+                      "<ghp_your_token_goes_here>"):
+            self.assertIsNone(classify_secret("PRIVATE_KEY", value), value)
+
+    def test_word_heuristics_never_suppress_a_real_token(self) -> None:
+        """A placeholder word must not veto a high-precision structural match.
+
+        Getting this backwards made the scanner miss a real AWS key, which is
+        a far worse failure than flagging a dummy one.
+        """
+        from mcp_audit.rules.credentials import classify_secret
+        for key, value in (("AWS_KEY", "AKIAIOSFODNN7EXAMPLE"),
+                           ("GITHUB_TOKEN", "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"),
+                           ("ANTHROPIC", "sk-ant-api03-Zk9vBq2LmNp4RtYu7WxA1cDfGhJk")):
+            self.assertIsNotNone(classify_secret(key, value), f"missed {key}")
+
+    # -- execution ---------------------------------------------------------
+
+    def test_env_indirection_in_args_is_not_a_shell_metacharacter(self) -> None:
+        """${VAR} is the pattern MCPA005 recommends; MCPA001 flagged it anyway."""
+        ctx = AuditContext(servers=[self._server(
+            args=["-y", "mcp-remote@latest", "https://example.com/hub/",
+                  "--header", "Authorization:Bearer ${ACCESS_TOKEN}"],
+        )])
+        self.assertNotIn("MCPA001", {f.rule_id for f in run_rules(ctx)})
+
+    def test_real_shell_metacharacters_still_fire(self) -> None:
+        for arg in ("a && b", "a | b", "a; b", "$(whoami)"):
+            ctx = AuditContext(servers=[self._server(args=[arg])])
+            self.assertIn("MCPA001", {f.rule_id for f in run_rules(ctx)}, arg)
+
+    def test_unpinned_package_is_low_not_medium(self) -> None:
+        """It fires on 69% of real configs, so at MEDIUM it drowns everything."""
+        ctx = AuditContext(servers=[self._server(
+            args=["-y", "@modelcontextprotocol/server-github"])])
+        f = next(f for f in run_rules(ctx) if f.rule_id == "MCPA003")
+        self.assertEqual("low", f.severity.label)
+
+    # -- transport ---------------------------------------------------------
+
+    def test_single_label_hostname_counts_as_private(self) -> None:
+        """'http://homeassistant:8123' is a LAN host, not the open internet."""
+        from mcp_audit.rules.transport import is_private
+        for host in ("homeassistant", "nas", "truenas"):
+            self.assertTrue(is_private(host), host)
+        for host in ("example.com", "api.vendor.io", "8.8.8.8"):
+            self.assertFalse(is_private(host), host)
+
+    def test_public_unauthenticated_endpoint_is_medium(self) -> None:
+        """Most real hits are public read-only services, unauthenticated on purpose."""
+        ctx = AuditContext(servers=[self._server(
+            name="docs", transport="http", command=None,
+            url="https://modelcontextprotocol.io/mcp")])
+        f = next(f for f in run_rules(ctx) if f.rule_id == "MCPA008")
+        self.assertEqual("medium", f.severity.label)
+
+    def test_cleartext_to_lan_host_is_not_critical(self) -> None:
+        ctx = AuditContext(servers=[self._server(
+            name="ha", transport="http", command=None,
+            url="http://homeassistant:8123/api/mcp",
+            headers={"Authorization": "Bearer ${HA_TOKEN}"})])
+        f = next(f for f in run_rules(ctx) if f.rule_id == "MCPA007")
+        self.assertEqual("high", f.severity.label)
+
+    def test_cleartext_to_public_host_with_token_is_critical(self) -> None:
+        ctx = AuditContext(servers=[self._server(
+            name="remote", transport="http", command=None,
+            url="http://mcp.example.com/sse",
+            headers={"Authorization": "Bearer ${TOKEN}"})])
+        f = next(f for f in run_rules(ctx) if f.rule_id == "MCPA007")
+        self.assertEqual("critical", f.severity.label)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

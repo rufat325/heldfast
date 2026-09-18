@@ -57,7 +57,13 @@ def is_private(host: str) -> bool:
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
-        return host.endswith((".local", ".internal", ".lan"))
+        if host.endswith((".local", ".internal", ".lan", ".home", ".corp")):
+            return True
+        # A single-label hostname ("homeassistant", "nas") has no public DNS
+        # meaning -- it can only resolve on a local network. Real configs use
+        # these constantly, and treating them as internet-facing overstated
+        # the severity of every finding about them.
+        return "." not in host
     return ip.is_private or ip.is_link_local
 
 
@@ -74,7 +80,12 @@ def cleartext_transport(ctx: AuditContext) -> Iterable[Finding]:
         if scheme != "http" or is_loopback(host):
             continue
         carries_token = any(AUTH_HEADERS.match(k) for k in s.headers)
-        severity = Severity.CRITICAL if carries_token else Severity.HIGH
+        # Cleartext on a LAN host is a real weakness but not the same exposure
+        # as cleartext across the internet, so it does not reach CRITICAL.
+        if is_private(host):
+            severity = Severity.MEDIUM if not carries_token else Severity.HIGH
+        else:
+            severity = Severity.CRITICAL if carries_token else Severity.HIGH
         yield Finding(
             rule_id="MCPA007",
             title="Remote server reached over cleartext HTTP",
@@ -113,7 +124,12 @@ def unauthenticated_remote(ctx: AuditContext) -> Iterable[Finding]:
         yield Finding(
             rule_id="MCPA008",
             title="Remote server configured without authentication",
-            severity=Severity.MEDIUM if is_private(host) else Severity.HIGH,
+            # Always MEDIUM. Measured across 83 real-world configs, this rule's
+            # hits were dominated by public read-only endpoints that are
+            # unauthenticated on purpose -- including the one in Anthropic's own
+            # servers repo. The scanner cannot see what an endpoint exposes, so
+            # it should prompt a look rather than assert a problem.
+            severity=Severity.MEDIUM,
             location=Location(path=s.source, line=s.line, snippet=s.url),
             evidence=f"no auth header, auth query parameter, or auth block configured for {s.url}",
             remediation=(

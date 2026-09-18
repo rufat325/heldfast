@@ -40,13 +40,31 @@ def shannon_entropy(s: str) -> float:
     return -sum((c / n) * math.log2(c / n) for c in counts.values())
 
 
+# Placeholder markers anywhere in the value, not only at the start. Real
+# configs write "0x<your-wallet-private-key>" and "0xYOUR_PRIVATE_KEY_HERE",
+# both of which the start-anchored check missed and reported as live secrets.
+# A prefix like "0x" or "sk-" in front of the placeholder is common enough
+# that anchoring to position 0 is simply the wrong test.
+_BRACKETED = re.compile(r"<[^<>]{2,}>")
+
+_ANYWHERE_PLACEHOLDER = re.compile(
+    r"<[^<>]{2,}>"                       # <your-key>
+    r"|your[_\-. ]"                      # YOUR_PRIVATE_KEY
+    r"|[_\-. ]here\b"                    # ..._KEY_HERE
+    r"|replace[_\-. ]?(?:me|this|with)"  # REPLACE_ME
+    r"|paste[_\-. ]"                     # PASTE_TOKEN
+    r"|placeholder|changeme|example|xxxx",
+    re.IGNORECASE,
+)
+
+
 def is_indirect_or_placeholder(value: str) -> bool:
     v = value.strip()
     if not v or len(v) < 8:
         return True
     if _INDIRECTION.match(v) or "${" in v:
         return True
-    if _PLACEHOLDER.match(v):
+    if _PLACEHOLDER.match(v) or _ANYWHERE_PLACEHOLDER.search(v):
         return True
     if v.startswith("$") and v[1:].replace("_", "").isalnum():
         return True
@@ -54,16 +72,42 @@ def is_indirect_or_placeholder(value: str) -> bool:
 
 
 def classify_secret(key: str, value: str) -> tuple[str, float] | None:
-    """Return (description, confidence) if `value` looks like a live secret."""
-    if is_indirect_or_placeholder(value):
+    """Return (description, confidence) if `value` looks like a live secret.
+
+    Order matters. The provider token shapes are high-precision structural
+    matches -- `ghp_` plus 36 base62 characters is not something a human types
+    by accident -- so they are checked first and are NOT second-guessed by the
+    placeholder word list. Doing it the other way round meant a value
+    containing "example" or "xxxx" suppressed a real key match, and a missed
+    credential is a far worse outcome for this tool than a flagged dummy one.
+
+    The fuzzy entropy fallback is the opposite case: it has no structure to
+    rely on, so it gets the full placeholder filtering.
+    """
+    v = value.strip()
+    if not v:
         return None
+
+    # Indirection is never a secret regardless of what it wraps.
+    if _INDIRECTION.match(v) or "${" in v:
+        return None
+
     for label, pattern in TOKEN_PATTERNS:
-        if pattern.search(value):
-            return label, 1.0
+        m = pattern.search(v)
+        if not m:
+            continue
+        # One narrow exception: a token shape sitting inside angle brackets is
+        # documentation, e.g. "<ghp_your_token_here>".
+        if _BRACKETED.search(v):
+            return None
+        return label, 1.0
+
     # Fall back to entropy, but only where the key name says "secret".
-    if SECRET_KEY_HINT.search(key) and len(value) >= 20:
-        ent = shannon_entropy(value)
-        if ent >= 3.6 and re.search(r"[A-Za-z]", value) and re.search(r"[0-9]", value):
+    if is_indirect_or_placeholder(v):
+        return None
+    if SECRET_KEY_HINT.search(key) and len(v) >= 20:
+        ent = shannon_entropy(v)
+        if ent >= 3.6 and re.search(r"[A-Za-z]", v) and re.search(r"[0-9]", v):
             return f"high-entropy value ({ent:.1f} bits/char) under a secret-shaped key", 0.6
     return None
 
