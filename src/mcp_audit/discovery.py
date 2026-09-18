@@ -115,10 +115,29 @@ def project_relative_paths() -> list[tuple[str, str]]:
     return out
 
 
+# Directories that never hold a project's MCP config and cost a great deal to
+# walk. AppData and ~/Library are the expensive ones: they contain tens of
+# thousands of cache directories, and the client configs that genuinely live
+# there are collected by exact path in candidate_config_paths(), so walking
+# them turns up nothing the scan does not already have.
+#
+# Only directories *below* a root are pruned, so pointing mcp-audit straight
+# at a path inside one of these still scans it.
 _SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build",
     ".mypy_cache", ".pytest_cache", ".tox", "site-packages", ".next", "target",
     ".gradle", ".idea", "vendor", "Pods", ".terraform",
+    # User-level caches and package stores.
+    "AppData", "Application Data", "Library", ".cache", ".local", ".npm",
+    ".nvm", ".cargo", ".rustup", ".gem", ".m2", ".nuget", ".conda", ".pyenv",
+    ".rbenv", ".docker", ".ollama",
+    "$Recycle.Bin", "System Volume Information",
+    # Windows keeps legacy junctions in the profile that point back at
+    # directories already covered -- Local Settings at AppData/Local, My
+    # Documents at Documents. Following them walks the same tree twice.
+    "Local Settings", "My Documents", "My Pictures", "My Music", "My Videos",
+    "NetHood", "PrintHood", "Recent", "SendTo", "Start Menu", "Templates",
+    "Cookies",
 }
 
 
@@ -132,7 +151,20 @@ def discover_config_files(roots: Iterable[Path], scan_user: bool = True,
             if path.is_file():
                 found[path.resolve()] = client_id
 
-    project_rels = project_relative_paths()
+    # Split the client project paths by shape so the walk can answer most of
+    # them from the directory listing it already has. Stat-ing every candidate
+    # in every directory cost 12 syscalls per directory, and on a home
+    # directory that dominated the runtime -- 67k stats that found nothing.
+    bare: dict[str, str] = {}
+    nested: dict[str, list[tuple[str, str]]] = {}
+    for rel, client_id in project_relative_paths():
+        parts = Path(rel).parts
+        if len(parts) > 1:
+            nested.setdefault(parts[0], []).append((rel, client_id))
+        else:
+            bare[parts[0]] = client_id
+
+    seen: set[str] = set()
 
     for root in roots:
         root = Path(root).resolve()
@@ -148,10 +180,22 @@ def discover_config_files(roots: Iterable[Path], scan_user: bool = True,
             if len(here.parts) - root_depth >= max_depth:
                 dirnames[:] = []
                 continue
+
+            # Junctions and symlinks make one tree appear under several names
+            # -- on Windows ~/Application Data points back into
+            # ~/AppData/Roaming -- so without this the walk repeats itself,
+            # and a loop would never end.
+            real = os.path.realpath(dirpath)
+            if real in seen:
+                dirnames[:] = []
+                continue
+            seen.add(real)
+
             dirnames[:] = [d for d in dirnames
                            if d not in _SKIP_DIRS and not d.startswith(".venv")]
+            names = set(filenames)
 
-            for fn in filenames:
+            for fn in names:
                 if fn in GENERIC_PROJECT_FILENAMES:
                     # Do not clobber a specific attribution with the generic
                     # one: .cursor/mcp.json is Cursor's, and the bare filename
@@ -161,10 +205,16 @@ def discover_config_files(roots: Iterable[Path], scan_user: bool = True,
                         found[resolved] = GENERIC_PROJECT_FILENAMES[fn]
 
             # Client-specific project paths such as .cursor/mcp.json. Checked
-            # at every level so nested workspaces are covered too.
-            for rel, client_id in project_rels:
-                candidate = here / rel
-                if candidate.is_file():
-                    found[candidate.resolve()] = client_id  # specific wins
+            # at every level so nested workspaces are covered too. The bare
+            # filenames come out of the listing; the nested ones are stat-ed
+            # only where the directory they sit in actually exists.
+            for fn, client_id in bare.items():
+                if fn in names:
+                    found[(here / fn).resolve()] = client_id  # specific wins
+            for sub in dirnames:
+                for rel, client_id in nested.get(sub, ()):
+                    candidate = here / rel
+                    if candidate.is_file():
+                        found[candidate.resolve()] = client_id  # specific wins
 
     return sorted(found.items(), key=lambda kv: str(kv[0]))
