@@ -330,3 +330,55 @@ class TestMalformedPolicyCannotBreakTheProxy(unittest.TestCase):
                                     "params": {"name": "t", "arguments": {}}})
         self.assertIsNone(refusal, "an internal error must not block the call")
         self.assertTrue(guard.stats.internal_errors)
+
+
+BS = chr(92)   # a literal backslash, written this way because every
+               # attempt to put one through a shell heredoc in this
+               # project has arrived mangled.
+
+
+class TestWindowsPaths(unittest.TestCase):
+    """This tool runs on Windows, and the path tests were all written with
+    POSIX paths.
+
+    Windows names the same file several ways: either slash, either case of the
+    drive letter, either case of anything else. A policy allowing C:/workspace
+    that refuses c:/workspace is not stricter, only broken -- and over-blocking
+    a legitimate call is the failure that gets a security tool switched off.
+    """
+
+    def _allowed(self, pattern: str, value: str) -> bool:
+        return bool(Policy({"t": {"paths": [pattern]}}).check("t", {"p": value}))
+
+    def test_either_slash(self) -> None:
+        self.assertTrue(self._allowed("C:/workspace/**", "C:" + BS + "workspace" + BS + "app" + BS + "main.py"))
+        self.assertTrue(self._allowed("C:" + BS + "workspace" + BS + "**",
+                                      "C:/workspace/app/main.py"))
+
+    def test_either_case_of_the_drive(self) -> None:
+        self.assertTrue(self._allowed("C:/workspace/**", "c:/workspace/app/main.py"))
+        self.assertTrue(self._allowed("c:/workspace/**", "C:/workspace/app/main.py"))
+
+    def test_either_case_of_the_rest(self) -> None:
+        self.assertTrue(self._allowed("C:/workspace/**", "C:/WorkSpace/App.py"))
+
+    def test_traversal_is_still_resolved(self) -> None:
+        self.assertFalse(self._allowed(
+            "C:/workspace/**", "C:/workspace/../Users/me/.ssh/id_rsa"))
+
+    def test_another_drive_is_not_the_same_place(self) -> None:
+        self.assertFalse(self._allowed("C:/workspace/**", "D:/workspace/app.py"))
+
+    def test_a_unc_path_is_not_inside_a_local_one(self) -> None:
+        for value in ("//server/share/secret.txt", BS + BS + "server" + BS + "share" + BS + "secret.txt"):
+            self.assertFalse(self._allowed("C:/workspace/**", value), value)
+
+    def test_a_posix_pattern_does_not_admit_a_windows_path(self) -> None:
+        self.assertFalse(self._allowed("/workspace/**", "C:/workspace/app.py"))
+
+    def test_posix_paths_stay_case_sensitive(self) -> None:
+        """Only Windows paths fold case. On POSIX /Workspace really is a
+        different directory, and quietly allowing it would widen the boundary
+        rather than fix anything."""
+        self.assertTrue(self._allowed("/workspace/**", "/workspace/a"))
+        self.assertFalse(self._allowed("/workspace/**", "/Workspace/a"))

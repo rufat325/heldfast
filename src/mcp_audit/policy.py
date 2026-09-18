@@ -103,7 +103,9 @@ def normalize_path(value: str) -> str:
         text = "/~/" + text[1:].lstrip("/")
     drive = ""
     if _WINDOWS_ABS.match(text):
-        drive, text = text[:2], text[2:]
+        # `c:` and `C:` are the same drive, so the letter is folded here
+        # rather than left for the comparison to worry about.
+        drive, text = text[:2].upper(), text[2:]
     normalized = posixpath.normpath(text)
     if normalized == ".":
         normalized = ""
@@ -143,15 +145,26 @@ def _segments_match(pattern: str, path: str) -> bool:
 
 
 def path_is_allowed(value: str, patterns: list[str]) -> bool:
+    """Whether this path is inside one of the approved patterns.
+
+    Windows paths compare without case, because there they name the same file
+    -- a policy allowing C:/workspace that refuses c:/workspace is not
+    stricter, only broken, and over-blocking is what gets a tool switched off.
+    POSIX paths stay case-sensitive, because there /Workspace really is a
+    different directory.
+    """
     candidate = normalize_path(value)
     for pattern in patterns:
         normalized = normalize_path(pattern) if "*" not in pattern else \
             pattern.replace("\\", "/")
-        if _segments_match(normalized, candidate):
+        windows = bool(_WINDOWS_ABS.match(candidate) or _WINDOWS_ABS.match(normalized))
+        left, right = (normalized.lower(), candidate.lower()) if windows else \
+            (normalized, candidate)
+        if _segments_match(left, right):
             return True
         # A bare directory authorises what is under it.
-        base = normalized.rstrip("/")
-        if base and (candidate == base or candidate.startswith(base + "/")):
+        base = left.rstrip("/")
+        if base and (right == base or right.startswith(base + "/")):
             return True
     return False
 
