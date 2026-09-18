@@ -92,8 +92,6 @@ broke.
 The action installs itself from the checked-out copy, uploads SARIF to code
 scanning and writes a job summary. Inputs are in [action.yml](action.yml).
 
-There's a composite action in `action.yml` too.
-
 ### Suppressing things
 
 Some rules are heuristics. MCPA008 can't tell an actually-open endpoint from one that does
@@ -456,7 +454,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-275 tests, stdlib unittest, nothing to install.
+287 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

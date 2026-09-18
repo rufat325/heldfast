@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -162,6 +163,26 @@ class TestRuleDocs(unittest.TestCase):
         md = rule_docs.render_markdown(all_rules())
         for r in all_rules():
             self.assertIn(f"## {r.id}", md)
+
+    def test_the_readme_test_count_is_true(self) -> None:
+        """It said 275 while the suite had grown to 286. A number in a README
+        that nothing checks is a number that goes quietly wrong, which is the
+        same reason the rule count is asserted against the registry rather
+        than typed into a test.
+
+        Skipped tests are still loaded, so this count does not move between
+        platforms.
+        """
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        stated = re.search(r"(\d+) tests, stdlib unittest", readme)
+        self.assertIsNotNone(stated, "the README no longer states a test count")
+
+        actual = unittest.defaultTestLoader.discover(str(ROOT / "tests")).countTestCases()
+        self.assertEqual(
+            int(stated.group(1)), actual,
+            "the README says %s tests and there are %s"
+            % (stated.group(1), actual),
+        )
 
 
 class TestNewCommands(unittest.TestCase):
