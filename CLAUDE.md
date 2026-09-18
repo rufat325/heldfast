@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 64 commits, 484 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 67 commits, 489 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -188,13 +188,24 @@ The cycles, most recent last:
     client count are now assertions. Also documented that `guard` is stdio
     only, which was true and unstated.
 
+31. `270afd6` — scanned Anthropic's own skills repos (24 SKILL.md). MCPA012
+    fired 8 times, all on setup skills saying "put your key in .env.local".
+    Project dotfiles are now exempt in *instructing* text (skill bodies,
+    server instructions) and nowhere else; ssh keys and ~/.aws/credentials
+    still fire everywhere. Checked MCPA013 against the same corpus first and
+    left it alone — 5/5 on this machine came from one plugin author, and none
+    of the 24 official skills declares the field.
+
 ### If the loop resumes, change source
 
 **The spec is near exhausted.** The remaining unscreened methods
 (`completion/complete`, `notifications/message`, `subscriptions/listen`)
 carry little model-facing text. Better sources now:
 
-- **the ecosystem's own repositories** — this is now the best corpus available
+- **the ecosystem's own repositories** — now including `anthropics/skills` and
+  `anthropics/claude-cookbooks` for SKILL.md text, and
+  `modelcontextprotocol/typescript-sdk` for TS handlers. This is the best
+  corpus available
   and it costs one `git clone`. The official servers repo, the Python SDK and
   FastMCP give ~2,800 handlers, 694 tool definitions and 27 configs, all of it
   text users literally copy. Cycles 24–26 each found something real in it:
@@ -402,6 +413,12 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
 
 ## Environment traps on this machine
 
+- **A heredoc can fail *silently*, not just loudly.** Every previous mangling
+  here produced a syntax error. Then `` in a regex became a literal
+  backspace byte (0x08): it compiled, matched nothing, and the exemption it
+  was part of simply did not exist. Nothing failed until the pattern was
+  printed with `repr()`. After writing any regex through a shell, print its
+  `.pattern` and look at it.
 - **Bash heredocs mangle escapes, including quoted ones.** `\\` collapses to
   `\` and `\n` becomes a real newline, which has broken source files
   repeatedly. `<<'EOF'` does *not* save you: a `\\` written inside a
