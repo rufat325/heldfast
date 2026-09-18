@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 38 commits, 340 tests, 30 rules, CI across Linux/macOS/Windows
+complete unit. 40 commits, 344 tests, 30 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -104,6 +104,14 @@ The cycles, most recent last:
     written -- that is the design, not an omission. Also fixed a hardcoded
     command list in `main()` that silently parsed `verify-log` as a path.
 
+18. `482073a` — an outside review read the code and found two real holes in
+    the guard, both confirmed before changing anything. An unknown server was
+    forwarded untouched (now withheld; `--allow-unapproved` restores it), and
+    the lock entry was resolved by bare name while entries are keyed
+    `client:name`, so two clients with a server called `github` got each
+    other's approvals. **A reviewer who reads the code is the best source
+    tried so far** — better than the spec, better than competitors.
+
 ### If the loop resumes, change source
 
 **The spec is near exhausted.** The remaining unscreened methods
@@ -136,6 +144,9 @@ carry little model-facing text. Better sources now:
   profile README is drafted on the Desktop in `rufat325-profile/`.
 - **Global git email** is still `rufatm726@email.com`, so every other repo on
   the machine commits under an address GitHub cannot link.
+- **GitHub repo metadata** is empty: no description, no topics, no homepage,
+  no release. Confirmed via the API. Two minutes of work on the repo settings
+  page, and it is the first thing anyone sees.
 - **Marketplace** listing for the action — the action is tested and ready.
 - **History rewrite**: three old commit messages still discuss competitors by
   name. Removing them needs a force push, which was blocked as a destructive
@@ -262,6 +273,10 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   hand and has no idea which client configures which server, so it cannot tell
   a genuine collision from two servers that never meet. Take the idea, check
   the implementation, and say precisely what was wrong with it.
+- **Ask someone to read the code, not the README.** One outside review found
+  two genuine security-model holes in `guard` that eighteen cycles of
+  self-directed work had walked past, because both were *defaults* rather than
+  bugs and everything passed. Defaults are invisible from the inside.
 - **A scanner that reports the remediation is worse than none.** The whole
   value of parsing over grepping in `sourcescan.py` is that
   `subprocess.run([...])` and `shlex.quote(x)` stay silent. Both are what the
