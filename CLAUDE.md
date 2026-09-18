@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 67 commits, 489 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 69 commits, 497 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -195,6 +195,11 @@ The cycles, most recent last:
     still fire everywhere. Checked MCPA013 against the same corpus first and
     left it alone — 5/5 on this machine came from one plugin author, and none
     of the 24 official skills declares the field.
+
+32. `d6d8f87` — the path policy was written and tested entirely in POSIX
+    paths, on a tool that runs on Windows. `c:/workspace` was refused by a
+    policy allowing `C:/workspace`. Drive letters fold, Windows comparison
+    ignores case, POSIX stays case-sensitive (asserted).
 
 ### If the loop resumes, change source
 
@@ -426,6 +431,10 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   end of a line, Python then read `\` + newline as a line continuation and
   silently joined the two lines. The string matched nothing and the patch
   failed. Use the Write tool for anything containing a backslash.
+- **Never let the test suite's exit code go through a pipe.** `python -m
+  unittest ... | tail -3 && git commit` commits even when tests fail, because
+  the pipeline's status is tail's. That put one red commit on main. Redirect
+  to a file and check `$?`.
 - **Windows path length.** The project lives at a short path deliberately;
   deep nesting under Temp hits the 248-character directory limit.
 - **CRLF.** `.gitattributes` normalizes to LF; the warnings on commit are
