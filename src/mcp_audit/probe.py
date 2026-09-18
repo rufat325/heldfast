@@ -79,6 +79,7 @@ def _parse_prompts(server: str, payload: dict[str, Any]) -> list[PromptSpec]:
             args = p.get("arguments") or []
             out.append(PromptSpec(
                 server=server, name=str(p.get("name") or ""),
+                title=str(p.get("title") or ""),
                 description=str(p.get("description") or ""),
                 arguments=[a for a in args if isinstance(a, dict)],
             ))
@@ -90,10 +91,13 @@ def _parse_resources(server: str, payload: dict[str, Any]) -> list[ResourceSpec]
     for r in (payload.get("result") or {}).get("resources") or []:
         if isinstance(r, dict):
             out.append(ResourceSpec(
-                server=server, uri=str(r.get("uri") or ""),
+                server=server,
+                uri=str(r.get("uri") or r.get("uriTemplate") or ""),
                 name=str(r.get("name") or ""),
+                title=str(r.get("title") or ""),
                 description=str(r.get("description") or ""),
                 mime_type=str(r.get("mimeType") or ""),
+                is_template="uriTemplate" in r,
             ))
     return out
 
@@ -108,6 +112,7 @@ def _parse_tools(server: str, payload: dict[str, Any]) -> list[ToolSpec]:
             ToolSpec(
                 server=server,
                 name=str(t.get("name") or ""),
+                title=str(t.get("title") or ""),
                 description=str(t.get("description") or ""),
                 input_schema=t.get("inputSchema") or t.get("input_schema") or {},
                 annotations=t.get("annotations") or {},
@@ -160,11 +165,12 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
     discover_result: dict[str, Any] = {}
     prompts_result: dict[str, Any] = {}
     resources_result: dict[str, Any] = {}
+    templates_result: dict[str, Any] = {}
     error: str | None = None
 
     def converse() -> None:
         nonlocal result, error, init_result, prompts_result, resources_result
-        nonlocal discover_result
+        nonlocal discover_result, templates_result
         assert proc.stdin is not None and proc.stdout is not None
         try:
             def send(msg: dict[str, Any]) -> None:
@@ -290,6 +296,14 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
                     reply = read_reply(4)
                     if reply and "error" not in reply:
                         resources_result = reply
+                    # Templates are a separate list with the same shape. A
+                    # server can put all of its text there and none in
+                    # resources/list, so asking for only one reads half.
+                    send({"jsonrpc": "2.0", "id": 5,
+                          "method": "resources/templates/list", "params": {}})
+                    reply = read_reply(5)
+                    if reply and "error" not in reply:
+                        templates_result = reply
         except (OSError, ValueError) as exc:
             error = f"transport error: {exc}"
 
@@ -328,7 +342,8 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
         _parse_tools(s.name, result),
         instructions=str((init_result.get("result") or {}).get("instructions") or ""),
         prompts=_parse_prompts(s.name, prompts_result),
-        resources=_parse_resources(s.name, resources_result),
+        resources=(_parse_resources(s.name, resources_result)
+                   + _parse_resources(s.name, templates_result)),
         protocol_era="modern" if discover_result else "legacy",
         supported_versions=[
             str(v) for v in

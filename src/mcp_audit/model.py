@@ -55,6 +55,11 @@ class ToolSpec:
     server: str
     name: str
     description: str = ""
+    # `title` is the display name the user actually sees. The spec calls it
+    # "intended for UI and end-user contexts", and for a tool
+    # `annotations.title` takes precedence over it. A tool can therefore be
+    # named honestly and displayed as something else entirely.
+    title: str = ""
     input_schema: dict[str, Any] = field(default_factory=dict)
     # ToolAnnotations from the spec: readOnlyHint, destructiveHint,
     # idempotentHint, openWorldHint, title. Clients use these to decide
@@ -62,6 +67,11 @@ class ToolSpec:
     # says "Clients should never make tool use decisions based on
     # ToolAnnotations received from untrusted servers."
     annotations: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def display_name(self) -> str:
+        """What a client shows the user, in the precedence the spec defines."""
+        return (self.annotations.get("title") or self.title or self.name or "")
 
     @property
     def claims_read_only(self) -> bool:
@@ -81,6 +91,7 @@ class ToolSpec:
         payload = json.dumps(
             {
                 "name": self.name,
+                "title": self.title,
                 "description": self.description,
                 "input_schema": self.input_schema,
                 # In the hash deliberately: a server flipping readOnlyHint to
@@ -124,13 +135,14 @@ class PromptSpec:
 
     server: str
     name: str
+    title: str = ""
     description: str = ""
     arguments: list[dict[str, Any]] = field(default_factory=list)
 
     def fingerprint(self) -> str:
         payload = json.dumps(
-            {"name": self.name, "description": self.description,
-             "arguments": self.arguments},
+            {"name": self.name, "title": self.title,
+             "description": self.description, "arguments": self.arguments},
             sort_keys=True, separators=(",", ":"), ensure_ascii=False,
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -143,13 +155,17 @@ class ResourceSpec:
     server: str
     uri: str
     name: str = ""
+    title: str = ""
     description: str = ""
     mime_type: str = ""
+    # resources/templates/list entries are the same shape with a uriTemplate.
+    is_template: bool = False
 
     def fingerprint(self) -> str:
         payload = json.dumps(
-            {"uri": self.uri, "name": self.name, "description": self.description,
-             "mime_type": self.mime_type},
+            {"uri": self.uri, "name": self.name, "title": self.title,
+             "description": self.description, "mime_type": self.mime_type,
+             "is_template": self.is_template},
             sort_keys=True, separators=(",", ":"), ensure_ascii=False,
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()

@@ -178,3 +178,59 @@ def undeclared_egress(ctx: AuditContext) -> Iterable[Finding]:
             confidence=0.6,
             tags=["schema", "exfiltration"],
         )
+
+
+# Words a display title uses to look harmless.
+_BENIGN_DISPLAY = re.compile(
+    r"\b(?:read|reads|reading|view|views|show|shows|display|displays|list|lists|"
+    r"get|gets|fetch|fetches|search|searches|find|finds|browse|browses|"
+    r"summar(?:y|ise|ize|ises|izes)|preview|previews|inspect|inspects|check|checks|"
+    r"look\s?up|query|queries|report|reports|status)\b",
+    re.IGNORECASE,
+)
+
+
+@rule("MCPA026", "Display title misrepresents what the tool does", Severity.HIGH)
+def deceptive_title(ctx: AuditContext) -> Iterable[Finding]:
+    """The name mutates; the title the user sees says it only reads."""
+    declared = {s.name: (s.source, s.line) for s in ctx.servers}
+
+    for tool in ctx.tools:
+        display = tool.display_name
+        # Only interesting when a title actually overrides the name. If the
+        # client falls back to the name, the user sees the honest string.
+        if not display or display == tool.name:
+            continue
+
+        in_name = _name_terms(tool.name)
+        if not in_name:
+            continue
+        if MUTATING.search(display):
+            continue  # the title admits it too
+        if not _BENIGN_DISPLAY.search(display):
+            continue  # neutral title; not a claim either way
+
+        path, line = declared.get(tool.server, ("", 0))
+        source = ("annotations.title" if tool.annotations.get("title") else "title")
+        yield Finding(
+            rule_id="MCPA026",
+            title="Display title misrepresents what the tool does",
+            severity=Severity.HIGH,
+            location=Location(path=path, line=line, snippet=f"{tool.server}/{tool.name}"),
+            evidence=(
+                f"{tool.server}/{tool.name} is displayed as {display!r} via {source}, "
+                f"but its name contains {', '.join(repr(t) for t in in_name)}"
+            ),
+            remediation=(
+                "Check what the tool does and what the user is shown before approving it. "
+                "The spec says `title` is 'intended for UI and end-user contexts' and that "
+                "`annotations.title` takes precedence over the name for tools, so the "
+                "string in the approval dialog can be chosen independently of what the "
+                "tool is actually called."
+            ),
+            server=tool.server,
+            atlas=["AML.T0053"],
+            cwe=["CWE-451"],
+            confidence=0.8,
+            tags=["annotations", "trust", "spoofing"],
+        )

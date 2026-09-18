@@ -190,6 +190,9 @@ def _targets(ctx: AuditContext) -> list[Target]:
 
     for p in ctx.prompts:
         path, line = declared.get(p.server, ("", 0))
+        if p.title:
+            out.append(Target("prompt-title", f"{p.server}/{p.name}.title",
+                              path, line, p.title, False, p.server))
         if p.description:
             out.append(Target("prompt", f"{p.server}/{p.name}", path, line,
                               p.description, False, p.server))
@@ -202,12 +205,22 @@ def _targets(ctx: AuditContext) -> list[Target]:
 
     for r in ctx.resources:
         path, line = declared.get(r.server, ("", 0))
+        if r.title:
+            out.append(Target("resource-title", f"{r.server}/{r.name or r.uri}.title",
+                              path, line, r.title, False, r.server))
         if r.description:
             out.append(Target("resource", f"{r.server}/{r.name or r.uri}", path, line,
                               r.description, False, r.server))
 
     for t in ctx.tools:
         path, line = declared.get(t.server, ("", 0))
+        # The display title is what the user reads before approving. It is
+        # separate from the description and was previously unscanned.
+        for label, text in (("title", t.title),
+                            ("annotation-title", t.annotations.get("title"))):
+            if isinstance(text, str) and text.strip():
+                out.append(Target("tool-title", f"{t.server}/{t.name}.{label}",
+                                  path, line, text, False, t.server))
         if t.description:
             out.append(Target("tool", f"{t.server}/{t.name}", path, line,
                               t.description, False, t.server))

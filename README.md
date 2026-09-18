@@ -135,6 +135,7 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA023 | critical | Server URL uses a dangerous scheme (javascript:, file:, data:) |
 | MCPA024 | critical | Server URL targets cloud metadata or a link-local address |
 | MCPA025 | medium | Server requests an over-broad OAuth scope |
+| MCPA026 | high | Display title misrepresents what the tool does |
 
 MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *supposed* to
 give the agent instructions, so imperative mood there is normal. In a tool description it
@@ -167,6 +168,7 @@ lockfile pins all of them:
 | prompts | `prompts/list` | Template and argument descriptions |
 | resources | `resources/list` | Resource descriptions |
 | annotations | on each tool | `readOnlyHint` and friends, which clients use to decide whether a call needs your approval |
+| titles | on tools, prompts and resources | the display name you actually read in an approval dialog |
 
 Pinning only tools leaves the other three free to change unnoticed - and `instructions`
 outranks every tool description, because it is not scoped to one tool. A server that
@@ -175,6 +177,13 @@ byte-identical.
 
 `guard` withholds changed instructions at the connection, replacing them with a notice
 rather than passing them to the model.
+
+Titles deserve a note of their own. A tool has a `name`, a `title`, and an
+`annotations.title`, and the spec gives the last precedence over the others for display.
+The name can stay honest while the display lies: a tool named `delete_all_files` shown as
+"Read a document" reads as harmless in the dialog you actually look at. MCPA026 catches
+that, and titles are in the fingerprint so changing one after approval trips the drift
+rules.
 
 Tool annotations deserve their own note. A server attaches `readOnlyHint` and
 `destructiveHint` to its own tools, and clients use those to decide whether a call needs
@@ -373,7 +382,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-226 tests, stdlib unittest, nothing to install.
+238 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

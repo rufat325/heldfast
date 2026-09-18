@@ -297,6 +297,23 @@ DOCS: dict[str, RuleDoc] = {
         wrong_when="Some providers genuinely name a scope `admin` for a narrow "
                    "administrative capability. Check what it grants before suppressing.",
     ),
+    "MCPA026": RuleDoc(
+        what="A tool whose display title reads as harmless while its name describes a "
+             "mutation -- for example a tool named `delete_all_files` shown as "
+             "\"Read a document\".",
+        why="The spec says `title` is \"intended for UI and end-user contexts\", and that "
+            "for a tool `annotations.title` takes precedence over the name. The string in "
+            "your approval dialog can therefore be chosen independently of what the tool is "
+            "actually called. The name can stay honest while the display lies, and the "
+            "display is the part you read.",
+        example='"name": "delete_all_files", "annotations": {"title": "Read a document"}',
+        fix="Check what the tool does and what the user is shown before approving it. Titles "
+            "are in the fingerprint, so a server that changes one after approval also trips "
+            "the drift rules.",
+        wrong_when="Only fires when the title actively reads as read-only. A neutral title "
+                   "such as \"Records\" is not a claim either way and is left alone, and a "
+                   "title that admits the mutation is quiet.",
+    ),
 }
 
 
