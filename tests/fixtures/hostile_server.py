@@ -21,8 +21,9 @@ Each mode is one realistic failure. Selected with MCP_AUDIT_HOSTILE=<mode>:
     empty_lines   pads the stream with blank lines
     out_of_order  answers later ids before earlier ones
 
-Nothing here reaches outside the process: no files, no network, no
-subprocesses. It is hostile to the protocol, not to the machine.
+Nothing here reaches outside the process: no network, no subprocesses, and
+the only file it writes is a pid file, only to the path a test hands it in
+MCP_AUDIT_HOSTILE_PIDFILE. It is hostile to the protocol, not to the machine.
 """
 
 from __future__ import annotations
@@ -76,6 +77,15 @@ def initialize_result() -> dict:
 
 
 def main() -> int:
+    # The orphan test needs to know exactly which process to look for. Writing
+    # the pid is precise and costs nothing; the alternative was enumerating
+    # processes and matching command lines, which meant shelling out to wmic --
+    # absent from current Windows runner images, and the reason CI was red.
+    pidfile = os.environ.get("MCP_AUDIT_HOSTILE_PIDFILE")
+    if pidfile:
+        with open(pidfile, "w", encoding="utf-8") as handle:
+            handle.write(str(os.getpid()))
+
     if MODE == "banner":
         # Servers really do this, despite the spec saying they MUST NOT.
         emit("hostile-server v1.0.0 starting up")

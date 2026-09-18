@@ -5,8 +5,8 @@ notifications mid-reply, start slowly, return enormous payloads and sometimes
 refuse to exit. The spec forbids some of that and it happens anyway.
 
 `tests/fixtures/hostile_server.py` does each of these deliberately. It is
-hostile to the protocol, not to the machine: no files, no network, no
-subprocesses.
+hostile to the protocol, not to the machine: no network, no subprocesses, and
+the only file it writes is a pid file a test asks it for.
 
 Written after testing against live servers showed the probe had only ever
 spoken to fixtures that behaved.
@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -41,6 +42,52 @@ def probe(mode: str, *, through_guard: bool = False, timeout: float = 20.0):
     spec = ServerSpec(name="h", source="<test>", client="test", transport="stdio",
                       command=sys.executable, args=args, env=env)
     return probe_stdio(spec, timeout=timeout)
+
+
+def wait_for_pidfile(path: Path, timeout: float = 20.0) -> int:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            text = ""
+        if text.isdigit():
+            return int(text)
+        time.sleep(0.1)
+    raise AssertionError("the fixture never wrote its pid to %s" % path)
+
+
+def pid_alive(pid: int) -> bool:
+    """Whether that process still exists, without shelling out to anything.
+
+    A process that exits with code 259 reads as alive here, which is the
+    standard caveat and cannot happen to the fixture.
+    """
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False
+        try:
+            code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
 
 
 class TestProbeRobustness(unittest.TestCase):
@@ -150,31 +197,38 @@ class TestChildLifetime(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "win32", "job objects are Windows-only")
     def test_killed_guard_takes_the_server_with_it(self) -> None:
-        def running() -> int:
-            out = subprocess.run(
-                ["wmic", "process", "where", "name='python.exe'", "get", "CommandLine"],
-                capture_output=True, text=True, timeout=120)
-            return sum(1 for line in out.stdout.splitlines()
-                       if "hostile_server" in line and "guard" not in line)
+        """This asked wmic to enumerate processes and matched command lines.
+        Current Windows runner images do not ship wmic, so the call raised
+        FileNotFoundError and every Windows job failed -- the tool was being
+        tested on a machine that still had a deprecated utility. The fixture
+        now reports its own pid, which is exact and needs no external tool."""
+        with tempfile.TemporaryDirectory() as td:
+            pidfile = Path(td) / "server.pid"
+            env = dict(os.environ, MCP_AUDIT_HOSTILE="hang",
+                       MCP_AUDIT_HOSTILE_PIDFILE=str(pidfile),
+                       PYTHONPATH=str(ROOT / "src"))
+            guard = subprocess.Popen(
+                [sys.executable, "-m", "mcp_audit", "guard", "--quiet", "--name", "h", "--",
+                 sys.executable, str(HOSTILE)],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, cwd=str(ROOT), env=env)
+            try:
+                pid = wait_for_pidfile(pidfile)
+                self.assertTrue(pid_alive(pid), "the server never started")
 
-        env = dict(os.environ, MCP_AUDIT_HOSTILE="hang", PYTHONPATH=str(ROOT / "src"))
-        guard = subprocess.Popen(
-            [sys.executable, "-m", "mcp_audit", "guard", "--quiet", "--name", "h", "--",
-             sys.executable, str(HOSTILE)],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, cwd=str(ROOT), env=env)
-        try:
-            time.sleep(3)
-            guard.kill()          # abrupt: the finally block never runs
-            guard.wait(timeout=15)
-            time.sleep(3)
-            self.assertEqual(0, running(), "the server outlived the guard")
-        finally:
-            if guard.poll() is None:
-                guard.kill()
-                guard.wait(timeout=10)
-            for stream in (guard.stdin, guard.stdout):
-                if stream is not None:
-                    stream.close()
+                guard.kill()          # abrupt: the finally block never runs
+                guard.wait(timeout=15)
+
+                deadline = time.time() + 20
+                while pid_alive(pid) and time.time() < deadline:
+                    time.sleep(0.25)
+                self.assertFalse(pid_alive(pid), "the server outlived the guard")
+            finally:
+                if guard.poll() is None:
+                    guard.kill()
+                    guard.wait(timeout=10)
+                for stream in (guard.stdin, guard.stdout):
+                    if stream is not None:
+                        stream.close()
 
 
 if __name__ == "__main__":
