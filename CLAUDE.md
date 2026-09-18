@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 53 commits, 420 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 55 commits, 426 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -159,12 +159,25 @@ The cycles, most recent last:
     gave up, so unpinned packages were silently fine on Windows. Net: 7 noise
     findings gone, 7 genuine ones appeared.
 
+26. `01bf267` — extracted 694 tool/resource/prompt definitions from the
+    official servers repo, the Python SDK and FastMCP, and ran the content
+    rules: **zero findings**. The 22 that came closest are checked in verbatim
+    as a regression test, with six attack shapes appended to the same
+    sentences to prove recall. Precision without recall is a rule that never
+    fires.
+
 ### If the loop resumes, change source
 
 **The spec is near exhausted.** The remaining unscreened methods
 (`completion/complete`, `notifications/message`, `subscriptions/listen`)
 carry little model-facing text. Better sources now:
 
+- **the ecosystem's own repositories** — this is now the best corpus available
+  and it costs one `git clone`. The official servers repo, the Python SDK and
+  FastMCP give ~2,800 handlers, 694 tool definitions and 27 configs, all of it
+  text users literally copy. Cycles 24–26 each found something real in it:
+  a missing handler channel, an unfixable false positive, and a precision
+  baseline. Harvest configs from fenced code blocks in the .md files.
 - **other tools' source, read properly.** Cycle 15 cloned fourteen of them and
   the pattern that worked was: take the *idea*, reject the *implementation*.
   Their best ideas were real (cross-server attack paths, tool shadowing,
