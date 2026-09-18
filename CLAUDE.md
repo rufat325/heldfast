@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 59 commits, 463 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 64 commits, 484 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -177,6 +177,16 @@ The cycles, most recent last:
     claim. It found a bug no unit test could: `cmd_approve` builds a *fresh*
     Lock, so the policy-preservation logic read an empty dict and a
     hand-written policy was dropped on the next `approve --probe`.
+
+29. `84c2c61`, `5e37f90` — asked both scanners "what shapes do real handlers
+    actually use", instead of assuming the tested ones were the set.
+    JavaScript missed 4 of 9 (destructuring from args, the renaming form,
+    named-helper and arrow-helper delegation); Python missed 1 of 13 (the
+    walrus). All fixed, all pinned, corpus precision unchanged at zero.
+30. `7d2bcaf` — audited the README against the code. MCPA003 was listed as
+    medium while the code said low. The rule table, its severities and the
+    client count are now assertions. Also documented that `guard` is stdio
+    only, which was true and unstated.
 
 ### If the loop resumes, change source
 
@@ -362,6 +372,11 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   handlers only, and the same gap reappeared one layer down — caught by
   enumerating real decorator usage, not by remembering. When adding anything
   that reads "what the model can influence", check all four channels.
+- **Enumerate the shapes; do not assume your tests are the set.** Writing out
+  every way a handler reads its argument found 4 missed shapes of 9 in the
+  JavaScript scanner and 1 of 13 in the Python one, hours after shipping both
+  with passing suites. The tests covered what I thought of, which is a
+  different thing from what people write.
 - **Unit tests cannot see who owns the object.** Policy preservation was
   correct and tested, and still broken in production, because the test reused
   one in-memory Lock while the CLI builds a fresh one. Only driving the real
