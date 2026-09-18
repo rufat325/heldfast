@@ -334,6 +334,12 @@ your machine enforces are two separate facts that can drift apart. Here they are
 committed to the repo - a changed tool description shows up as a diff in code review, fails
 the build, and is refused at the call site, all from the artifact the reviewer looked at.
 
+`guard` also ties the server's lifetime to its own - a Job Object on Windows,
+`PR_SET_PDEATHSIG` on Linux. Its cleanup handles a normal exit, but if the guard is killed
+outright that never runs, and a server which ignores stdin close would otherwise outlive it
+indefinitely. Setting this up is best effort: failing to arrange your own cleanup is not a
+reason to refuse to start.
+
 Two failure modes, two deliberate answers. A *security* event (drift, unapproved tool) fails
 closed. An *internal* error (corrupt lockfile, a rule raising) fails open and says so loudly
 on stderr, because a scanner bug should not take down your agent. `--strict` inverts that.
@@ -426,6 +432,13 @@ low-confidence missing-auth rule.
 
 Every one of those cases is pinned as a regression test.
 
+`tests/fixtures/hostile_server.py` covers the other half of real-world behaviour: servers
+that print banners to stdout before speaking the protocol, interleave notifications with
+replies, answer an id twice, return 400 tools or a two-megabyte line, emit a lone
+surrogate, crash mid-conversation, or ignore stdin close and refuse to exit. It is hostile
+to the protocol, not to the machine - no files, no network, no subprocesses - so the
+robustness coverage costs nothing and executes nobody else's code.
+
 ## Development
 
 ```bash
@@ -434,7 +447,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-256 tests, stdlib unittest, nothing to install.
+275 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

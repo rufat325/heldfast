@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any
 
 from .findings import Severity
+from .lifetime import bind_child, posix_preexec
 from .lockfile import DEFAULT_LOCK_NAME, Lock
 from .model import ServerSpec, ToolSpec, instructions_fingerprint
 from .rules import AuditContext, run_rules, scan_untrusted_text
@@ -515,10 +516,16 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         proc = subprocess.Popen(
             argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
+            preexec_fn=posix_preexec(),
         )
     except OSError as exc:
         print(f"mcp-audit guard: cannot launch {argv[0]!r}: {exc}", file=sys.stderr)
         return 2
+
+    # Tie the server's lifetime to ours. The finally block below handles a
+    # normal exit, but if this process is killed outright it never runs, and a
+    # server that ignores stdin close would be orphaned indefinitely.
+    guard.log(f"child lifetime: {bind_child(proc)}")
 
     def pump_client_to_server() -> None:
         try:
