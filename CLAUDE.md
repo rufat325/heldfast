@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 33 commits, 312 tests, 29 rules, CI across Linux/macOS/Windows
+complete unit. 36 commits, 330 tests, 30 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -90,6 +90,13 @@ The cycles, most recent last:
     anything). The theme is findings that exist only in the *combination* of
     servers, which per-server scanners cannot see and this one is unusually
     placed to compute.
+
+16. `a648135` — MCPA030 and `sourcescan.py`: read the server's own Python
+    and find a tool parameter reaching a shell. AST taint, not regex, because
+    the argv form and `shlex.quote` are the *fixes* and a scanner that reports
+    the fix gets ignored. Follows one hop into a local helper, because every
+    real server uses the dispatcher shape and stopping at the handler finds
+    only tutorials. Validated on 41 handlers across 14 repos before shipping.
 
 ### If the loop resumes, change source
 
@@ -246,6 +253,10 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`, `serve`.
   hand and has no idea which client configures which server, so it cannot tell
   a genuine collision from two servers that never meet. Take the idea, check
   the implementation, and say precisely what was wrong with it.
+- **A scanner that reports the remediation is worse than none.** The whole
+  value of parsing over grepping in `sourcescan.py` is that
+  `subprocess.run([...])` and `shlex.quote(x)` stay silent. Both are what the
+  finding tells you to do. Check any new rule against its own remediation.
 - **The two halves of the repo can drift apart.** `probe.py` was taught the
   current protocol revision; `server.py` was not, and nothing compared them
   for four cycles. When one side of a client/server pair learns something,
