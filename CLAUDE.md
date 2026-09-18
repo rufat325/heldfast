@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 49 commits, 405 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 51 commits, 411 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -142,6 +142,13 @@ The cycles, most recent last:
     is the intended workflow and the check runs on the pump thread, where an
     exception hangs the agent instead of failing open. Hardened the parser and
     made `check_call` catch anything, per the posture the module documents.
+
+24. `c49ec9a` — ran `sourcescan` over the official MCP SDK, the official
+    servers repo and FastMCP (1,711 files), then **enumerated the decorator
+    styles actually in use**. 1,373 `@mcp.tool` were covered; 392
+    `@mcp.resource` and 174 `@mcp.prompt` were not. A resource template binds
+    parameters from the URI the model asks for, so it is the same taint
+    source. Surface went 1,938 -> 2,769 handlers, findings stayed at zero.
 
 ### If the loop resumes, change source
 
@@ -306,6 +313,12 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   hand and has no idea which client configures which server, so it cannot tell
   a genuine collision from two servers that never meet. Take the idea, check
   the implementation, and say precisely what was wrong with it.
+- **The four-channels mistake is easy to make twice.** Cycle 1 learned that a
+  server reaches the model through tools *and* instructions, prompts and
+  resources. Sixteen cycles later `sourcescan` was written to read tool
+  handlers only, and the same gap reappeared one layer down — caught by
+  enumerating real decorator usage, not by remembering. When adding anything
+  that reads "what the model can influence", check all four channels.
 - **Fuzz new code the same day you write it.** The policy engine passed 38
   hand-written tests and crashed on 8 of 312 fuzzed combinations, all from
   *malformed policy* rather than malicious arguments — the shape nobody writes
