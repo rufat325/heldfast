@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 29 commits, 286 tests, 26 rules, CI across Linux/macOS/Windows
+complete unit. 31 commits, 287 tests, 26 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -79,6 +79,10 @@ The cycles, most recent last:
     spoke both eras, so mcp-audit's own server was two revisions behind the
     thing that checks for exactly that. It now answers `server/discover`, and
     the end-to-end test asserts which era the two halves settle on.
+
+14. `15b62db`, `ef498f6` — corrected the CI claim in this file, added the
+    badge, and made the README's test count a thing a test checks. It said
+    275 while the suite had 286.
 
 ### If the loop resumes, change source
 
