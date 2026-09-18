@@ -60,6 +60,38 @@ def _active(ctx: AuditContext):
     return [s for s in ctx.servers if not s.disabled]
 
 
+# Package runners ship as batch files on Windows, and CreateProcess cannot
+# execute a .cmd directly. `cmd /c npx ...` is therefore the documented -- and
+# only -- way to start most servers there; it is what the official Model
+# Context Protocol servers repository tells Windows users to write.
+_WINDOWS_LAUNCHERS = {"npx", "npm", "yarn", "pnpm", "bunx", "uvx", "pipx", "pnpx"}
+
+
+def _is_windows_launcher_shim(server) -> bool:
+    """`cmd /c <package runner> ...` with nothing a shell would interpret.
+
+    Found by scanning the 27 config examples in the official servers
+    repository and the SDKs: seven of them are this shape, and every Windows
+    user following the documentation writes it. There is no alternative to
+    offer them, and a HIGH finding nobody can act on is how a scanner gets
+    uninstalled -- after which it catches nothing at all.
+
+    The exemption is narrow on purpose. The shell here adds no reach that
+    `npx <pkg>` does not already have, and the package risk itself is still
+    reported by MCPA003 and MCPA004. Put a metacharacter in the arguments, or
+    run something other than a package runner, and this says nothing.
+    """
+    if _basename(server.command or "") not in ("cmd", "cmd.exe"):
+        return False
+    args = [str(a) for a in server.args]
+    if len(args) < 2 or args[0].lower() != "/c":
+        return False
+    rest = args[1:]
+    if _basename(rest[0]).lower() not in _WINDOWS_LAUNCHERS:
+        return False
+    return not SHELL_METACHARS.search(" ".join(rest))
+
+
 @rule("MCPA001", "Server command invokes a shell", Severity.HIGH)
 def shell_invocation(ctx: AuditContext) -> Iterable[Finding]:
     """Server is launched through a shell interpreter, widening the exec surface."""
@@ -69,6 +101,8 @@ def shell_invocation(ctx: AuditContext) -> Iterable[Finding]:
         uses_shell = _basename(s.command) in SHELL_BINARIES
         has_meta = bool(SHELL_METACHARS.search(" ".join(s.args)))
         if not (uses_shell or has_meta):
+            continue
+        if _is_windows_launcher_shim(s):
             continue
         if uses_shell:
             evidence = f"command={s.command!r} launches a shell: {s.command_line[:200]}"
@@ -128,15 +162,32 @@ _PYTHON_RUNNERS = {"uvx", "pipx"}
 _PEP508_SPLIT = re.compile(r"(===|==|>=|<=|~=|!=|>|<)")
 
 
+def unwrap_launcher(command: str, args: list) -> tuple[str, list]:
+    """See through `cmd /c <runner> ...` to the runner underneath.
+
+    Windows users are told to write `cmd /c npx -y <pkg>`, because a package
+    runner is a batch file there and CreateProcess cannot execute one. Every
+    rule that reasons about the runner was reading `cmd` and giving up, so the
+    same unpinned package that is reported on macOS was silently fine on
+    Windows. Found by writing a test that asserted MCPA003 still fires after
+    MCPA001 stopped.
+    """
+    if _basename(command or "") in ("cmd", "cmd.exe") and args:
+        rest = [str(a) for a in args]
+        if rest[0].lower() in ("/c", "/k") and len(rest) > 1:
+            return rest[1], rest[2:]
+    return command, list(args)
+
+
 def extract_package(s) -> tuple[str, str] | None:
     """Return (runner, package_token) for a runner-style invocation, else None."""
     if not s.command:
         return None
-    base = _basename(s.command)
+    command, args = unwrap_launcher(s.command, s.args)
+    base = _basename(command)
     if base not in RUNNERS:
         return None
     i = 0
-    args = s.args
     while i < len(args):
         tok = args[i]
         if tok in _FLAGS_WITH_VALUE:

