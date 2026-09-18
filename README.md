@@ -154,6 +154,22 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA030 | critical | Tool parameter reaches a shell in the server's own source |
 | MCPA031 | high | Server script changed since approval |
 
+### Measured against tool text somebody shipped
+
+The poisoning rules read text a server controls, which makes them exactly the rules that go
+wrong by firing on ordinary prose. That happened here once already: tuned on hand-written
+fixtures, they fired on 27% of 56 live tools.
+
+694 tool, resource and prompt definitions were extracted from the official MCP servers
+repository, the official Python SDK and FastMCP, and scanned. **Zero findings.** The
+twenty-two that came closest — every real description containing *execute*, *run*,
+*delete*, *shell*, *command*, *credential*, a path, a URL or an imperative *must* — are
+checked into the suite verbatim, so a future rule that starts firing on `delete_folder`
+("Delete a folder, asking for confirmation when it is not empty") fails the build.
+
+Precision alone proves nothing, since a rule that never fires is perfectly precise. The
+same real descriptions, with six known poisoning shapes appended, are all caught.
+
 MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *supposed* to
 give the agent instructions, so imperative mood there is normal. In a tool description it
 isn't. Without that split the scanner fires constantly on any real skills directory and
@@ -680,7 +696,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-420 tests, stdlib unittest, nothing to install.
+426 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
