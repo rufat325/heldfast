@@ -46,7 +46,15 @@ from .findings import Severity
 from .parsers import parse_config
 from .rules import AuditContext, all_rules, run_rules
 
-PROTOCOL_VERSION = "2024-11-05"
+# This server answers both eras, for the same reason probe.py speaks both.
+# The current revision replaced the initialize handshake with `server/discover`;
+# a client that only knows the new method would otherwise get "method not
+# found" from the security scanner's own server. Advertising a protocol two
+# revisions old while shipping a rule about protocol currency is not a
+# position worth defending.
+PROTOCOL_VERSION = "2026-07-28"
+LEGACY_PROTOCOL_VERSION = "2024-11-05"
+SUPPORTED_VERSIONS = [PROTOCOL_VERSION, LEGACY_PROTOCOL_VERSION]
 SERVER_INFO = {"name": "mcp-audit", "version": __version__}
 
 ALLOW_PATH_SCAN = os.environ.get("MCP_AUDIT_ALLOW_PATH_SCAN", "").lower() in ("1", "true", "yes")
@@ -265,9 +273,19 @@ def handle(message: dict[str, Any]) -> None:
     method = message.get("method")
     req_id = message.get("id")
 
-    if method == "initialize":
+    if method == "server/discover":
         _result(req_id, {
-            "protocolVersion": PROTOCOL_VERSION,
+            "serverInfo": SERVER_INFO,
+            "capabilities": {"tools": {}},
+            "supportedVersions": SUPPORTED_VERSIONS,
+        })
+        return
+
+    if method == "initialize":
+        # A legacy client negotiates a single version here, so it gets the one
+        # it can actually speak rather than the newest one we know.
+        _result(req_id, {
+            "protocolVersion": LEGACY_PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
             "serverInfo": SERVER_INFO,
         })

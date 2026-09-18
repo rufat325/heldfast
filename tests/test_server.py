@@ -48,11 +48,30 @@ def call(message: dict) -> dict | None:
 
 
 class TestProtocol(unittest.TestCase):
-    def test_initialize(self) -> None:
+    def test_initialize_answers_with_a_version_a_legacy_client_speaks(self) -> None:
+        """Only a legacy client uses this handshake, so it negotiates the
+        legacy version. Answering with the current one would name a revision
+        the client asking the question cannot speak."""
         r = call({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
-        self.assertEqual(srv.PROTOCOL_VERSION, r["result"]["protocolVersion"])
+        self.assertEqual(srv.LEGACY_PROTOCOL_VERSION, r["result"]["protocolVersion"])
         self.assertEqual("mcp-audit", r["result"]["serverInfo"]["name"])
         self.assertIn("tools", r["result"]["capabilities"])
+
+    def test_discover_answers_the_current_era(self) -> None:
+        """The current revision replaced the handshake with server/discover.
+        Without this, a client that only knows the new method gets 'method not
+        found' from the scanner's own server."""
+        r = call({"jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": {}})
+        self.assertNotIn("error", r)
+        self.assertEqual("mcp-audit", r["result"]["serverInfo"]["name"])
+        self.assertIn("tools", r["result"]["capabilities"])
+        self.assertIn(srv.PROTOCOL_VERSION, r["result"]["supportedVersions"])
+        self.assertIn(srv.LEGACY_PROTOCOL_VERSION, r["result"]["supportedVersions"])
+
+    def test_the_current_version_is_not_the_legacy_one(self) -> None:
+        """A guard against quietly pinning both constants to the same string
+        and calling the server dual-era."""
+        self.assertNotEqual(srv.PROTOCOL_VERSION, srv.LEGACY_PROTOCOL_VERSION)
 
     def test_initialized_notification_gets_no_reply(self) -> None:
         self.assertIsNone(call({"jsonrpc": "2.0", "method": "notifications/initialized"}))
@@ -196,6 +215,11 @@ class TestEndToEnd(unittest.TestCase):
         )
         result = probe_stdio(spec, timeout=30)
         self.assertIsNone(result.error, result.error)
+        # Both halves of this repository have to agree on the era. The probe
+        # knew the current revision while this server still answered only the
+        # handshake, so the client's modern path had never once been exercised
+        # against the server shipped beside it.
+        self.assertEqual("modern", result.protocol_era)
         self.assertEqual({"check_config", "list_rules", "explain_rule"},
                          {t.name for t in result.tools})
         for tool in result.tools:
