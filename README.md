@@ -394,13 +394,14 @@ arguments arrive in `prompts/get`. CLI entry points like `click.command` are not
 input and are left alone.
 
 Measured on two corpora. The official ones — the MCP Python SDK, the servers repository, the
-TypeScript SDK and FastMCP: 2,769 Python handlers and 729 TypeScript handlers. Then 74
-third-party servers sampled from the community index: another 198 Python and 654 TypeScript
-handlers, and 64 real configs harvested from their READMEs.
+TypeScript SDK and FastMCP: 2,769 Python handlers and 729 TypeScript handlers. Then 86
+third-party servers sampled across the 4,133-repo community index: another 587 Python and
+730 TypeScript handlers, plus 99 real configs harvested from 20,589 fenced code blocks in
+their READMEs.
 
-**About 4,350 handlers, zero findings, no tokenizer failures.** On the configs, only MCPA003
-(unpinned packages, LOW, 47%) and MCPA008 (the documented 0.7-confidence auth heuristic, 3%)
-fire at all.
+**4,815 handlers, zero findings, no tokenizer failures.** On the 99 configs, only MCPA003
+(unpinned packages, LOW, 48%) and MCPA008 (the documented 0.7-confidence auth heuristic, 8%,
+all of them public hosted endpoints) fire at all.
 
 That zero is a true negative and was checked rather than assumed. The community corpus has
 185 files importing `child_process`; exactly two both import it and register a handler. One
