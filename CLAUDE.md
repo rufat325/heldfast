@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 40 commits, 344 tests, 30 rules, CI across Linux/macOS/Windows
+complete unit. 41 commits, 376 tests, 30 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -111,6 +111,13 @@ The cycles, most recent last:
     `client:name`, so two clients with a server called `github` got each
     other's approvals. **A reviewer who reads the code is the best source
     tried so far** — better than the spec, better than competitors.
+
+19. `56c1f4a` — `policy.py`: argument-level limits in the lockfile (paths,
+    domains, sql, deny), enforced by the guard before a call reaches the
+    server, plus `--dry-run`. The lockfile answered "is this the tool I
+    approved"; this answers "may it be asked to do *that*". Most of the tests
+    are evasions -- traversal, `/workspace-evil`, `api.github.com.evil.io`,
+    stacked SQL, a path hidden in a nested argument.
 
 ### If the loop resumes, change source
 
@@ -218,6 +225,7 @@ owner removed it deliberately. Revisit only if asked.
     lockfile.py     .mcp-audit.lock — what you approved
     guard.py        stdio proxy that enforces the lockfile at runtime
     auditlog.py     hash-chained record of a guarded session
+    policy.py       argument limits for an approved tool; deterministic
     sourcescan.py   AST taint: tool parameter -> shell, in the server's own code
     lifetime.py     ties the wrapped server's lifetime to the guard's
     server.py       mcp-audit *as* an MCP server (`serve`)
