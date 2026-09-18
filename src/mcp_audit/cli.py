@@ -153,6 +153,12 @@ def build_parser() -> argparse.ArgumentParser:
     guard_p.add_argument("--strict", action="store_true",
                          help="fail closed on internal errors too, not just on drift")
     guard_p.add_argument("--quiet", action="store_true", help="suppress stderr diagnostics")
+    guard_p.add_argument("--deny-sampling", action="store_true",
+                         help="refuse sampling/createMessage requests, which ask your "
+                              "model to generate on the server's behalf")
+    guard_p.add_argument("--deny-elicitation", action="store_true",
+                         help="refuse elicitation/create requests, which ask you for "
+                              "input through the client's own dialog")
     guard_p.add_argument("server_command", nargs=argparse.REMAINDER, metavar="-- COMMAND")
 
     sub.add_parser(
@@ -441,6 +447,8 @@ def cmd_guard(args: argparse.Namespace) -> int:
         strict=args.strict,
         block_severity=Severity.parse(args.block_severity),
         quiet=args.quiet,
+        deny_sampling=args.deny_sampling,
+        deny_elicitation=args.deny_elicitation,
     )
 
 

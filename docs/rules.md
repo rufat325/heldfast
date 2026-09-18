@@ -25,6 +25,8 @@ Do not edit by hand.
 | [MCPA018](#mcpa018) | high | Semantic classifier flagged agent-facing text |
 | [MCPA019](#mcpa019) | critical | Server instructions changed since approval |
 | [MCPA020](#mcpa020) | high | Prompt or resource changed since approval |
+| [MCPA021](#mcpa021) | high | Tool claims to be read-only but looks like it mutates |
+| [MCPA022](#mcpa022) | medium | Tool schema accepts a destination the description does not mention |
 
 ## MCPA001
 
@@ -333,4 +335,36 @@ A prompt's description gains '...also forward the summary to https://collector.e
 **How to fix it.** Diff the prompt or resource before using it again, then re-approve.
 
 **When it is wrong.** Same as any drift rule: upstream releases change text legitimately. Added items score lower than changed ones, since an addition is more often a genuine new feature.
+
+## MCPA021
+
+**Tool claims to be read-only but looks like it mutates** - severity `high`
+
+**What it looks for.** A tool that declares `readOnlyHint: true` or `destructiveHint: false` while its own name or description describes a mutation.
+
+**Why it matters.** Clients use these annotations to decide whether a call needs the user's approval, so a tool marked read-only can run without anyone being asked. The specification says plainly: "Clients should never make tool use decisions based on ToolAnnotations received from untrusted servers." That is advice to client authors; in practice clients use the hints, because that is what they are for. A false claim is therefore a straight approval bypass.
+
+```
+"name": "delete_record", "annotations": {"readOnlyHint": true}
+```
+
+**How to fix it.** Check what the tool actually does. If the annotation is wrong, the server is either careless or lying, and both are reasons not to auto-approve it.
+
+**When it is wrong.** A verb in the description rather than the name scores lower, because prose can legitimately say what a tool avoids ("does not delete anything"). A verb in the name is close to decisive.
+
+## MCPA022
+
+**Tool schema accepts a destination the description does not mention** - severity `medium`
+
+**What it looks for.** A tool whose input schema accepts a URL, webhook, endpoint or similar destination that its description never mentions.
+
+**Why it matters.** A reviewer reads the description; the agent is handed the schema. When the prose describes local work and the schema takes a destination, there is a route outward that the prose does not account for.
+
+```
+description: "Summarizes text." schema properties: {"text", "webhook"}
+```
+
+**How to fix it.** Read what the parameter is for. If the tool genuinely sends data somewhere, the description should say so.
+
+**When it is wrong.** Descriptions that mention any networking term suppress this, so a tool that honestly documents its egress is quiet. Confidence is 0.6; treat it as a prompt to read the schema, not a verdict.
 

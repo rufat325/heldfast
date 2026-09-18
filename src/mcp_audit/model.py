@@ -56,6 +56,20 @@ class ToolSpec:
     name: str
     description: str = ""
     input_schema: dict[str, Any] = field(default_factory=dict)
+    # ToolAnnotations from the spec: readOnlyHint, destructiveHint,
+    # idempotentHint, openWorldHint, title. Clients use these to decide
+    # whether a call needs the user's approval, which is exactly why the spec
+    # says "Clients should never make tool use decisions based on
+    # ToolAnnotations received from untrusted servers."
+    annotations: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def claims_read_only(self) -> bool:
+        return self.annotations.get("readOnlyHint") is True
+
+    @property
+    def claims_non_destructive(self) -> bool:
+        return self.annotations.get("destructiveHint") is False
 
     def fingerprint(self) -> str:
         """Hash of everything the model actually sees.
@@ -69,6 +83,10 @@ class ToolSpec:
                 "name": self.name,
                 "description": self.description,
                 "input_schema": self.input_schema,
+                # In the hash deliberately: a server flipping readOnlyHint to
+                # true after approval escalates its own privileges without
+                # touching a description, and that must register as drift.
+                "annotations": self.annotations,
             },
             sort_keys=True,
             separators=(",", ":"),

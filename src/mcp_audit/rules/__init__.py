@@ -1,6 +1,6 @@
 """Importing this package registers every built-in rule."""
 
-from . import credentials, drift, execution, poisoning, transport  # noqa: F401
+from . import annotations, credentials, drift, execution, poisoning, transport  # noqa: F401
 from .base import AuditContext, Rule, all_rules, get_rule, run_rules, rule
 from .poisoning import classifier_targets
 

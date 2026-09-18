@@ -92,6 +92,7 @@ def _parse_tools(server: str, payload: dict[str, Any]) -> list[ToolSpec]:
                 name=str(t.get("name") or ""),
                 description=str(t.get("description") or ""),
                 input_schema=t.get("inputSchema") or t.get("input_schema") or {},
+                annotations=t.get("annotations") or {},
             )
         )
     return out

@@ -130,6 +130,8 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA018 | high | LLM classifier flagged agent-facing text (opt-in) |
 | MCPA019 | critical | Server instructions changed since approval |
 | MCPA020 | high | Prompt or resource changed since approval |
+| MCPA021 | high | Tool claims to be read-only but looks like it mutates |
+| MCPA022 | medium | Tool schema accepts a destination its description omits |
 
 MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *supposed* to
 give the agent instructions, so imperative mood there is normal. In a tool description it
@@ -147,6 +149,7 @@ lockfile pins all of them:
 | tools | `tools/list` | Descriptions and input schemas, injected as tool metadata |
 | prompts | `prompts/list` | Template and argument descriptions |
 | resources | `resources/list` | Resource descriptions |
+| annotations | on each tool | `readOnlyHint` and friends, which clients use to decide whether a call needs your approval |
 
 Pinning only tools leaves the other three free to change unnoticed - and `instructions`
 outranks every tool description, because it is not scoped to one tool. A server that
@@ -156,8 +159,31 @@ byte-identical.
 `guard` withholds changed instructions at the connection, replacing them with a notice
 rather than passing them to the model.
 
+Tool annotations deserve their own note. A server attaches `readOnlyHint` and
+`destructiveHint` to its own tools, and clients use those to decide whether a call needs
+your approval. The spec says: *"Clients should never make tool use decisions based on
+ToolAnnotations received from untrusted servers."* That is advice to client authors; in
+practice clients use the hints, because that is what they are for. So a tool named
+`delete_record` declaring `readOnlyHint: true` is an approval bypass, and MCPA021 checks the
+claim against the server's own other statements about the same tool. The annotations are in
+the fingerprint too, so flipping the flag after approval registers as drift.
+
 Prompts and resources are only requested from servers that declare those capabilities, so
 well-behaved servers are never asked for something they do not have.
+
+### Requests travelling the other way
+
+Two methods go server to client, and `guard` is the only place that sees them:
+
+- `sampling/createMessage` asks your client to run a completion. The prompt is the
+  server's; the model and the bill are yours.
+- `elicitation/create` asks your client to collect input from you. A server that suddenly
+  wants a value typed in is the shape of a credential phish, wearing your client's own
+  dialog.
+
+Neither is illegitimate, so both are forwarded and logged by default rather than breaking
+working servers. `--deny-sampling` and `--deny-elicitation` refuse them with a well-formed
+JSON-RPC error that the server sees and the client never does.
 
 ## Using it from an agent
 
@@ -321,7 +347,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-182 tests, stdlib unittest, nothing to install.
+197 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

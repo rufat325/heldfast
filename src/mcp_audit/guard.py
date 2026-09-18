@@ -61,6 +61,9 @@ class GuardStats:
     tools_seen: int = 0
     tools_blocked: list[str] = field(default_factory=list)
     instructions_replaced: bool = False
+    sampling_requests: int = 0
+    elicitation_requests: int = 0
+    server_requests_denied: int = 0
     tools_unapproved: list[str] = field(default_factory=list)
     tools_drifted: list[str] = field(default_factory=list)
     findings_blocked: list[str] = field(default_factory=list)
@@ -70,13 +73,19 @@ class GuardStats:
 class Guard:
     def __init__(self, server_name: str, lock: Lock, *, policy: str = DEFAULT_POLICY,
                  strict: bool = False, block_severity: Severity = Severity.CRITICAL,
-                 quiet: bool = False) -> None:
+                 quiet: bool = False, deny_sampling: bool = False,
+                 deny_elicitation: bool = False) -> None:
         self.server_name = server_name
         self.lock = lock
         self.policy = policy
         self.strict = strict
         self.block_severity = block_severity
         self.quiet = quiet
+        self.deny_sampling = deny_sampling
+        self.deny_elicitation = deny_elicitation
+        # Set by run() so a denied server request can be answered without
+        # the client ever seeing it.
+        self.respond_to_server = None
         self.stats = GuardStats()
         self._locked_tools = self._load_locked_tools()
         self._locked_instructions = self._load_locked_instructions()
@@ -187,6 +196,7 @@ class Guard:
                 name=str(raw.get("name") or ""),
                 description=str(raw.get("description") or ""),
                 input_schema=raw.get("inputSchema") or {},
+                annotations=raw.get("annotations") or {},
             )
 
             verdict, reason = self._verdict(tool)
@@ -222,6 +232,50 @@ class Guard:
 
     # -- message handling --------------------------------------------------
 
+    # -- server-initiated requests ----------------------------------------
+
+    def screen_server_request(self, message: dict[str, Any]) -> bool:
+        """Return True to forward a server->client request, False to deny it.
+
+        Two methods travel in this direction and both are worth naming:
+
+        `sampling/createMessage` asks the client to run a completion. The
+        prompt is the server's, the model and the bill are the user's.
+
+        `elicitation/create` asks the client to collect input from the user.
+        A server that suddenly wants a value typed in is the shape of a
+        credential phish, wearing the client's own dialog.
+
+        Neither is illegitimate, so the default is to forward and log rather
+        than break working servers. What matters is that they stop being
+        invisible.
+        """
+        method = message.get("method")
+        if method == "sampling/createMessage":
+            self.stats.sampling_requests += 1
+            self.log(f"server requested sampling (#{self.stats.sampling_requests}) -- "
+                     f"it is asking your model to generate on its behalf")
+            return not self.deny_sampling
+        if method == "elicitation/create":
+            self.stats.elicitation_requests += 1
+            params = message.get("params") or {}
+            prompt = str(params.get("message") or "")[:100]
+            self.log(f"server requested elicitation (#{self.stats.elicitation_requests}) -- "
+                     f"it wants to ask you for input: {prompt!r}")
+            return not self.deny_elicitation
+        return True
+
+    def deny_response(self, message: dict[str, Any]) -> dict[str, Any]:
+        self.stats.server_requests_denied += 1
+        return {
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "error": {
+                "code": -32601,
+                "message": f"mcp-audit guard: {message.get('method')} is denied by policy",
+            },
+        }
+
     def handle_server_message(self, message: dict[str, Any]) -> dict[str, Any]:
         """Inspect a message travelling server -> client."""
         try:
@@ -251,6 +305,12 @@ class Guard:
             bits.append(f"{len(s.findings_blocked)} failed content rules")
         if s.instructions_replaced:
             bits.append("instructions replaced")
+        if s.sampling_requests:
+            bits.append(f"{s.sampling_requests} sampling request(s)")
+        if s.elicitation_requests:
+            bits.append(f"{s.elicitation_requests} elicitation request(s)")
+        if s.server_requests_denied:
+            bits.append(f"{s.server_requests_denied} denied")
         if s.internal_errors:
             bits.append(f"{len(s.internal_errors)} internal errors")
         return ", ".join(bits)
@@ -258,7 +318,8 @@ class Guard:
 
 def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         server_name: str | None = None, strict: bool = False,
-        block_severity: Severity = Severity.CRITICAL, quiet: bool = False) -> int:
+        block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
+        deny_sampling: bool = False, deny_elicitation: bool = False) -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("mcp-audit guard: no server command given", file=sys.stderr)
@@ -274,7 +335,8 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
 
     name = server_name or Path(argv[0]).stem
     guard = Guard(name, lock, policy=policy, strict=strict,
-                  block_severity=block_severity, quiet=quiet)
+                  block_severity=block_severity, quiet=quiet,
+                  deny_sampling=deny_sampling, deny_elicitation=deny_elicitation)
 
     if guard._locked_tools is None:
         guard.log(

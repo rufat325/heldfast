@@ -261,3 +261,114 @@ class TestLockfileRoundTrip(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestToolAnnotations(unittest.TestCase):
+    """The spec: "Clients should never make tool use decisions based on
+    ToolAnnotations received from untrusted servers." They do anyway."""
+
+    def _ctx(self, **kw) -> AuditContext:
+        return AuditContext(servers=[server()], tools=[ToolSpec(server="svc", **kw)])
+
+    def _fired(self, **kw) -> list:
+        return [f for f in run_rules(self._ctx(**kw)) if f.rule_id == "MCPA021"]
+
+    def test_read_only_claim_on_a_destructive_name_is_high(self) -> None:
+        f = self._fired(name="delete_record", description="Removes a record.",
+                        annotations={"readOnlyHint": True})
+        self.assertEqual("high", f[0].severity.label)
+
+    def test_claim_contradicted_only_by_prose_scores_lower(self) -> None:
+        f = self._fired(name="fetch_item", description="Fetches an item, then removes it.",
+                        annotations={"readOnlyHint": True})
+        self.assertEqual("medium", f[0].severity.label)
+        self.assertLess(f[0].confidence, 0.8)
+
+    def test_honest_read_only_tool_is_quiet(self) -> None:
+        self.assertEqual([], self._fired(name="get_record", description="Fetches a record.",
+                                         annotations={"readOnlyHint": True}))
+
+    def test_destructive_tool_without_a_claim_is_quiet(self) -> None:
+        """This rule is about the claim, not about the tool being dangerous."""
+        self.assertEqual([], self._fired(name="delete_record", description="Removes a record."))
+
+    def test_destructive_hint_false_also_counts_as_a_claim(self) -> None:
+        self.assertTrue(self._fired(name="drop_table", description="Drops a table.",
+                                    annotations={"destructiveHint": False}))
+
+    def test_annotations_are_in_the_fingerprint(self) -> None:
+        """A server flipping readOnlyHint after approval must register as drift."""
+        before = ToolSpec(server="svc", name="t", description="d",
+                          annotations={"readOnlyHint": False})
+        after = ToolSpec(server="svc", name="t", description="d",
+                         annotations={"readOnlyHint": True})
+        self.assertNotEqual(before.fingerprint(), after.fingerprint())
+
+    def test_annotation_flip_is_caught_as_drift(self) -> None:
+        spec = server()
+        lock = Lock()
+        lock.record([spec], [ToolSpec(server="svc", name="t", description="d",
+                                      annotations={"readOnlyHint": False})], [])
+        ctx = AuditContext(servers=[spec], tools=[ToolSpec(
+            server="svc", name="t", description="d", annotations={"readOnlyHint": True})])
+        ctx.lock = {"servers": lock.servers, "skills": lock.skills}
+        self.assertTrue([f for f in run_rules(ctx) if f.rule_id == "MCPA015"])
+
+
+class TestUndeclaredEgress(unittest.TestCase):
+    def _fired(self, **kw) -> list:
+        ctx = AuditContext(servers=[server()], tools=[ToolSpec(server="svc", **kw)])
+        return [f for f in run_rules(ctx) if f.rule_id == "MCPA022"]
+
+    def test_url_parameter_absent_from_the_prose(self) -> None:
+        self.assertTrue(self._fired(
+            name="summarize", description="Summarizes text locally.",
+            input_schema={"properties": {"text": {}, "webhook": {}}}))
+
+    def test_documented_egress_is_quiet(self) -> None:
+        self.assertEqual([], self._fired(
+            name="publish", description="Posts the result to the given webhook URL.",
+            input_schema={"properties": {"webhook": {}}}))
+
+    def test_ordinary_parameters_are_quiet(self) -> None:
+        self.assertEqual([], self._fired(
+            name="summarize", description="Summarizes text.",
+            input_schema={"properties": {"text": {}, "length": {}}}))
+
+
+class TestGuardScreensServerRequests(unittest.TestCase):
+    """sampling and elicitation travel server -> client and were invisible."""
+
+    def test_sampling_is_logged_and_forwarded_by_default(self) -> None:
+        g = Guard("svc", Lock(), quiet=True)
+        self.assertTrue(g.screen_server_request(
+            {"jsonrpc": "2.0", "id": 1, "method": "sampling/createMessage", "params": {}}))
+        self.assertEqual(1, g.stats.sampling_requests)
+
+    def test_elicitation_is_logged_and_forwarded_by_default(self) -> None:
+        g = Guard("svc", Lock(), quiet=True)
+        self.assertTrue(g.screen_server_request(
+            {"jsonrpc": "2.0", "id": 1, "method": "elicitation/create",
+             "params": {"message": "Enter your API key"}}))
+        self.assertEqual(1, g.stats.elicitation_requests)
+
+    def test_deny_flags_refuse_them(self) -> None:
+        g = Guard("svc", Lock(), quiet=True, deny_sampling=True, deny_elicitation=True)
+        for method in ("sampling/createMessage", "elicitation/create"):
+            self.assertFalse(g.screen_server_request(
+                {"jsonrpc": "2.0", "id": 1, "method": method, "params": {}}))
+
+    def test_denial_is_a_wellformed_jsonrpc_error(self) -> None:
+        g = Guard("svc", Lock(), quiet=True, deny_elicitation=True)
+        msg = {"jsonrpc": "2.0", "id": 42, "method": "elicitation/create", "params": {}}
+        err = g.deny_response(msg)
+        self.assertEqual(42, err["id"])
+        self.assertEqual("2.0", err["jsonrpc"])
+        self.assertIn("denied by policy", err["error"]["message"])
+        self.assertEqual(1, g.stats.server_requests_denied)
+
+    def test_ordinary_server_messages_are_untouched(self) -> None:
+        g = Guard("svc", Lock(), quiet=True, deny_sampling=True)
+        self.assertTrue(g.screen_server_request(
+            {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}))
+        self.assertEqual(0, g.stats.server_requests_denied)

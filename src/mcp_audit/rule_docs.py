@@ -231,6 +231,35 @@ DOCS: dict[str, RuleDoc] = {
                    "Added items score lower than changed ones, since an addition is more "
                    "often a genuine new feature.",
     ),
+    "MCPA021": RuleDoc(
+        what="A tool that declares `readOnlyHint: true` or `destructiveHint: false` while "
+             "its own name or description describes a mutation.",
+        why="Clients use these annotations to decide whether a call needs the user's "
+            "approval, so a tool marked read-only can run without anyone being asked. The "
+            "specification says plainly: \"Clients should never make tool use decisions "
+            "based on ToolAnnotations received from untrusted servers.\" That is advice to "
+            "client authors; in practice clients use the hints, because that is what they "
+            "are for. A false claim is therefore a straight approval bypass.",
+        example='"name": "delete_record", "annotations": {"readOnlyHint": true}',
+        fix="Check what the tool actually does. If the annotation is wrong, the server is "
+            "either careless or lying, and both are reasons not to auto-approve it.",
+        wrong_when="A verb in the description rather than the name scores lower, because "
+                   "prose can legitimately say what a tool avoids (\"does not delete "
+                   "anything\"). A verb in the name is close to decisive.",
+    ),
+    "MCPA022": RuleDoc(
+        what="A tool whose input schema accepts a URL, webhook, endpoint or similar "
+             "destination that its description never mentions.",
+        why="A reviewer reads the description; the agent is handed the schema. When the "
+            "prose describes local work and the schema takes a destination, there is a "
+            "route outward that the prose does not account for.",
+        example='description: "Summarizes text." schema properties: {"text", "webhook"}',
+        fix="Read what the parameter is for. If the tool genuinely sends data somewhere, "
+            "the description should say so.",
+        wrong_when="Descriptions that mention any networking term suppress this, so a tool "
+                   "that honestly documents its egress is quiet. Confidence is 0.6; treat "
+                   "it as a prompt to read the schema, not a verdict.",
+    ),
 }
 
 
