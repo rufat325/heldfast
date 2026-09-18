@@ -308,3 +308,49 @@ def prompt_resource_drift(ctx: AuditContext) -> Iterable[Finding]:
                     atlas=["AML.T0010", "AML.T0051.001"],
                     tags=["drift", "rug-pull", label],
                 )
+
+
+@rule("MCPA031", "Server script changed since approval", Severity.HIGH)
+def artifact_drift(ctx: AuditContext) -> Iterable[Finding]:
+    """The launch command is unchanged; the code it starts is not."""
+    from ..artifacts import artifact_digests
+
+    lock = _lock(ctx)
+    if not lock:
+        return
+    known = lock["servers"]
+    for s in ctx.servers:
+        entry = known.get(s.identity())
+        if not isinstance(entry, dict):
+            continue
+        recorded = entry.get("artifacts")
+        if not isinstance(recorded, dict) or not recorded:
+            continue
+
+        current = artifact_digests(s)
+        for path, approved in sorted(recorded.items()):
+            now = current.get(path)
+            if now == approved:
+                continue
+            if now is None:
+                detail = "is no longer readable at that path"
+            else:
+                detail = f"now hashes to {now[:16]}, was {str(approved)[:16]}"
+            yield Finding(
+                rule_id="MCPA031",
+                title="Server script changed since approval",
+                severity=Severity.HIGH,
+                location=Location(path=s.source, line=s.line, snippet=path),
+                evidence=f"{s.identity()} starts {path}, which {detail}",
+                remediation=(
+                    "Confirm you made this change. The launch command in the config is "
+                    "identical to the one you approved, so nothing else here would "
+                    "report it -- and editing a script nobody diffs is easier than "
+                    "editing a config somebody committed. Re-run `mcp-audit approve "
+                    "--probe` once you have read the change."
+                ),
+                server=s.name,
+                atlas=["AML.T0010.001"],
+                cwe=["CWE-494"],
+                tags=["drift", "supply-chain"],
+            )

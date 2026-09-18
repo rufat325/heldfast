@@ -403,6 +403,26 @@ DOCS: dict[str, RuleDoc] = {
                    "SDK shape is a dispatcher that forwards arguments, but not two. "
                    "Silence means no flow of this shape, not a safe server.",
     ),
+    "MCPA031": RuleDoc(
+        what="A script named by a server's launch command whose contents changed since "
+             "approval, while the command line itself is byte-identical.",
+        why="MCPA016 pins the command line. It cannot see that `node server.js` still "
+            "says `node server.js` while server.js has been rewritten -- the same rug "
+            "pull one layer down, and an easier one: editing a file nobody diffs beats "
+            "editing a config somebody committed. The approval covered the code that "
+            "was there, not the path it lived at.",
+        example='"command": "node", "args": ["server.js"]   # unchanged; server.js is not',
+        fix="Read the change, then re-run `mcp-audit approve` to record it. If you did "
+            "not make it, the server is running code nobody reviewed.",
+        wrong_when="Only scripts are hashed: arguments that name a file, and a command "
+                   "written as a path. A bare `node` or `python` off PATH is not, "
+                   "because system interpreters update for reasons unrelated to this "
+                   "server and a rule that fires on every Node patch gets turned off. "
+                   "Updating your own server fires this, exactly as a legitimate tool "
+                   "description change fires MCPA015 -- that is the rule working, and "
+                   "re-approving is the answer. Nothing is fetched over the network, so "
+                   "a published package's integrity stays the registry's problem.",
+    ),
 }
 
 

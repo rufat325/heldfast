@@ -152,11 +152,43 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA028 | high | One server reads the home directory while another can post anywhere |
 | MCPA029 | high | Command allowlist includes a binary that runs arbitrary commands |
 | MCPA030 | critical | Tool parameter reaches a shell in the server's own source |
+| MCPA031 | high | Server script changed since approval |
 
 MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *supposed* to
 give the agent instructions, so imperative mood there is normal. In a tool description it
 isn't. Without that split the scanner fires constantly on any real skills directory and
 becomes useless.
+
+## Pinning the code, not just the command
+
+MCPA016 notices when `"command": "node", "args": ["server.js"]` becomes something else. It
+cannot notice when that line stays byte-identical and `server.js` is rewritten — which is
+the same rug pull one layer down, and an easier one, because editing a file nobody diffs
+beats editing a config somebody committed.
+
+So `approve` also records a digest of the scripts a server starts:
+
+```json
+"artifacts": {
+  "/home/me/project/server.js": "409b798fdab060d1..."
+}
+```
+
+```
+HIGH  MCPA031  Server script changed since approval
+      claude-code:notes starts /home/me/project/server.js,
+      which now hashes to 89ce619531cd1d8e, was 409b798fdab060d1
+```
+
+MCPA016 stays silent through that, because nothing it watches changed. There's a test
+asserting exactly that pairing.
+
+What is hashed is deliberately narrow: arguments that name a file, and a command written as
+a path. A bare `node` or `python` off PATH is not — system interpreters update on the
+machine's schedule for reasons unrelated to this server, and a rule that fires on every Node
+patch is one people turn off. Nothing is fetched over the network either, so a published
+package's integrity stays the registry's problem; this watches the files already on your
+disk, which is the part nobody else is looking at.
 
 ## Constraining what a tool may be asked to do
 
@@ -624,7 +656,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-382 tests, stdlib unittest, nothing to install.
+396 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

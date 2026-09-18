@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .artifacts import artifact_digests
 from .model import (PromptSpec, ResourceSpec, ServerSpec, SkillSpec, ToolSpec,
                     instructions_fingerprint)
 
@@ -155,6 +156,12 @@ class Lock:
                              "description_preview": (rs.description or "")[:160]}
                     for rs in sorted(observed_resources, key=lambda x: x.uri)
                 }
+            # The command is the promise; this is what was behind it. A
+            # config line can stay byte-identical while the script it names
+            # is rewritten, which MCPA016 cannot see.
+            digests = artifact_digests(s)
+            if digests:
+                entry["artifacts"] = digests
             carried = kept_policies.get(s.identity())
             if carried:
                 entry["policy"] = carried
@@ -186,7 +193,7 @@ class Lock:
             if not isinstance(old, dict):
                 continue
             carried = False
-            for key in ("tools", "prompts", "resources", "instructions"):
+            for key in ("tools", "prompts", "resources", "instructions", "artifacts"):
                 if key not in entry and key in old:
                     entry[key] = old[key]
                     carried = True
