@@ -104,6 +104,16 @@ SIGNALS: list[Signal] = [
     ),
 ]
 
+# A project's own dotfiles. Naming one is normal in a SKILL.md, whose job is
+# to document setup -- "put your key in .env.local" is instruction, not
+# instruction *injection*. Naming one in a tool description is a different
+# matter: a server has no business telling the agent about your .env.
+#
+# Found in Anthropic's own skills repository, where three setup skills say
+# exactly that and were all reported. MCPA010 already draws this line between
+# a skill body and a tool description; MCPA012 was not drawing it.
+PROJECT_DOTFILES = re.compile(r"\.env(?:\.local|\.production)?", re.IGNORECASE)
+
 # Paths whose appearance in agent-facing text is almost never innocent.
 SENSITIVE_PATHS = re.compile(
     r"(?:~|\$HOME|%USERPROFILE%)?[/\\]?\.(?:ssh(?:[/\\]|\b)|aws[/\\]credentials|"
@@ -306,6 +316,13 @@ def sensitive_path_reference(ctx: AuditContext) -> Iterable[Finding]:
     """A tool or skill points the agent at private keys or credential files."""
     for tgt in _targets(ctx):
         for m in SENSITIVE_PATHS.finditer(tgt.text):
+            # `strict` marks text whose purpose is to instruct the agent: a
+            # skill body, or a server's own instructions. A project dotfile
+            # named there is setup documentation. A credential store -- an ssh
+            # key, ~/.aws/credentials, /etc/shadow -- is not, wherever it
+            # appears, so only the dotfile class is exempt.
+            if tgt.strict and PROJECT_DOTFILES.fullmatch(m.group(0)):
+                continue
             yield Finding(
                 rule_id="MCPA012",
                 title="Sensitive credential path referenced in agent-facing text",
