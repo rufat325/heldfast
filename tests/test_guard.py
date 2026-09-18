@@ -215,3 +215,78 @@ class TestEndToEnd(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestModernMrtrScreening(unittest.TestCase):
+    """MRTR replaced server-initiated requests; the spec calls it a breaking
+    change. Elicitation, sampling and roots/list now arrive inside an
+    InputRequiredResult, so screening only the legacy shape left a server on
+    the current protocol entirely unscreened."""
+
+    def _result(self, **overrides) -> dict:
+        result = {
+            "resultType": "input_required",
+            "requestState": "AEAD-protected-blob",
+            "inputRequests": {
+                "login": {"method": "elicitation/create",
+                          "params": {"message": "Enter your GitHub token"}},
+                "ask": {"method": "sampling/createMessage",
+                        "params": {"messages": [
+                            {"content": {"type": "text", "text": "What is 2+2?"}}]}},
+                "roots": {"method": "roots/list", "params": {}},
+            },
+        }
+        result.update(overrides)
+        return {"jsonrpc": "2.0", "id": 1, "result": result}
+
+    def test_everything_is_forwarded_by_default(self) -> None:
+        g = Guard("svc", Lock(), quiet=True)
+        out = g.handle_server_message(self._result())
+        self.assertEqual({"login", "ask", "roots"}, set(out["result"]["inputRequests"]))
+        self.assertEqual(1, g.stats.input_required_seen)
+
+    def test_denied_entries_are_removed_not_the_whole_result(self) -> None:
+        g = Guard("svc", Lock(), quiet=True, deny_elicitation=True)
+        out = g.handle_server_message(self._result())
+        self.assertEqual({"ask", "roots"}, set(out["result"]["inputRequests"]))
+        self.assertEqual(1, g.stats.server_requests_denied)
+
+    def test_request_state_is_never_touched(self) -> None:
+        """Clients MUST NOT inspect, parse or modify requestState."""
+        g = Guard("svc", Lock(), quiet=True, deny_elicitation=True, deny_sampling=True)
+        out = g.handle_server_message(self._result())
+        self.assertEqual("AEAD-protected-blob", out["result"]["requestState"])
+
+    def test_each_method_is_counted(self) -> None:
+        g = Guard("svc", Lock(), quiet=True)
+        g.handle_server_message(self._result())
+        self.assertEqual(1, g.stats.elicitation_requests)
+        self.assertEqual(1, g.stats.sampling_requests)
+        self.assertEqual(1, g.stats.roots_requests)
+
+    def test_deny_roots(self) -> None:
+        g = Guard("svc", Lock(), quiet=True, deny_roots=True)
+        out = g.handle_server_message(self._result())
+        self.assertNotIn("roots", out["result"]["inputRequests"])
+
+    def test_ordinary_results_are_untouched(self) -> None:
+        g = Guard("svc", Lock(), quiet=True, deny_elicitation=True)
+        msg = {"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": "ok"}]}}
+        self.assertEqual(msg, g.handle_server_message(msg))
+
+    def test_malformed_input_requests_do_not_crash(self) -> None:
+        g = Guard("svc", Lock(), quiet=True, deny_elicitation=True)
+        for bad in ("not-a-map", 42, None, {"x": "not-a-dict"}):
+            msg = {"jsonrpc": "2.0", "id": 1,
+                   "result": {"resultType": "input_required", "inputRequests": bad}}
+            g.handle_server_message(msg)  # must not raise
+
+    def test_both_eras_share_one_screening_path(self) -> None:
+        """The legacy request form and the modern map form must agree."""
+        legacy = Guard("svc", Lock(), quiet=True, deny_elicitation=True)
+        self.assertFalse(legacy.screen_server_request(
+            {"jsonrpc": "2.0", "id": 1, "method": "elicitation/create", "params": {}}))
+
+        modern = Guard("svc", Lock(), quiet=True, deny_elicitation=True)
+        out = modern.handle_server_message(self._result())
+        self.assertNotIn("login", out["result"]["inputRequests"])

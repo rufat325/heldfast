@@ -64,6 +64,8 @@ class GuardStats:
     sampling_requests: int = 0
     elicitation_requests: int = 0
     server_requests_denied: int = 0
+    roots_requests: int = 0
+    input_required_seen: int = 0
     tools_unapproved: list[str] = field(default_factory=list)
     tools_drifted: list[str] = field(default_factory=list)
     findings_blocked: list[str] = field(default_factory=list)
@@ -74,7 +76,8 @@ class Guard:
     def __init__(self, server_name: str, lock: Lock, *, policy: str = DEFAULT_POLICY,
                  strict: bool = False, block_severity: Severity = Severity.CRITICAL,
                  quiet: bool = False, deny_sampling: bool = False,
-                 deny_elicitation: bool = False) -> None:
+                 deny_elicitation: bool = False,
+                 deny_roots: bool = False) -> None:
         self.server_name = server_name
         self.lock = lock
         self.policy = policy
@@ -83,6 +86,7 @@ class Guard:
         self.quiet = quiet
         self.deny_sampling = deny_sampling
         self.deny_elicitation = deny_elicitation
+        self.deny_roots = deny_roots
         # Set by run() so a denied server request can be answered without
         # the client ever seeing it.
         self.respond_to_server = None
@@ -234,6 +238,70 @@ class Guard:
 
     # -- server-initiated requests ----------------------------------------
 
+    def _screen_method(self, method: str, params: dict[str, Any]) -> tuple[bool, str]:
+        """Screen one server-to-client request by method. Returns (allow, note)."""
+        if method == "sampling/createMessage":
+            self.stats.sampling_requests += 1
+            preview = ""
+            messages = params.get("messages")
+            if isinstance(messages, list) and messages:
+                content = (messages[0] or {}).get("content") or {}
+                if isinstance(content, dict):
+                    preview = str(content.get("text") or "")[:80]
+            note = ("is asking your model to generate on its behalf"
+                    + (f": {preview!r}" if preview else ""))
+            return (not self.deny_sampling), note
+        if method == "elicitation/create":
+            self.stats.elicitation_requests += 1
+            prompt = str(params.get("message") or "")[:100]
+            return (not self.deny_elicitation), f"wants to ask you for input: {prompt!r}"
+        if method == "roots/list":
+            # A server asking which directories the client has exposed is
+            # reconnaissance of the filesystem surface. Legitimate, and worth
+            # being able to see.
+            self.stats.roots_requests += 1
+            return (not self.deny_roots), "is asking which filesystem roots you expose"
+        return True, ""
+
+    def screen_input_required(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Screen an InputRequiredResult -- the modern (2026-07-28) form.
+
+        MRTR replaced server-initiated requests outright; the spec calls it a
+        breaking change. Elicitation, sampling and roots/list now arrive as
+        entries in an `inputRequests` map on a tools/call, prompts/get or
+        resources/read result, so screening only the legacy shape would leave
+        a server on the current protocol entirely unscreened.
+
+        Denied entries are removed from the map rather than the whole result
+        being rejected. The spec says servers MUST NOT assume clients will
+        fulfil the requests, so returning fewer is a case servers already have
+        to handle.
+
+        `requestState` is never touched: clients MUST NOT inspect, parse or
+        modify it.
+        """
+        requests = result.get("inputRequests")
+        if not isinstance(requests, dict):
+            return result
+        self.stats.input_required_seen += 1
+
+        kept: dict[str, Any] = {}
+        for key, request in requests.items():
+            if not isinstance(request, dict):
+                kept[key] = request
+                continue
+            method = str(request.get("method") or "")
+            allowed, note = self._screen_method(method, request.get("params") or {})
+            if note:
+                self.log(f"server {note} (via {method}, key {key!r})")
+            if allowed:
+                kept[key] = request
+            else:
+                self.stats.server_requests_denied += 1
+                self.log(f"DENIED {method} (key {key!r}) -- removed from inputRequests")
+        result["inputRequests"] = kept
+        return result
+
     def screen_server_request(self, message: dict[str, Any]) -> bool:
         """Return True to forward a server->client request, False to deny it.
 
@@ -250,20 +318,11 @@ class Guard:
         than break working servers. What matters is that they stop being
         invisible.
         """
-        method = message.get("method")
-        if method == "sampling/createMessage":
-            self.stats.sampling_requests += 1
-            self.log(f"server requested sampling (#{self.stats.sampling_requests}) -- "
-                     f"it is asking your model to generate on its behalf")
-            return not self.deny_sampling
-        if method == "elicitation/create":
-            self.stats.elicitation_requests += 1
-            params = message.get("params") or {}
-            prompt = str(params.get("message") or "")[:100]
-            self.log(f"server requested elicitation (#{self.stats.elicitation_requests}) -- "
-                     f"it wants to ask you for input: {prompt!r}")
-            return not self.deny_elicitation
-        return True
+        method = str(message.get("method") or "")
+        allowed, note = self._screen_method(method, message.get("params") or {})
+        if note:
+            self.log(f"server {note} (via {method})")
+        return allowed
 
     def deny_response(self, message: dict[str, Any]) -> dict[str, Any]:
         self.stats.server_requests_denied += 1
@@ -287,6 +346,8 @@ class Guard:
                 # spec permits a client to add to the system prompt.
                 if "instructions" in result and isinstance(result["instructions"], str):
                     result["instructions"] = self.check_instructions(result["instructions"])
+                if result.get("resultType") == "input_required" or "inputRequests" in result:
+                    message["result"] = self.screen_input_required(result)
         except Exception as exc:
             self.stats.internal_errors.append(str(exc))
             self.log(f"INTERNAL ERROR inspecting message: {exc}")
@@ -309,6 +370,8 @@ class Guard:
             bits.append(f"{s.sampling_requests} sampling request(s)")
         if s.elicitation_requests:
             bits.append(f"{s.elicitation_requests} elicitation request(s)")
+        if s.roots_requests:
+            bits.append(f"{s.roots_requests} roots request(s)")
         if s.server_requests_denied:
             bits.append(f"{s.server_requests_denied} denied")
         if s.internal_errors:
@@ -319,7 +382,8 @@ class Guard:
 def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         server_name: str | None = None, strict: bool = False,
         block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
-        deny_sampling: bool = False, deny_elicitation: bool = False) -> int:
+        deny_sampling: bool = False, deny_elicitation: bool = False,
+        deny_roots: bool = False) -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("mcp-audit guard: no server command given", file=sys.stderr)
@@ -336,7 +400,8 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
     name = server_name or Path(argv[0]).stem
     guard = Guard(name, lock, policy=policy, strict=strict,
                   block_severity=block_severity, quiet=quiet,
-                  deny_sampling=deny_sampling, deny_elicitation=deny_elicitation)
+                  deny_sampling=deny_sampling, deny_elicitation=deny_elicitation,
+                  deny_roots=deny_roots)
 
     if guard._locked_tools is None:
         guard.log(

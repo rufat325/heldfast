@@ -190,17 +190,26 @@ well-behaved servers are never asked for something they do not have.
 
 ### Requests travelling the other way
 
-Two methods go server to client, and `guard` is the only place that sees them:
+Three methods go server to client, and `guard` is the only place that sees them:
 
 - `sampling/createMessage` asks your client to run a completion. The prompt is the
   server's; the model and the bill are yours.
 - `elicitation/create` asks your client to collect input from you. A server that suddenly
   wants a value typed in is the shape of a credential phish, wearing your client's own
   dialog.
+- `roots/list` asks which filesystem roots you expose. Reconnaissance of the surface.
 
-Neither is illegitimate, so both are forwarded and logged by default rather than breaking
-working servers. `--deny-sampling` and `--deny-elicitation` refuse them with a well-formed
-JSON-RPC error that the server sees and the client never does.
+None is illegitimate, so all are forwarded and logged by default rather than breaking
+working servers. `--deny-sampling`, `--deny-elicitation` and `--deny-roots` refuse them.
+
+They arrive in two different shapes depending on protocol era, and `guard` screens both
+through the same path. On legacy servers they are server-initiated JSON-RPC requests,
+refused with an error the server sees and the client never does. On 2026-07-28 servers they
+arrive as entries in an `inputRequests` map on an `InputRequiredResult` -- MRTR replaced
+server-initiated requests outright, which the spec calls a breaking change. There, denied
+entries are removed from the map rather than the result being rejected, since servers MUST
+NOT assume a client will fulfil them. `requestState` is passed through untouched; clients
+MUST NOT inspect or modify it.
 
 ## Using it from an agent
 
@@ -364,7 +373,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-218 tests, stdlib unittest, nothing to install.
+226 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

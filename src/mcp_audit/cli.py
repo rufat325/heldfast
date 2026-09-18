@@ -160,6 +160,9 @@ def build_parser() -> argparse.ArgumentParser:
                          help="refuse elicitation/create requests, which ask you for "
                               "input through the client's own dialog")
     guard_p.add_argument("server_command", nargs=argparse.REMAINDER, metavar="-- COMMAND")
+    guard_p.add_argument("--deny-roots", action="store_true",
+                         help="refuse roots/list requests, which ask which "
+                              "filesystem roots you expose")
 
     sub.add_parser(
         "serve",
@@ -452,6 +455,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
         quiet=args.quiet,
         deny_sampling=args.deny_sampling,
         deny_elicitation=args.deny_elicitation,
+        deny_roots=args.deny_roots,
     )
 
 
