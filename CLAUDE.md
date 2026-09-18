@@ -1,0 +1,146 @@
+# Working on mcp-audit
+
+Context for anyone (or any session) picking this up cold. The code explains
+what it does; this explains what is not in the code — decisions, their
+reasons, and the ones that were wrong first.
+
+## What this is
+
+A security scanner for MCP server configurations and agent skills, plus a
+runtime proxy that enforces what you approved. Zero runtime dependencies,
+stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
+
+Owner's actual goal: this is a **credential**. It exists to make its author
+demonstrably competent at MCP and agent security — the market for that is
+contract work building MCP servers ($50–150/hr, $3–8k for a simple server).
+It is not trying to win a product category, and decisions should be judged
+against "does this make the repo more convincing and more correct", not
+"does this add a feature".
+
+## The honest competitive position
+
+Bigger tools exist: Tencent's AI-Infra-Guard (6.4k stars), Snyk's agent-scan
+(3.1k, analysis runs server-side at api.snyk.io), Cisco's mcp-scanner,
+Trail of Bits' mcp-context-protector (runtime pinning, blocks at the call
+site). Verified by cloning and reading them, not from their READMEs.
+
+What actually differs here: analysis runs entirely locally, there are no
+runtime dependencies, findings map to MITRE ATLAS (none of the others do),
+and the approval lockfile is a **committed artifact**, so one file governs
+code review, CI and runtime enforcement.
+
+**Do not add a "Prior art" section to the README.** It was there, it went
+stale between commits because the field moves faster than this repo, and the
+owner removed it deliberately. Revisit only if asked.
+
+## Architecture
+
+    clients.py      declarative registry of 17 MCP clients and their config paths
+    discovery.py    finds config files; tolerant JSONC parser
+    parsers.py      config + SKILL.md -> normalized specs
+    model.py        ServerSpec / ToolSpec / PromptSpec / ResourceSpec + fingerprints
+    probe.py        MCP client. Dual-era: server/discover (2026-07-28) and the
+                    legacy initialize handshake
+    lockfile.py     .mcp-audit.lock — what you approved
+    guard.py        stdio proxy that enforces the lockfile at runtime
+    lifetime.py     ties the wrapped server's lifetime to the guard's
+    server.py       mcp-audit *as* an MCP server (`serve`)
+    inspect.py      what is configured, with no judgements
+    llm.py          optional semantic classifier (extra: mcp-audit[llm])
+    rules/          26 rules, MCPA001–MCPA026
+    rule_docs.py    long-form docs; docs/rules.md is generated from this
+
+Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`, `serve`.
+
+## Standing rules for changes
+
+**Zero runtime dependencies.** The JSONC parser, frontmatter parser and MCP
+client are all hand-written. A supply-chain scanner that drags in a
+dependency tree asks you to trust what it audits. The `anthropic` SDK is an
+optional extra, lazily imported, for `--llm` only.
+
+**False positives are the expensive failure.** A scanner that fires on
+correct configuration gets uninstalled, and then it catches nothing. The
+most load-bearing test is a clean fixture that must produce exactly zero
+findings. Prefer low recall and high precision — that tradeoff has been made
+explicitly more than once and should keep being made.
+
+**Secrets never reach the report.** `Finding.__post_init__` scrubs every
+evidence and snippet string. It is a chokepoint rather than a convention so
+a new rule cannot reintroduce a leak.
+
+**Docs are generated from code.** Add a rule, add a `RuleDoc`, regenerate
+with `mcp-audit rules --markdown -o docs/rules.md`. Tests fail if a rule is
+undocumented or the checked-in file is stale.
+
+**Tests pin decisions, not just behaviour.** Where a test looks oddly
+specific it is usually recording a bug that shipped. Read the docstring
+before changing one.
+
+## Lessons that cost something
+
+- **Verify competitors by reading their source.** Two wrong claims were made
+  from search summaries — once saying the drift wedge was gone, once saying
+  it was intact. Clone the repo.
+- **Validate against real data, not your own fixtures.** Rules tuned on
+  hand-written fixtures fired on 27% of 56 real tools, essentially all false
+  positives: "charges" in billing prose, "runs" in a verification tool, and a
+  docs search tool whose description says *nothing runs on the user's
+  computer*. The corpora live in the eval workflow, not the repo.
+- **Enumerate from the schema.** Two gaps were found by extracting every
+  text-bearing interface and every RPC method from the spec and diffing
+  against coverage — including `content` vs `contents`, one letter apart and
+  different types, which left `resources/read` unscreened.
+- **A structural match must not be vetoed by a fuzzy one.** Matching
+  placeholder words anywhere made the scanner miss a real AWS key, because
+  AWS's own example key contains "EXAMPLE".
+- **TLS verification failures are often local.** Seven of fifteen real
+  endpoints reported expired certificates; every chain was in date and the
+  local CA bundle was stale. Do not blame the server.
+
+## Environment traps on this machine
+
+- **Bash heredocs mangle escapes.** `\\` collapses and `\n` becomes a real
+  newline, which has broken source files repeatedly. For anything containing
+  escapes use the Write tool, or write a patch script to a file and run it.
+- **Windows path length.** The project lives at a short path deliberately;
+  deep nesting under Temp hits the 248-character directory limit.
+- **CRLF.** `.gitattributes` normalizes to LF; the warnings on commit are
+  expected.
+- `wmic` is very slow to start and has hung a command for minutes.
+- Unauthenticated GitHub API polling gets rate-limited quickly.
+- `.venv/` is gitignored and holds the `anthropic` extra so the wire-shape
+  tests can run. `python -m unittest discover -s tests` works without it;
+  11 tests skip.
+
+## How the owner works
+
+- **Ignore suggested timelines.** Phased plans read as padding; build the
+  whole thing in the session.
+- **Do not spend their money.** API integrations are verified by pointing the
+  real SDK at a local stub server (`tests/test_wire_shape.py`).
+- **Do not break their machine.** Third-party MCP servers are not installed
+  or launched. Protocol robustness is covered by `hostile_server.py`, which
+  misbehaves deliberately but touches no files, network or subprocesses.
+
+## State and what is outstanding
+
+21 commits, 275 tests, 26 rules, CI green across Linux/macOS/Windows on
+Python 3.9/3.12/3.13 plus a wire-shape job and a job that exercises
+`action.yml` itself.
+
+Not done, and needing the owner rather than an agent:
+
+- **PyPI.** The README says `uvx mcp-audit`, which does not work until it is
+  published. That is the one false claim left in the repo.
+- **GitHub profile.** Bio, location and "available for hire" are empty; a
+  profile README is drafted on the Desktop in `rufat325-profile/`.
+- **Global git email** is still `rufatm726@email.com`, so every other repo on
+  the machine commits under an address GitHub cannot link.
+- **Marketplace** listing for the action — the action is tested and ready.
+- **History rewrite**: three old commit messages still discuss competitors by
+  name. Removing them needs a force push, which was blocked as a destructive
+  action and needs an explicit decision.
+
+Never exercised against the live Anthropic API: `--llm` request shape is
+verified against `anthropic` 1.6.0 through a stub server only.
