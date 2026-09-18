@@ -295,7 +295,10 @@ def _analyze_function(fn, path: str, source_lines: list[str],
                             tainted.add(sub.id)
                             origin.setdefault(sub.id, origin.get(found, found))
 
-        elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+        elif isinstance(node, (ast.AugAssign, ast.AnnAssign, ast.NamedExpr)):
+            # NamedExpr is the walrus. It binds a name like any other
+            # assignment and was the one shape of thirteen that this missed
+            # when they were checked one by one.
             found = _taint(node.value, tainted)
             if found and isinstance(node.target, ast.Name):
                 tainted.add(node.target.id)

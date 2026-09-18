@@ -271,3 +271,103 @@ class TestTheWholeHandlerSurface(unittest.TestCase):
                 f"@{receiver}.tool()\n"
                 "def go(t: str):\n    os.system('echo ' + t)\n", "<t>")
             self.assertEqual(1, len(found), receiver)
+
+
+class TestTheShapesRealPythonHandlersUse(unittest.TestCase):
+    """The counterpart to the TypeScript exercise: write out how a handler
+    normally touches its argument and check each one, instead of assuming the
+    tested shapes are the whole set.
+
+    Twelve of thirteen already worked, because ast.walk plus a recursive taint
+    check covers most of Python's syntax for free. The thirteenth did not.
+    """
+
+    def _flows(self, body: str):
+        return flows(body)
+
+    def test_a_walrus_binds_a_name_like_any_assignment(self) -> None:
+        self.assertTrue(self._flows('''
+            @mcp.tool()
+            def go(target: str):
+                if (cmd := "ls " + target):
+                    os.system(cmd)
+        '''))
+
+    def test_tuple_unpacking(self) -> None:
+        self.assertTrue(self._flows('''
+            @mcp.tool()
+            def go(pair: str):
+                a, b = pair, "x"
+                os.system("echo " + a)
+        '''))
+
+    def test_dict_access_and_get(self) -> None:
+        for expression in ('opts["target"]', 'opts.get("target", "")'):
+            self.assertTrue(self._flows(f'''
+                @mcp.tool()
+                def go(opts: dict):
+                    os.system("echo " + {expression})
+            '''), expression)
+
+    def test_augmented_assignment(self) -> None:
+        self.assertTrue(self._flows('''
+            @mcp.tool()
+            def go(target: str):
+                cmd = "nmap "
+                cmd += target
+                os.system(cmd)
+        '''))
+
+    def test_join_of_a_tainted_list(self) -> None:
+        self.assertTrue(self._flows('''
+            @mcp.tool()
+            def go(parts: list):
+                os.system(" ".join(parts))
+        '''))
+
+    def test_a_nested_function_inside_the_handler(self) -> None:
+        self.assertTrue(self._flows('''
+            @mcp.tool()
+            def go(target: str):
+                def inner():
+                    os.system("ls " + target)
+                inner()
+        '''))
+
+    def test_a_method_on_a_class(self) -> None:
+        self.assertTrue(self._flows('''
+            class Server:
+                @mcp.tool()
+                def go(self, target: str):
+                    os.system("ls " + target)
+        '''))
+
+    def test_only_the_unsafe_branch_is_reported(self) -> None:
+        found = self._flows('''
+            @mcp.tool()
+            def go(target: str, safe: bool):
+                if safe:
+                    subprocess.run(["ls", target])
+                else:
+                    os.system("ls " + target)
+        ''')
+        self.assertEqual(1, len(found))
+        self.assertEqual("os.system()", found[0].sink)
+
+    def test_inside_a_try_block(self) -> None:
+        self.assertTrue(self._flows('''
+            @mcp.tool()
+            def go(target: str):
+                try:
+                    os.system("ls " + target)
+                except Exception:
+                    pass
+        '''))
+
+    def test_an_f_string_conversion_does_not_sanitize(self) -> None:
+        """!r quotes for Python, not for a shell."""
+        self.assertTrue(self._flows('''
+            @mcp.tool()
+            def go(target: str):
+                os.system(f"ls {target!r}")
+        '''))
