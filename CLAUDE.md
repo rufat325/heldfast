@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 77 commits, 540 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 79 commits, 550 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -218,6 +218,15 @@ The cycles, most recent last:
     quiet; this proves it detects. 31 of 32 passed first run; the one failure
     found a real gap (`admin:org` scopes went unreported).
 
+36. `206dbd8` — `tests/test_evasions.py`: put each attack to the rules the
+    *other* ways it gets written. Five gaps in one sitting. MCPA024 compared
+    strings, so decimal/hex/octal/IPv6-mapped spellings of 169.254.169.254 all
+    walked past a CRITICAL rule; hosts are now canonicalized through
+    `ipaddress`. MCPA002 knew the pipe but not `curl -o f URL && sh f`.
+    MCPA010 caught the imperative but not polite or passive concealment, and
+    not a bare line-start `System:`. Two shapes stay missed *on purpose* and
+    say so in tests.
+
 ### If the loop resumes, change source
 
 **The spec is near exhausted.** The remaining unscreened methods
@@ -413,6 +422,11 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   handlers only, and the same gap reappeared one layer down — caught by
   enumerating real decorator usage, not by remembering. When adding anything
   that reads "what the model can influence", check all four channels.
+- **Detection needs three corpora, not two.** Clean (does it stay quiet),
+  attacks (does it fire), and *evasions* (does it fire on the other phrasing).
+  The third found five gaps in rules that passed the first two, including a
+  CRITICAL SSRF rule that only knew one spelling of one IP address. Every
+  widening was checked against the 694 shipped descriptions before shipping.
 - **Precision evidence and recall evidence are separate artifacts.** The
   clean corpus and the attack corpus each prove nothing alone. Both together
   are the claim. Adding a rule now requires: the rule, a doc entry, a README
