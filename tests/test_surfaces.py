@@ -372,3 +372,53 @@ class TestGuardScreensServerRequests(unittest.TestCase):
         self.assertTrue(g.screen_server_request(
             {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}))
         self.assertEqual(0, g.stats.server_requests_denied)
+
+
+class TestDangerousUrls(unittest.TestCase):
+    """From the MCP security guidance: clients MUST reject these schemes."""
+
+    def _fired(self, url: str, rule_id: str, **extra) -> list:
+        spec = ServerSpec(name="x", source="/tmp/.mcp.json", client="t",
+                          transport="http", url=url, raw=extra)
+        return [f for f in run_rules(AuditContext(servers=[spec])) if f.rule_id == rule_id]
+
+    def test_javascript_scheme_is_critical(self) -> None:
+        f = self._fired("javascript:fetch('//evil/')", "MCPA023")
+        self.assertEqual("critical", f[0].severity.label)
+
+    def test_file_and_data_schemes_fire(self) -> None:
+        for url in ("file:///etc/passwd", "data:text/html;base64,PHNjcmlwdD4="):
+            self.assertTrue(self._fired(url, "MCPA023"), url)
+
+    def test_http_and_https_are_quiet(self) -> None:
+        for url in ("https://ok.example.com/mcp", "http://localhost:3000/mcp"):
+            self.assertEqual([], self._fired(url, "MCPA023"), url)
+
+    def test_cloud_metadata_is_critical(self) -> None:
+        f = self._fired("http://169.254.169.254/latest/meta-data/", "MCPA024")
+        self.assertEqual("critical", f[0].severity.label)
+        self.assertIn("IAM credentials", f[0].evidence)
+
+    def test_gcp_metadata_hostname(self) -> None:
+        self.assertTrue(self._fired(
+            "http://metadata.google.internal/computeMetadata/v1/", "MCPA024"))
+
+    def test_link_local_range_generally(self) -> None:
+        self.assertTrue(self._fired("http://169.254.1.5:8080/mcp", "MCPA024"))
+
+    def test_ordinary_private_lan_is_not_flagged_as_metadata(self) -> None:
+        """Self-hosting on a LAN is normal; only link-local is anomalous."""
+        for url in ("http://192.168.1.50:8080/mcp", "http://10.0.0.5/mcp"):
+            self.assertEqual([], self._fired(url, "MCPA024"), url)
+
+    def test_wildcard_scope(self) -> None:
+        self.assertTrue(self._fired("https://ok.example.com/mcp", "MCPA025", scopes=["*"]))
+
+    def test_omnibus_scope_names(self) -> None:
+        for scope in ("all", "full-access", "admin", "files:*"):
+            self.assertTrue(
+                self._fired("https://ok.example.com/mcp", "MCPA025", scopes=[scope]), scope)
+
+    def test_narrow_scopes_are_quiet(self) -> None:
+        self.assertEqual([], self._fired("https://ok.example.com/mcp", "MCPA025",
+                                         scopes=["tools:read", "resources:read"]))

@@ -178,3 +178,134 @@ def bind_all_interfaces(ctx: AuditContext) -> Iterable[Finding]:
             cwe=["CWE-1327"],
             tags=["transport", "exposure"],
         )
+
+
+# The MCP security guidance is explicit that a client "MUST only allow http://
+# and https:// schemes" for URLs a server supplies, and "MUST reject
+# javascript:, data:, file:, vbscript:, and other potentially dangerous
+# schemes". A configured server URL is the same class of input.
+DANGEROUS_SCHEMES = {
+    "javascript": "executes script in the client's context (XSS, and on some clients RCE)",
+    "vbscript": "executes script in the client's context",
+    "data": "inlines content the client may render or execute",
+    "file": "reads from the local filesystem instead of a server",
+    "jar": "loads a remote archive into a local handler",
+    "blob": "references client-internal storage",
+}
+
+SAFE_SCHEMES = {"http", "https", "ws", "wss"}
+
+
+@rule("MCPA023", "Server URL uses a dangerous scheme", Severity.CRITICAL)
+def dangerous_url_scheme(ctx: AuditContext) -> Iterable[Finding]:
+    """A configured URL that is not http(s) at all."""
+    for s in ctx.servers:
+        if not s.url:
+            continue
+        scheme = urlsplit(s.url).scheme.lower()
+        if not scheme or scheme in SAFE_SCHEMES:
+            continue
+        reason = DANGEROUS_SCHEMES.get(scheme, "is not an HTTP transport")
+        yield Finding(
+            rule_id="MCPA023",
+            title="Server URL uses a dangerous scheme",
+            severity=Severity.CRITICAL if scheme in DANGEROUS_SCHEMES else Severity.HIGH,
+            location=Location(path=s.source, line=s.line, snippet=s.url[:200]),
+            evidence=f"{scheme}: URL configured as an MCP endpoint -- {reason}",
+            remediation=(
+                "Remove it. An MCP endpoint is http:// or https://. The protocol's own "
+                "security guidance says clients MUST reject javascript:, data:, file: and "
+                "vbscript: URLs, because a client that opens one hands the page's author "
+                "execution in the client's context."
+            ),
+            server=s.name,
+            atlas=["AML.T0011"],
+            cwe=["CWE-79", "CWE-749"],
+            tags=["transport", "scheme"],
+        )
+
+
+# 169.254.0.0/16 is link-local. 169.254.169.254 is the cloud instance metadata
+# endpoint on AWS, GCP and Azure, and returns IAM credentials to anything that
+# can reach it. Nothing legitimately configures it as an MCP server.
+_METADATA_HOSTS = {
+    "169.254.169.254": "cloud instance metadata (AWS/GCP/Azure) -- returns IAM credentials",
+    "metadata.google.internal": "GCP instance metadata -- returns service account tokens",
+    "169.254.170.2": "ECS task metadata -- returns task role credentials",
+    "100.100.100.200": "Alibaba Cloud instance metadata",
+}
+
+
+@rule("MCPA024", "Server URL targets a cloud metadata or link-local address", Severity.CRITICAL)
+def metadata_endpoint(ctx: AuditContext) -> Iterable[Finding]:
+    """A URL pointing at the instance metadata service."""
+    for s in ctx.servers:
+        if not s.url:
+            continue
+        host = _host_of(s.url)
+        if not host:
+            continue
+
+        described = _METADATA_HOSTS.get(host)
+        if described is None:
+            try:
+                ip = ipaddress.ip_address(host)
+            except ValueError:
+                continue
+            if not ip.is_link_local:
+                continue
+            described = "a link-local address, the range cloud metadata services live in"
+
+        yield Finding(
+            rule_id="MCPA024",
+            title="Server URL targets a cloud metadata or link-local address",
+            severity=Severity.CRITICAL,
+            location=Location(path=s.source, line=s.line, snippet=s.url[:200]),
+            evidence=f"{s.url} points at {described}",
+            remediation=(
+                "Remove this server. A configured MCP endpoint on the metadata service is "
+                "not a server -- it is a request for the agent to fetch cloud credentials "
+                "and hand them back as tool output."
+            ),
+            server=s.name,
+            atlas=["AML.T0055", "AML.T0024"],
+            cwe=["CWE-918"],
+            tags=["transport", "ssrf", "credentials"],
+        )
+
+
+_BROAD_SCOPE = re.compile(r"^(?:\*|all|full[_\-]?access|admin|root|everything|.*:\*)$",
+                          re.IGNORECASE)
+_SCOPE_KEYS = ("scope", "scopes", "oauthScopes", "oauth_scopes", "requiredScopes")
+
+
+@rule("MCPA025", "Server requests an over-broad OAuth scope", Severity.MEDIUM)
+def broad_scope(ctx: AuditContext) -> Iterable[Finding]:
+    """A wildcard or omnibus scope in the server's configuration."""
+    for s in ctx.servers:
+        for key in _SCOPE_KEYS:
+            raw = s.raw.get(key)
+            if raw is None:
+                continue
+            values = (re.split(r"[,\s]+", raw) if isinstance(raw, str)
+                      else [str(v) for v in raw] if isinstance(raw, (list, tuple))
+                      else [])
+            broad = [v.strip() for v in values if v.strip() and _BROAD_SCOPE.match(v.strip())]
+            if not broad:
+                continue
+            yield Finding(
+                rule_id="MCPA025",
+                title="Server requests an over-broad OAuth scope",
+                severity=Severity.MEDIUM,
+                location=Location(path=s.source, line=s.line, snippet=f"{key}: {broad}"),
+                evidence=f"{key} includes {', '.join(repr(b) for b in broad)}",
+                remediation=(
+                    "Request the narrowest scopes the server actually needs. A stolen "
+                    "omnibus token gives an attacker everything at once, and revoking it "
+                    "breaks every workflow rather than one."
+                ),
+                server=s.name,
+                atlas=["AML.T0012"],
+                cwe=["CWE-250"],
+                tags=["oauth", "scope"],
+            )
