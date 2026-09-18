@@ -29,7 +29,12 @@ from typing import Any
 
 from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec
 
-PROTOCOL_VERSION = "2024-11-05"
+# The current protocol revision. Kept alongside the legacy one because the
+# probe has to speak to both eras: everything published before 2026-07-28
+# negotiates through an `initialize` handshake, and most servers in the wild
+# still do.
+PROTOCOL_VERSION = "2026-07-28"
+LEGACY_PROTOCOL_VERSION = "2024-11-05"
 CLIENT_INFO = {"name": "mcp-audit", "version": "0.1.0"}
 
 
@@ -44,11 +49,24 @@ class ProbeResult:
     instructions: str = ""
     prompts: list[PromptSpec] = field(default_factory=list)
     resources: list[ResourceSpec] = field(default_factory=list)
+    # "modern" (2026-07-28 per-request _meta) or "legacy" (initialize
+    # handshake), decided by whether server/discover answered.
+    protocol_era: str = "unknown"
+    supported_versions: list[str] = field(default_factory=list)
+
+
+def _modern_meta() -> dict[str, Any]:
+    """`_meta` for a 2026-07-28 request, where version lives per request."""
+    return {
+        "io.modelcontextprotocol/protocolVersion": PROTOCOL_VERSION,
+        "io.modelcontextprotocol/clientInfo": CLIENT_INFO,
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }
 
 
 def _initialize_params() -> dict[str, Any]:
     return {
-        "protocolVersion": PROTOCOL_VERSION,
+        "protocolVersion": LEGACY_PROTOCOL_VERSION,
         "capabilities": {},
         "clientInfo": CLIENT_INFO,
     }
@@ -139,19 +157,30 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
 
     result: dict[str, Any] = {}
     init_result: dict[str, Any] = {}
+    discover_result: dict[str, Any] = {}
     prompts_result: dict[str, Any] = {}
     resources_result: dict[str, Any] = {}
     error: str | None = None
 
     def converse() -> None:
         nonlocal result, error, init_result, prompts_result, resources_result
+        nonlocal discover_result
         assert proc.stdin is not None and proc.stdout is not None
         try:
             def send(msg: dict[str, Any]) -> None:
                 proc.stdin.write(json.dumps(msg) + "\n")
                 proc.stdin.flush()
 
-            def read_reply(expect_id: int) -> dict[str, Any] | None:
+            # Replies can arrive out of order once requests are pipelined, so
+            # anything not being waited on is kept rather than dropped. The
+            # earlier version discarded non-matching messages, which meant
+            # waiting on the discover reply would silently eat the initialize
+            # reply and then block until the whole probe timed out.
+            pending: dict[Any, dict[str, Any]] = {}
+
+            def read_reply(expect_id: Any) -> dict[str, Any] | None:
+                if expect_id in pending:
+                    return pending.pop(expect_id)
                 while True:
                     line = proc.stdout.readline()
                     if not line:
@@ -163,19 +192,76 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
                         msg = json.loads(line)
                     except json.JSONDecodeError:
                         continue  # servers sometimes emit banner text on stdout
-                    if isinstance(msg, dict) and msg.get("id") == expect_id:
+                    if not isinstance(msg, dict) or "id" not in msg:
+                        continue  # a notification, not a reply we asked for
+                    if msg.get("id") == expect_id:
                         return msg
+                    pending[msg["id"]] = msg
 
+            # Era probe. The current protocol (2026-07-28) replaced the
+            # initialize handshake with per-request `_meta` and a mandatory
+            # `server/discover`. The spec's stdio backward-compatibility rules
+            # say a dual-era client SHOULD send server/discover first, and
+            # MUST NOT key the legacy fallback to one error code, since legacy
+            # servers answer an unknown pre-initialize request with whatever
+            # they like -- or with nothing at all.
+            #
+            # Both probes are pipelined rather than waiting on a timeout to
+            # decide. A modern server answers discover; a legacy one errors or
+            # ignores it and answers initialize. One round trip covers both,
+            # and the "no response" case needs no special handling because the
+            # initialize reply still arrives.
+            def read_any(expected: set) -> dict[str, Any] | None:
+                """First reply matching any of `expected`; the rest are buffered."""
+                for known in expected:
+                    if known in pending:
+                        return pending.pop(known)
+                while True:
+                    line = proc.stdout.readline()
+                    if not line:
+                        return None
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        msg = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(msg, dict) or "id" not in msg:
+                        continue
+                    if msg.get("id") in expected:
+                        return msg
+                    pending[msg["id"]] = msg
+
+            send({"jsonrpc": "2.0", "id": 0, "method": "server/discover",
+                  "params": {"_meta": _modern_meta()}})
             send({"jsonrpc": "2.0", "id": 1, "method": "initialize",
                   "params": _initialize_params()})
-            init = read_reply(1)
-            if init is None:
-                error = "server closed the connection during initialize"
+
+            # Resolve on whichever answer arrives first. Waiting on one
+            # specific id deadlocks against a server that answers only the
+            # other -- a modern server never replies to `initialize`, and a
+            # legacy one may ignore `server/discover` outright.
+            first = read_any({0, 1})
+            if first is None:
+                error = "server closed the connection during the era probe"
                 return
-            if "error" in init:
-                error = f"initialize failed: {init['error']}"
-                return
-            init_result = init
+
+            if first.get("id") == 0 and isinstance(first.get("result"), dict):
+                discover_result = first
+                init_result = first          # instructions live here in this era
+            else:
+                # Either initialize answered first, or discover errored. Both
+                # mean the legacy handshake is the path; the spec is explicit
+                # that the fallback must not be keyed to one error code.
+                init = first if first.get("id") == 1 else read_reply(1)
+                if init is None:
+                    error = "server closed the connection during initialize"
+                    return
+                if "error" in init:
+                    error = f"initialize failed: {init['error']}"
+                    return
+                init_result = init
             send({"jsonrpc": "2.0", "method": "notifications/initialized"})
             send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
             listed = read_reply(2)
@@ -191,7 +277,8 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
             # them. Calling an unsupported method returns an error the server
             # is entitled to send, and treating that as a probe failure would
             # make well-behaved servers look broken.
-            caps = (init.get("result") or {}).get("capabilities") or {}
+            source = discover_result or init or {}
+            caps = (source.get("result") or {}).get("capabilities") or {}
             if isinstance(caps, dict):
                 if isinstance(caps.get("prompts"), dict):
                     send({"jsonrpc": "2.0", "id": 3, "method": "prompts/list", "params": {}})
@@ -242,6 +329,11 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
         instructions=str((init_result.get("result") or {}).get("instructions") or ""),
         prompts=_parse_prompts(s.name, prompts_result),
         resources=_parse_resources(s.name, resources_result),
+        protocol_era="modern" if discover_result else "legacy",
+        supported_versions=[
+            str(v) for v in
+            ((discover_result.get("result") or {}).get("supportedVersions") or [])
+        ],
     )
 
 

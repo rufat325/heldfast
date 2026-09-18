@@ -185,6 +185,7 @@ class Collected:
         self.prompts: list = []
         self.resources: list = []
         self.instructions: dict[str, str] = {}
+        self.eras: dict[str, str] = {}
         self.errors: list[str] = []
         self.config_count = 0
         self.probed = False
@@ -229,6 +230,7 @@ def collect(args: argparse.Namespace) -> Collected:
             out.resources.extend(res.resources)
             if res.instructions:
                 out.instructions[res.server] = res.instructions
+            out.eras[res.server] = res.protocol_era
             if res.error:
                 out.errors.append(f"probe {res.server}: {res.error}")
     return out
@@ -402,7 +404,8 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     from . import inspect as inspect_mod
 
     data = collect(args)
-    report = inspect_mod.build(data.servers, data.skills, data.tools, data.errors)
+    report = inspect_mod.build(data.servers, data.skills, data.tools, data.errors,
+                               eras=data.eras)
 
     if args.format == "json":
         import json as _json

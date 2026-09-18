@@ -41,7 +41,8 @@ def classify_env_value(key: str, value: str) -> str:
 
 
 def build(servers: list[ServerSpec], skills: list[SkillSpec],
-          tools: list[ToolSpec], errors: Iterable[str]) -> dict[str, Any]:
+          tools: list[ToolSpec], errors: Iterable[str],
+          eras: dict[str, str] | None = None) -> dict[str, Any]:
     by_server: dict[str, list[ToolSpec]] = {}
     for t in tools:
         by_server.setdefault(t.server, []).append(t)
@@ -61,6 +62,9 @@ def build(servers: list[ServerSpec], skills: list[SkillSpec],
             entry["url"] = s.url
         if s.headers:
             entry["headers"] = sorted(s.headers)
+        era = (eras or {}).get(s.name)
+        if era and era != "unknown":
+            entry["protocol_era"] = era
         observed = by_server.get(s.name)
         if observed is not None:
             entry["tools"] = [
@@ -117,6 +121,8 @@ def render(data: dict[str, Any], *, color: bool = False, verbose: bool = False) 
             out.append(f"    {s['name']}{flag}")
             target = s.get("command") or s.get("url") or "(nothing configured)"
             out.append(f"      {dim(s['transport'] + ':')} {target[:110]}")
+            if s.get("protocol_era"):
+                out.append(f"      {dim('protocol:')} {s['protocol_era']}")
             if s.get("headers"):
                 out.append(f"      {dim('headers:')} {', '.join(s['headers'])}")
             for key, kind in s.get("env", {}).items():

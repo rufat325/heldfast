@@ -141,6 +141,20 @@ give the agent instructions, so imperative mood there is normal. In a tool descr
 isn't. Without that split the scanner fires constantly on any real skills directory and
 becomes useless.
 
+## Protocol versions
+
+The current MCP revision is **2026-07-28**, which replaced the `initialize` handshake with
+per-request `_meta` and a mandatory `server/discover`. Most servers in the wild are still on
+the handshake, so `--probe` speaks both eras.
+
+It sends `server/discover` and `initialize` together and resolves on whichever answers
+first, rather than waiting on either. Waiting deadlocks: a modern server never replies to
+`initialize`, and a legacy one may ignore `server/discover` without replying at all. The
+spec is explicit that the fallback must not be keyed to a particular error code, since
+legacy servers answer unknown pre-handshake requests with whatever they like.
+
+`inspect` reports which era each server speaks.
+
 ## What a server actually controls
 
 A server has four channels into the model, not one. `--probe` reads all of them and the
@@ -350,7 +364,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-207 tests, stdlib unittest, nothing to install.
+218 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
