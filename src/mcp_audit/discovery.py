@@ -90,119 +90,81 @@ def find_key_line(raw: str, key: str) -> int:
 # Known config locations
 # ---------------------------------------------------------------------------
 
-def _home() -> Path:
-    return Path.home()
-
-
-def _appdata() -> Path | None:
-    v = os.environ.get("APPDATA")
-    return Path(v) if v else None
+from .clients import CLIENTS, GENERIC_PROJECT_FILENAMES
 
 
 def candidate_config_paths() -> list[tuple[Path, str]]:
-    """(path, client) pairs for every well-known MCP config location."""
-    home = _home()
+    """(path, client_id) for every known per-user config location.
+
+    Driven entirely by the registry in clients.py, so adding a client is one
+    entry there rather than another branch here.
+    """
     out: list[tuple[Path, str]] = []
-
-    def add(p: Path | None, client: str) -> None:
-        if p is not None:
-            out.append((p, client))
-
-    # Claude Desktop
-    if sys.platform == "win32":
-        ad = _appdata()
-        add(ad / "Claude" / "claude_desktop_config.json" if ad else None, "claude-desktop")
-    elif sys.platform == "darwin":
-        add(home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",
-            "claude-desktop")
-    else:
-        add(home / ".config" / "Claude" / "claude_desktop_config.json", "claude-desktop")
-
-    # Claude Code
-    add(home / ".claude.json", "claude-code")
-    add(home / ".claude" / "settings.json", "claude-code")
-
-    # Cursor
-    add(home / ".cursor" / "mcp.json", "cursor")
-
-    # Windsurf
-    add(home / ".codeium" / "windsurf" / "mcp_config.json", "windsurf")
-
-    # Zed
-    add(home / ".config" / "zed" / "settings.json", "zed")
-
-    # Cline / Roo (VS Code extension global storage)
-    for variant in ("saoudrizwan.claude-dev", "rooveterinaryinc.roo-cline"):
-        if sys.platform == "win32":
-            ad = _appdata()
-            base = ad / "Code" / "User" / "globalStorage" if ad else None
-        elif sys.platform == "darwin":
-            base = home / "Library" / "Application Support" / "Code" / "User" / "globalStorage"
-        else:
-            base = home / ".config" / "Code" / "User" / "globalStorage"
-        if base is not None:
-            add(base / variant / "settings" / "cline_mcp_settings.json", "cline")
-
+    for client in CLIENTS:
+        for path in client.resolved_user_paths():
+            out.append((path, client.id))
     return out
 
 
-# Project-local config files, found by walking a project tree.
-PROJECT_CONFIG_NAMES: dict[str, str] = {
-    ".mcp.json": "claude-code",
-    "mcp.json": "generic",
-    "claude_desktop_config.json": "claude-desktop",
-    "mcp_config.json": "generic",
-    "cline_mcp_settings.json": "cline",
-}
+def project_relative_paths() -> list[tuple[str, str]]:
+    """(relative_path, client_id) for project-local config locations."""
+    out: list[tuple[str, str]] = []
+    for client in CLIENTS:
+        for rel in client.project_paths:
+            out.append((rel, client.id))
+    return out
 
-PROJECT_CONFIG_RELPATHS: dict[str, str] = {
-    ".cursor/mcp.json": "cursor",
-    ".vscode/mcp.json": "vscode",
-    ".zed/settings.json": "zed",
-}
 
 _SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build",
     ".mypy_cache", ".pytest_cache", ".tox", "site-packages", ".next", "target",
+    ".gradle", ".idea", "vendor", "Pods", ".terraform",
 }
 
 
 def discover_config_files(roots: Iterable[Path], scan_user: bool = True,
                           max_depth: int = 6) -> list[tuple[Path, str]]:
-    """Return (path, client) for every config file we can find."""
+    """Return (path, client_id) for every config file we can find."""
     found: dict[Path, str] = {}
 
     if scan_user:
-        for path, client in candidate_config_paths():
+        for path, client_id in candidate_config_paths():
             if path.is_file():
-                found[path.resolve()] = client
+                found[path.resolve()] = client_id
+
+    project_rels = project_relative_paths()
 
     for root in roots:
         root = Path(root).resolve()
         if root.is_file():
-            client = PROJECT_CONFIG_NAMES.get(root.name, "generic")
-            found[root] = client
+            found[root] = GENERIC_PROJECT_FILENAMES.get(root.name, "generic")
             continue
         if not root.is_dir():
             continue
-        for rel, client in PROJECT_CONFIG_RELPATHS.items():
-            p = root / rel
-            if p.is_file():
-                found[p.resolve()] = client
+
         root_depth = len(root.parts)
         for dirpath, dirnames, filenames in os.walk(root):
             here = Path(dirpath)
             if len(here.parts) - root_depth >= max_depth:
                 dirnames[:] = []
                 continue
-            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.startswith(".venv")]
+            dirnames[:] = [d for d in dirnames
+                           if d not in _SKIP_DIRS and not d.startswith(".venv")]
+
             for fn in filenames:
-                if fn in PROJECT_CONFIG_NAMES:
-                    found[(here / fn).resolve()] = PROJECT_CONFIG_NAMES[fn]
-            # .cursor/mcp.json and .vscode/mcp.json nested in subprojects
-            for rel, client in PROJECT_CONFIG_RELPATHS.items():
-                p = here / rel
-                if p.is_file():
-                    found[p.resolve()] = client
+                if fn in GENERIC_PROJECT_FILENAMES:
+                    # Do not clobber a specific attribution with the generic
+                    # one: .cursor/mcp.json is Cursor's, and the bare filename
+                    # match would otherwise relabel it "generic".
+                    resolved = (here / fn).resolve()
+                    if found.get(resolved) in (None, "generic"):
+                        found[resolved] = GENERIC_PROJECT_FILENAMES[fn]
+
+            # Client-specific project paths such as .cursor/mcp.json. Checked
+            # at every level so nested workspaces are covered too.
+            for rel, client_id in project_rels:
+                candidate = here / rel
+                if candidate.is_file():
+                    found[candidate.resolve()] = client_id  # specific wins
 
     return sorted(found.items(), key=lambda kv: str(kv[0]))

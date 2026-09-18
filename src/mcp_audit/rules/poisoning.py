@@ -297,10 +297,10 @@ _DANGEROUS_GRANT = re.compile(
 def skill_permissions(ctx: AuditContext) -> Iterable[Finding]:
     """A skill's frontmatter grants unrestricted execution."""
     for sk in ctx.skills:
-        grants = sk.frontmatter.get("allowed-tools") or sk.frontmatter.get("allowed_tools") or []
-        if isinstance(grants, str):
-            grants = [g.strip() for g in re.split(r"[,\s]+", grants) if g.strip()]
-        for grant in grants:
+        # Shared with `inspect`, so the two cannot disagree about what a
+        # grant list is.
+        from ..parsers import normalize_tool_grants
+        for grant in normalize_tool_grants(sk.frontmatter):
             grant = str(grant)
             broad = bool(_BROAD_GRANT.match(grant.strip()))
             dangerous = bool(_DANGEROUS_GRANT.search(grant))

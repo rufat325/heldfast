@@ -101,7 +101,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_scan_arguments(approve)
 
-    sub.add_parser("rules", help="list the built-in rules")
+    inspect_p = sub.add_parser(
+        "inspect",
+        help="show what is configured, without judging it",
+        description=(
+            "List the MCP servers and skills this machine has configured, grouped by "
+            "client. Reports no findings and makes no judgements. Environment values "
+            "are classified as reference/placeholder/literal and never printed."
+        ),
+    )
+    _add_scan_arguments(inspect_p)
+    inspect_p.add_argument("-f", "--format", choices=("text", "json"), default="text")
+    inspect_p.add_argument("-o", "--output", metavar="FILE")
+    inspect_p.add_argument("--no-color", action="store_true")
+
+    rules_p = sub.add_parser("rules", help="list the built-in rules")
+    rules_p.add_argument("--markdown", action="store_true",
+                         help="emit the full rule catalog as Markdown")
+    rules_p.add_argument("-o", "--output", metavar="FILE",
+                         help="write to FILE as UTF-8 instead of stdout")
+
+    explain_p = sub.add_parser(
+        "explain",
+        help="describe one rule in full",
+        description="What a check looks for, why it matters, how to fix it, and when it is wrong.",
+    )
+    explain_p.add_argument("rule_id", metavar="RULE", help="a rule id, e.g. MCPA015")
 
     sub.add_parser(
         "serve",
@@ -320,7 +345,61 @@ def cmd_approve(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def cmd_rules(_args: argparse.Namespace) -> int:
+def cmd_inspect(args: argparse.Namespace) -> int:
+    from . import inspect as inspect_mod
+
+    data = collect(args)
+    report = inspect_mod.build(data.servers, data.skills, data.tools, data.errors)
+
+    if args.format == "json":
+        import json as _json
+        text = _json.dumps(report, indent=2) + "\n"
+    else:
+        from .report.terminal import use_color
+        text = inspect_mod.render(
+            report,
+            color=False if args.no_color else use_color(),
+            verbose=args.verbose,
+        )
+
+    if args.output:
+        try:
+            Path(args.output).write_text(text, encoding="utf-8")
+        except OSError as exc:
+            print(f"mcp-audit: cannot write {args.output}: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+    else:
+        sys.stdout.write(text)
+    return EXIT_OK
+
+
+def cmd_explain(args: argparse.Namespace) -> int:
+    from . import rule_docs
+
+    rule_id = args.rule_id.upper()
+    rule = next((r for r in all_rules() if r.id == rule_id), None)
+    if rule is None:
+        print(f"mcp-audit: unknown rule id {args.rule_id!r}; run `mcp-audit rules`",
+              file=sys.stderr)
+        return EXIT_ERROR
+
+    doc = rule_docs.get(rule_id)
+    sys.stdout.write(rule_docs.render_terminal(rule, doc))
+    return EXIT_OK
+
+
+def cmd_rules(args: argparse.Namespace) -> int:
+    if getattr(args, "markdown", False):
+        from . import rule_docs
+        markdown = rule_docs.render_markdown(all_rules())
+        target = getattr(args, "output", None)
+        if target:
+            # Explicit encoding: a shell redirect on Windows picks up the
+            # console codepage and silently mangles any non-ASCII byte.
+            Path(target).write_text(markdown, encoding="utf-8")
+            return EXIT_OK
+        sys.stdout.write(markdown)
+        return EXIT_OK
     rules = all_rules()
     width = max((len(r.id) for r in rules), default=8)
     print(f"\n  {len(rules)} rules\n")
@@ -336,7 +415,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     argv = list(sys.argv[1:] if argv is None else argv)
     # Make `scan` the default command so bare `mcp-audit` and `mcp-audit .` work.
-    known = {"scan", "approve", "rules", "serve"}
+    known = {"scan", "approve", "rules", "serve", "inspect", "explain"}
     if not argv or (argv[0] not in known and not argv[0].startswith("-")):
         argv = ["scan", *argv]
     elif argv and argv[0].startswith("-") and argv[0] not in ("-h", "--help", "--version"):
@@ -346,8 +425,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "approve":
             return cmd_approve(args)
+        if args.command == "inspect":
+            return cmd_inspect(args)
         if args.command == "rules":
             return cmd_rules(args)
+        if args.command == "explain":
+            return cmd_explain(args)
         if args.command == "serve":
             from .server import main as serve_main
             return serve_main()

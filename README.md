@@ -51,12 +51,21 @@ mcp-audit scan ./my-project            # scan one project
 mcp-audit scan --no-user-configs .     # project only, skip ~/ configs
 mcp-audit scan --probe                 # also read live tool descriptions
 mcp-audit approve --probe              # write .mcp-audit.lock
+mcp-audit inspect                      # what is configured, no judgement
 mcp-audit rules                        # list rules
+mcp-audit explain MCPA015              # describe one rule in full
 mcp-audit serve                        # run as an MCP server
 ```
 
-Finds configs for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed and Cline on
-Windows, macOS and Linux, plus any `SKILL.md` files in the tree.
+Finds configs for 17 clients - Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed,
+Cline, Roo, Kilo, Continue, LM Studio, opencode, Gemini CLI, Amp, Witsy, and more - on
+Windows, macOS and Linux, plus any `SKILL.md` files in the tree. Clients whose config is
+YAML or TOML (Goose, Codex) are reported as found-but-unparsed rather than skipped silently.
+
+`mcp-audit inspect` lists all of it without reporting a single finding - useful because the
+honest first question is usually "how many MCP servers do I even have?" rather than "which
+of them are dangerous". Env values are shown as reference / placeholder / literal and never
+printed.
 
 Output is text by default. `-f json` or `-f sarif` for machines — SARIF uploads straight to
 GitHub code scanning. Findings carry MITRE ATLAS technique IDs and CWE references.
@@ -94,6 +103,9 @@ that suppressed it. They're never silently dropped — you should be able to see
 excluded. `--no-ignore` turns it off.
 
 ## Rules
+
+Full catalog with rationale, examples and known false positives: [docs/rules.md](docs/rules.md).
+`mcp-audit explain MCPA015` prints any single rule.
 
 | Rule | Severity | What |
 |---|---|---|
@@ -247,7 +259,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-110 tests, stdlib unittest, nothing to install.
+138 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

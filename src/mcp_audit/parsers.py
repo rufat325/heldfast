@@ -61,6 +61,18 @@ def _iter_server_maps(data: dict[str, Any]) -> Iterator[dict[str, Any]]:
 def parse_config(path: Path, client: str) -> tuple[list[ServerSpec], list[str]]:
     """Return (servers, errors). Errors are human-readable strings."""
     errors: list[str] = []
+
+    # Some clients keep their config in YAML or TOML. Those are discovered and
+    # reported so the user knows the file exists and is not being checked --
+    # silently skipping them would understate what is installed.
+    from .clients import BY_ID
+    client_def = BY_ID.get(client)
+    if client_def is not None and client_def.unsupported_format:
+        return [], [
+            f"{path}: {client_def.name} config is {client_def.unsupported_format}, "
+            "which this scanner does not parse; its servers were not checked"
+        ]
+
     try:
         data, raw = load_jsonc(path)
     except (ValueError, OSError) as exc:
@@ -155,6 +167,26 @@ def parse_skill(path: Path) -> SkillSpec | None:
     fm, body = _parse_frontmatter(text)
     name = str(fm.get("name") or path.parent.name if path.name.upper() == "SKILL.MD" else fm.get("name") or path.stem)
     return SkillSpec(name=name, path=str(path), frontmatter=fm, body=body)
+
+
+def normalize_tool_grants(frontmatter: dict) -> list[str]:
+    """Return allowed-tools as a list however the frontmatter spelled it.
+
+    It is legal to write either `allowed-tools: [Read, Bash]` or
+    `allowed-tools: Read, Bash`. The second form parses as a plain string, and
+    iterating a string yields characters -- which is how a skill once reported
+    that it had been granted the tool "B".
+    """
+    raw = frontmatter.get("allowed-tools")
+    if raw is None:
+        raw = frontmatter.get("allowed_tools")
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [g.strip() for g in re.split(r",\s*", raw) if g.strip()]
+    if isinstance(raw, (list, tuple)):
+        return [str(g).strip() for g in raw if str(g).strip()]
+    return [str(raw)]
 
 
 SKILL_FILENAMES = {"skill.md", "agent.md", "agents.md"}
