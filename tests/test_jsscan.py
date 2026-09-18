@@ -104,6 +104,92 @@ class TestItFires(unittest.TestCase):
         self.assertIn("shell: true", found[0].sink)
 
 
+class TestTheShapesRealHandlersAreWrittenIn(unittest.TestCase):
+    """Found by writing out the ways a TypeScript handler normally reads its
+    argument and checking each one, rather than assuming the first two were
+    the whole set. Four of nine were missed.
+
+    `const { count } = args` and `const { query } = request` both appear in
+    the official sources, so taint that stops at the destructure stops one
+    line into most handlers.
+    """
+
+    def test_destructured_from_the_argument(self) -> None:
+        self.assertTrue(flows(
+            'import { exec } from "child_process";\n'
+            'server.registerTool("go", cfg, async (args) => {\n'
+            '  const { path } = args;\n'
+            '  await exec(`cat ${path}`);\n'
+            '});\n'))
+
+    def test_destructured_with_a_rename(self) -> None:
+        """In `{ path: p }` the binding is p, not path."""
+        self.assertTrue(flows(
+            'import { exec } from "child_process";\n'
+            'server.registerTool("go", cfg, async (args) => {\n'
+            '  const { path: p } = args;\n'
+            '  await exec(`cat ${p}`);\n'
+            '});\n'))
+
+    def test_destructured_in_the_parameter_list(self) -> None:
+        self.assertTrue(flows(
+            'import { exec } from "child_process";\n'
+            'server.registerTool("go", cfg, async ({ path }) => {\n'
+            '  await exec(`cat ${path}`);\n'
+            '});\n'))
+
+    def test_delegated_to_a_named_helper(self) -> None:
+        found = flows(
+            'import { exec } from "child_process";\n'
+            'function runIt(target) {\n'
+            '  return exec(`nmap ${target}`);\n'
+            '}\n'
+            'server.registerTool("go", cfg, async (args) => {\n'
+            '  return runIt(args.target);\n'
+            '});\n')
+        self.assertEqual(1, len(found))
+        self.assertIn("runIt", found[0].via)
+        self.assertLess(found[0].confidence, 1.0)
+
+    def test_delegated_to_an_arrow_helper(self) -> None:
+        self.assertTrue(flows(
+            'import { exec } from "child_process";\n'
+            'const runIt = (target) => exec(`nmap ${target}`);\n'
+            'server.registerTool("go", cfg, async (args) => {\n'
+            '  return runIt(args.target);\n'
+            '});\n'))
+
+    def test_two_hops_are_still_not_followed(self) -> None:
+        """The same limit as the Python side, asserted so it stays a decision."""
+        self.assertEqual([], flows(
+            'import { exec } from "child_process";\n'
+            'function deep(c) { return exec(c); }\n'
+            'function mid(c) { return deep(c); }\n'
+            'server.registerTool("go", cfg, async (args) => {\n'
+            '  return mid(args.target);\n'
+            '});\n'))
+
+    def test_a_helper_that_is_handed_nothing_tainted_is_not_followed(self) -> None:
+        self.assertEqual([], flows(
+            'import { exec } from "child_process";\n'
+            'function runIt(target) { return exec(`nmap ${target}`); }\n'
+            'server.registerTool("go", cfg, async (args) => {\n'
+            '  return runIt("localhost");\n'
+            '});\n'))
+
+    def test_reassignment_and_expression_bodies(self) -> None:
+        self.assertTrue(flows(
+            'import { exec } from "child_process";\n'
+            'server.registerTool("go", cfg, async (args) => exec(`ls ${args.dir}`));\n'))
+        self.assertTrue(flows(
+            'import { exec } from "child_process";\n'
+            'server.registerTool("go", cfg, async (args) => {\n'
+            '  let cmd;\n'
+            '  cmd = `ls ${args.dir}`;\n'
+            '  await exec(cmd);\n'
+            '});\n'))
+
+
 class TestItStaysSilent(unittest.TestCase):
     """Every one of these is a line a pattern-based scanner reports."""
 

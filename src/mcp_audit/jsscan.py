@@ -462,6 +462,99 @@ def find_handlers(tokens: list[Token]) -> list[tuple[str, list[str], int, int]]:
     return out
 
 
+_NOT_A_BINDING = {"true", "false", "null", "undefined", "const", "let", "var"}
+
+
+def _destructured_names(tokens: list[Token], close_brace: int) -> list[str]:
+    """The names bound by `const { a, b: c, d = 1 } = ...`.
+
+    A key followed by `:` is the property being read; the identifier after it
+    is the name that gets bound. Real handlers are full of this -- `const
+    { count } = args` and `const { query } = request` both appear in the
+    official sources -- and taint that stops at the destructure stops one line
+    into most handlers.
+    """
+    open_brace = None
+    depth = 0
+    for j in range(close_brace, -1, -1):
+        if tokens[j].kind == "punct" and tokens[j].value == "}":
+            depth += 1
+        elif tokens[j].kind == "punct" and tokens[j].value == "{":
+            depth -= 1
+            if depth == 0:
+                open_brace = j
+                break
+    if open_brace is None:
+        return []
+
+    names: list[str] = []
+    j = open_brace + 1
+    while j < close_brace:
+        token = tokens[j]
+        if token.kind == "id" and token.value not in _NOT_A_BINDING:
+            follows = tokens[j + 1] if j + 1 < close_brace else None
+            if follows is not None and follows.kind == "punct" and follows.value == ":":
+                j += 2          # `key:` -- the binding is the next identifier
+                continue
+            names.append(token.value)
+        j += 1
+    return names
+
+
+def find_local_functions(tokens: list[Token]) -> dict[str, tuple[list[str], int, int]]:
+    """name -> (parameters, body start, body end) for functions in this file.
+
+    Handlers delegate. The Python side follows one hop into a helper for
+    exactly this reason, and stopping at the handler boundary in JavaScript
+    would miss the same shape.
+    """
+    out: dict[str, tuple[list[str], int, int]] = {}
+
+    for index, token in enumerate(tokens):
+        name = None
+        params_open = None
+
+        if token.kind == "id" and token.value == "function" and index + 2 < len(tokens):
+            if tokens[index + 1].kind == "id" and tokens[index + 2].kind == "punct" \
+                    and tokens[index + 2].value == "(":
+                name, params_open = tokens[index + 1].value, index + 2
+
+        # const runIt = (a) => ...   /   const runIt = async (a) => ...
+        elif token.kind == "punct" and token.value == "=" and index >= 1 \
+                and tokens[index - 1].kind == "id":
+            j = index + 1
+            if j < len(tokens) and tokens[j].kind == "id" and tokens[j].value == "async":
+                j += 1
+            if j < len(tokens) and tokens[j].kind == "punct" and tokens[j].value == "(":
+                name, params_open = tokens[index - 1].value, j
+
+        if name is None or params_open is None:
+            continue
+
+        params_close = _matching(tokens, params_open, "(", ")")
+        params = [t.value for t in tokens[params_open + 1:params_close]
+                  if t.kind == "id" and t.value not in _NOT_A_BINDING]
+
+        body = params_close + 1
+        while body < len(tokens) and tokens[body].kind == "punct" and \
+                tokens[body].value in ("=", ">", ":"):
+            body += 1
+        while body < len(tokens) and tokens[body].kind == "id":
+            body += 1       # a return-type annotation
+        if body >= len(tokens):
+            continue
+        if tokens[body].kind == "punct" and tokens[body].value == "{":
+            end = _matching(tokens, body, "{", "}")
+        else:
+            end = body
+            while end < len(tokens) and not (tokens[end].kind == "punct"
+                                             and tokens[end].value == ";"):
+                end += 1
+        if params:
+            out[name] = (params, body, end)
+    return out
+
+
 def analyze_js(text: str, path: str) -> list[JsFlow]:
     """Handler parameters reaching a shell, in this file."""
     try:
@@ -476,28 +569,33 @@ def analyze_js(text: str, path: str) -> list[JsFlow]:
         return []
 
     lines = text.splitlines()
+    locals_by_name = find_local_functions(tokens)
     flows: list[JsFlow] = []
     seen: set[tuple[int, str]] = set()
 
-    for registrar, params, body_start, body_end in find_handlers(tokens):
-        tainted = set(params)
-
+    def walk(registrar: str, tainted: set[str], body_start: int, body_end: int,
+             chain: tuple[str, ...] = (), depth: int = 0) -> None:
+        tainted = set(tainted)
         for k in range(body_start, body_end):
             token = tokens[k]
 
-            # const cmd = `... ${x} ...`  -- taint travels through assignment.
+            # const cmd = `... ${x} ...`  -- taint travels through assignment,
+            # and through a destructure of something already tainted.
             if token.kind == "punct" and token.value == "=" and \
                     k + 1 < body_end and not (tokens[k + 1].kind == "punct" and
-                                              tokens[k + 1].value == "="):
+                                              tokens[k + 1].value in ("=", ">")):
                 target = tokens[k - 1] if k else None
                 end = k + 1
                 while end < body_end and not (tokens[end].kind == "punct" and
                                               tokens[end].value in ";}"):
                     end += 1
-                if target is not None and target.kind == "id":
-                    if any(t.kind == "id" and t.value in tainted
-                           for t in tokens[k + 1:end]):
+                carries = any(t.kind == "id" and t.value in tainted
+                              for t in tokens[k + 1:end])
+                if carries and target is not None:
+                    if target.kind == "id":
                         tainted.add(target.value)
+                    elif target.kind == "punct" and target.value == "}":
+                        tainted.update(_destructured_names(tokens, k - 1))
 
             if not (token.kind == "punct" and token.value == "("):
                 continue
@@ -505,6 +603,17 @@ def analyze_js(text: str, path: str) -> list[JsFlow]:
             if not name:
                 continue
             leaf = name.split(".")[-1]
+
+            # A local helper handed a tainted value. One hop, like the Python
+            # side; two would need a call graph, and a half-built one reports
+            # paths that do not exist.
+            if depth < 1 and leaf in locals_by_name and leaf != registrar:
+                close = _matching(tokens, k, "(", ")")
+                if any(t.kind == "id" and t.value in tainted
+                       for t in tokens[k + 1:close]):
+                    callee_params, callee_start, callee_end = locals_by_name[leaf]
+                    walk(registrar, set(callee_params), callee_start, callee_end,
+                         chain + (leaf,), depth + 1)
 
             # Resolution comes first and the well-known name second. An alias
             # -- const run = promisify(exec) -- is a shell under a name that
@@ -551,7 +660,12 @@ def analyze_js(text: str, path: str) -> list[JsFlow]:
                 sink=(f"{name}(shell: true)"
                       if leaf in SHELL_ON_REQUEST else f"{name}()"),
                 snippet=snippet[:200],
+                via=" -> ".join((registrar,) + chain) if chain else "",
+                confidence=1.0 if not chain else 0.9,
             ))
+
+    for registrar, params, body_start, body_end in find_handlers(tokens):
+        walk(registrar, set(params), body_start, body_end)
 
     return flows
 
