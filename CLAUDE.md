@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 43 commits, 382 tests, 30 rules, CI across Linux/macOS/Windows
+complete unit. 45 commits, 396 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -125,6 +125,12 @@ The cycles, most recent last:
     policy that quietly permitted the home directory would read like a
     boundary and be a rubber stamp.
 
+21. `67860ad` — `artifacts.py` and MCPA031: the lockfile now pins a digest
+    of the scripts a server starts. MCPA016 watched the command *string*, and
+    a config line can stay byte-identical while `server.js` is rewritten.
+    Interpreters resolved from PATH are deliberately not hashed -- a rule that
+    fires on every Node patch gets turned off.
+
 ### If the loop resumes, change source
 
 **The spec is near exhausted.** The remaining unscreened methods
@@ -232,12 +238,13 @@ owner removed it deliberately. Revisit only if asked.
     guard.py        stdio proxy that enforces the lockfile at runtime
     auditlog.py     hash-chained record of a guarded session
     policy.py       argument limits for an approved tool; deterministic
+    artifacts.py    digests of the scripts a launch command actually runs
     sourcescan.py   AST taint: tool parameter -> shell, in the server's own code
     lifetime.py     ties the wrapped server's lifetime to the guard's
     server.py       mcp-audit *as* an MCP server (`serve`)
     inspect.py      what is configured, with no judgements
     llm.py          optional semantic classifier (extra: mcp-audit[llm])
-    rules/          30 rules, MCPA001–MCPA030
+    rules/          31 rules, MCPA001–MCPA031
     rule_docs.py    long-form docs; docs/rules.md is generated from this
 
 Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
