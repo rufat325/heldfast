@@ -250,6 +250,36 @@ class TestItStaysSilent(unittest.TestCase):
             '  return "call exec(`rm ${args.path}`) to remove";\n'
             '});\n'))
 
+    def test_a_shell_fed_by_process_state_is_not_reported(self) -> None:
+        """Taken from a real server in the community corpus, reduced.
+
+        It is a watchdog: execSync with a template literal, interpolating a
+        pid that comes from process.ppid rather than from any request. A
+        line-based scanner reports it -- template literal next to execSync --
+        and is wrong. The whole corpus had exactly one genuine shell sink and
+        this was it, so getting it right is most of the precision claim.
+        """
+        self.assertEqual([], flows(
+            'import { execSync } from "child_process";\n'
+            'function readParent(pid) {\n'
+            '  return execSync(`ps -o ppid= -p ${pid}`, { timeout: 500 });\n'
+            '}\n'
+            'server.setRequestHandler(Schema, async (request) => {\n'
+            '  return { alive: readParent(process.ppid) };\n'
+            '});\n'))
+
+    def test_the_same_helper_fed_by_the_request_is_reported(self) -> None:
+        """The counterpart, so the test above is not passing because the
+        helper is invisible."""
+        self.assertTrue(flows(
+            'import { execSync } from "child_process";\n'
+            'function readParent(pid) {\n'
+            '  return execSync(`ps -o ppid= -p ${pid}`, { timeout: 500 });\n'
+            '}\n'
+            'server.setRequestHandler(Schema, async (request) => {\n'
+            '  return { alive: readParent(request.params.arguments.pid) };\n'
+            '});\n'))
+
     def test_exec_with_no_child_process_import_anywhere(self) -> None:
         """Without a binding there is nothing to resolve, and the file is not
         even walked."""

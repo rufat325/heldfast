@@ -393,9 +393,26 @@ resource template binds its parameters from the URI the model asks for, and a pr
 arguments arrive in `prompts/get`. CLI entry points like `click.command` are not model
 input and are left alone.
 
-Measured against the official MCP Python SDK, the official servers repository, the official
-TypeScript SDK and FastMCP: **2,769 Python handlers across 478 files and 729 TypeScript and
-JavaScript handlers across 192 files, zero findings** and no tokenizer failures. That is a true negative rather than a blind spot — exactly one file in the
+Measured on two corpora. The official ones — the MCP Python SDK, the servers repository, the
+TypeScript SDK and FastMCP: 2,769 Python handlers and 729 TypeScript handlers. Then 74
+third-party servers sampled from the community index: another 198 Python and 654 TypeScript
+handlers, and 64 real configs harvested from their READMEs.
+
+**About 4,350 handlers, zero findings, no tokenizer failures.** On the configs, only MCPA003
+(unpinned packages, LOW, 47%) and MCPA008 (the documented 0.7-confidence auth heuristic, 3%)
+fire at all.
+
+That zero is a true negative and was checked rather than assumed. The community corpus has
+185 files importing `child_process`; exactly two both import it and register a handler. One
+passes an argv array to `execFile`. The other is a watchdog:
+
+```js
+execSync(`ps -o ppid= -p ${pid}`, { timeout: 500 })   // pid is process.ppid
+```
+
+A template literal next to `execSync` is precisely what a line-based scanner reports — and
+it would be wrong, because that pid comes from the operating system and not from any
+request. Both that shape and its tainted counterpart are in the test suite. That is a true negative rather than a blind spot — exactly one file in the
 corpus uses a shell at all, and it is the SDK's own CLI, not a handler. Across 14 security
 repositories scanned separately, 3 flows, all three inside one deliberately vulnerable
 fixture; the 38 servers wrapping nmap, sqlmap and ghidra use the argv form throughout and
@@ -727,7 +744,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-505 tests, stdlib unittest, nothing to install.
+507 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
