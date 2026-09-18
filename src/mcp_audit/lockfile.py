@@ -95,7 +95,8 @@ class Lock:
                skills: list[SkillSpec],
                prompts: list[PromptSpec] | None = None,
                resources: list[ResourceSpec] | None = None,
-               instructions: dict[str, str] | None = None) -> None:
+               instructions: dict[str, str] | None = None,
+               previous: "Lock | None" = None) -> None:
         """Replace the lock contents with the current observed state.
 
         Covers every surface a server controls that reaches the model, not
@@ -118,9 +119,16 @@ class Lock:
         # Argument policy is written by a person, not observed from a server,
         # so re-approving must not throw it away. Everything else in an entry
         # is a fact about what was seen and is rebuilt from scratch.
+        #
+        # `previous` is explicit because the CLI builds a brand-new Lock and
+        # then records into it, so reading self.servers preserved nothing and
+        # a hand-written policy was silently dropped on the next
+        # `approve --probe`. The unit test passed because it reused one object;
+        # only driving the real command line found it.
+        source = previous.servers if previous is not None else self.servers
         kept_policies = {
             key: value["policy"]
-            for key, value in self.servers.items()
+            for key, value in source.items()
             if isinstance(value, dict) and isinstance(value.get("policy"), dict)
         }
 

@@ -456,7 +456,7 @@ def cmd_approve(args: argparse.Namespace) -> int:
     lock = Lock(path=lock_path)
     lock.record(data.servers, data.tools, data.skills,
                 prompts=data.prompts, resources=data.resources,
-                instructions=data.instructions)
+                instructions=data.instructions, previous=previous)
     lock.merge_unprobed(previous)
     written = lock.save()
 
