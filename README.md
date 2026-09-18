@@ -3,9 +3,11 @@
 Security scanner for MCP server configs and agent skills. No runtime dependencies.
 
 ```bash
-uvx mcp-audit                    # scan what's configured on this machine
-uvx mcp-audit approve --probe    # record what you reviewed
-uvx mcp-audit                    # later: see what changed
+pipx install git+https://github.com/rufat325/mcp-audit
+
+mcp-audit                  # scan what's configured on this machine
+mcp-audit approve --probe  # record what you reviewed
+mcp-audit                  # later: see what changed
 ```
 
 ## Why
@@ -35,9 +37,12 @@ The config file was byte-identical across those two scans.
 ## Install
 
 ```bash
-uvx mcp-audit            # no install
-pipx install mcp-audit   # or keep it
+uvx --from git+https://github.com/rufat325/mcp-audit mcp-audit   # no install
+pipx install git+https://github.com/rufat325/mcp-audit           # or keep it
 ```
+
+Not on PyPI yet, so both commands name the repository. When it is published
+they shorten to `uvx mcp-audit` and `pipx install mcp-audit`.
 
 Python 3.9+. Zero runtime dependencies, on purpose — a supply-chain scanner that drags in a
 dependency tree is asking you to trust the thing it's auditing. The JSONC parser,
@@ -77,11 +82,13 @@ broke.
 ### CI
 
 ```yaml
-- run: uvx mcp-audit scan . --no-user-configs -f sarif -o results.sarif --fail-on never
-- uses: github/codeql-action/upload-sarif@v3
+- uses: rufat325/mcp-audit@main
   with:
-    sarif_file: results.sarif
+    fail-on: high
 ```
+
+The action installs itself from the checked-out copy, uploads SARIF to code
+scanning and writes a job summary. Inputs are in [action.yml](action.yml).
 
 There's a composite action in `action.yml` too.
 
@@ -350,7 +357,7 @@ The regex rules catch phrasings I thought of. They don't catch paraphrase, or a 
 whose prose contradicts its own schema, or an appeal to authority aimed at the agent.
 
 ```bash
-pip install 'mcp-audit[llm]'
+pipx install "mcp-audit[llm] @ git+https://github.com/rufat325/mcp-audit"
 export ANTHROPIC_API_KEY=...
 mcp-audit scan . --probe --llm
 ```
