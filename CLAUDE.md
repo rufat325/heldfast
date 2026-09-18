@@ -13,7 +13,7 @@ stdlib only, Python 3.9+. Public at https://github.com/rufat325/mcp-audit.
 ## Where this stopped
 
 **Nothing is half-finished.** Working tree clean, the last commit is a
-complete unit. 51 commits, 411 tests, 31 rules, CI across Linux/macOS/Windows
+complete unit. 53 commits, 420 tests, 31 rules, CI across Linux/macOS/Windows
 on Python 3.9/3.12/3.13 plus a wire-shape job, a job that exercises
 `action.yml` itself, and a release workflow that publishes on a version tag.
 
@@ -149,6 +149,15 @@ The cycles, most recent last:
     `@mcp.resource` and 174 `@mcp.prompt` were not. A resource template binds
     parameters from the URI the model asks for, so it is the same taint
     source. Surface went 1,938 -> 2,769 handlers, findings stayed at zero.
+
+25. `4a271e7` — harvested the 27 config examples out of the official servers
+    repo and SDKs and scanned them. 7 of 18 findings were MCPA001 on
+    `cmd /c npx ...`, which is the *only* thing Windows users can write and
+    therefore an unfixable HIGH. Exempted that exact shape; the tests prove
+    the exemption is narrow. Writing "exempting the shell must not exempt the
+    package" then found an older bug: MCPA003/004 read `cmd` as the runner and
+    gave up, so unpinned packages were silently fine on Windows. Net: 7 noise
+    findings gone, 7 genuine ones appeared.
 
 ### If the loop resumes, change source
 
@@ -313,6 +322,14 @@ Commands: `scan`, `inspect`, `approve`, `explain`, `rules`, `guard`,
   hand and has no idea which client configures which server, so it cannot tell
   a genuine collision from two servers that never meet. Take the idea, check
   the implementation, and say precisely what was wrong with it.
+- **Scan the ecosystem's own documentation.** The official servers repo and
+  SDKs are 27 real configs and ~2,800 real handlers, cost nothing to obtain,
+  and are the configuration users literally copy. A rule that fires on them is
+  a rule that fires on everybody. This is now the cheapest high-signal corpus
+  available; it lives in a scratch dir, harvested from fenced code blocks.
+- **A false positive and a false negative can share one cause.** Reading `cmd`
+  as the runner produced an unfixable HIGH *and* hid a genuine finding. Fixing
+  the noise without looking for its twin would have left the gap.
 - **The four-channels mistake is easy to make twice.** Cycle 1 learned that a
   server reaches the model through tools *and* instructions, prompts and
   resources. Sixteen cycles later `sourcescan` was written to read tool
