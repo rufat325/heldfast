@@ -143,6 +143,9 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA024 | critical | Server URL targets cloud metadata or a link-local address |
 | MCPA025 | medium | Server requests an over-broad OAuth scope |
 | MCPA026 | high | Display title misrepresents what the tool does |
+| MCPA027 | medium | Two servers in one client expose the same tool name |
+| MCPA028 | high | One server reads the home directory while another can post anywhere |
+| MCPA029 | high | Command allowlist includes a binary that runs arbitrary commands |
 
 MCPA010 treats skill bodies differently from tool descriptions. A SKILL.md is *supposed* to
 give the agent instructions, so imperative mood there is normal. In a tool description it
@@ -454,7 +457,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-287 tests, stdlib unittest, nothing to install.
+312 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

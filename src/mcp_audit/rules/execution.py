@@ -319,3 +319,115 @@ def typosquat(ctx: AuditContext) -> Iterable[Finding]:
             cwe=["CWE-1357"],
             tags=["supply-chain", "typosquat"],
         )
+
+
+# An allowlist is only a restriction if the binaries on it cannot themselves be
+# told to run something else. Each of these takes an argument, or reads a
+# config key, that executes an arbitrary command -- so a server that checks
+# argv[0] against a list containing any of them has a control that does not
+# control anything.
+ARGUMENT_EXECUTION_PRIMITIVES = {
+    "git": "-c alias.x='!cmd', -c core.fsmonitor=cmd and -c diff.external=cmd all run a command",
+    "find": "-exec and -execdir run a command per matched file",
+    "tar": "--checkpoint-action=exec=cmd and --to-command=cmd run a command",
+    "ssh": "-o ProxyCommand=cmd and -o LocalCommand=cmd run a command on this host",
+    "rsync": "-e cmd and --rsync-path=cmd run a command",
+    "awk": "BEGIN { system(\"cmd\") } runs a command",
+    "gawk": "BEGIN { system(\"cmd\") } runs a command",
+    "sed": "GNU sed's e flag (s/x/cmd/e) runs a command",
+    "vim": "-c ':!cmd' runs a command",
+    "env": "env cmd execs anything, so argv[0] is only ever 'env'",
+    "xargs": "xargs cmd execs an arbitrary command",
+    "nice": "nice cmd execs an arbitrary command",
+    "timeout": "timeout N cmd execs an arbitrary command",
+    "node": "-e '<code>' evaluates JavaScript, including child_process",
+    "python": "-c '<code>' evaluates Python, including os.system",
+    "python3": "-c '<code>' evaluates Python, including os.system",
+    "perl": "-e '<code>' evaluates Perl, including system()",
+    "ruby": "-e '<code>' evaluates Ruby, including system()",
+    "php": "-r '<code>' evaluates PHP, including shell_exec()",
+    "npm": "run-script executes whatever package.json defines",
+    "npx": "-c '<script>' runs a command string",
+    "make": "-f - reads a makefile from stdin and runs its recipes",
+    "docker": "run --privileged -v /:/host mounts and executes on the host",
+}
+
+# Whether an env var names an allowlist is decided on whole tokens, never on
+# substrings: DISALLOWED_COMMANDS contains the letters of ALLOW, and reading it
+# as an allowlist would invert the meaning of a denylist.
+_ALLOW_TOKENS = {"ALLOW", "ALLOWED", "ALLOWLIST", "WHITELIST", "PERMIT",
+                 "PERMITTED", "SAFE"}
+_DENY_TOKENS = {"DISALLOW", "DISALLOWED", "DENY", "DENIED", "DENYLIST", "BLOCK",
+                "BLOCKED", "BLOCKLIST", "BLACKLIST", "FORBID", "FORBIDDEN",
+                "EXCLUDE", "EXCLUDED", "NO", "NOT", "NEVER", "UNSAFE"}
+# TOOL/TOOLS are deliberately absent. In this ecosystem a "tool" is an agent
+# tool, not a binary, and ALLOWED_TOOLS=Bash is MCPA013's subject. Two rules
+# describing one fact in different words is how a catalog stops being read.
+_SUBJECT_TOKENS = {"COMMAND", "COMMANDS", "CMD", "CMDS", "BIN", "BINARY",
+                   "BINARIES", "EXEC", "EXECUTABLE", "EXECUTABLES",
+                   "PROGRAM", "PROGRAMS", "SHELL"}
+
+_LIST_SEPARATORS = re.compile(r"[,;:\s]+")
+
+
+def _is_command_allowlist(key: str) -> bool:
+    tokens = {t for t in re.split(r"[^A-Za-z]+", key.upper()) if t}
+    if tokens & _DENY_TOKENS:
+        return False
+    return bool(tokens & _ALLOW_TOKENS) and bool(tokens & _SUBJECT_TOKENS)
+
+
+def _allowlist_entries(value: str) -> list[str]:
+    """Binary names from an allowlist value, however it is punctuated."""
+    out = []
+    for piece in _LIST_SEPARATORS.split(value or ""):
+        piece = piece.strip().strip("\"'")
+        if not piece:
+            continue
+        # An entry may be a path; the allowlist check upstream compares the
+        # binary, so that is what matters here too.
+        name = piece.replace("\\", "/").rsplit("/", 1)[-1]
+        if name.lower().endswith(".exe"):
+            name = name[:-4]
+        out.append(name.lower())
+    return out
+
+
+@rule("MCPA029", "Command allowlist includes a binary that runs arbitrary commands",
+      Severity.HIGH)
+def allowlist_bypass(ctx: AuditContext) -> Iterable[Finding]:
+    """An allowlist naming git, find or env does not restrict anything."""
+    for s in _active(ctx):
+        for key, value in (s.env or {}).items():
+            if not _is_command_allowlist(str(key)):
+                continue
+            hits = []
+            for name in _allowlist_entries(str(value)):
+                if name in SHELL_BINARIES:
+                    hits.append((name, "a shell runs whatever string it is given"))
+                elif name in ARGUMENT_EXECUTION_PRIMITIVES:
+                    hits.append((name, ARGUMENT_EXECUTION_PRIMITIVES[name]))
+            if not hits:
+                continue
+
+            listed = ", ".join(f"{n} ({why})" for n, why in hits[:3])
+            yield Finding(
+                rule_id="MCPA029",
+                title="Command allowlist includes a binary that runs arbitrary commands",
+                severity=Severity.HIGH,
+                location=_server_location(s),
+                evidence=(
+                    f"{key} permits {len(hits)} binary(ies) that execute anything: {listed}"
+                ),
+                remediation=(
+                    "Remove those entries, or stop relying on the allowlist as the "
+                    "boundary. A check on the binary name is only a restriction while "
+                    "every name on the list can do one thing; these each take an "
+                    "argument that runs a command of the caller's choosing, so the "
+                    "allowlist permits everything while appearing to permit little."
+                ),
+                server=s.name,
+                atlas=["AML.T0053"],
+                cwe=["CWE-183"],
+                tags=["execution", "allowlist"],
+            )

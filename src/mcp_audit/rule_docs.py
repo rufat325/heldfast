@@ -320,6 +320,64 @@ DOCS: dict[str, RuleDoc] = {
                    "such as \"Records\" is not a claim either way and is left alone, and a "
                    "title that admits the mutation is quiet.",
     ),
+    "MCPA027": RuleDoc(
+        what="Two servers configured in the same client that each expose a tool with the "
+             "same name.",
+        why="The agent selects a tool by name. When two definitions answer to one name, "
+            "nothing in the protocol says which the client should offer or which the model "
+            "will pick, and the user approving a call sees the name rather than the server "
+            "behind it. A server added later can take a name a trusted server already had "
+            "and answer calls meant for it.",
+        example='"notes" exposes read_file; "helper" added later also exposes read_file',
+        fix="Decide which server owns the name and rename or remove the other tool. Where "
+            "a client supports per-server tool prefixes, turn them on.",
+        wrong_when="Generic names collide honestly -- two unrelated servers may each have a "
+                   "`search`. The finding is that the ambiguity exists, not that either "
+                   "server is hostile, so it is medium rather than high. It needs --probe, "
+                   "since tool names are not in the config, and it only fires inside one "
+                   "client: two servers in different clients are two different agents and "
+                   "cannot compete for a call.",
+    ),
+    "MCPA028": RuleDoc(
+        what="One server granted the user's home directory (or a credential directory such "
+             "as ~/.ssh or ~/.aws) while another server in the same client exposes a tool "
+             "whose schema takes a caller-chosen destination such as `url` or `webhook`.",
+        why="Neither server is misconfigured on its own, and every per-server scanner will "
+            "pass both. The reach belongs to the pair: one agent can read a private key "
+            "with the first and post it with the second, so anything that can steer that "
+            "agent -- a poisoned tool description, a malicious document, an injected web "
+            "page -- has a complete exfiltration path without exploiting anything.",
+        example='filesystem server rooted at "~" alongside a fetch server whose tool '
+                'accepts {"url": ...}',
+        fix="Scope the filesystem server to the directory you actually work in. A root of "
+            "~/projects instead of ~ removes the path without removing either server.",
+        wrong_when="Capability is read from the launch command and the declared schema, "
+                   "never from description prose, so a tool is only counted as a "
+                   "destination when its schema really takes one. A filesystem server "
+                   "already scoped to a project directory is not reported at all. It still "
+                   "describes a possibility rather than an event: if you accept the risk "
+                   "for a machine that holds nothing sensitive, suppress it.",
+    ),
+    "MCPA029": RuleDoc(
+        what="An environment variable naming a command allowlist whose value includes a "
+             "binary that can be told to run something else -- git, find, tar, env, xargs, "
+             "awk, node, python and similar.",
+        why="Servers commonly restrict what they will execute by checking the binary name "
+            "against a list. That is only a restriction while every name on the list does "
+            "one thing. `git -c alias.x='!cmd'`, `find -exec`, `tar "
+            "--checkpoint-action=exec=`, `env cmd` and `node -e` each run an arbitrary "
+            "command, so the allowlist permits everything while appearing to permit very "
+            "little -- and it is trusted precisely because it looks narrow.",
+        example='"env": {"ALLOWED_COMMANDS": "ls,cat,git"}',
+        fix="Remove those entries, or stop treating the allowlist as the boundary and "
+            "sandbox the server instead. If git really is needed, the check has to "
+            "inspect the whole argument list, not argv[0].",
+        wrong_when="Whether a variable names an allowlist is decided on whole tokens, so "
+                   "DISALLOWED_COMMANDS and BLOCKED_BINARIES are read as denylists and "
+                   "left alone -- substring matching would invert their meaning, since "
+                   "DISALLOW contains ALLOW. A server that does inspect full argv is still "
+                   "flagged; the rule can see the list but not the checker.",
+    ),
 }
 
 
