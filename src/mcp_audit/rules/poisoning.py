@@ -9,6 +9,13 @@ A note on false positives: a SKILL.md is *supposed* to instruct the agent, so
 imperative mood there is normal and is not flagged. In a tool description it
 is anomalous. The `strict` flag below encodes that difference, and it is the
 main reason this scanner can run on skills without drowning the user.
+
+A signal for "addresses the agent directly" used to live here and was
+removed. Measured against live servers it fired on
+"Use this tool when you need to answer questions about..." -- which is not
+merely acceptable phrasing for a tool description, it is the recommended
+phrasing. A signal that flags the canonical good example is not a weak
+signal, it is a wrong one.
 """
 
 from __future__ import annotations
@@ -94,16 +101,6 @@ SIGNALS: list[Signal] = [
         ),
         Severity.CRITICAL, 0.85, True,
         "directs data to an external destination",
-    ),
-    Signal(
-        "agent-addressed-imperative",
-        re.compile(
-            r"\b(?:you\s+(?:must|should|need\s+to|are\s+required\s+to)|"
-            r"it\s+is\s+(?:essential|mandatory|critical|imperative)\s+that\s+you)\b",
-            re.IGNORECASE,
-        ),
-        Severity.MEDIUM, 0.5, False,
-        "addresses the agent directly rather than describing the tool",
     ),
 ]
 

@@ -377,6 +377,27 @@ def _post_jsonrpc(url: str, headers: dict[str, str], payload: dict[str, Any],
         return {}
 
 
+def _describe_connection_error(exc: Exception) -> str:
+    """Describe a failed connection without blaming the wrong party.
+
+    A TLS verification failure reads like the server's fault and often is not.
+    Measured against 15 real public MCP endpoints, seven reported "certificate
+    has expired" while every certificate in their chains was in date -- the
+    local OpenSSL CA bundle was stale. Reporting that as a server problem
+    would have been a false positive on nearly half of them, so the message
+    names the other possibility explicitly.
+    """
+    text = str(exc)
+    if "CERTIFICATE_VERIFY_FAILED" in text or "SSLCertVerificationError" in text:
+        detail = text.split("certificate verify failed:", 1)[-1].strip(" )]'\"")
+        return (
+            f"TLS verification failed ({detail or 'no detail'}). This may be the server's "
+            "certificate or a stale CA bundle on this machine -- check with `openssl "
+            "s_client -connect HOST:443` before treating it as a server fault."
+        )
+    return f"connection failed: {exc}"
+
+
 def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
     if not s.url:
         return ProbeResult(s.name, [], "no url configured")
@@ -423,7 +444,7 @@ def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
     except urllib.error.HTTPError as exc:
         return ProbeResult(s.name, [], f"HTTP {exc.code} {exc.reason}")
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        return ProbeResult(s.name, [], f"connection failed: {exc}")
+        return ProbeResult(s.name, [], _describe_connection_error(exc))
 
 
 def probe(servers: list[ServerSpec], *, timeout: float = 20.0,

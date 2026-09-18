@@ -29,21 +29,27 @@ from typing import Iterable
 from ..findings import Finding, Location, Severity
 from .base import AuditContext, rule
 
-# Verbs that indicate a tool changes something. Deliberately conservative:
-# every one of these is a mutation in ordinary usage, so a read-only claim
-# alongside one is a contradiction rather than a matter of taste.
+# Verbs that destroy or revoke, in essentially any context.
 #
-# Inflections are generated rather than listed, because the first version
-# matched "remove" and missed "removes", which is the form a description is
-# far more likely to use.
+# The first version of this list was far broader -- run, execute, send, post,
+# publish, create, write, update, charge and so on. Measured against 56 tools
+# on four live servers it fired on 27% of them and essentially every hit was
+# wrong: "charges" in billing prose, "runs" in a verification tool, and a
+# documentation search tool whose description explains that it is read-only
+# and that "nothing runs on the user's computer".
+#
+# What survives is the set whose meaning does not depend on the object. You
+# cannot delete, purge or revoke something benignly. Words like `remove` and
+# `update` were dropped even though they are sometimes destructive, because
+# `remove_background` on an image is a pure function and the rule cannot tell
+# the difference.
+#
+# Recall is much lower and precision is the point: a rule that fires on a
+# quarter of ordinary tools teaches people to ignore it.
 MUTATING_VERBS = (
-    "delete", "remove", "destroy", "drop", "purge", "truncate", "erase", "wipe",
-    "write", "create", "insert", "update", "modify", "edit", "patch", "replace",
-    "rename", "move", "execute", "exec", "run", "spawn", "eval",
-    "send", "post", "publish", "deploy", "install", "uninstall", "upgrade",
-    "revoke", "grant", "transfer", "pay", "charge", "refund",
-    "kill", "terminate", "shutdown", "restart", "reboot", "format",
-    "chmod", "chown", "overwrite", "append", "push", "commit", "merge", "reset",
+    "delete", "destroy", "purge", "truncate", "erase", "wipe",
+    "uninstall", "revoke", "terminate", "shutdown", "reboot",
+    "chmod", "chown", "overwrite",
 )
 
 
@@ -89,23 +95,16 @@ def read_only_contradiction(ctx: AuditContext) -> Iterable[Finding]:
         if not (tool.claims_read_only or tool.claims_non_destructive):
             continue
 
+        # Name only. The description path was measured against four live
+        # servers and produced 14 hits, every one of them wrong -- prose
+        # mentions destructive words constantly, including when explaining
+        # that a tool does not do them.
         in_name = _name_terms(tool.name)
-        in_description = _mutating_terms(tool.description)
-        if not in_name and not in_description:
+        if not in_name:
             continue
-
-        # A verb in the name is decisive; one only in the prose might be
-        # describing what the tool avoids ("does not delete anything"), so it
-        # scores lower and says so.
-        if in_name:
-            severity = Severity.HIGH
-            confidence = 0.9
-            evidence_bit = f"its name contains {', '.join(repr(t) for t in in_name)}"
-        else:
-            severity = Severity.MEDIUM
-            confidence = 0.55
-            evidence_bit = (f"its description contains "
-                            f"{', '.join(repr(t) for t in in_description[:4])}")
+        severity = Severity.HIGH
+        confidence = 0.9
+        evidence_bit = f"its name contains {', '.join(repr(t) for t in in_name)}"
 
         claim = "readOnlyHint: true" if tool.claims_read_only else "destructiveHint: false"
         path, line = declared.get(tool.server, ("", 0))

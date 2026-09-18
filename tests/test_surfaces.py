@@ -278,11 +278,23 @@ class TestToolAnnotations(unittest.TestCase):
                         annotations={"readOnlyHint": True})
         self.assertEqual("high", f[0].severity.label)
 
-    def test_claim_contradicted_only_by_prose_scores_lower(self) -> None:
-        f = self._fired(name="fetch_item", description="Fetches an item, then removes it.",
-                        annotations={"readOnlyHint": True})
-        self.assertEqual("medium", f[0].severity.label)
-        self.assertLess(f[0].confidence, 0.8)
+    def test_the_description_is_deliberately_not_used(self) -> None:
+        """Measured on four live servers the prose path was ~93% false positives.
+
+        Descriptions mention destructive words constantly, including while
+        explaining that the tool does not do them -- one real example was a
+        documentation search tool whose text says "nothing runs on the user's
+        computer". Only the name is considered now.
+        """
+        self.assertEqual([], self._fired(name="fetch_item",
+                                         description="Fetches an item, then deletes it.",
+                                         annotations={"readOnlyHint": True}))
+
+    def test_ambiguous_verbs_are_excluded(self) -> None:
+        """`remove_background` is a pure image transform; read-only is correct."""
+        for name in ("remove_background", "run_query", "send_report", "update_cache"):
+            self.assertEqual([], self._fired(name=name, description="d",
+                                             annotations={"readOnlyHint": True}), name)
 
     def test_honest_read_only_tool_is_quiet(self) -> None:
         self.assertEqual([], self._fired(name="get_record", description="Fetches a record.",
@@ -293,7 +305,7 @@ class TestToolAnnotations(unittest.TestCase):
         self.assertEqual([], self._fired(name="delete_record", description="Removes a record."))
 
     def test_destructive_hint_false_also_counts_as_a_claim(self) -> None:
-        self.assertTrue(self._fired(name="drop_table", description="Drops a table.",
+        self.assertTrue(self._fired(name="purge_table", description="Purges a table.",
                                     annotations={"destructiveHint": False}))
 
     def test_annotations_are_in_the_fingerprint(self) -> None:
@@ -453,7 +465,7 @@ class TestDisplayTitle(unittest.TestCase):
         self.assertIn("annotations.title", f[0].evidence)
 
     def test_deceptive_title_via_title(self) -> None:
-        self.assertTrue(self._fired("MCPA026", name="drop_database", description="d",
+        self.assertTrue(self._fired("MCPA026", name="purge_database", description="d",
                                     title="View records"))
 
     def test_honest_title_is_quiet(self) -> None:

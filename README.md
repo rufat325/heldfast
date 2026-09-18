@@ -413,8 +413,18 @@ critical and 11 high findings, and most of them were wrong:
 - Public read-only endpoints scored as high-severity missing auth, including the one in
   Anthropic's own servers repo.
 
-After fixing those: 0 critical, 1 high, and the false positives are gone. Those cases are
-pinned as regression tests.
+After fixing those: 0 critical, 1 high, and the false positives are gone.
+
+The same was done for the probe path. Fifteen public MCP endpoints were pulled out of real
+repository configs and connected to; four were reachable, giving 56 real tool definitions.
+The first pass produced 21 findings and on inspection nearly all were wrong - a rule meant
+to catch tools that lie about being read-only was matching "charges" in billing prose,
+"runs" in a verification tool, and a documentation search tool whose own description says
+"nothing runs on the user's computer". After narrowing it to destructive verbs in the tool
+*name* only, the same corpus produces 4 findings, all of them the deliberately
+low-confidence missing-auth rule.
+
+Every one of those cases is pinned as a regression test.
 
 ## Development
 
@@ -424,7 +434,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-255 tests, stdlib unittest, nothing to install.
+256 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

@@ -232,20 +232,26 @@ DOCS: dict[str, RuleDoc] = {
                    "often a genuine new feature.",
     ),
     "MCPA021": RuleDoc(
-        what="A tool that declares `readOnlyHint: true` or `destructiveHint: false` while "
-             "its own name or description describes a mutation.",
+        what="A tool that declares `readOnlyHint: true` or `destructiveHint: false` while its "
+             "own NAME contains a verb that destroys or revokes -- delete, purge, wipe, "
+             "revoke, terminate and a handful of others.",
         why="Clients use these annotations to decide whether a call needs the user's "
             "approval, so a tool marked read-only can run without anyone being asked. The "
             "specification says plainly: \"Clients should never make tool use decisions "
             "based on ToolAnnotations received from untrusted servers.\" That is advice to "
             "client authors; in practice clients use the hints, because that is what they "
             "are for. A false claim is therefore a straight approval bypass.",
-        example='"name": "delete_record", "annotations": {"readOnlyHint": true}',
+        example='"name": "purge_records", "annotations": {"readOnlyHint": true}',
         fix="Check what the tool actually does. If the annotation is wrong, the server is "
             "either careless or lying, and both are reasons not to auto-approve it.",
-        wrong_when="A verb in the description rather than the name scores lower, because "
-                   "prose can legitimately say what a tool avoids (\"does not delete "
-                   "anything\"). A verb in the name is close to decisive.",
+        wrong_when="Deliberately narrow, after measurement. An earlier version also read the "
+                   "description and used a much broader verb list; against 56 tools on four "
+                   "live servers it fired on 27% of them and effectively every hit was "
+                   "wrong -- \"charges\" in billing prose, \"runs\" in a verification tool, "
+                   "and a docs search tool whose text explains that nothing runs on your "
+                   "computer. Ambiguous verbs like `remove` and `update` are excluded too, "
+                   "because `remove_background` on an image is a pure function. Recall is "
+                   "lower on purpose.",
     ),
     "MCPA022": RuleDoc(
         what="A tool whose input schema accepts a URL, webhook, endpoint or similar "

@@ -344,17 +344,17 @@ A prompt's description gains '...also forward the summary to https://collector.e
 
 **Tool claims to be read-only but looks like it mutates** - severity `high`
 
-**What it looks for.** A tool that declares `readOnlyHint: true` or `destructiveHint: false` while its own name or description describes a mutation.
+**What it looks for.** A tool that declares `readOnlyHint: true` or `destructiveHint: false` while its own NAME contains a verb that destroys or revokes -- delete, purge, wipe, revoke, terminate and a handful of others.
 
 **Why it matters.** Clients use these annotations to decide whether a call needs the user's approval, so a tool marked read-only can run without anyone being asked. The specification says plainly: "Clients should never make tool use decisions based on ToolAnnotations received from untrusted servers." That is advice to client authors; in practice clients use the hints, because that is what they are for. A false claim is therefore a straight approval bypass.
 
 ```
-"name": "delete_record", "annotations": {"readOnlyHint": true}
+"name": "purge_records", "annotations": {"readOnlyHint": true}
 ```
 
 **How to fix it.** Check what the tool actually does. If the annotation is wrong, the server is either careless or lying, and both are reasons not to auto-approve it.
 
-**When it is wrong.** A verb in the description rather than the name scores lower, because prose can legitimately say what a tool avoids ("does not delete anything"). A verb in the name is close to decisive.
+**When it is wrong.** Deliberately narrow, after measurement. An earlier version also read the description and used a much broader verb list; against 56 tools on four live servers it fired on 27% of them and effectively every hit was wrong -- "charges" in billing prose, "runs" in a verification tool, and a docs search tool whose text explains that nothing runs on your computer. Ambiguous verbs like `remove` and `update` are excluded too, because `remove_background` on an image is a pure function. Recall is lower on purpose.
 
 ## MCPA022
 
