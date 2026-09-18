@@ -288,14 +288,6 @@ critical and 11 high findings, and most of them were wrong:
 After fixing those: 0 critical, 1 high, and the false positives are gone. Those cases are
 pinned as regression tests.
 
-## Prior art
-
-[snyk/agent-scan](https://github.com/snyk/agent-scan) (which absorbed Invariant Labs'
-mcp-scan) covers a lot of the same ground, with real threat intelligence behind it, and it's
-free. If you want maximum detection coverage, use that. I'd run both — they overlap, but
-mcp-audit emits SARIF, maps findings to ATLAS, has zero dependencies, and takes
-contributions.
-
 ## Development
 
 ```bash
