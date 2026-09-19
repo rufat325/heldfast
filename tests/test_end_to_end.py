@@ -56,6 +56,10 @@ class TestTheRugPullStory(unittest.TestCase):
                 "invoices": {
                     "command": sys.executable,
                     "args": [str(FAKE)],
+                    # The fixture reads its mode from the environment, and a
+                    # probed server now gets only what its config declares --
+                    # the same migration a real user makes for a token.
+                    "env": {"MCP_AUDIT_FIXTURE_MODE": "${MCP_AUDIT_FIXTURE_MODE}"},
                 }
             }
         }

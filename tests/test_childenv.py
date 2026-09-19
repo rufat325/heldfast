@@ -164,6 +164,71 @@ class TestTheBaseSetItself(unittest.TestCase):
         self.assertTrue(all(n == n.upper() for n in BASE))
 
 
+class TestTheProbeIsolatesToo(unittest.TestCase):
+    """The riskier of the two launches.
+
+    The gateway starts servers that were approved. Probing is the operation
+    that launches code *before* anyone has reviewed it -- that is why it is
+    opt-in and why it is gated by severity. Handing a config pasted out of a
+    README every secret in the environment, in order to find out whether it is
+    hostile, is the wrong order to do things in.
+    """
+
+    def setUp(self) -> None:
+        import os
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self.project = Path(self._tmp.name)
+        # A server that reports back which secrets it could see.
+        (self.project / "peek.py").write_text(
+            "import json, os, sys\n"
+            "seen = [k for k in ('SNOOP_TOKEN', 'DECLARED_TOKEN') if k in os.environ]\n"
+            "for line in sys.stdin:\n"
+            "    line = line.strip()\n"
+            "    if not line:\n"
+            "        continue\n"
+            "    req = json.loads(line)\n"
+            "    rid, method = req.get('id'), req.get('method')\n"
+            "    if method == 'initialize':\n"
+            "        out = {'protocolVersion': '2024-11-05', 'capabilities': {},\n"
+            "               'serverInfo': {'name': 'peek', 'version': '1'}}\n"
+            "    elif method == 'tools/list':\n"
+            "        out = {'tools': [{'name': 'saw_' + ('_'.join(seen) or 'nothing'),\n"
+            "                          'description': 'Reports.', 'inputSchema': {}}]}\n"
+            "    elif rid is None:\n"
+            "        continue\n"
+            "    else:\n"
+            "        out = {}\n"
+            "    sys.stdout.write(json.dumps({'jsonrpc': '2.0', 'id': rid,\n"
+            "                                 'result': out}) + '\\n')\n"
+            "    sys.stdout.flush()\n",
+            encoding="utf-8")
+        os.environ["SNOOP_TOKEN"] = "should-not-be-seen"
+        os.environ["DECLARED_TOKEN"] = "declared-value"
+
+    def tearDown(self) -> None:
+        import os
+        for name in ("SNOOP_TOKEN", "DECLARED_TOKEN"):
+            os.environ.pop(name, None)
+        self._tmp.cleanup()
+
+    def _probe(self, **env) -> str:
+        from mcp_audit.probe import probe_stdio
+        s = ServerSpec(name="peek", source=str(self.project / ".mcp.json"),
+                       client="claude-code", transport="stdio",
+                       command=sys.executable,
+                       args=[str(self.project / "peek.py")], env=env)
+        result = probe_stdio(s, timeout=30.0)
+        return result.tools[0].name if result.tools else f"<no tools: {result.error}>"
+
+    def test_an_undeclared_secret_does_not_reach_a_probed_server(self) -> None:
+        self.assertEqual("saw_nothing", self._probe())
+
+    def test_a_declared_one_does(self) -> None:
+        self.assertEqual("saw_DECLARED_TOKEN",
+                         self._probe(DECLARED_TOKEN="${DECLARED_TOKEN}"))
+
+
 class TestMalformedInput(unittest.TestCase):
     def test_nothing_raises(self) -> None:
         class Odd:

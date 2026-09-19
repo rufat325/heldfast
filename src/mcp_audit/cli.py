@@ -50,6 +50,11 @@ def _add_scan_arguments(p: argparse.ArgumentParser) -> None:
                    help=f"approval lockfile (default: ./{DEFAULT_LOCK_NAME})")
     p.add_argument("--depth", type=int, default=6, metavar="N",
                    help="maximum directory depth when walking paths (default: 6)")
+    p.add_argument("--share-env", metavar="NAME", action="append", default=[],
+                   help="with --probe, also pass this environment variable to the "
+                        "servers being launched (repeatable). By default a probed "
+                        "server gets what its config declares plus the infrastructure "
+                        "it needs, and none of your other credentials")
     p.add_argument("-v", "--verbose", action="store_true")
 
 
@@ -496,6 +501,7 @@ def collect(args: argparse.Namespace) -> Collected:
             timeout=args.probe_timeout,
             allow_stdio=not args.no_stdio_probe,
             verbose=args.verbose,
+            share_env=set(getattr(args, "share_env", None) or []),
         )
         out.probed = True
         for res in results:

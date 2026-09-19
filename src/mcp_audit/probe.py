@@ -27,6 +27,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
+from .childenv import build as build_child_env
 from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec
 
 # The current protocol revision. Kept alongside the legacy one because the
@@ -141,12 +142,20 @@ def _parse_tools(server: str, payload: dict[str, Any]) -> list[ToolSpec]:
 # STDIO
 # ---------------------------------------------------------------------------
 
-def probe_stdio(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
+def probe_stdio(s: ServerSpec, timeout: float = 20.0,
+                share_env: set | None = None) -> ProbeResult:
     if not s.command:
         return ProbeResult(s.name, [], "no command configured")
     exe = shutil.which(s.command) or s.command
-    env = dict(os.environ)
-    env.update(s.env)
+    # A server being probed gets what it declared and the infrastructure it
+    # needs to run -- not every token on the machine.
+    #
+    # This matters more here than at the gateway. The gateway starts servers
+    # that were approved; probing is the operation that launches code *before*
+    # anyone has reviewed it, which is the whole reason it is opt-in. Handing
+    # a config pasted from a README every secret in the environment, in order
+    # to find out whether it is hostile, is the wrong order to do things in.
+    env, _ = build_child_env(s, share=share_env)
     # Servers commonly buffer stdout when they think they are not on a tty.
     env.setdefault("PYTHONUNBUFFERED", "1")
 
@@ -464,7 +473,8 @@ def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
 
 
 def probe(servers: list[ServerSpec], *, timeout: float = 20.0,
-          allow_stdio: bool = True, verbose: bool = False) -> list[ProbeResult]:
+          allow_stdio: bool = True, verbose: bool = False,
+          share_env: set | None = None) -> list[ProbeResult]:
     results: list[ProbeResult] = []
     for s in servers:
         if s.disabled:
@@ -474,7 +484,7 @@ def probe(servers: list[ServerSpec], *, timeout: float = 20.0,
         if s.is_remote:
             results.append(probe_http(s, timeout))
         elif allow_stdio:
-            results.append(probe_stdio(s, timeout))
+            results.append(probe_stdio(s, timeout, share_env=share_env))
         else:
             results.append(ProbeResult(s.name, [], "stdio probing disabled"))
     return results

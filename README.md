@@ -102,6 +102,13 @@ not probed  claude-code:evil -- MCPA002 (critical) -- Remote code fetched and pi
             to an interpreter. Re-run with --probe-gate off to launch it anyway.
 ```
 
+A probed server also gets only what its config declares plus the infrastructure it needs to
+run — not every token in your environment. That ordering matters more here than anywhere
+else: probing is the operation that launches code *before* anyone has reviewed it, and
+handing a config pasted out of a README every secret on the machine, in order to find out
+whether it is hostile, is the wrong way round. `--share-env NAME` passes one through if a
+server genuinely needs it to start.
+
 That helps and does not solve it, which is worth saying plainly: a server can be statically
 unremarkable and still hostile, and reading its live tools means running it. So `--safe`
 executes nothing and connects to nothing whatever else is asked for, and says that it
@@ -1096,7 +1103,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-770 tests, stdlib unittest, nothing to install.
+772 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
