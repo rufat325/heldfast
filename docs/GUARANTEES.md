@@ -33,6 +33,8 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-GOLDEN | The known-bad fixture still produces the pinned set of rule IDs. A rule that goes quiet is a bug. | `tests/test_golden_findings.py` |
 | T-MUTATION | Every catalogued fail-open edit of policy, fingerprint or JSONC is observed as a hole. Survival fails CI. | `tests/test_mutation.py` |
 | T-TRACE | Guard and gateway still emit the pinned JSON-RPC conversations (allow, deny, banner-before-frame, rewrite-after-N). | `tests/test_golden_traces.py` |
+| T-TYPES | `policy.py`, `lockfile.py`, `model.py` and `findings.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
+| T-SIZE | Functions in `cli.py` and `guard.py` fit on one page (60 lines). | `tests/test_function_size.py` |
 | T-WHEEL | The published wheel has no runtime dependencies. | `.github/workflows/release.yml` |
 | T-REDACT | Findings cannot carry a live credential or a control character that rewrites the report. | `tests/test_output_integrity.py` |
 
@@ -70,4 +72,4 @@ undemonstrated.
 1. Change the test first, watch it fail.
 2. Change the code.
 3. Update this file in the same commit.
-4. Do not add MCPA036 until T-GOLDEN, T-ATTACK, T-MUTATION, T-TRACE and T-POLICY-* are green.
+4. Do not add MCPA036 until T-GOLDEN, T-ATTACK, T-MUTATION, T-TRACE, T-TYPES, T-SIZE and T-POLICY-* are green.

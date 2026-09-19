@@ -94,7 +94,7 @@ class Finding:
             self.location = replace(
                 self.location, snippet=safe_name(redact(self.location.snippet)))
 
-    def key(self) -> tuple:
+    def key(self) -> tuple[str, str, str, int, str]:
         """Identity for dedup and for baseline suppression."""
         return (self.rule_id, self.server or "", self.location.path,
                 self.location.line, self.evidence)

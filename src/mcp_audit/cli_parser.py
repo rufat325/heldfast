@@ -1,0 +1,392 @@
+"""Flag definitions for the command line.
+
+Kept off `cli.py` so adding a command is one function here rather than
+another hundred lines in the file that also runs the commands. The
+behaviour is identical: `cli.build_parser` is this module's `build_parser`.
+"""
+
+from __future__ import annotations
+
+import argparse
+
+from . import __version__
+from . import llm as llm_mod
+from . import suppressions as supp
+from .findings import Severity
+from .lockfile import DEFAULT_LOCK_NAME
+
+
+def _add_scan_arguments(p: argparse.ArgumentParser) -> None:
+    p.add_argument("paths", nargs="*", default=None,
+                   help="files or directories to scan (default: current directory)")
+    p.add_argument("--no-user-configs", action="store_true",
+                   help="skip well-known per-user config locations; scan only the given paths")
+    p.add_argument("--no-skills", action="store_true", help="skip SKILL.md discovery")
+    p.add_argument("--no-source", action="store_true",
+                   help="skip reading MCP server source for shell-injection flows")
+    p.add_argument("--safe", action="store_true",
+                   help="never execute anything and never open a connection, "
+                        "whatever else is asked for")
+    p.add_argument("--probe-gate", default="high",
+                   choices=("critical", "high", "medium", "low", "off"),
+                   help="refuse to launch a server already carrying a static "
+                        "finding this severe (default: high)")
+    p.add_argument("--probe", action="store_true",
+                   help="connect to each server and read its tool definitions. "
+                        "WARNING: this launches local STDIO servers")
+    p.add_argument("--no-stdio-probe", action="store_true",
+                   help="with --probe, contact remote servers only; never launch local ones")
+    p.add_argument("--probe-timeout", type=float, default=20.0, metavar="SECONDS")
+    p.add_argument("--lock", metavar="PATH", default=None,
+                   help=f"approval lockfile (default: ./{DEFAULT_LOCK_NAME})")
+    p.add_argument("--depth", type=int, default=6, metavar="N",
+                   help="maximum directory depth when walking paths (default: 6)")
+    p.add_argument("--share-env", metavar="NAME", action="append", default=[],
+                   help="with --probe, also pass this environment variable to the "
+                        "servers being launched (repeatable). By default a probed "
+                        "server gets what its config declares plus the infrastructure "
+                        "it needs, and none of your other credentials")
+    p.add_argument("-v", "--verbose", action="store_true")
+
+
+
+def _register_scan(sub: argparse._SubParsersAction) -> None:
+    scan = sub.add_parser("scan", help="scan for findings (default command)")
+    _add_scan_arguments(scan)
+    scan.add_argument("-f", "--format", choices=("text", "json", "sarif"), default="text")
+    scan.add_argument("-o", "--output", metavar="FILE", help="write the report to FILE")
+    scan.add_argument("--fail-on", default="high",
+                      choices=[s.label for s in Severity] + ["never"],
+                      help="minimum severity that sets exit code 1 (default: high)")
+    scan.add_argument("--min-severity", default="info", choices=[s.label for s in Severity],
+                      help="hide findings below this severity (default: info)")
+    scan.add_argument("--only", action="append", metavar="RULE", default=[],
+                      help="run only these rule ids (repeatable)")
+    scan.add_argument("--disable", action="append", metavar="RULE", default=[],
+                      help="skip these rule ids (repeatable)")
+    scan.add_argument("--no-color", action="store_true")
+    scan.add_argument("--ignore-file", metavar="PATH", default=None,
+                      help=f"suppression file (default: ./{supp.DEFAULT_IGNORE_NAME} if present)")
+    scan.add_argument("--no-ignore", action="store_true",
+                      help="ignore the suppression file and report everything")
+    llm_group = scan.add_argument_group(
+        "semantic classifier (optional)",
+        "Sends tool descriptions and skill text to the Anthropic API for judgement. "
+        "Needs: pip install 'mcp-audit[llm]' and ANTHROPIC_API_KEY.",
+    )
+    llm_group.add_argument("--llm", action="store_true",
+                           help="enable MCPA018. NOTE: this transmits agent-facing text "
+                                "off this machine (credentials are redacted first)")
+    llm_group.add_argument("--llm-model", default=llm_mod.DEFAULT_MODEL, metavar="MODEL")
+    llm_group.add_argument("--llm-effort", default=llm_mod.DEFAULT_EFFORT,
+                           choices=("low", "medium", "high", "xhigh", "max"))
+    llm_group.add_argument("--llm-max-items", type=int, default=50, metavar="N",
+                           help="maximum classifications per run (default: 50)")
+    llm_group.add_argument("--llm-cache", metavar="PATH", default=None,
+                           help=f"verdict cache (default: ./{llm_mod.CACHE_NAME}; "
+                                "unchanged text is never re-sent)")
+    llm_group.add_argument("--no-llm-cache", action="store_true",
+                           help="do not read or write the verdict cache")
+
+
+def _register_approve(sub: argparse._SubParsersAction) -> None:
+    approve = sub.add_parser(
+        "approve",
+        help="record the current state as approved in the lockfile",
+        description="Write the lockfile that later scans compare against.",
+    )
+    _add_scan_arguments(approve)
+
+
+def _register_inspect(sub: argparse._SubParsersAction) -> None:
+    inspect_p = sub.add_parser(
+        "inspect",
+        help="show what is configured, without judging it",
+        description=(
+            "List the MCP servers and skills this machine has configured, grouped by "
+            "client. Reports no findings and makes no judgements. Environment values "
+            "are classified as reference/placeholder/literal and never printed."
+        ),
+    )
+    _add_scan_arguments(inspect_p)
+    inspect_p.add_argument("-f", "--format", choices=("text", "json"), default="text")
+    inspect_p.add_argument("-o", "--output", metavar="FILE")
+    inspect_p.add_argument("--no-color", action="store_true")
+
+
+def _register_rules(sub: argparse._SubParsersAction) -> None:
+    rules_p = sub.add_parser("rules", help="list the built-in rules")
+    rules_p.add_argument("--markdown", action="store_true",
+                         help="emit the full rule catalog as Markdown")
+    rules_p.add_argument("-o", "--output", metavar="FILE",
+                         help="write to FILE as UTF-8 instead of stdout")
+
+
+def _register_explain(sub: argparse._SubParsersAction) -> None:
+    explain_p = sub.add_parser(
+        "explain",
+        help="describe one rule in full",
+        description="What a check looks for, why it matters, how to fix it, and when it is wrong.",
+    )
+    explain_p.add_argument("rule_id", metavar="RULE", help="a rule id, e.g. MCPA015")
+
+
+def _register_policy(sub: argparse._SubParsersAction) -> None:
+    policy_p = sub.add_parser(
+        "policy",
+        help="propose argument limits for the tools a server exposes",
+        description=(
+            "Reads the tools a server actually exposes and proposes a starter "
+            "policy: path limits for tools that take a path, destination limits "
+            "for tools that take a URL, operation limits for tools that take a "
+            "query, and an outright deny for tools named after something "
+            "destructive. Every value is a placeholder you have to edit -- a "
+            "generated policy that quietly permitted your home directory would "
+            "read like a boundary and be a rubber stamp."
+        ),
+    )
+    policy_p.add_argument("paths", nargs="*", help="files or directories to scan")
+    policy_p.add_argument("--probe", action="store_true",
+                          help="connect to servers to read their live tool schemas "
+                               "(this LAUNCHES local stdio servers)")
+    policy_p.add_argument("--probe-timeout", type=float, default=10.0, metavar="SECONDS")
+    policy_p.add_argument("--no-stdio-probe", action="store_true")
+    policy_p.add_argument("--no-user-configs", action="store_true")
+    policy_p.add_argument("--no-skills", action="store_true", default=True,
+                          help=argparse.SUPPRESS)
+    policy_p.add_argument("--no-source", action="store_true", default=True,
+                          help=argparse.SUPPRESS)
+    policy_p.add_argument("--depth", type=int, default=6, metavar="N")
+    policy_p.add_argument("--lock", metavar="PATH", default=None)
+    policy_p.add_argument("--write", action="store_true",
+                          help="merge the proposal into the lockfile, leaving any "
+                               "rule already there untouched")
+    policy_p.add_argument("-v", "--verbose", action="store_true")
+
+
+def _register_status(sub: argparse._SubParsersAction) -> None:
+    status_p = sub.add_parser(
+        "status",
+        help="where things stand: approved, drifted, enforced, recorded",
+        description=(
+            "One page joining the lockfile, the current configuration and the "
+            "audit trail. Computes nothing the other commands do not; it "
+            "answers 'where do things stand' without reading three files."
+        ),
+    )
+    _add_scan_arguments(status_p)
+    status_p.add_argument("-f", "--format", choices=("text", "json"), default="text")
+    status_p.add_argument("--log", metavar="PATH", default=None,
+                          help="audit trail to summarise alongside it")
+    status_p.add_argument("--no-color", action="store_true")
+
+
+def _register_coverage(sub: argparse._SubParsersAction) -> None:
+    coverage_p = sub.add_parser(
+        "coverage",
+        help="which guarantees are actually in force, and why not",
+        description=(
+            "Per server and per layer: covered or not, the reason, and the "
+            "command that would change it. An absent guarantee and one that "
+            "cannot apply are different situations, and this is the only "
+            "place that distinguishes them."
+        ),
+    )
+    _add_scan_arguments(coverage_p)
+    # -v comes from the shared scan arguments; here it means "also show the
+    # layers that cannot apply".
+    coverage_p.add_argument("-f", "--format", choices=("text", "json"), default="text")
+    coverage_p.add_argument("--no-color", action="store_true")
+
+
+def _register_gateway(sub: argparse._SubParsersAction) -> None:
+    gateway_p = sub.add_parser(
+        "gateway",
+        help="one MCP endpoint in front of every approved server",
+        description=(
+            "Starts every approved server from the lockfile and serves them as a "
+            "single MCP server, applying the same approval checks, argument "
+            "policy and result screening that `guard` applies to one. Tool names "
+            "are namespaced server__tool, so two servers offering the same name "
+            "cannot collide. Point your client at this instead of at the servers."
+        ),
+    )
+    gateway_p.add_argument("paths", nargs="*", help="where to look for configs")
+    gateway_p.add_argument("--no-user-configs", action="store_true")
+    gateway_p.add_argument("--no-skills", action="store_true", default=True,
+                           help=argparse.SUPPRESS)
+    gateway_p.add_argument("--no-source", action="store_true", default=True,
+                           help=argparse.SUPPRESS)
+    gateway_p.add_argument("--probe", action="store_true", default=False,
+                           help=argparse.SUPPRESS)
+    gateway_p.add_argument("--safe", action="store_true", default=False,
+                           help=argparse.SUPPRESS)
+    gateway_p.add_argument("--depth", type=int, default=6, metavar="N")
+    gateway_p.add_argument("--lock", metavar="PATH", default=None)
+    gateway_p.add_argument("--policy", choices=("block", "strip", "warn"),
+                           default="block")
+    gateway_p.add_argument("--allow-unapproved", action="store_true",
+                           help="start servers that are not in the lockfile "
+                                "(they are refused by default)")
+    gateway_p.add_argument("--dry-run", action="store_true",
+                           help="report what the argument policy would refuse, "
+                                "and forward the call anyway")
+    gateway_p.add_argument("--as", dest="act_as", metavar="IDENTITY", default=None,
+                           help="serve as this identity from the lockfile, which "
+                                "narrows which servers and tools are reachable")
+    gateway_p.add_argument("--max-calls", type=int, default=0, metavar="N",
+                           help="refuse a tool after N calls in one session "
+                                "(0 = no budget)")
+    gateway_p.add_argument("--timeout", type=float, default=30.0, metavar="SECONDS")
+    gateway_p.add_argument("--log", metavar="PATH", default=None,
+                           help="append a hash-chained record of the session")
+    # The same two the guard has taken since it learned about them. The
+    # gateway screened neither until the halves were compared.
+    gateway_p.add_argument("--deny-sampling", action="store_true",
+                           help="refuse sampling/createMessage requests, which ask your "
+                                "model to generate on a server's behalf")
+    gateway_p.add_argument("--deny-elicitation", action="store_true",
+                           help="refuse elicitation/create requests, which ask you for "
+                                "input through the client's own dialog")
+    gateway_p.add_argument("--share-env", metavar="NAME", action="append", default=[],
+                           help="also pass this environment variable through to every "
+                                "backend (repeatable). By default a backend gets the "
+                                "infrastructure it needs plus what its own config "
+                                "declares, so one server's token does not reach the rest")
+    gateway_p.add_argument("--no-isolate-env", action="store_true",
+                           help="give every backend the gateway's whole environment, "
+                                "as clients do. Restores the behaviour from before "
+                                "isolation existed")
+    gateway_p.add_argument("--quiet", action="store_true")
+    gateway_p.add_argument("-v", "--verbose", action="store_true")
+
+
+def _register_verify_log(sub: argparse._SubParsersAction) -> None:
+    verify_p = sub.add_parser(
+        "verify-log",
+        help="check that a guard audit log has not been altered",
+        description=(
+            "Walks the hash chain written by `guard --log` and reports the first "
+            "entry that does not follow the one before it. Proves the file has not "
+            "been edited since it was written; it does not prove who wrote it."
+        ),
+    )
+    verify_p.add_argument("path", metavar="PATH", help="the log file to check")
+
+
+def _register_report(sub: argparse._SubParsersAction) -> None:
+    report_p = sub.add_parser(
+        "report",
+        help="what the agent did: sessions, calls, refusals",
+        description=(
+            "Reads back an audit trail written by `guard --log` or "
+            "`gateway --log`: which sessions ran, as which identity, what they "
+            "called and what was refused. Verifies the chain first and reports "
+            "only the entries it could verify -- a summary of a file that was "
+            "edited would launder a tampered log into a clean-looking report."
+        ),
+    )
+    report_p.add_argument("path", metavar="PATH", help="the trail to read")
+    report_p.add_argument("-f", "--format", choices=("text", "json"), default="text")
+    report_p.add_argument("-v", "--verbose", action="store_true",
+                          help="list every tool rather than the busiest few")
+    report_p.add_argument("--no-color", action="store_true")
+
+
+def _register_guard(sub: argparse._SubParsersAction) -> None:
+    guard_p = sub.add_parser(
+        "guard",
+        help="proxy a server and enforce the approval lockfile at runtime",
+        description=(
+            "Sit between the client and an MCP server, and refuse to pass through tools "
+            "that are unapproved or whose definition changed since approval. Reads the "
+            "same .mcp-audit.lock the CI gate reads, so one artifact governs both. "
+            "Usage: mcp-audit guard -- <server command...>"
+        ),
+    )
+    guard_p.add_argument("--lock", metavar="PATH", default=None,
+                         help=f"approval lockfile (default: ./{DEFAULT_LOCK_NAME})")
+    guard_p.add_argument("--name", metavar="NAME", default=None,
+                         help="server name as it appears in the lockfile "
+                              "(default: inferred from the command)")
+    guard_p.add_argument("--policy", choices=("block", "strip", "warn"), default="block",
+                         help="what to do with a rejected tool: replace it with a blocked "
+                              "stub (default), remove it, or allow it and log")
+    guard_p.add_argument("--block-severity", default="critical",
+                         choices=[s.label for s in Severity],
+                         help="minimum content-rule severity that rejects a tool "
+                              "(default: critical)")
+    guard_p.add_argument("--strict", action="store_true",
+                         help="fail closed on internal errors too, not just on drift")
+    guard_p.add_argument("--quiet", action="store_true", help="suppress stderr diagnostics")
+    guard_p.add_argument("--dry-run", action="store_true",
+                         help="report what the argument policy would block, and "
+                              "forward the call anyway")
+    guard_p.add_argument("--allow-unapproved", action="store_true",
+                         help="forward a server that is not in the lockfile instead of "
+                              "withholding its tools (the pre-0.2 behaviour)")
+    guard_p.add_argument("--log", metavar="PATH", default=None,
+                         help="append a hash-chained record of the session to PATH "
+                              "(tool names and decisions; never arguments)")
+    guard_p.add_argument("--deny-sampling", action="store_true",
+                         help="refuse sampling/createMessage requests, which ask your "
+                              "model to generate on the server's behalf")
+    guard_p.add_argument("--deny-elicitation", action="store_true",
+                         help="refuse elicitation/create requests, which ask you for "
+                              "input through the client's own dialog")
+    guard_p.add_argument("server_command", nargs=argparse.REMAINDER, metavar="-- COMMAND")
+    guard_p.add_argument("--deny-roots", action="store_true",
+                         help="refuse roots/list requests, which ask which "
+                              "filesystem roots you expose")
+    guard_p.add_argument("--result-policy", default="annotate",
+                         choices=("annotate", "block", "off"),
+                         help="what to do when a tool RESULT contains injection "
+                              "signals: fence it as untrusted data (default), "
+                              "withhold it, or only log")
+
+
+def _register_serve(sub: argparse._SubParsersAction) -> None:
+    sub.add_parser(
+        "serve",
+        help="run mcp-audit as an MCP server over stdio",
+        description=(
+            "Expose the scanner's analysis over MCP so an agent can check a server "
+            "configuration before a human installs it. Read-only: no probing, and "
+            "path scanning only when MCP_AUDIT_ALLOW_PATH_SCAN is set."
+        ),
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mcp-audit",
+        description="Security scanner for MCP server configurations and agent skills.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "exit codes:\n"
+            "  0  no findings at or above the --fail-on threshold\n"
+            "  1  findings at or above the threshold\n"
+            "  2  the scan itself could not complete\n"
+        ),
+    )
+    parser.add_argument("--version", action="version", version=f"mcp-audit {__version__}")
+    sub = parser.add_subparsers(dest="command")
+
+    _register_scan(sub)
+    _register_approve(sub)
+    _register_inspect(sub)
+    _register_rules(sub)
+    _register_explain(sub)
+    _register_policy(sub)
+    _register_status(sub)
+    _register_coverage(sub)
+    _register_gateway(sub)
+    _register_verify_log(sub)
+    _register_report(sub)
+    _register_guard(sub)
+    _register_serve(sub)
+    # The command names come from the parser rather than a second list.
+    # A hardcoded set is how `verify-log` was silently treated as a path
+    # to scan for its first few minutes of existence.
+    parser.mcp_commands = set(sub.choices)
+    return parser

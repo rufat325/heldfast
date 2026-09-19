@@ -228,51 +228,7 @@ class Guard:
             return "deny", "tool definition changed since approval"
         return "allow", "matches approved fingerprint"
 
-    def check_call(self, message: dict[str, Any]) -> dict[str, Any] | None:
-        """A refusal to send back, or None to forward the call.
-
-        The lockfile says this tool is the one that was approved. Policy says
-        what it may be asked to do, which is a different question: a
-        `delete_file` whose definition has not changed by a byte is still the
-        tool that deletes ~/.ssh/id_rsa when something talks the agent into
-        asking for that.
-        """
-        if not self.call_policy:
-            return None
-        if message.get("method") != "tools/call":
-            return None
-        params = message.get("params")
-        if not isinstance(params, dict):
-            return None
-
-        name = str(params.get("name") or "")
-        try:
-            decision = self.call_policy.check(name, params.get("arguments"))
-        except Exception as exc:
-            # Same posture as the rest of this module: a security event fails
-            # closed, an internal error fails open and says so. This runs on
-            # the pump thread, so an escaping exception would stop forwarding
-            # entirely and hang the agent -- a worse outcome than one
-            # unchecked call, and a much more confusing one.
-            self.stats.internal_errors.append(f"policy raised: {exc}")
-            self.log(f"INTERNAL ERROR checking {name}: {exc}")
-            if self.strict:
-                raise
-            return None
-        if decision.allowed:
-            return None
-
-        if self.dry_run:
-            # Nobody adopts an enforcement tool they cannot try first. A dry
-            # run answers "what would this policy have broken" against real
-            # traffic, which is the only honest way to ask it -- the audit log
-            # holds no arguments, by design, so there is nothing to replay.
-            self.stats.calls_would_deny.append(f"{name}: {decision.constraint}")
-            self.log(f"WOULD DENY {name}: {decision.reason}")
-            return None
-
-        self.stats.calls_denied.append(f"{name}: {decision.constraint}")
-        self.log(f"DENIED {name}: {decision.reason}")
+    def _refusal_result(self, message: dict[str, Any], name: str, reason: str) -> dict[str, Any]:
         # An error *result* rather than a JSON-RPC error: the model is shown
         # why, in the same channel it reads every other answer in, so it can
         # ask for something permitted instead. A protocol error tells it the
@@ -284,13 +240,47 @@ class Guard:
                 "content": [{
                     "type": "text",
                     "text": (f"[BLOCKED BY mcp-audit] {name} was not called. "
-                             f"{decision.reason}. This boundary is recorded in the "
-                             f"approval lockfile; it is not a fault in the server, "
-                             f"and retrying the same arguments will not change it."),
+                             f"{reason}. This boundary is recorded in the "
+                             "approval lockfile; it is not a fault in the server, "
+                             "and retrying the same arguments will not change it."),
                 }],
                 "isError": True,
             },
         }
+
+    def check_call(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        """A refusal to send back, or None to forward the call.
+
+        The lockfile says this tool is the one that was approved. Policy says
+        what it may be asked to do, which is a different question: a
+        `delete_file` whose definition has not changed by a byte is still the
+        tool that deletes ~/.ssh/id_rsa when something talks the agent into
+        asking for that.
+        """
+        if not self.call_policy or message.get("method") != "tools/call":
+            return None
+        params = message.get("params")
+        if not isinstance(params, dict):
+            return None
+
+        name = str(params.get("name") or "")
+        try:
+            decision = self.call_policy.check(name, params.get("arguments"))
+        except Exception as exc:
+            self.stats.internal_errors.append(f"policy raised: {exc}")
+            self.log(f"INTERNAL ERROR checking {name}: {exc}")
+            if self.strict:
+                raise
+            return None
+        if decision.allowed:
+            return None
+        if self.dry_run:
+            self.stats.calls_would_deny.append(f"{name}: {decision.constraint}")
+            self.log(f"WOULD DENY {name}: {decision.reason}")
+            return None
+        self.stats.calls_denied.append(f"{name}: {decision.constraint}")
+        self.log(f"DENIED {name}: {decision.reason}")
+        return self._refusal_result(message, name, decision.reason)
 
     def _content_verdict(self, tool: ToolSpec) -> tuple[str, str]:
         """Run the poisoning rules over this tool's own text."""
@@ -669,44 +659,32 @@ def _record_request(trail: AuditLog, message: dict[str, Any]) -> None:
     trail.record("request", subject=subject or method, detail=detail or method)
 
 
-def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
-        server_name: str | None = None, strict: bool = False,
-        block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
-        deny_sampling: bool = False, deny_elicitation: bool = False,
-        deny_roots: bool = False, result_policy: str = "annotate",
-        log_path: Path | None = None, allow_unapproved: bool = False,
-        dry_run: bool = False) -> int:
-    """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
-    if not argv:
-        print("mcp-audit guard: no server command given", file=sys.stderr)
-        return 2
-
+def _load_lock(lock_path: Path, strict: bool) -> Lock:
     try:
-        lock = Lock.load(lock_path)
+        return Lock.load(lock_path)
     except ValueError as exc:
         print(f"mcp-audit guard: {exc}", file=sys.stderr)
         if strict:
-            return 2
-        lock = Lock(path=lock_path)
+            raise
+        return Lock(path=lock_path)
 
-    name = server_name or Path(argv[0]).stem
-    guard = Guard(name, lock, policy=policy, strict=strict,
-                  block_severity=block_severity, quiet=quiet,
-                  deny_sampling=deny_sampling, deny_elicitation=deny_elicitation,
-                  deny_roots=deny_roots, result_policy=result_policy,
-                  allow_unapproved=allow_unapproved, dry_run=dry_run)
 
-    trail: AuditLog | None = None
-    if log_path is not None:
-        trail = AuditLog(log_path, name)
-        if trail.failed:
-            guard.log(f"audit log unavailable: {trail.failed}")
-            trail = None
-        else:
-            trail.record("session_start", subject=name,
-                         detail=f"policy={policy} result_policy={result_policy}")
-            guard.log(f"audit trail: {log_path}")
+def _open_trail(log_path: Path | None, name: str, policy: str,
+                result_policy: str, guard: Guard) -> AuditLog | None:
+    if log_path is None:
+        return None
+    trail = AuditLog(log_path, name)
+    if trail.failed:
+        guard.log(f"audit log unavailable: {trail.failed}")
+        return None
+    trail.record("session_start", subject=name,
+                 detail=f"policy={policy} result_policy={result_policy}")
+    guard.log(f"audit trail: {log_path}")
+    return trail
 
+
+def _announce_posture(guard: Guard, name: str, lock_path: Path,
+                      allow_unapproved: bool, policy: str) -> None:
     if guard.ambiguous:
         guard.log(
             f"{name!r} matches {len(guard.ambiguous)} entries in {lock_path.name} "
@@ -728,67 +706,74 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         guard.log(f"enforcing {len(guard._locked_tools)} approved tool(s) for {name!r} "
                   f"(policy={policy})")
 
+
+def _launch(argv: list[str]) -> subprocess.Popen | None:
     try:
-        proc = subprocess.Popen(
+        return subprocess.Popen(
             argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
             preexec_fn=posix_preexec(),
         )
     except OSError as exc:
         print(f"mcp-audit guard: cannot launch {argv[0]!r}: {exc}", file=sys.stderr)
-        return 2
+        return None
 
-    # Tie the server's lifetime to ours. The finally block below handles a
-    # normal exit, but if this process is killed outright it never runs, and a
-    # server that ignores stdin close would be orphaned indefinitely.
-    guard.log(f"child lifetime: {bind_child(proc)}")
 
-    stdout_lock = threading.Lock()
+def _answer_client(lock: threading.Lock, payload: dict[str, Any]) -> None:
+    with lock:
+        sys.stdout.write(json.dumps(payload) + "\n")
+        sys.stdout.flush()
 
-    def pump_client_to_server() -> None:
-        try:
-            for line in sys.stdin:
-                if proc.stdin is None:
-                    break
-                # This direction is only parsed when something needs it: a
-                # policy to enforce, or a trail to write.
-                if guard.call_policy or trail is not None:
-                    try:
-                        message = json.loads(line)
-                    except (ValueError, TypeError):
-                        message = None
-                    if isinstance(message, dict):
-                        if trail is not None:
-                            _record_request(trail, message)
-                        refusal = guard.check_call(message)
-                        if refusal is not None:
-                            if trail is not None:
-                                trail.record(
-                                    "denied",
-                                    subject=str((message.get("params") or {}).get("name") or ""),
-                                    decision="block")
-                            # Answer the client ourselves and do not forward.
-                            # stdout has two writers now, so it is serialized.
-                            with stdout_lock:
-                                sys.stdout.write(json.dumps(refusal) + "\n")
-                                sys.stdout.flush()
-                            continue
-                proc.stdin.write(line)
-                proc.stdin.flush()
-        except (OSError, ValueError):
-            pass
-        finally:
-            try:
-                if proc.stdin:
-                    proc.stdin.close()
-            except OSError:
-                pass
 
-    upstream = threading.Thread(target=pump_client_to_server, daemon=True)
-    upstream.start()
-
+def _maybe_refuse(guard: Guard, trail: AuditLog | None, line: str,
+                  stdout_lock: threading.Lock) -> bool:
+    """True if the line was answered here and must not be forwarded."""
+    if not (guard.call_policy or trail is not None):
+        return False
     try:
-        assert proc.stdout is not None
+        message = json.loads(line)
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(message, dict):
+        return False
+    if trail is not None:
+        _record_request(trail, message)
+    refusal = guard.check_call(message)
+    if refusal is None:
+        return False
+    if trail is not None:
+        trail.record(
+            "denied",
+            subject=str((message.get("params") or {}).get("name") or ""),
+            decision="block")
+    _answer_client(stdout_lock, refusal)
+    return True
+
+
+def _pump_client(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None,
+                 stdout_lock: threading.Lock) -> None:
+    try:
+        for line in sys.stdin:
+            if proc.stdin is None:
+                break
+            if _maybe_refuse(guard, trail, line, stdout_lock):
+                continue
+            proc.stdin.write(line)
+            proc.stdin.flush()
+    except (OSError, ValueError):
+        pass
+    finally:
+        try:
+            if proc.stdin:
+                proc.stdin.close()
+        except OSError:
+            pass
+
+
+def _pump_server(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None,
+                 stdout_lock: threading.Lock) -> None:
+    assert proc.stdout is not None
+    try:
         for line in proc.stdout:
             stripped = line.strip()
             if not stripped:
@@ -805,35 +790,78 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
                 continue
             if isinstance(message, dict):
                 message = guard.handle_server_message(message)
-            with stdout_lock:
-                sys.stdout.write(json.dumps(message) + "\n")
-                sys.stdout.flush()
+            _answer_client(stdout_lock, message)
     except (OSError, ValueError) as exc:
         guard.log(f"transport error: {exc}")
         if trail is not None:
             trail.record("transport_error", detail=str(exc)[:200])
-    finally:
-        if trail is not None:
-            trail.record(
-                "session_end",
-                detail=(f"forwarded={guard.stats.forwarded} "
-                        f"tools_blocked={len(guard.stats.tools_blocked)} "
-                        f"results_flagged={guard.stats.results_flagged}"),
-            )
-        for stream in (proc.stdin, proc.stdout):
-            if stream is not None:
-                try:
-                    stream.close()
-                except OSError:
-                    pass
-        try:
-            proc.terminate()
-            proc.wait(timeout=5)
-        except (OSError, subprocess.TimeoutExpired):
+
+
+def _shutdown(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None) -> None:
+    if trail is not None:
+        trail.record(
+            "session_end",
+            detail=(f"forwarded={guard.stats.forwarded} "
+                    f"tools_blocked={len(guard.stats.tools_blocked)} "
+                    f"results_flagged={guard.stats.results_flagged}"),
+        )
+    for stream in (proc.stdin, proc.stdout):
+        if stream is not None:
             try:
-                proc.kill()
+                stream.close()
             except OSError:
                 pass
-        guard.log(guard.summary())
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    guard.log(guard.summary())
 
+
+def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
+        server_name: str | None = None, strict: bool = False,
+        block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
+        deny_sampling: bool = False, deny_elicitation: bool = False,
+        deny_roots: bool = False, result_policy: str = "annotate",
+        log_path: Path | None = None, allow_unapproved: bool = False,
+        dry_run: bool = False) -> int:
+    """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
+    if not argv:
+        print("mcp-audit guard: no server command given", file=sys.stderr)
+        return 2
+
+    try:
+        lock = _load_lock(lock_path, strict)
+    except ValueError:
+        return 2
+
+    name = server_name or Path(argv[0]).stem
+    guard = Guard(name, lock, policy=policy, strict=strict,
+                  block_severity=block_severity, quiet=quiet,
+                  deny_sampling=deny_sampling, deny_elicitation=deny_elicitation,
+                  deny_roots=deny_roots, result_policy=result_policy,
+                  allow_unapproved=allow_unapproved, dry_run=dry_run)
+    trail = _open_trail(log_path, name, policy, result_policy, guard)
+    _announce_posture(guard, name, lock_path, allow_unapproved, policy)
+
+    proc = _launch(argv)
+    if proc is None:
+        return 2
+    # Tie the server's lifetime to ours. The finally block below handles a
+    # normal exit, but if this process is killed outright it never runs, and a
+    # server that ignores stdin close would be orphaned indefinitely.
+    guard.log(f"child lifetime: {bind_child(proc)}")
+
+    stdout_lock = threading.Lock()
+    upstream = threading.Thread(
+        target=_pump_client, args=(proc, guard, trail, stdout_lock), daemon=True)
+    upstream.start()
+    try:
+        _pump_server(proc, guard, trail, stdout_lock)
+    finally:
+        _shutdown(proc, guard, trail)
     return proc.returncode or 0

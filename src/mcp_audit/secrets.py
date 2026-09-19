@@ -10,6 +10,7 @@ hired to detect, so the scrubbing side is not optional.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # High-precision provider token shapes. Each is a strong signal on its own,
 # so neither caller needs an entropy heuristic to act on a match.
@@ -47,7 +48,9 @@ def redact(text: str) -> str:
     if not text:
         return text
     for label, pattern in TOKEN_PATTERNS:
-        text = pattern.sub(lambda m, _l=label: f"[REDACTED {_l}]", text)
+        def _replace(match: re.Match[str], _label: str = label) -> str:
+            return f"[REDACTED {_label}]"
+        text = pattern.sub(_replace, text)
     return text
 
 
@@ -88,7 +91,9 @@ def safe_text(value: Any, limit: int = 4000) -> str:
     text = str(value if value is not None else "")
     if len(text) > limit:
         text = text[:limit] + "..."
-    return _CONTROLS.sub(lambda m: "\\x%02x" % ord(m.group(0)), text)
+    def _escape(match: re.Match[str]) -> str:
+        return "\\x%02x" % ord(match.group(0))
+    return _CONTROLS.sub(_escape, text)
 
 
 def safe_name(value: Any, limit: int = 300) -> str:

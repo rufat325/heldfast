@@ -32,19 +32,17 @@ Read this file and `docs/GUARANTEES.md` instead.
 - `tests/test_guarantees.py` — this document and the guarantees file stay coupled
 - `tests/mutants.py` + `tests/test_mutation.py` — catalogued fail-open edits must die
 - `tests/golden/traces/` — pinned JSON-RPC conversations for guard and gateway
+- `cli_parser.py` — argparse off `cli.py`; `guard.run` split into small pumps
+- `mypy --strict` on the four kernels, CI job `types`
 
 ## Next, in order
 
-1. ~~Mutation-score the kernels (`policy.py`, `model.ToolSpec.fingerprint`,
-   `discovery._strip_jsonc`). Fail CI under a threshold you pick.~~ Done:
-   16 fail-open mutants, score must be 1.0. Not mutmut; equivalent mutants
-   are excluded on purpose.
-2. ~~Golden JSON-RPC traces for `guard` / `gateway` (allow, deny, hostile
-   stdout-before-frame, rewrite-after-N-calls).~~ Done: `tests/golden/traces/`.
-3. Split `cli.py` and `guard.py` only after (1) and (2). Small functions,
-   same behaviour, same tests.
-4. `mypy --strict` on `policy.py`, `lockfile.py`, `model.py`, `findings.py`
-   as a non-runtime extra. Do not block the rest of the tree on day one.
+1. ~~Mutation-score the kernels.~~ Done: 16 fail-open mutants, score 1.0.
+2. ~~Golden JSON-RPC traces.~~ Done: `tests/golden/traces/`.
+3. ~~Split `cli.py` and `guard.py`.~~ Done. Functions in those two files
+   must fit on one page (`tests/test_function_size.py`).
+4. ~~`mypy --strict` on `policy.py`, `lockfile.py`, `model.py`, `findings.py`.~~
+   Done, CI job `types`. Not a runtime dependency.
 5. Only then: PyPI, a name that can win search, more clients.
 
 ## How to run

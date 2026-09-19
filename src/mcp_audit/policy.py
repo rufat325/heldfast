@@ -94,7 +94,9 @@ def looks_like_sql(value: str) -> bool:
     # at all and the whole rule is skipped for it -- the gate mattering more
     # than the check behind it.
     match = _SQL_LEAD.match(unmask_sql(value))
-    return bool(match) and match.group(1).lower() in _SQL_KEYWORDS
+    if match is None:
+        return False
+    return match.group(1).lower() in _SQL_KEYWORDS
 
 
 def _decoded(value: str, rounds: int = 3) -> str:
@@ -440,7 +442,7 @@ def _property_names(schema: Any) -> list[str]:
     return [str(name) for name in properties] if isinstance(properties, dict) else []
 
 
-def suggest(tools: Any, destructive_verbs: tuple = ()) -> dict[str, dict[str, Any]]:
+def suggest(tools: Any, destructive_verbs: tuple[str, ...] = ()) -> dict[str, dict[str, Any]]:
     """A starter policy for these tools, as {tool: constraints}.
 
     Only tools whose schema actually takes a path, a destination or a query
