@@ -54,7 +54,8 @@ Read this file and `docs/GUARANTEES.md` instead.
 7. ~~Mutants for lockfile load and the guard pump.~~ Done.
 8. ~~Golden traces for sampling / elicitation / roots / a screened result.~~
    Done.
-9. ~~README first screen is the pin.~~ Done. PyPI still waits.
+9. ~~README first screen is the pin.~~ Done. GIF is a live filesystem
+   wrap plus the rug pull. Long form is `docs/MANUAL.md`. PyPI still waits.
 10. ~~JSON-RPC batches skip the pump.~~ Done: `_screen_outbound` / `_client_to_server`.
 11. ~~`.mcp-pin-ignore` could hide MCPA015.~~ Done: `PINNED` lockfile theorems.
 12. ~~`NODE_OPTIONS` / `PYTHONPATH` inherited.~~ Done: declare them or they stay out.
