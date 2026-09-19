@@ -38,7 +38,7 @@ def _add_scan_arguments(p: argparse.ArgumentParser) -> None:
                    help="with --probe, contact remote servers only; never launch local ones")
     p.add_argument("--probe-timeout", type=float, default=20.0, metavar="SECONDS")
     p.add_argument("--lock", metavar="PATH", default=None,
-                   help=f"approval lockfile (default: ./{DEFAULT_LOCK_NAME})")
+                   help="approval lockfile (default: .mcp-pin.lock in the scanned tree)")
     p.add_argument("--depth", type=int, default=6, metavar="N",
                    help="maximum directory depth when walking paths (default: 6)")
     p.add_argument("--share-env", metavar="NAME", action="append", default=[],

@@ -196,7 +196,9 @@ def collect(args: argparse.Namespace) -> Collected:
     return out
 
 def _resolve_lock_path(args: argparse.Namespace) -> Path:
-    return resolve_lock_path(getattr(args, "lock", None))
+    raw = getattr(args, "paths", None) or ["."]
+    return resolve_lock_path(getattr(args, "lock", None),
+                             roots=[Path(p) for p in raw])
 
 
 def _validate_rule_ids(ids: list[str]) -> list[str]:

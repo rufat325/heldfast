@@ -68,6 +68,9 @@ Read this file and `docs/GUARANTEES.md` instead.
     `SECURITY.md`. Register `mcp-pin` on PyPI before the first tweet; a
     name squat is the remaining supply-chain hole this repo cannot close
     from git.
+20. ~~Scan looked for the lock in cwd, not the tree.~~ Done: a lock beside
+    the scanned directory is the lock; the Action job on the clean fixture
+    no longer files MCPA014 because the runner's cwd is the repo root.
 
 ## How to run
 

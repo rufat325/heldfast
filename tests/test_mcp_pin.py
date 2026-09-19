@@ -261,6 +261,20 @@ class TestLockfileAndDrift(unittest.TestCase):
             current.write_text("{}", encoding="utf-8")
             self.assertEqual(current, resolve_lock_path(cwd=cwd))
 
+    def test_a_lock_in_the_scanned_tree_wins_over_cwd(self) -> None:
+        """The Action job scans tests/fixtures/clean from the repo root.
+        cwd is not the pin."""
+        from mcp_pin.lockfile import resolve_lock_path
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp) / "runner"
+            tree = Path(tmp) / "project"
+            cwd.mkdir()
+            tree.mkdir()
+            pinned = tree / ".mcp-pin.lock"
+            pinned.write_text("{}", encoding="utf-8")
+            (cwd / ".mcp-pin.lock").write_text("{}", encoding="utf-8")
+            self.assertEqual(pinned, resolve_lock_path(cwd=cwd, roots=[tree]))
+
 
 class TestSkillParsing(unittest.TestCase):
     def test_frontmatter_forms(self) -> None:
@@ -413,17 +427,21 @@ class TestCli(unittest.TestCase):
 
     def test_clean_exits_zero(self) -> None:
         ensure_fixtures()
-        r = self._run("scan", "tests/fixtures/clean", "--no-user-configs",
-                      "--lock", "tests/fixtures/clean/.mcp-pin.lock")
+        r = self._run("scan", "tests/fixtures/clean", "--no-user-configs")
         self.assertEqual(0, r.returncode, r.stdout + r.stderr)
 
     def test_an_unpinned_tree_fails_the_default_threshold(self) -> None:
         """No lockfile, configured servers, default --fail-on high: exit 1.
         A CI job that never ran `approve` must not look clean."""
-        ensure_fixtures()
-        r = self._run("scan", "tests/fixtures/clean", "--no-user-configs")
-        self.assertEqual(1, r.returncode)
-        self.assertIn("MCPA014", r.stdout + r.stderr)
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / ".mcp.json"
+            cfg.write_text(
+                json.dumps({"mcpServers": {"x": {"command": "true"}}}),
+                encoding="utf-8",
+            )
+            r = self._run("scan", tmp, "--no-user-configs")
+            self.assertEqual(1, r.returncode, r.stdout + r.stderr)
+            self.assertIn("MCPA014", r.stdout + r.stderr)
 
     def test_vulnerable_exits_one(self) -> None:
         ensure_fixtures()

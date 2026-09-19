@@ -31,17 +31,38 @@ DEFAULT_LOCK_NAME = ".mcp-pin.lock"
 LEGACY_LOCK_NAME = ".mcp-audit.lock"
 
 
-def resolve_lock_path(explicit: str | Path | None = None, *, cwd: Path | None = None) -> Path:
-    if explicit:
-        return Path(explicit)
-    base = cwd or Path.cwd()
+def _lock_in(base: Path) -> Path | None:
     current = base / DEFAULT_LOCK_NAME
     if current.is_file():
         return current
     legacy = base / LEGACY_LOCK_NAME
     if legacy.is_file():
         return legacy
-    return current
+    return None
+
+
+def resolve_lock_path(explicit: str | Path | None = None, *,
+                      cwd: Path | None = None,
+                      roots: list[Path] | None = None) -> Path:
+    if explicit:
+        return Path(explicit)
+    bases: list[Path] = []
+    for raw in list(roots or []) + [cwd or Path.cwd()]:
+        p = Path(raw)
+        bases.append(p if (p.is_dir() or not p.exists()) else p.parent)
+    seen: set[Path] = set()
+    first: Path | None = None
+    for base in bases:
+        key = base.resolve() if base.exists() else base
+        if key in seen:
+            continue
+        seen.add(key)
+        if first is None:
+            first = base
+        hit = _lock_in(base)
+        if hit is not None:
+            return hit
+    return (first or Path.cwd()) / DEFAULT_LOCK_NAME
 
 
 def _now() -> str:
