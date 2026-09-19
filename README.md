@@ -176,7 +176,7 @@ newline there forges a whole row.
 
 ```yaml
 # Pin a commit SHA. `@main` is whoever pushed last.
-- uses: rufat325/mcp-pin@8a0e4893a8cf63120f903990310ec1f05a273979
+- uses: rufat325/mcp-pin@298f0379979a2b0a45fd4f6f7f739b65f3776ea3
   with:
     fail-on: high
 ```
