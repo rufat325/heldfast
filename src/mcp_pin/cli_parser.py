@@ -41,6 +41,9 @@ def _add_scan_arguments(p: argparse.ArgumentParser) -> None:
                    help="approval lockfile (default: .mcp-pin.lock in the scanned tree)")
     p.add_argument("--depth", type=int, default=6, metavar="N",
                    help="maximum directory depth when walking paths (default: 6)")
+    p.add_argument("--exclude", metavar="PATH", action="append", default=[],
+                   help="skip this path (repeatable); a tests/ directory of "
+                        "attack corpora is not the product")
     p.add_argument("--share-env", metavar="NAME", action="append", default=[],
                    help="with --probe, also pass this environment variable to the "
                         "servers being launched (repeatable). By default a probed "

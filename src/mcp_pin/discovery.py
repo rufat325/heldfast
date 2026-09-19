@@ -141,8 +141,27 @@ _SKIP_DIRS = {
 }
 
 
+def excluded(path: Path, prefixes: Iterable[Path] | None) -> bool:
+    """True when `path` is at or under one of the prefixes."""
+    if not prefixes:
+        return False
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = Path(path)
+    for raw in prefixes:
+        try:
+            prefix = Path(raw).resolve()
+        except OSError:
+            prefix = Path(raw)
+        if resolved == prefix or prefix in resolved.parents:
+            return True
+    return False
+
+
 def discover_config_files(roots: Iterable[Path], scan_user: bool = True,
-                          max_depth: int = 6) -> list[tuple[Path, str]]:
+                          max_depth: int = 6,
+                          exclude: Iterable[Path] | None = None) -> list[tuple[Path, str]]:
     """Return (path, client_id) for every config file we can find."""
     found: dict[Path, str] = {}
 
@@ -169,9 +188,10 @@ def discover_config_files(roots: Iterable[Path], scan_user: bool = True,
     for root in roots:
         root = Path(root).resolve()
         if root.is_file():
-            found[root] = GENERIC_PROJECT_FILENAMES.get(root.name, "generic")
+            if not excluded(root, exclude):
+                found[root] = GENERIC_PROJECT_FILENAMES.get(root.name, "generic")
             continue
-        if not root.is_dir():
+        if not root.is_dir() or excluded(root, exclude):
             continue
 
         root_depth = len(root.parts)
@@ -192,7 +212,8 @@ def discover_config_files(roots: Iterable[Path], scan_user: bool = True,
             seen.add(real)
 
             dirnames[:] = [d for d in dirnames
-                           if d not in _SKIP_DIRS and not d.startswith(".venv")]
+                           if d not in _SKIP_DIRS and not d.startswith(".venv")
+                           and not excluded(here / d, exclude)]
             names = set(filenames)
 
             for fn in names:

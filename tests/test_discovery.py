@@ -90,6 +90,18 @@ class TestWhatItRefusesToWalk(unittest.TestCase):
             self.assertEqual(1, len(found))
             self.assertEqual("keep", found[0][0].parent.name)
 
+    def test_an_excluded_prefix_is_not_walked(self) -> None:
+        """The Security tab filled with fixture findings because self-scan
+        walked tests/. --exclude is how that scan names the corpus."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            write(root / "tests" / "fixtures" / ".mcp.json")
+            write(root / "keep" / ".mcp.json")
+            found = discover_config_files(
+                [root], scan_user=False, exclude=[root / "tests"])
+            self.assertEqual(1, len(found))
+            self.assertEqual("keep", found[0][0].parent.name)
+
     def test_a_pruned_name_is_still_scanned_when_named_directly(self) -> None:
         """Only directories *below* a root are pruned. Pointing mcp-pin at
         one has to keep working, or you could never scan inside AppData."""

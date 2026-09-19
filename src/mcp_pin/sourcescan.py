@@ -404,7 +404,8 @@ def _as_source_flow(flow: Any) -> SourceFlow:
     )
 
 
-def scan_source_tree(roots: Iterable[Path], max_depth: int = 6) -> list[SourceFlow]:
+def scan_source_tree(roots: Iterable[Path], max_depth: int = 6,
+                     exclude: Iterable[Path] | None = None) -> list[SourceFlow]:
     """Every MCP server under these roots, analyzed.
 
     Python here, JavaScript and TypeScript in jsscan. They answer the same
@@ -413,12 +414,15 @@ def scan_source_tree(roots: Iterable[Path], max_depth: int = 6) -> list[SourceFl
     written for it.
     """
     from . import jsscan
+    from .discovery import excluded
 
     flows: list[SourceFlow] = []
     seen_files: set[str] = set()
 
     for root in roots:
         root = Path(root).resolve()
+        if excluded(root, exclude):
+            continue
         if root.is_file():
             candidates = [root] if root.suffix in _SOURCE_SUFFIXES else []
         elif root.is_dir():
@@ -429,7 +433,8 @@ def scan_source_tree(roots: Iterable[Path], max_depth: int = 6) -> list[SourceFl
                 if len(here.parts) - root_depth >= max_depth:
                     dirnames[:] = []
                     continue
-                dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+                dirnames[:] = [d for d in dirnames
+                               if d not in _SKIP_DIRS and not excluded(here / d, exclude)]
                 candidates.extend(here / f for f in filenames
                                   if f.endswith(_SOURCE_SUFFIXES)
                                   and not f.endswith(".d.ts"))

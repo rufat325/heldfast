@@ -42,6 +42,7 @@ dependency tree is asking you to trust the thing it's auditing.
 mcp-pin                              # scan discovered configs + skills
 mcp-pin scan ./my-project            # scan one project
 mcp-pin scan --no-user-configs .     # project only, skip ~/ configs
+mcp-pin scan --exclude tests .       # skip a path (attack corpora, generated trees)
 mcp-pin scan --probe                 # also read live tool descriptions
 mcp-pin scan --safe                  # never execute, never connect
 mcp-pin scan --no-source             # skip reading server source
@@ -190,7 +191,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-902 tests, stdlib unittest, nothing to install.
+904 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

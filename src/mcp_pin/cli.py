@@ -107,6 +107,10 @@ def _live_roots(roots: list[Path]) -> list[Path]:
     return [r for r in roots if r.exists()]
 
 
+def _excludes(args: argparse.Namespace) -> list[Path]:
+    return [Path(p) for p in (getattr(args, "exclude", None) or [])]
+
+
 def _roots(args: argparse.Namespace, out: "Collected") -> list[Path]:
     roots = [Path(p) for p in (args.paths or ["."])]
     for r in roots:
@@ -120,6 +124,7 @@ def _collect_configs(out: "Collected", roots: list[Path], args: argparse.Namespa
         _live_roots(roots),
         scan_user=not args.no_user_configs,
         max_depth=args.depth,
+        exclude=_excludes(args),
     )
     out.config_count = len(config_files)
     for path, client in config_files:
@@ -133,12 +138,14 @@ def _collect_skills_and_source(out: "Collected", roots: list[Path],
     live = _live_roots(roots)
     if not args.no_skills:
         out.skills = discover_skills(
-            live, max_depth=args.depth + 2, scan_user=not args.no_user_configs)
+            live, max_depth=args.depth + 2, scan_user=not args.no_user_configs,
+            exclude=_excludes(args))
     # Reading the servers' own source only makes sense for a path the user
     # named. The user-config sweep finds servers installed from packages, and
     # their source is not in the tree being scanned.
     if not getattr(args, "no_source", False):
-        out.source_flows = scan_source_tree(live, max_depth=args.depth + 2)
+        out.source_flows = scan_source_tree(
+            live, max_depth=args.depth + 2, exclude=_excludes(args))
 
 
 def _ingest_probe(out: "Collected", results: list) -> None:

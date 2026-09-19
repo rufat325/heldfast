@@ -430,6 +430,16 @@ class TestCli(unittest.TestCase):
         r = self._run("scan", "tests/fixtures/clean", "--no-user-configs")
         self.assertEqual(0, r.returncode, r.stdout + r.stderr)
 
+    def test_exclude_keeps_the_attack_corpus_out_of_a_product_scan(self) -> None:
+        """Self-scan of this repo used to upload 33 fixture findings to
+        GitHub's Security tab."""
+        ensure_fixtures()
+        r = self._run("scan", ".", "--no-user-configs", "--exclude", "tests",
+                      "--fail-on", "never", "-f", "json")
+        self.assertEqual(0, r.returncode, r.stderr)
+        doc = json.loads(r.stdout)
+        self.assertEqual(0, doc["summary"]["total"], r.stdout[:500])
+
     def test_an_unpinned_tree_fails_the_default_threshold(self) -> None:
         """No lockfile, configured servers, default --fail-on high: exit 1.
         A CI job that never ran `approve` must not look clean."""

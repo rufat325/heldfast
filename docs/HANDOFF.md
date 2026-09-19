@@ -72,6 +72,8 @@ Read this file and `docs/GUARANTEES.md` instead.
 20. ~~Scan looked for the lock in cwd, not the tree.~~ Done: a lock beside
     the scanned directory is the lock; the Action job on the clean fixture
     no longer files MCPA014 because the runner's cwd is the repo root.
+21. ~~Self-scan uploaded the attack corpus to GitHub code scanning.~~ Done:
+    `--exclude tests`. The 33 Security-tab alerts were fixture findings.
 
 ## How to run
 

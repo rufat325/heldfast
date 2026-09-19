@@ -192,7 +192,8 @@ def normalize_tool_grants(frontmatter: dict) -> list[str]:
 SKILL_FILENAMES = {"skill.md", "agent.md", "agents.md"}
 
 
-def discover_skills(roots, max_depth: int = 8, scan_user: bool = True) -> list[SkillSpec]:
+def discover_skills(roots, max_depth: int = 8, scan_user: bool = True,
+                    exclude=None) -> list[SkillSpec]:
     """Find SKILL.md-style files under the given roots.
 
     With `scan_user`, also sweeps the per-user skill directory -- the same
@@ -201,7 +202,7 @@ def discover_skills(roots, max_depth: int = 8, scan_user: bool = True) -> list[S
     """
     import os
 
-    from .discovery import _SKIP_DIRS
+    from .discovery import _SKIP_DIRS, excluded
 
     found: dict[str, SkillSpec] = {}
     search_roots = [Path(r) for r in roots]
@@ -213,11 +214,12 @@ def discover_skills(roots, max_depth: int = 8, scan_user: bool = True) -> list[S
     for root in search_roots:
         root = root.resolve()
         if root.is_file():
-            spec = parse_skill(root)
-            if spec:
-                found[str(root)] = spec
+            if not excluded(root, exclude):
+                spec = parse_skill(root)
+                if spec:
+                    found[str(root)] = spec
             continue
-        if not root.is_dir():
+        if not root.is_dir() or excluded(root, exclude):
             continue
         root_depth = len(root.parts)
         for dirpath, dirnames, filenames in os.walk(root):
@@ -225,7 +227,8 @@ def discover_skills(roots, max_depth: int = 8, scan_user: bool = True) -> list[S
             if len(here.parts) - root_depth >= max_depth:
                 dirnames[:] = []
                 continue
-            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+            dirnames[:] = [d for d in dirnames
+                           if d not in _SKIP_DIRS and not excluded(here / d, exclude)]
             for fn in filenames:
                 if fn.lower() in SKILL_FILENAMES:
                     p = (here / fn).resolve()
