@@ -69,6 +69,8 @@ mcp-audit verify-log trail.jsonl       # check the record was not altered
 mcp-audit guard --dry-run -- npx pkg   # what would the policy block?
 mcp-audit policy --probe               # propose argument limits to review
 mcp-audit gateway                      # one endpoint in front of every approved server
+mcp-audit gateway --as finance         # ...restricted to one declared identity
+mcp-audit status                       # what is approved, what moved, what happened
 mcp-audit serve                        # run as an MCP server
 ```
 
@@ -141,7 +143,7 @@ client ──stdio──> mcp-audit gateway ──stdio──> github server
 }}}
 ```
 
-Point the client at that instead of at the servers. Three things follow that per-server
+Point the client at that instead of at the servers. Four things follow that per-server
 wrapping cannot give you:
 
 **Name collisions become impossible rather than reported.** Tools are exposed as
@@ -156,11 +158,96 @@ theatre. `--allow-unapproved` admits it if you mean to.
 **One audit trail covers the fleet**, so "what did the agent do" has a single answer rather
 than eight files to correlate.
 
+**Different agents can get different surfaces.** See below.
+
 Everything `guard` enforces applies here to all of them at once: drifted tools withheld,
 argument policy checked before the call leaves, results screened on the way back. The
 failure posture is the same too — a security event fails closed, while a backend that will
 not start is reported and the others carry on, because one broken server should not take
 the agent's whole tool surface with it.
+
+### Who is asking (`--as`)
+
+The gateway knew *what* was called and not *who* called it, which is one boundary rather
+than access control: the agent summarising invoices and the agent with shell access were
+the same principal, because there was only one.
+
+An identity is declared in the lockfile and selected at launch:
+
+```jsonc
+"identities": {
+  "finance": {
+    "description": "reads invoices, cannot write anything",
+    "servers": ["postgres", "notes"],
+    "deny": ["postgres__execute", "notes__delete"],
+    "policy": { "postgres__query": { "sql": ["SELECT"] } }
+  }
+}
+```
+
+```jsonc
+{ "mcpServers": { "everything": {
+    "command": "mcp-audit",
+    "args": ["gateway", "--as", "finance", "--log", "trail.jsonl"]
+}}}
+```
+
+A server outside the grant is **never started**, not started and hidden. A denied tool is
+absent from `tools/list` *and* refused at call time, because nothing stops a client asking
+for a name it was never shown. An identity policy narrows what the server-level policy
+already allows; it cannot widen it. `--as` naming an identity the lockfile does not declare
+exits 2 rather than running unrestricted — a typo in a deployment must not quietly produce
+an unrestricted agent.
+
+**What this is not.** The `clientInfo` a client sends in `initialize` is self-declared:
+anything able to reach the gateway can claim any name. It is written to the audit trail,
+labelled as such, and never reaches a decision. Identity here is *operator-declared* —
+whoever writes the client configuration chooses it — which is the only kind that means
+anything for a local stdio transport. Treating a name the caller picked as authorization is
+how an access-control layer becomes decoration, and there is a test asserting it does not
+happen.
+
+### A ceiling on calls (`--max-calls`)
+
+```bash
+mcp-audit gateway --max-calls 50
+```
+
+Per tool, per session. A tool that suddenly runs fifty times in a loop is usually an agent
+that has lost the plot rather than an attack, and the point is to bound it either way —
+this judges nothing about the call, it just stops the hundredth one. `--dry-run` reports
+the overrun without refusing, so you can find the right number before enforcing one.
+
+## Where things stand (`status`)
+
+Everything below was already on disk. The lockfile knows what was approved and when; the
+scan knows what has moved since; the audit trail knows what the gateway did. Nothing put
+them on one page, so operating this meant reading three files and holding the join in your
+head.
+
+```
+  approved 2026-09-19T03:38:52Z   2 server(s), 0 skill(s)
+
+  DRIFTED     claude-code:alpha   2 tool(s)  policy  pinned-code
+              MCPA015  Tool definition changed since approval (possible rug pull)
+  UNAPPROVED  claude-code:gamma   0 tool(s)
+
+  identities
+    finance        postgres, notes
+                   denies postgres__execute
+
+  audit trail  trail.jsonl  (4 entries, intact)
+```
+
+Five states, and they answer different questions: `ok`, `FINDINGS`, `DRIFTED` (approved,
+then changed underneath you), `UNAPPROVED` (configured and never approved) and `GONE`
+(approved and no longer configured). `UNAPPROVED` is read from the lockfile rather than
+from MCPA014 having fired — a status page that prints "ok" because a rule was filtered out
+is worse than no page at all.
+
+It computes nothing the other commands do not. `-f json` for the same thing as data. It is
+a command that prints rather than a dashboard, so it works over ssh and in CI output, which
+is the only interface a lot of this will ever have.
 
 ### Suppressing things
 
@@ -827,7 +914,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-570 tests, stdlib unittest, nothing to install.
+606 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

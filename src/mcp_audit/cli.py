@@ -170,6 +170,21 @@ def build_parser() -> argparse.ArgumentParser:
                                "rule already there untouched")
     policy_p.add_argument("-v", "--verbose", action="store_true")
 
+    status_p = sub.add_parser(
+        "status",
+        help="where things stand: approved, drifted, enforced, recorded",
+        description=(
+            "One page joining the lockfile, the current configuration and the "
+            "audit trail. Computes nothing the other commands do not; it "
+            "answers 'where do things stand' without reading three files."
+        ),
+    )
+    _add_scan_arguments(status_p)
+    status_p.add_argument("-f", "--format", choices=("text", "json"), default="text")
+    status_p.add_argument("--log", metavar="PATH", default=None,
+                          help="audit trail to summarise alongside it")
+    status_p.add_argument("--no-color", action="store_true")
+
     gateway_p = sub.add_parser(
         "gateway",
         help="one MCP endpoint in front of every approved server",
@@ -201,6 +216,12 @@ def build_parser() -> argparse.ArgumentParser:
     gateway_p.add_argument("--dry-run", action="store_true",
                            help="report what the argument policy would refuse, "
                                 "and forward the call anyway")
+    gateway_p.add_argument("--as", dest="act_as", metavar="IDENTITY", default=None,
+                           help="serve as this identity from the lockfile, which "
+                                "narrows which servers and tools are reachable")
+    gateway_p.add_argument("--max-calls", type=int, default=0, metavar="N",
+                           help="refuse a tool after N calls in one session "
+                                "(0 = no budget)")
     gateway_p.add_argument("--timeout", type=float, default=30.0, metavar="SECONDS")
     gateway_p.add_argument("--log", metavar="PATH", default=None,
                            help="append a hash-chained record of the session")
@@ -722,6 +743,37 @@ def cmd_policy(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_status(args: argparse.Namespace) -> int:
+    from . import status as status_mod
+
+    lock_path = _resolve_lock_path(args)
+    try:
+        lock = Lock.load(lock_path)
+    except ValueError as exc:
+        print(f"mcp-audit: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    data = collect(args)
+    ctx = AuditContext(
+        servers=data.servers, skills=data.skills, tools=data.tools,
+        prompts=data.prompts, resources=data.resources,
+        instructions=data.instructions, source_flows=data.source_flows,
+        config_errors=data.errors,
+        lock={"servers": lock.servers, "skills": lock.skills},
+        options={"probed": data.probed},
+    )
+    findings = run_rules(ctx)
+
+    log_path = Path(args.log) if args.log else None
+    payload = status_mod.build(lock, data.servers, findings, log_path)
+
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        sys.stdout.write(status_mod.render(payload, color=not args.no_color))
+    return EXIT_OK
+
+
 def cmd_gateway(args: argparse.Namespace) -> int:
     from . import gateway as gateway_mod
 
@@ -739,6 +791,8 @@ def cmd_gateway(args: argparse.Namespace) -> int:
         quiet=args.quiet,
         timeout=args.timeout,
         log_path=Path(args.log) if args.log else None,
+        act_as=args.act_as,
+        max_calls=args.max_calls,
     )
 
 
@@ -810,6 +864,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_rules(args)
         if args.command == "explain":
             return cmd_explain(args)
+        if args.command == "status":
+            return cmd_status(args)
         if args.command == "gateway":
             return cmd_gateway(args)
         if args.command == "policy":

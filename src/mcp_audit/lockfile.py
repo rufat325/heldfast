@@ -38,6 +38,9 @@ class Lock:
     generated: str = field(default_factory=_now)
     servers: dict[str, Any] = field(default_factory=dict)
     skills: dict[str, Any] = field(default_factory=dict)
+    # Which agent may reach which servers. Written by a person, never
+    # observed, so `record` preserves it the same way it preserves policy.
+    identities: dict[str, Any] = field(default_factory=dict)
     path: Path | None = None
 
     @property
@@ -67,6 +70,7 @@ class Lock:
             generated=str(data.get("generated") or _now()),
             servers=dict(data.get("servers") or {}),
             skills=dict(data.get("skills") or {}),
+            identities=dict(data.get("identities") or {}),
             path=path,
         )
 
@@ -81,6 +85,8 @@ class Lock:
             "servers": self.servers,
             "skills": self.skills,
         }
+        if self.identities:
+            payload["identities"] = self.identities
         # Write-then-rename so an interrupted run cannot truncate the record
         # of what was previously approved.
         tmp = target.with_suffix(target.suffix + ".tmp")
@@ -125,6 +131,11 @@ class Lock:
         # a hand-written policy was silently dropped on the next
         # `approve --probe`. The unit test passed because it reused one object;
         # only driving the real command line found it.
+        if previous is not None and previous.identities and not self.identities:
+            # Same reasoning as policy: hand-written, so re-approving must not
+            # discard it.
+            self.identities = dict(previous.identities)
+
         source = previous.servers if previous is not None else self.servers
         kept_policies = {
             key: value["policy"]

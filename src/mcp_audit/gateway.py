@@ -50,6 +50,7 @@ from typing import Any
 from .auditlog import AuditLog
 from .findings import Severity
 from .guard import Guard
+from .identity import Identity, UnknownIdentity
 from .lifetime import bind_child, posix_preexec
 from .lockfile import Lock
 from .model import ServerSpec
@@ -72,6 +73,8 @@ class GatewayStats:
     tools_withheld: list[str] = field(default_factory=list)
     calls_forwarded: int = 0
     calls_refused: list[str] = field(default_factory=list)
+    calls_over_budget: list[str] = field(default_factory=list)
+    client_announced: str = ""
 
 
 class Backend:
@@ -215,16 +218,28 @@ class Gateway:
                  policy: str = "block", block_severity: Severity = Severity.CRITICAL,
                  allow_unapproved: bool = False, dry_run: bool = False,
                  quiet: bool = False, timeout: float = 30.0,
-                 trail: AuditLog | None = None) -> None:
+                 trail: AuditLog | None = None,
+                 identity: Identity | None = None,
+                 max_calls: int = 0) -> None:
         self.lock = lock
         self.quiet = quiet
         self.trail = trail
+        self.identity = identity
+        self.max_calls = max_calls
+        self.dry_run = dry_run
         self.stats = GatewayStats()
         self.backends: dict[str, Backend] = {}
         self.guards: dict[str, Guard] = {}
+        self._calls: dict[str, int] = {}
 
         for spec in servers:
             if spec.disabled:
+                continue
+            if identity is not None and not identity.may_use_server(spec.name):
+                # Not "started and then hidden". An identity that may not use a
+                # server should not cause that server's process to exist.
+                self.stats.backends_refused.append(
+                    f"{spec.identity()} (not granted to {identity.name})")
                 continue
             guard = Guard(spec.identity(), lock, policy=policy, quiet=True,
                           block_severity=block_severity,
@@ -248,6 +263,10 @@ class Gateway:
     # -- lifecycle ---------------------------------------------------------
 
     def start(self) -> None:
+        if self.identity is not None:
+            scope = ("every approved server" if self.identity.servers is None
+                     else ", ".join(self.identity.servers) or "no servers")
+            self.log(f"acting as {self.identity.name!r}: {scope}")
         for name, backend in list(self.backends.items()):
             if backend.start():
                 self.stats.backends_started += 1
@@ -287,6 +306,11 @@ class Gateway:
                 raw = str(tool.get("name") or "")
                 if not raw:
                     continue
+                namespaced = f"{name}{SEPARATOR}{raw}"
+                if self.identity is not None and \
+                        self.identity.denies_tool(namespaced, raw):
+                    self.stats.tools_withheld.append(namespaced)
+                    continue
                 if "BLOCKED BY mcp-audit" in str(tool.get("description") or ""):
                     self.stats.tools_withheld.append(f"{name}{SEPARATOR}{raw}")
                 tool["name"] = f"{name}{SEPARATOR}{raw}"
@@ -314,6 +338,15 @@ class Gateway:
         request_id = message.get("id")
 
         if method == "initialize":
+            # Recorded, never trusted. The client chooses this string, so it
+            # identifies nothing; authority comes from --as and the lockfile.
+            info = (message.get("params") or {}).get("clientInfo")
+            if isinstance(info, dict):
+                announced = str(info.get("name") or "")[:80]
+                self.stats.client_announced = announced
+                if self.trail and announced:
+                    self.trail.record("client_announced", subject=announced,
+                                      detail="self-declared, not authenticated")
             return {"jsonrpc": "2.0", "id": request_id, "result": {
                 "protocolVersion": LEGACY_PROTOCOL_VERSION,
                 "capabilities": {"tools": {}},
@@ -359,6 +392,50 @@ class Gateway:
 
         name, tool = split
         backend, guard = self.backends[name], self.guards[name]
+
+        if self.identity is not None:
+            if self.identity.denies_tool(namespaced, tool):
+                self.stats.calls_refused.append(namespaced)
+                if self.trail:
+                    self.trail.record("denied", subject=namespaced,
+                                      decision="block",
+                                      detail=f"identity={self.identity.name}")
+                return self._error(request_id, (
+                    f"[BLOCKED BY mcp-audit] {namespaced} is not available to "
+                    f"{self.identity.name!r}. The lockfile grants this agent a "
+                    f"narrower surface than the server offers."))
+
+            extra = self.identity.policy_for(namespaced, tool)
+            if extra:
+                decision = extra.check(tool, params.get("arguments"))
+                if not decision.allowed:
+                    self.stats.calls_refused.append(namespaced)
+                    if self.trail:
+                        self.trail.record("denied", subject=namespaced,
+                                          decision="block",
+                                          detail=f"identity={self.identity.name}")
+                    return self._error(request_id, (
+                        f"[BLOCKED BY mcp-audit] {namespaced} was not called. "
+                        f"{decision.reason}. This limit belongs to "
+                        f"{self.identity.name!r} and is narrower than the "
+                        f"server's own."))
+
+        if self.max_calls:
+            used = self._calls.get(namespaced, 0)
+            if used >= self.max_calls:
+                self.stats.calls_over_budget.append(namespaced)
+                if self.trail:
+                    self.trail.record("budget_exhausted", subject=namespaced,
+                                      decision="block")
+                if not self.dry_run:
+                    return self._error(request_id, (
+                        f"[BLOCKED BY mcp-audit] {namespaced} has been called "
+                        f"{used} times this session and the budget is "
+                        f"{self.max_calls}. A tool that suddenly runs in a loop "
+                        f"is usually an agent that has lost the plot, and the "
+                        f"budget is there to bound the damage rather than to "
+                        f"judge the call."))
+            self._calls[namespaced] = used + 1
 
         # The guard's own checks, on the un-namespaced call it expects.
         inner = dict(message)
@@ -407,18 +484,29 @@ class Gateway:
             bits.append(f"{s.calls_forwarded} call(s) forwarded")
         if s.calls_refused:
             bits.append(f"{len(s.calls_refused)} call(s) refused")
+        if s.calls_over_budget:
+            bits.append(f"{len(s.calls_over_budget)} over budget")
         return ", ".join(bits)
 
 
 def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
         allow_unapproved: bool = False, dry_run: bool = False, quiet: bool = False,
-        timeout: float = 30.0, log_path: Path | None = None) -> int:
+        timeout: float = 30.0, log_path: Path | None = None,
+        act_as: str | None = None, max_calls: int = 0) -> int:
     """Serve the gateway on stdio until the client goes away."""
     try:
         lock = Lock.load(lock_path)
     except ValueError as exc:
         print(f"mcp-audit gateway: {exc}", file=sys.stderr)
         return 2
+
+    identity = None
+    if act_as:
+        try:
+            identity = Identity.from_lock(lock, act_as)
+        except UnknownIdentity as exc:
+            print(f"mcp-audit gateway: {exc}", file=sys.stderr)
+            return 2
 
     trail = None
     if log_path is not None:
@@ -428,10 +516,12 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
                   file=sys.stderr)
             trail = None
         else:
-            trail.record("session_start", subject="gateway", detail=f"policy={policy}")
+            trail.record("session_start", subject=act_as or "gateway",
+                         detail=f"policy={policy} budget={max_calls or 'none'}")
 
     gateway = Gateway(servers, lock, policy=policy, allow_unapproved=allow_unapproved,
-                      dry_run=dry_run, quiet=quiet, timeout=timeout, trail=trail)
+                      dry_run=dry_run, quiet=quiet, timeout=timeout, trail=trail,
+                      identity=identity, max_calls=max_calls)
     if not gateway.backends:
         print("mcp-audit gateway: nothing approved to serve. Run "
               "`mcp-audit approve --probe` first, or pass --allow-unapproved.",
