@@ -71,6 +71,7 @@ mcp-audit policy --probe               # propose argument limits to review
 mcp-audit gateway                      # one endpoint in front of every approved server
 mcp-audit gateway --as finance         # ...restricted to one declared identity
 mcp-audit status                       # what is approved, what moved, what happened
+mcp-audit coverage                     # which guarantees are in force, and why not
 mcp-audit serve                        # run as an MCP server
 ```
 
@@ -248,6 +249,43 @@ is worse than no page at all.
 It computes nothing the other commands do not. `-f json` for the same thing as data. It is
 a command that prints rather than a dashboard, so it works over ssh and in CI output, which
 is the only interface a lot of this will ever have.
+
+### Where the guarantees stop (`coverage`)
+
+Every layer here is optional in practice. A server can be approved without being probed,
+pinned by command without being pinned by digest, policed at the fingerprint with no limit
+on its arguments. Each is a reasonable state to be in; not knowing which one you are in is
+not. `status` shows flags, and an absent flag reads identically whether pinning failed or
+was never possible.
+
+```
+  claude-code:github
+    yes  approved         2026-09-19T04:00:26Z
+    yes  tools pinned     14 tool(s) fingerprinted
+    no   code pinned      fetched from a registry at launch, so there is no local file to hash
+                          -> pin the version -- @modelcontextprotocol/server-github@1.2.3
+    no   argument policy  any argument reaches the server once the tool itself is approved
+                          -> mcp-audit policy --probe
+    yes  identity         reachable by finance
+```
+
+The **reason** is the point, not the verdict. `npx -y pkg` can never be pinned by digest
+and reporting that as a failure would put a permanent red mark on correct configuration —
+so it is reported as the gap it actually is, with the fix that does exist. A server pinned
+at `pkg@1.2.3` reads `n/a`: the version *is* the pin, and demanding a digest as well would
+be nagging. Nothing here is scored, because a percentage invites people to raise the number
+rather than close the gap, and the gaps are not equal.
+
+Writing this found a case where the report guessed and guessed wrong. A server that was
+launched at approve time and never answered has no tools recorded — identical, from the
+outside, to one nobody probed — and it printed "approved without `--probe`" and pointed at
+the command that had already failed. The lockfile now records the probe outcome, so the two
+read differently:
+
+```
+    no   tools pinned     probed at approve time and did not answer -- could not launch
+                          -> the approval covers a server that does not start; fix or remove it
+```
 
 ### Suppressing things
 
@@ -914,7 +952,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-606 tests, stdlib unittest, nothing to install.
+631 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

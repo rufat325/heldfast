@@ -185,6 +185,22 @@ def build_parser() -> argparse.ArgumentParser:
                           help="audit trail to summarise alongside it")
     status_p.add_argument("--no-color", action="store_true")
 
+    coverage_p = sub.add_parser(
+        "coverage",
+        help="which guarantees are actually in force, and why not",
+        description=(
+            "Per server and per layer: covered or not, the reason, and the "
+            "command that would change it. An absent guarantee and one that "
+            "cannot apply are different situations, and this is the only "
+            "place that distinguishes them."
+        ),
+    )
+    _add_scan_arguments(coverage_p)
+    # -v comes from the shared scan arguments; here it means "also show the
+    # layers that cannot apply".
+    coverage_p.add_argument("-f", "--format", choices=("text", "json"), default="text")
+    coverage_p.add_argument("--no-color", action="store_true")
+
     gateway_p = sub.add_parser(
         "gateway",
         help="one MCP endpoint in front of every approved server",
@@ -324,6 +340,9 @@ class Collected:
         self.source_flows: list = []
         # (identity, reason) for servers deliberately not launched.
         self.probe_skipped: list = []
+        # server name -> "answered" or a short reason it did not. Absent means
+        # no probe was attempted, which is a different thing from a failed one.
+        self.probe_status: dict = {}
 
 
 _GATE_NAMES = {
@@ -452,6 +471,8 @@ def collect(args: argparse.Namespace) -> Collected:
             if res.instructions:
                 out.instructions[res.server] = res.instructions
             out.eras[res.server] = res.protocol_era
+            out.probe_status[res.server] = (
+                f"no response: {res.error}" if res.error else "answered")
             if res.error:
                 out.errors.append(f"probe {res.server}: {res.error}")
     return out
@@ -602,7 +623,8 @@ def cmd_approve(args: argparse.Namespace) -> int:
     lock = Lock(path=lock_path)
     lock.record(data.servers, data.tools, data.skills,
                 prompts=data.prompts, resources=data.resources,
-                instructions=data.instructions, previous=previous)
+                instructions=data.instructions, previous=previous,
+                probe_status=data.probe_status)
     lock.merge_unprobed(previous)
     written = lock.save()
 
@@ -774,6 +796,29 @@ def cmd_status(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_coverage(args: argparse.Namespace) -> int:
+    from . import coverage as coverage_mod
+
+    lock_path = _resolve_lock_path(args)
+    try:
+        lock = Lock.load(lock_path)
+    except ValueError as exc:
+        print(f"mcp-audit: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    # No rules are run: this reports on the control plane, not on the servers.
+    # It is also the reason it stays fast enough to put in a prompt.
+    data = collect(args)
+    payload = coverage_mod.build(lock, data.servers)
+
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        sys.stdout.write(coverage_mod.render(
+            payload, color=not args.no_color, verbose=args.verbose))
+    return EXIT_OK
+
+
 def cmd_gateway(args: argparse.Namespace) -> int:
     from . import gateway as gateway_mod
 
@@ -866,6 +911,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_explain(args)
         if args.command == "status":
             return cmd_status(args)
+        if args.command == "coverage":
+            return cmd_coverage(args)
         if args.command == "gateway":
             return cmd_gateway(args)
         if args.command == "policy":

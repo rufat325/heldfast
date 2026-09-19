@@ -109,6 +109,26 @@ def _candidates(server: Any) -> list[Path]:
     return out
 
 
+def named_scripts(server: Any) -> list[str]:
+    """Script-looking tokens in the launch command, whether or not they exist.
+
+    `_candidates` deliberately returns only files that are present, because
+    hashing is the point there. Answering "was a script named at all" needs
+    the question asked before that filter: a command naming `server.js` when
+    no such file is on the machine is a broken launch, not a server with
+    nothing to pin, and the two were indistinguishable from the outside.
+    """
+    out: list[str] = []
+    command = str(getattr(server, "command", "") or "")
+    if command and ("/" in command or "\\" in command):
+        out.append(command)
+    for arg in getattr(server, "args", None) or []:
+        text = str(arg or "").strip().strip('"').strip("'")
+        if text and text not in _SKIP_ARGS and _looks_like_path(text):
+            out.append(text)
+    return out
+
+
 def artifact_digests(server: Any) -> dict[str, str]:
     """{path: sha256} for the scripts this server starts."""
     out: dict[str, str] = {}

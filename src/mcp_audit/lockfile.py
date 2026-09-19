@@ -102,7 +102,8 @@ class Lock:
                prompts: list[PromptSpec] | None = None,
                resources: list[ResourceSpec] | None = None,
                instructions: dict[str, str] | None = None,
-               previous: "Lock | None" = None) -> None:
+               previous: "Lock | None" = None,
+               probe_status: dict[str, str] | None = None) -> None:
         """Replace the lock contents with the current observed state.
 
         Covers every surface a server controls that reaches the model, not
@@ -154,6 +155,13 @@ class Lock:
                 "url": s.url,
                 "approved_at": _now(),
             }
+            # Whether a probe was attempted, and whether it answered. An entry
+            # with no tools means two opposite things -- nobody probed, or the
+            # server was launched and never replied -- and the second is worth
+            # knowing: it is an approval covering a server that does not run.
+            # Without this the coverage report had to guess, and guessed wrong.
+            if probe_status and s.name in probe_status:
+                entry["probe"] = probe_status[s.name]
             if s.name in instructions:
                 text = instructions[s.name]
                 entry["instructions"] = {
@@ -212,7 +220,8 @@ class Lock:
             if not isinstance(old, dict):
                 continue
             carried = False
-            for key in ("tools", "prompts", "resources", "instructions", "artifacts"):
+            for key in ("tools", "prompts", "resources", "instructions",
+                        "artifacts", "probe"):
                 if key not in entry and key in old:
                     entry[key] = old[key]
                     carried = True
