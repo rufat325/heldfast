@@ -25,7 +25,7 @@ def render_json(
 ) -> str:
     counts = {s.label: sum(1 for f in findings if f.severity == s) for s in Severity}
     doc = {
-        "tool": "mcp-audit",
+        "tool": "mcp-pin",
         "version": version,
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "platform": platform.platform(),

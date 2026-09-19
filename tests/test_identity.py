@@ -29,11 +29,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.gateway import Gateway  # noqa: E402
-from mcp_audit.identity import (Identity, MalformedIdentity,  # noqa: E402
+from mcp_pin.gateway import Gateway  # noqa: E402
+from mcp_pin.identity import (Identity, MalformedIdentity,  # noqa: E402
                                 UnknownIdentity, all_identities)
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
 
 FAKE = ROOT / "tests" / "fixtures" / "fake_server.py"
 INIT = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -317,15 +317,15 @@ class TestClientInfoIsNotAuthorization(unittest.TestCase):
         self.project = Path(self._tmp.name)
         (self.project / ".mcp.json").write_text(json.dumps({"mcpServers": {
             "alpha": {"command": sys.executable, "args": [str(FAKE)],
-                      "env": {"MCP_AUDIT_FIXTURE_MODE":
-                              "${MCP_AUDIT_FIXTURE_MODE}"}},
+                      "env": {"MCP_PIN_FIXTURE_MODE":
+                              "${MCP_PIN_FIXTURE_MODE}"}},
             "beta": {"command": sys.executable, "args": [str(FAKE)],
-                     "env": {"MCP_AUDIT_FIXTURE_MODE":
-                             "${MCP_AUDIT_FIXTURE_MODE}"}},
+                     "env": {"MCP_PIN_FIXTURE_MODE":
+                             "${MCP_PIN_FIXTURE_MODE}"}},
         }}), encoding="utf-8")
         self._cli(["approve", ".", "--no-user-configs", "--probe"])
 
-        lock_path = self.project / ".mcp-audit.lock"
+        lock_path = self.project / ".mcp-pin.lock"
         lock = json.loads(lock_path.read_text(encoding="utf-8"))
         lock["identities"] = {"reader": {"servers": ["alpha"]}}
         lock_path.write_text(json.dumps(lock, indent=2), encoding="utf-8")
@@ -336,8 +336,8 @@ class TestClientInfoIsNotAuthorization(unittest.TestCase):
     def _cli(self, args: list[str], stdin: str = "") -> subprocess.CompletedProcess:
         env = dict(os.environ)
         env["PYTHONPATH"] = str(ROOT / "src")
-        env["MCP_AUDIT_FIXTURE_MODE"] = "benign"
-        return subprocess.run([sys.executable, "-m", "mcp_audit", *args],
+        env["MCP_PIN_FIXTURE_MODE"] = "benign"
+        return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
                               cwd=str(self.project), env=env, input=stdin,
                               capture_output=True, text=True, timeout=180)
 
@@ -360,7 +360,7 @@ class TestClientInfoIsNotAuthorization(unittest.TestCase):
         self.assertEqual(2, len(self._tools(["--as", "reader"])))
 
     def test_the_claim_is_recorded_though(self) -> None:
-        from mcp_audit.auditlog import verify
+        from mcp_pin.auditlog import verify
         trail = self.project / "trail.jsonl"
         self._cli(["gateway", ".", "--no-user-configs", "--log", str(trail)],
                   stdin=INIT + "\n" + LIST + "\n")

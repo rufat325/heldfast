@@ -1,7 +1,7 @@
 """Whether this tool is actually in the path.
 
 The lockfile is a committed artifact describing a boundary. Nothing in it is
-in force unless the client talks to `mcp-audit gateway` or `mcp-audit guard`,
+in force unless the client talks to `mcp-pin gateway` or `mcp-pin guard`,
 and the configuration is where that is decided.
 
 Two questions are asked from three places -- the MCPA032 rule, the status page
@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from typing import Any
 
-# What mcp-audit is called once installed, however it was installed.
-_SELF = {"mcp-audit", "mcp-audit.exe", "mcp_audit"}
+# What mcp-pin is called once installed, however it was installed.
+_SELF = {"mcp-pin", "mcp-pin.exe", "mcp_pin"}
 
 # Subcommands that put this tool between the client and a server. `scan` and
 # the rest are not enforcement and must not be mistaken for it.
@@ -47,12 +47,12 @@ def unwrap_launcher(command: str, args: list) -> tuple[str, list]:
 
 
 def subcommand(server: Any) -> str:
-    """The mcp-audit subcommand this entry launches, or "".
+    """The mcp-pin subcommand this entry launches, or "".
 
     Recognises the shapes people actually write: the installed console script,
-    an absolute path to it, `python -m mcp_audit`, a uvx invocation, and any of
+    an absolute path to it, `python -m mcp_pin`, a uvx invocation, and any of
     them behind the `cmd /c` wrapper Windows requires. Matching is on the whole
-    path leaf and never on a substring -- `npx -y mcp-audit-helper` is somebody
+    path leaf and never on a substring -- `npx -y mcp-pin-helper` is somebody
     else's package, and a rule that can be switched off by choosing a package
     name is not a rule.
     """

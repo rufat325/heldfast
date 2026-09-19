@@ -42,7 +42,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.rules.poisoning import scan_untrusted_text  # noqa: E402
+from mcp_pin.rules.poisoning import scan_untrusted_text  # noqa: E402
 
 
 def categories(text: str) -> set:

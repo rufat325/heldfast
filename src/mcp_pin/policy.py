@@ -12,7 +12,7 @@ So policy constrains arguments, not identity:
     "fetch":       {"domains": ["api.github.com"]}
     "run_command": {"deny": true}
 
-It lives in `.mcp-audit.lock` next to the fingerprints, deliberately. One
+It lives in `.mcp-pin.lock` next to the fingerprints, deliberately. One
 committed file already governs code review, CI and runtime enforcement; a
 second policy file in a different format would let the thing a reviewer read
 and the thing a machine enforces drift apart, which is the failure this

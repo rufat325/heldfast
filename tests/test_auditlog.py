@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.auditlog import GENESIS, AuditLog, verify  # noqa: E402
+from mcp_pin.auditlog import GENESIS, AuditLog, verify  # noqa: E402
 
 HOSTILE = ROOT / "tests" / "fixtures" / "hostile_server.py"
 SECRET = "ghp_" + "A" * 36
@@ -138,12 +138,12 @@ class TestArgumentsAreNeverWritten(unittest.TestCase):
                 "params": {"name": "read_note", "arguments": {"token": SECRET}},
             })
             proc = subprocess.run(
-                [sys.executable, "-m", "mcp_audit", "guard", "--quiet", "--name", "h",
+                [sys.executable, "-m", "mcp_pin", "guard", "--quiet", "--name", "h",
                  "--log", str(path), "--", sys.executable, str(HOSTILE)],
                 input=request + "\n", text=True, capture_output=True, timeout=120,
                 cwd=str(ROOT),
                 env={"PATH": "", "SystemRoot": "C:\\Windows",
-                     "PYTHONPATH": str(ROOT / "src"), "MCP_AUDIT_HOSTILE": "banner"},
+                     "PYTHONPATH": str(ROOT / "src"), "MCP_PIN_HOSTILE": "banner"},
             )
             self.assertTrue(path.exists(), proc.stderr)
             body = path.read_text(encoding="utf-8")

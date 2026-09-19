@@ -9,7 +9,7 @@ The gateway is one MCP server that the client points at instead. Behind it sit
 every approved server from the lockfile, started as children, and every call
 passes through the same enforcement `guard` already applies:
 
-    client ──stdio──> mcp-audit gateway ──stdio──> github server
+    client ──stdio──> mcp-pin gateway ──stdio──> github server
                             │                 └──> filesystem server
                             │                 └──> postgres server
                             ▼
@@ -59,7 +59,7 @@ from .model import ServerSpec
 
 PROTOCOL_VERSION = "2026-07-28"
 LEGACY_PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": "mcp-audit-gateway", "version": "0.1.0"}
+SERVER_INFO = {"name": "mcp-pin-gateway", "version": "0.1.0"}
 
 # `server__tool`. Two underscores because single ones are common inside tool
 # names and would make the split ambiguous.
@@ -138,7 +138,7 @@ class Backend:
         reply = self.request("initialize", {
             "protocolVersion": LEGACY_PROTOCOL_VERSION,
             "capabilities": {},
-            "clientInfo": {"name": "mcp-audit-gateway", "version": "0.1.0"},
+            "clientInfo": {"name": "mcp-pin-gateway", "version": "0.1.0"},
         })
         if reply is None or "error" in reply:
             self.error = "did not answer initialize"
@@ -279,7 +279,7 @@ class Gateway:
             if guard._locked_tools is None and not allow_unapproved:
                 self.stats.backends_refused.append(spec.identity())
                 self.log(f"not started: {spec.identity()} is not in the lockfile. "
-                         f"Run `mcp-audit approve --probe`, or pass "
+                         f"Run `mcp-pin approve --probe`, or pass "
                          f"--allow-unapproved.")
                 continue
             backend = Backend(spec, timeout=timeout,
@@ -291,7 +291,7 @@ class Gateway:
 
     def log(self, message: str) -> None:
         if not self.quiet:
-            print(f"mcp-audit gateway: {message}", file=sys.stderr)
+            print(f"mcp-pin gateway: {message}", file=sys.stderr)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -355,7 +355,7 @@ class Gateway:
                         self.identity.denies_tool(namespaced, raw):
                     self.stats.tools_withheld.append(namespaced)
                     continue
-                if "BLOCKED BY mcp-audit" in str(tool.get("description") or ""):
+                if "BLOCKED BY mcp-pin" in str(tool.get("description") or ""):
                     self.stats.tools_withheld.append(f"{name}{SEPARATOR}{raw}")
                 tool["name"] = f"{name}{SEPARATOR}{raw}"
                 out.append(tool)
@@ -423,14 +423,14 @@ class Gateway:
         request_id = message.get("id")
         params = message.get("params")
         if not isinstance(params, dict):
-            return self._error(request_id, "[mcp-audit] malformed tools/call")
+            return self._error(request_id, "[mcp-pin] malformed tools/call")
 
         namespaced = str(params.get("name") or "")
         split = self.split_name(namespaced)
         if split is None:
             self.stats.calls_refused.append(namespaced)
             return self._error(request_id, (
-                f"[BLOCKED BY mcp-audit] no approved server offers "
+                f"[BLOCKED BY mcp-pin] no approved server offers "
                 f"{namespaced!r}. Tool names here are prefixed with the server "
                 f"they belong to."))
 
@@ -445,7 +445,7 @@ class Gateway:
                                       decision="block",
                                       detail=f"identity={self.identity.name}")
                 return self._error(request_id, (
-                    f"[BLOCKED BY mcp-audit] {namespaced} is not available to "
+                    f"[BLOCKED BY mcp-pin] {namespaced} is not available to "
                     f"{self.identity.name!r}. The lockfile grants this agent a "
                     f"narrower surface than the server offers."))
 
@@ -459,7 +459,7 @@ class Gateway:
                                           decision="block",
                                           detail=f"identity={self.identity.name}")
                     return self._error(request_id, (
-                        f"[BLOCKED BY mcp-audit] {namespaced} was not called. "
+                        f"[BLOCKED BY mcp-pin] {namespaced} was not called. "
                         f"{decision.reason}. This limit belongs to "
                         f"{self.identity.name!r} and is narrower than the "
                         f"server's own."))
@@ -473,7 +473,7 @@ class Gateway:
                                       decision="block")
                 if not self.dry_run:
                     return self._error(request_id, (
-                        f"[BLOCKED BY mcp-audit] {namespaced} has been called "
+                        f"[BLOCKED BY mcp-pin] {namespaced} has been called "
                         f"{used} times this session and the budget is "
                         f"{self.max_calls}. A tool that suddenly runs in a loop "
                         f"is usually an agent that has lost the plot, and the "
@@ -505,7 +505,7 @@ class Gateway:
         reply = backend.request("tools/call", inner["params"])
         if reply is None:
             return self._error(request_id, (
-                f"[mcp-audit] {name} did not answer. The gateway is still up; "
+                f"[mcp-pin] {name} did not answer. The gateway is still up; "
                 f"other servers are unaffected."))
 
         self.stats.calls_forwarded += 1
@@ -602,7 +602,7 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
     try:
         lock = Lock.load(lock_path)
     except ValueError as exc:
-        print(f"mcp-audit gateway: {exc}", file=sys.stderr)
+        print(f"mcp-pin gateway: {exc}", file=sys.stderr)
         return 2
 
     identity = None
@@ -610,14 +610,14 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
         try:
             identity = Identity.from_lock(lock, act_as)
         except UnknownIdentity as exc:
-            print(f"mcp-audit gateway: {exc}", file=sys.stderr)
+            print(f"mcp-pin gateway: {exc}", file=sys.stderr)
             return 2
 
     trail = None
     if log_path is not None:
         trail = AuditLog(log_path, "gateway")
         if trail.failed:
-            print(f"mcp-audit gateway: audit log unavailable: {trail.failed}",
+            print(f"mcp-pin gateway: audit log unavailable: {trail.failed}",
                   file=sys.stderr)
             trail = None
         else:
@@ -631,14 +631,14 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
                       deny_elicitation=deny_elicitation,
                       isolate_env=isolate_env, share_env=share_env)
     if not gateway.backends:
-        print("mcp-audit gateway: nothing approved to serve. Run "
-              "`mcp-audit approve --probe` first, or pass --allow-unapproved.",
+        print("mcp-pin gateway: nothing approved to serve. Run "
+              "`mcp-pin approve --probe` first, or pass --allow-unapproved.",
               file=sys.stderr)
         return 2
 
     gateway.start()
     if not gateway.backends:
-        print("mcp-audit gateway: no backend started successfully.", file=sys.stderr)
+        print("mcp-pin gateway: no backend started successfully.", file=sys.stderr)
         gateway.close()
         return 2
 
@@ -658,7 +658,7 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
             except Exception as exc:          # never take the agent down
                 gateway.log(f"INTERNAL ERROR: {exc}")
                 reply = gateway._error(message.get("id"),
-                                       f"[mcp-audit] internal error: {exc}")
+                                       f"[mcp-pin] internal error: {exc}")
             if reply is not None:
                 sys.stdout.write(json.dumps(reply) + "\n")
                 sys.stdout.flush()

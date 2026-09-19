@@ -1,7 +1,7 @@
 """Findings that exist in the combination of servers, not in any one of them.
 
 Every other scanner in this space examines one server at a time, so these are
-invisible to them by construction. mcp-audit already reads every client's
+invisible to them by construction. mcp-pin already reads every client's
 config on the machine in a single pass, which means it holds the one thing the
 per-server tools do not: the whole set an agent can reach at once.
 
@@ -245,7 +245,7 @@ def exfiltration_reach(ctx: AuditContext) -> Iterable[Finding]:
 def bypassable_gateway(ctx: AuditContext) -> Iterable[Finding]:
     """A gateway entry beside the direct entries it was meant to replace.
 
-    `mcp-audit gateway` is one endpoint in front of every approved server, and
+    `mcp-pin gateway` is one endpoint in front of every approved server, and
     the client is supposed to point at it *instead of* at the servers. Adding
     it without removing what it replaces leaves both paths live: the agent
     sees each tool twice, and the second copy answers without passing the

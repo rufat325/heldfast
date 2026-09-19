@@ -25,17 +25,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit import lifetime  # noqa: E402
-from mcp_audit.model import ServerSpec  # noqa: E402
-from mcp_audit.probe import probe_stdio  # noqa: E402
+from mcp_pin import lifetime  # noqa: E402
+from mcp_pin.model import ServerSpec  # noqa: E402
+from mcp_pin.probe import probe_stdio  # noqa: E402
 
 HOSTILE = ROOT / "tests" / "fixtures" / "hostile_server.py"
 
 
 def probe(mode: str, *, through_guard: bool = False, timeout: float = 20.0):
-    env = {"MCP_AUDIT_HOSTILE": mode, "PYTHONPATH": str(ROOT / "src")}
+    env = {"MCP_PIN_HOSTILE": mode, "PYTHONPATH": str(ROOT / "src")}
     if through_guard:
-        args = ["-m", "mcp_audit", "guard", "--quiet", "--name", "h", "--",
+        args = ["-m", "mcp_pin", "guard", "--quiet", "--name", "h", "--",
                 sys.executable, str(HOSTILE)]
     else:
         args = [str(HOSTILE)]
@@ -204,11 +204,11 @@ class TestChildLifetime(unittest.TestCase):
         now reports its own pid, which is exact and needs no external tool."""
         with tempfile.TemporaryDirectory() as td:
             pidfile = Path(td) / "server.pid"
-            env = dict(os.environ, MCP_AUDIT_HOSTILE="hang",
-                       MCP_AUDIT_HOSTILE_PIDFILE=str(pidfile),
+            env = dict(os.environ, MCP_PIN_HOSTILE="hang",
+                       MCP_PIN_HOSTILE_PIDFILE=str(pidfile),
                        PYTHONPATH=str(ROOT / "src"))
             guard = subprocess.Popen(
-                [sys.executable, "-m", "mcp_audit", "guard", "--quiet", "--name", "h", "--",
+                [sys.executable, "-m", "mcp_pin", "guard", "--quiet", "--name", "h", "--",
                  sys.executable, str(HOSTILE)],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, cwd=str(ROOT), env=env)
             try:

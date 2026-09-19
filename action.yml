@@ -1,4 +1,4 @@
-name: "mcp-audit"
+name: "mcp-pin"
 description: "Scan MCP server configurations and agent skills for security issues"
 author: "rufat325"
 branding:
@@ -21,7 +21,7 @@ inputs:
   output:
     description: "Path for the report file"
     required: false
-    default: "mcp-audit.sarif"
+    default: "mcp-pin.sarif"
   probe:
     description: >-
       Connect to servers and read live tool descriptions. This LAUNCHES local
@@ -61,7 +61,7 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install mcp-audit
+    - name: Install mcp-pin
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -95,13 +95,13 @@ runs:
           common+=(--no-user-configs)
         fi
 
-        summary="$RUNNER_TEMP/mcp-audit-summary.json"
-        mcp-audit "${common[@]}" --format json --output "$summary" --fail-on never
+        summary="$RUNNER_TEMP/mcp-pin-summary.json"
+        mcp-pin "${common[@]}" --format json --output "$summary" --fail-on never
 
         if [ "$IN_FORMAT" = "json" ]; then
           cp "$summary" "$IN_OUTPUT"
         else
-          mcp-audit "${common[@]}" --format "$IN_FORMAT" --output "$IN_OUTPUT" --fail-on never
+          mcp-pin "${common[@]}" --format "$IN_FORMAT" --output "$IN_OUTPUT" --fail-on never
         fi
 
         total=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['summary']['total'])" "$summary")
@@ -115,10 +115,10 @@ runs:
 
         # Print the findings into the log. A report written only to a file is
         # a report nobody reads.
-        mcp-audit "${common[@]}" --format text --fail-on never --no-color || true
+        mcp-pin "${common[@]}" --format text --fail-on never --no-color || true
 
         {
-          echo "### mcp-audit"
+          echo "### mcp-pin"
           echo ""
           echo "\`$total\` finding(s), highest severity: \`$highest\`"
         } >> "$GITHUB_STEP_SUMMARY"
@@ -128,7 +128,7 @@ runs:
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: ${{ inputs.output }}
-        category: mcp-audit
+        category: mcp-pin
 
     - name: Enforce threshold
       if: ${{ inputs.fail-on != 'never' }}
@@ -149,12 +149,12 @@ runs:
         highest = os.environ["HIGHEST"]
         total = int(os.environ["FINDINGS"] or 0)
         if total == 0 or highest == "none":
-            print("mcp-audit: no findings")
+            print("mcp-pin: no findings")
             sys.exit(0)
         if order.index(highest) >= order.index(threshold):
-            print(f"mcp-audit: {total} finding(s); highest '{highest}' "
+            print(f"mcp-pin: {total} finding(s); highest '{highest}' "
                   f"meets or exceeds the '{threshold}' threshold")
             sys.exit(1)
-        print(f"mcp-audit: {total} finding(s); highest '{highest}' is below "
+        print(f"mcp-pin: {total} finding(s); highest '{highest}' is below "
               f"the '{threshold}' threshold")
         EOF

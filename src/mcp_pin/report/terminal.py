@@ -68,7 +68,7 @@ def render_terminal(
     add = out.append
 
     add("")
-    add(paint.bold("  mcp-audit"))
+    add(paint.bold("  mcp-pin"))
     add(paint.dim(
         f"  {scanned_configs} config file(s), {scanned_servers} server(s), "
         f"{scanned_tools} tool(s), {scanned_skills} skill(s)"
@@ -136,7 +136,7 @@ def render_terminal(
     hints: list[str] = []
     if not lock_present:
         hints.append(
-            "No approval lockfile. Run `mcp-audit approve` to record the current state; "
+            "No approval lockfile. Run `mcp-pin approve` to record the current state; "
             "later scans will then flag tool descriptions that change behind your back."
         )
     elif not probed:

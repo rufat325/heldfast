@@ -103,7 +103,7 @@ def render(data: dict[str, Any], *, color: bool = False, verbose: bool = False) 
     dim = (lambda s: f"\033[90m{s}\033[0m") if color else (lambda s: s)
     warn = (lambda s: f"\033[33m{s}\033[0m") if color else (lambda s: s)
 
-    out: list[str] = ["", bold("  mcp-audit inspect"), ""]
+    out: list[str] = ["", bold("  mcp-pin inspect"), ""]
     totals = data["totals"]
     out.append(dim(
         f"  {totals['servers']} server(s) across {totals['clients']} client(s), "
@@ -152,6 +152,6 @@ def render(data: dict[str, Any], *, color: bool = False, verbose: bool = False) 
     if data["errors"]:
         out.append("")
 
-    out.append(dim("  Nothing here is a judgement. Run `mcp-audit scan` for that."))
+    out.append(dim("  Nothing here is a judgement. Run `mcp-pin scan` for that."))
     out.append("")
     return "\n".join(out)

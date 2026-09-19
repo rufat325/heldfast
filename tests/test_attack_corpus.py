@@ -23,10 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import (PromptSpec, ResourceSpec, ServerSpec,  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import (PromptSpec, ResourceSpec, ServerSpec,  # noqa: E402
                              SkillSpec, ToolSpec)
-from mcp_audit.rules import AuditContext, all_rules, run_rules  # noqa: E402
+from mcp_pin.rules import AuditContext, all_rules, run_rules  # noqa: E402
 
 # Rules that cannot be demonstrated in-process, with the reason.
 EXEMPT = {
@@ -75,7 +75,7 @@ class TestExecutionAttacks(unittest.TestCase):
         self.assertTrue(caught("MCPA029", ctx))
 
     def test_shell_injection_in_the_server_source_python(self) -> None:
-        from mcp_audit.sourcescan import analyze_source
+        from mcp_pin.sourcescan import analyze_source
         flows = analyze_source(
             "from mcp.server.fastmcp import FastMCP\nimport subprocess\n"
             "mcp = FastMCP('x')\n"
@@ -85,8 +85,8 @@ class TestExecutionAttacks(unittest.TestCase):
         self.assertTrue(caught("MCPA030", AuditContext(source_flows=flows)))
 
     def test_shell_injection_in_the_server_source_typescript(self) -> None:
-        from mcp_audit.jsscan import analyze_js
-        from mcp_audit.sourcescan import _as_source_flow
+        from mcp_pin.jsscan import analyze_js
+        from mcp_pin.sourcescan import _as_source_flow
         flows = [_as_source_flow(f) for f in analyze_js(
             'import { exec } from "node:child_process";\n'
             'import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";\n'
@@ -311,7 +311,7 @@ class TestCompositionAttacks(unittest.TestCase):
         lock = Lock()
         lock.record([direct], [], [])
         ctx = AuditContext(
-            servers=[server("everything", command="mcp-audit", args=["gateway"]),
+            servers=[server("everything", command="mcp-pin", args=["gateway"]),
                      direct],
             lock={"servers": lock.servers, "skills": lock.skills})
         self.assertTrue(caught("MCPA032", ctx))

@@ -6,7 +6,7 @@ exit when stdin closes, and occasionally send malformed UTF-8. The spec
 forbids some of this and it happens anyway, so a client that only ever talks
 to a polite fixture has not been tested.
 
-Each mode is one realistic failure. Selected with MCP_AUDIT_HOSTILE=<mode>:
+Each mode is one realistic failure. Selected with MCP_PIN_HOSTILE=<mode>:
 
     banner        writes human text to stdout before any JSON-RPC
     notifications interleaves notifications between request and reply
@@ -23,7 +23,7 @@ Each mode is one realistic failure. Selected with MCP_AUDIT_HOSTILE=<mode>:
 
 Nothing here reaches outside the process: no network, no subprocesses, and
 the only file it writes is a pid file, only to the path a test hands it in
-MCP_AUDIT_HOSTILE_PIDFILE. It is hostile to the protocol, not to the machine.
+MCP_PIN_HOSTILE_PIDFILE. It is hostile to the protocol, not to the machine.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import os
 import sys
 import time
 
-MODE = os.environ.get("MCP_AUDIT_HOSTILE", "")
+MODE = os.environ.get("MCP_PIN_HOSTILE", "")
 
 TOOLS = [{
     "name": "read_note",
@@ -81,7 +81,7 @@ def main() -> int:
     # the pid is precise and costs nothing; the alternative was enumerating
     # processes and matching command lines, which meant shelling out to wmic --
     # absent from current Windows runner images, and the reason CI was red.
-    pidfile = os.environ.get("MCP_AUDIT_HOSTILE_PIDFILE")
+    pidfile = os.environ.get("MCP_PIN_HOSTILE_PIDFILE")
     if pidfile:
         with open(pidfile, "w", encoding="utf-8") as handle:
             handle.write(str(os.getpid()))

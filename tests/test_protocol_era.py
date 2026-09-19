@@ -18,9 +18,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit import probe as probe_mod  # noqa: E402
-from mcp_audit.model import ServerSpec  # noqa: E402
-from mcp_audit.probe import probe_stdio  # noqa: E402
+from mcp_pin import probe as probe_mod  # noqa: E402
+from mcp_pin.model import ServerSpec  # noqa: E402
+from mcp_pin.probe import probe_stdio  # noqa: E402
 
 MODERN = ROOT / "tests" / "fixtures" / "modern_server.py"
 LEGACY = ROOT / "tests" / "fixtures" / "fake_server.py"
@@ -58,24 +58,24 @@ class TestEraDetection(unittest.TestCase):
 
     def test_modern_server_that_ignores_initialize(self) -> None:
         """Deadlocked before: nothing ever answers id 1, so waiting on it hangs."""
-        r = probe(MODERN, {"MCP_AUDIT_FIXTURE_SILENT": "1"})
+        r = probe(MODERN, {"MCP_PIN_FIXTURE_SILENT": "1"})
         self.assertIsNone(r.error, r.error)
         self.assertEqual("modern", r.protocol_era)
 
     def test_legacy_server_falls_back_to_the_handshake(self) -> None:
-        r = probe(LEGACY, {"MCP_AUDIT_FIXTURE_MODE": "benign"})
+        r = probe(LEGACY, {"MCP_PIN_FIXTURE_MODE": "benign"})
         self.assertIsNone(r.error, r.error)
         self.assertEqual("legacy", r.protocol_era)
         self.assertEqual([], r.supported_versions)
 
     def test_tools_are_read_in_both_eras(self) -> None:
         self.assertTrue(probe(MODERN).tools)
-        self.assertTrue(probe(LEGACY, {"MCP_AUDIT_FIXTURE_MODE": "benign"}).tools)
+        self.assertTrue(probe(LEGACY, {"MCP_PIN_FIXTURE_MODE": "benign"}).tools)
 
     def test_instructions_are_read_in_both_eras(self) -> None:
         """In the modern era they arrive on the discover result, not initialize."""
         self.assertIn("notes", probe(MODERN).instructions)
-        self.assertIn("invoice", probe(LEGACY, {"MCP_AUDIT_FIXTURE_MODE": "benign"}).instructions)
+        self.assertIn("invoice", probe(LEGACY, {"MCP_PIN_FIXTURE_MODE": "benign"}).instructions)
 
     def test_annotations_survive_the_modern_path(self) -> None:
         tool = probe(MODERN).tools[0]

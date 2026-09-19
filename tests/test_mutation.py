@@ -24,12 +24,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mutants import MUTANTS, Mutant  # noqa: E402
 
 
-PKG = ROOT / "src" / "mcp_audit"
+PKG = ROOT / "src" / "mcp_pin"
 KILL_THRESHOLD = 1.0  # every catalogued mutant must die
 
 
 def _apply(mutant: Mutant, dest: Path) -> None:
-    target = dest / "mcp_audit" / mutant.path
+    target = dest / "mcp_pin" / mutant.path
     text = target.read_text(encoding="utf-8")
     count = text.count(mutant.original)
     if count != 1:
@@ -71,10 +71,10 @@ def _probe(mutant: Mutant, dest: Path) -> dict:
 
 
 def _kill(mutant: Mutant) -> bool:
-    with tempfile.TemporaryDirectory(prefix="mcp-audit-mutant-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="mcp-pin-mutant-") as tmp:
         dest = Path(tmp)
         shutil.copytree(
-            PKG, dest / "mcp_audit",
+            PKG, dest / "mcp_pin",
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
         )
         _apply(mutant, dest)

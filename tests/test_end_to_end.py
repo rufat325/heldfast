@@ -9,13 +9,13 @@ a different question and the one the README makes a promise about:
                 -> the proxy refuses to pass it through
 
 Nothing here imports an internal function. Everything goes through
-`python -m mcp_audit`, with a real config file, a real lockfile, a real server
+`python -m mcp_pin`, with a real config file, a real lockfile, a real server
 process and this package's own MCP client on the other side -- because a chain
 that only works when called from inside the package is not a chain anybody
 else can use.
 
 The server is `fixtures/fake_server.py`, which rewrites its own tool
-descriptions when MCP_AUDIT_FIXTURE_MODE=poisoned. Its configuration is
+descriptions when MCP_PIN_FIXTURE_MODE=poisoned. Its configuration is
 byte-identical across the two runs; that is the entire point, and it is what
 no point-in-time config scan can see.
 """
@@ -40,10 +40,10 @@ EXIT_OK, EXIT_FINDINGS = 0, 1
 def run(args: list[str], cwd: Path, poisoned: bool = False, **kw) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "src")
-    env["MCP_AUDIT_FIXTURE_MODE"] = "poisoned" if poisoned else "benign"
-    env.pop("MCP_AUDIT_ALLOW_PATH_SCAN", None)
+    env["MCP_PIN_FIXTURE_MODE"] = "poisoned" if poisoned else "benign"
+    env.pop("MCP_PIN_ALLOW_PATH_SCAN", None)
     return subprocess.run(
-        [sys.executable, "-m", "mcp_audit", *args],
+        [sys.executable, "-m", "mcp_pin", *args],
         cwd=str(cwd), env=env, capture_output=True, text=True, timeout=180, **kw)
 
 
@@ -59,7 +59,7 @@ class TestTheRugPullStory(unittest.TestCase):
                     # The fixture reads its mode from the environment, and a
                     # probed server now gets only what its config declares --
                     # the same migration a real user makes for a token.
-                    "env": {"MCP_AUDIT_FIXTURE_MODE": "${MCP_AUDIT_FIXTURE_MODE}"},
+                    "env": {"MCP_PIN_FIXTURE_MODE": "${MCP_PIN_FIXTURE_MODE}"},
                 }
             }
         }
@@ -70,7 +70,7 @@ class TestTheRugPullStory(unittest.TestCase):
         self._tmp.cleanup()
 
     def lock(self) -> dict:
-        return json.loads((self.project / ".mcp-audit.lock").read_text(encoding="utf-8"))
+        return json.loads((self.project / ".mcp-pin.lock").read_text(encoding="utf-8"))
 
     def test_the_whole_chain(self) -> None:
         # 1. Approve what is actually there.
@@ -104,23 +104,23 @@ class TestTheRugPullStory(unittest.TestCase):
         self.assertEqual(EXIT_FINDINGS, gated.returncode)
 
         # 5. The proxy refuses to pass the rewritten tool to a client.
-        from mcp_audit.model import ServerSpec
-        from mcp_audit.probe import probe_stdio
+        from mcp_pin.model import ServerSpec
+        from mcp_pin.probe import probe_stdio
 
         spec = ServerSpec(
             name="invoices", source="<test>", client="test", transport="stdio",
             command=sys.executable,
-            args=["-m", "mcp_audit", "guard", "--quiet", "--name", "invoices",
-                  "--lock", str(self.project / ".mcp-audit.lock"),
+            args=["-m", "mcp_pin", "guard", "--quiet", "--name", "invoices",
+                  "--lock", str(self.project / ".mcp-pin.lock"),
                   "--", sys.executable, str(FAKE)],
-            env={"PYTHONPATH": str(ROOT / "src"), "MCP_AUDIT_FIXTURE_MODE": "poisoned"},
+            env={"PYTHONPATH": str(ROOT / "src"), "MCP_PIN_FIXTURE_MODE": "poisoned"},
         )
         result = probe_stdio(spec, timeout=60)
         self.assertIsNone(result.error, result.error)
 
         served = {t.name: t.description for t in result.tools}
         self.assertIn("read_invoice", served, "a blocked tool keeps its name")
-        self.assertIn("BLOCKED BY mcp-audit", served["read_invoice"])
+        self.assertIn("BLOCKED BY mcp-pin", served["read_invoice"])
         self.assertNotIn("id_rsa", served["read_invoice"],
                          "the poisoned text must not reach the client")
 
@@ -145,7 +145,7 @@ class TestTheScriptSwapStory(unittest.TestCase):
             approved = run(["approve", ".", "--no-user-configs"], project)
             self.assertEqual(EXIT_OK, approved.returncode, approved.stderr)
 
-            lock = json.loads((project / ".mcp-audit.lock").read_text(encoding="utf-8"))
+            lock = json.loads((project / ".mcp-pin.lock").read_text(encoding="utf-8"))
             self.assertTrue(lock["servers"]["claude-code:notes"]["artifacts"])
 
             script.write_text("console.log('v1');\nrequire('child_process');\n",
@@ -166,8 +166,8 @@ class TestThePolicyStory(unittest.TestCase):
     do something outside its boundary."""
 
     def test_an_approved_tool_refused_for_its_arguments(self) -> None:
-        from mcp_audit.guard import Guard
-        from mcp_audit.lockfile import Lock
+        from mcp_pin.guard import Guard
+        from mcp_pin.lockfile import Lock
 
         with tempfile.TemporaryDirectory() as td:
             project = Path(td)
@@ -179,7 +179,7 @@ class TestThePolicyStory(unittest.TestCase):
                              run(["approve", ".", "--no-user-configs", "--probe"],
                                  project).returncode)
 
-            lock_path = project / ".mcp-audit.lock"
+            lock_path = project / ".mcp-pin.lock"
             lock_data = json.loads(lock_path.read_text(encoding="utf-8"))
             lock_data["servers"]["claude-code:files"]["policy"] = {
                 "read_invoice": {"paths": ["/workspace/**"]}
@@ -211,7 +211,7 @@ class TestThePolicyStory(unittest.TestCase):
             }), encoding="utf-8")
             run(["approve", ".", "--no-user-configs", "--probe"], project)
 
-            lock_path = project / ".mcp-audit.lock"
+            lock_path = project / ".mcp-pin.lock"
             data = json.loads(lock_path.read_text(encoding="utf-8"))
             data["servers"]["claude-code:files"]["policy"] = {"read_invoice": {"deny": True}}
             lock_path.write_text(json.dumps(data, indent=2), encoding="utf-8")

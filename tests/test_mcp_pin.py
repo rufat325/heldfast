@@ -21,17 +21,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.discovery import _strip_jsonc, find_key_line  # noqa: E402
-from mcp_audit.findings import Finding, Location, Severity  # noqa: E402
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import ServerSpec, SkillSpec, ToolSpec  # noqa: E402
-from mcp_audit.parsers import parse_config, parse_skill  # noqa: E402
-from mcp_audit.report.sarif import render_sarif  # noqa: E402
-from mcp_audit.rules import AuditContext, run_rules  # noqa: E402
-from mcp_audit.rules.execution import levenshtein, split_package  # noqa: E402
-from mcp_audit.rules.poisoning import invisible_runs  # noqa: E402
-from mcp_audit.secrets import redact  # noqa: E402
-from mcp_audit import suppressions  # noqa: E402
+from mcp_pin.discovery import _strip_jsonc, find_key_line  # noqa: E402
+from mcp_pin.findings import Finding, Location, Severity  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import ServerSpec, SkillSpec, ToolSpec  # noqa: E402
+from mcp_pin.parsers import parse_config, parse_skill  # noqa: E402
+from mcp_pin.report.sarif import render_sarif  # noqa: E402
+from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
+from mcp_pin.rules.execution import levenshtein, split_package  # noqa: E402
+from mcp_pin.rules.poisoning import invisible_runs  # noqa: E402
+from mcp_pin.secrets import redact  # noqa: E402
+from mcp_pin import suppressions  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
 
@@ -42,8 +42,8 @@ def ensure_fixtures() -> None:
 
 
 def scan_dir(path: Path, *, skills: bool = True) -> list[Finding]:
-    from mcp_audit.discovery import discover_config_files
-    from mcp_audit.parsers import discover_skills
+    from mcp_pin.discovery import discover_config_files
+    from mcp_pin.parsers import discover_skills
 
     servers, errors = [], []
     for cfg, client in discover_config_files([path], scan_user=False):
@@ -72,7 +72,7 @@ class TestCleanCorpus(unittest.TestCase):
                          split_package("mcp-server-fetch==0.1.4", "uvx"))
 
     def test_env_indirection_is_not_a_secret(self) -> None:
-        from mcp_audit.rules.credentials import classify_secret
+        from mcp_pin.rules.credentials import classify_secret
         for value in ("${env:GITHUB_TOKEN}", "$GITHUB_TOKEN", "<YOUR_API_KEY_HERE>",
                       "${input:vendor-token}", "changeme"):
             self.assertIsNone(classify_secret("token", value), f"{value!r} flagged as a secret")
@@ -176,7 +176,7 @@ class TestLockfileAndDrift(unittest.TestCase):
 
     def test_roundtrip_and_drift(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            lock_path = Path(tmp) / ".mcp-audit.lock"
+            lock_path = Path(tmp) / ".mcp-pin.lock"
             before = self._ctx("Does a thing.")
             lock = Lock(path=lock_path)
             lock.record(before.servers, before.tools, [])
@@ -200,7 +200,7 @@ class TestLockfileAndDrift(unittest.TestCase):
     def test_unprobed_approval_keeps_tool_baseline(self) -> None:
         """`approve` without --probe must not silently erase the tool fingerprints."""
         with tempfile.TemporaryDirectory() as tmp:
-            lock_path = Path(tmp) / ".mcp-audit.lock"
+            lock_path = Path(tmp) / ".mcp-pin.lock"
             probed = self._ctx("Does a thing.")
             first = Lock(path=lock_path)
             first.record(probed.servers, probed.tools, [])
@@ -215,10 +215,21 @@ class TestLockfileAndDrift(unittest.TestCase):
 
     def test_rejects_future_lock_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / ".mcp-audit.lock"
+            p = Path(tmp) / ".mcp-pin.lock"
             p.write_text(json.dumps({"version": 999, "servers": {}}), encoding="utf-8")
             with self.assertRaises(ValueError):
                 Lock.load(p)
+
+    def test_legacy_lockfile_is_used_when_the_new_name_is_absent(self) -> None:
+        from mcp_pin.lockfile import resolve_lock_path
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            legacy = cwd / ".mcp-audit.lock"
+            current = cwd / ".mcp-pin.lock"
+            legacy.write_text("{}", encoding="utf-8")
+            self.assertEqual(legacy, resolve_lock_path(cwd=cwd))
+            current.write_text("{}", encoding="utf-8")
+            self.assertEqual(current, resolve_lock_path(cwd=cwd))
 
 
 class TestSkillParsing(unittest.TestCase):
@@ -266,7 +277,7 @@ class TestSuppressions(unittest.TestCase):
 
     def test_parse_forms(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / ".mcp-audit-ignore"
+            p = Path(tmp) / ".mcp-pin-ignore"
             p.write_text("# lead comment\n\nMCPA008\nMCPA003 alpha  # reviewed\n"
                          "mcpa007 pre-*\n", encoding="utf-8")
             rules, errors = suppressions.parse_ignore_file(p)
@@ -278,7 +289,7 @@ class TestSuppressions(unittest.TestCase):
 
     def test_rejects_non_rule_lines(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / ".mcp-audit-ignore"
+            p = Path(tmp) / ".mcp-pin-ignore"
             p.write_text("not-a-rule\nMCPA001\n", encoding="utf-8")
             rules, errors = suppressions.parse_ignore_file(p)
             self.assertEqual(1, len(rules))
@@ -313,7 +324,7 @@ class TestSuppressions(unittest.TestCase):
         ensure_fixtures()
         env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), NO_COLOR="1")
         r = subprocess.run(
-            [sys.executable, "-m", "mcp_audit", "scan", "tests/fixtures/vulnerable",
+            [sys.executable, "-m", "mcp_pin", "scan", "tests/fixtures/vulnerable",
              "--no-user-configs", "-f", "json", "--fail-on", "never"],
             capture_output=True, text=True, env=env, cwd=str(ROOT),
         )
@@ -330,7 +341,7 @@ class TestSarif(unittest.TestCase):
         doc = json.loads(render_sarif(findings, base=ROOT))
         self.assertEqual("2.1.0", doc["version"])
         run = doc["runs"][0]
-        self.assertEqual("mcp-audit", run["tool"]["driver"]["name"])
+        self.assertEqual("mcp-pin", run["tool"]["driver"]["name"])
         self.assertEqual(len(findings), len(run["results"]))
         declared = {r["id"] for r in run["tool"]["driver"]["rules"]}
         for result in run["results"]:
@@ -349,7 +360,7 @@ class TestCli(unittest.TestCase):
     def _run(self, *args: str) -> subprocess.CompletedProcess:
         env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), NO_COLOR="1")
         return subprocess.run(
-            [sys.executable, "-m", "mcp_audit", *args],
+            [sys.executable, "-m", "mcp_pin", *args],
             capture_output=True, text=True, env=env, cwd=str(ROOT),
         )
 
@@ -372,7 +383,7 @@ class TestCli(unittest.TestCase):
         ensure_fixtures()
         r = self._run("scan", "tests/fixtures/vulnerable", "--no-user-configs", "-f", "json")
         doc = json.loads(r.stdout)
-        self.assertEqual("mcp-audit", doc["tool"])
+        self.assertEqual("mcp-pin", doc["tool"])
         self.assertGreater(doc["summary"]["total"], 0)
 
     def test_unknown_rule_id_is_rejected(self) -> None:
@@ -405,7 +416,7 @@ class TestRealWorldRegressions(unittest.TestCase):
 
     def test_placeholder_with_prefix_is_not_a_secret(self) -> None:
         """'0x<your-wallet-private-key>' was reported as a live key."""
-        from mcp_audit.rules.credentials import classify_secret
+        from mcp_pin.rules.credentials import classify_secret
         for value in ("0x<your-base-wallet-private-key>",
                       "0xYOUR_PRIVATE_KEY_HERE",
                       "0xREPLACE_ME_WITH_YOUR_KEY",
@@ -418,7 +429,7 @@ class TestRealWorldRegressions(unittest.TestCase):
         Getting this backwards made the scanner miss a real AWS key, which is
         a far worse failure than flagging a dummy one.
         """
-        from mcp_audit.rules.credentials import classify_secret
+        from mcp_pin.rules.credentials import classify_secret
         for key, value in (("AWS_KEY", "AKIAIOSFODNN7EXAMPLE"),
                            ("GITHUB_TOKEN", "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"),
                            ("ANTHROPIC", "sk-ant-api03-Zk9vBq2LmNp4RtYu7WxA1cDfGhJk")):
@@ -450,7 +461,7 @@ class TestRealWorldRegressions(unittest.TestCase):
 
     def test_single_label_hostname_counts_as_private(self) -> None:
         """'http://homeassistant:8123' is a LAN host, not the open internet."""
-        from mcp_audit.rules.transport import is_private
+        from mcp_pin.rules.transport import is_private
         for host in ("homeassistant", "nas", "truenas"):
             self.assertTrue(is_private(host), host)
         for host in ("example.com", "api.vendor.io", "8.8.8.8"):
@@ -499,7 +510,7 @@ class TestWindowsLauncherShim(unittest.TestCase):
     """
 
     def _fires(self, command: str, args: list) -> bool:
-        from mcp_audit.model import ServerSpec
+        from mcp_pin.model import ServerSpec
         spec = ServerSpec(name="s", source="/c/.mcp.json", client="t",
                           transport="stdio", command=command, args=args)
         return any(f.rule_id == "MCPA001"
@@ -541,7 +552,7 @@ class TestWindowsLauncherShim(unittest.TestCase):
     def test_the_package_risk_is_still_reported(self) -> None:
         """Exempting the shell does not exempt the unpinned package: MCPA003
         is what actually matters about this line."""
-        from mcp_audit.model import ServerSpec
+        from mcp_pin.model import ServerSpec
         spec = ServerSpec(name="s", source="/c/.mcp.json", client="t",
                           transport="stdio", command="cmd",
                           args=["/c", "npx", "-y", "@scope/server"])

@@ -25,7 +25,23 @@ from .model import (PromptSpec, ResourceSpec, ServerSpec, SkillSpec, ToolSpec,
                     instructions_fingerprint)
 
 LOCK_VERSION = 1
-DEFAULT_LOCK_NAME = ".mcp-audit.lock"
+DEFAULT_LOCK_NAME = ".mcp-pin.lock"
+# Previous product name. Loaded only when the current file is absent, so a
+# rename does not quietly drop enforcement.
+LEGACY_LOCK_NAME = ".mcp-audit.lock"
+
+
+def resolve_lock_path(explicit: str | Path | None = None, *, cwd: Path | None = None) -> Path:
+    if explicit:
+        return Path(explicit)
+    base = cwd or Path.cwd()
+    current = base / DEFAULT_LOCK_NAME
+    if current.is_file():
+        return current
+    legacy = base / LEGACY_LOCK_NAME
+    if legacy.is_file():
+        return legacy
+    return current
 
 
 def _now() -> str:
@@ -63,7 +79,7 @@ class Lock:
         if version > LOCK_VERSION:
             raise ValueError(
                 f"{path}: lockfile version {version} is newer than this tool understands "
-                f"(supports {LOCK_VERSION}); upgrade mcp-audit"
+                f"(supports {LOCK_VERSION}); upgrade mcp-pin"
             )
         return cls(
             version=version or LOCK_VERSION,

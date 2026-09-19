@@ -21,13 +21,13 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests" / "fixtures"))
 
 from fake_server import BENIGN_TOOLS, POISONED_TOOLS  # noqa: E402
-from mcp_audit.gateway import Gateway  # noqa: E402
-from mcp_audit.guard import Guard  # noqa: E402
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin.gateway import Gateway  # noqa: E402
+from mcp_pin.guard import Guard  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
 
 PIN_DIR = Path(__file__).resolve().parent / "golden" / "traces"
-WRITE = os.environ.get("MCP_AUDIT_WRITE_GOLDEN") == "1"
+WRITE = os.environ.get("MCP_PIN_WRITE_GOLDEN") == "1"
 HOSTILE = ROOT / "tests" / "fixtures" / "hostile_server.py"
 FAKE = ROOT / "tests" / "fixtures" / "fake_server.py"
 
@@ -48,7 +48,7 @@ def _pin(name: str, live: Any) -> None:
         return
     if not path.is_file():
         raise AssertionError(
-            f"missing pin {path}. Capture with MCP_AUDIT_WRITE_GOLDEN=1 "
+            f"missing pin {path}. Capture with MCP_PIN_WRITE_GOLDEN=1 "
             "and commit the file."
         )
     expected = json.loads(path.read_text(encoding="utf-8"))
@@ -57,7 +57,7 @@ def _pin(name: str, live: Any) -> None:
             f"{path.name} drifted.\n"
             f"  expected: {json.dumps(expected, sort_keys=True)}\n"
             f"  live:     {json.dumps(live, sort_keys=True)}\n"
-            "If this is intended, MCP_AUDIT_WRITE_GOLDEN=1 and explain why "
+            "If this is intended, MCP_PIN_WRITE_GOLDEN=1 and explain why "
             "in docs/GUARANTEES.md in the same commit."
         )
 
@@ -114,7 +114,7 @@ def _classify_stdout(text: str) -> dict[str, Any]:
             "has_error": "error" in msg,
             "is_error_result": bool((msg.get("result") or {}).get("isError"))
             if isinstance(msg.get("result"), dict) else False,
-            "blocked": "BLOCKED BY mcp-audit" in stripped,
+            "blocked": "BLOCKED BY mcp-pin" in stripped,
             "leaked_secret": "id_rsa" in stripped,
         })
     return {"frames": frames}
@@ -167,13 +167,13 @@ class TestRewriteAfterNCalls(unittest.TestCase):
             "id": "rewrite-after-2-calls",
             "first_list_blocked": [
                 t["name"] for t in first["result"]["tools"]
-                if "BLOCKED BY mcp-audit" in str(t.get("description"))
+                if "BLOCKED BY mcp-pin" in str(t.get("description"))
             ],
             "calls_forwarded": [call_one, call_two],
             "list_changed_forwarded": note.get("method"),
             "second_list_blocked": [
                 t["name"] for t in tools
-                if "BLOCKED BY mcp-audit" in str(t.get("description"))
+                if "BLOCKED BY mcp-pin" in str(t.get("description"))
             ],
             "second_list_leaked_secret": any(
                 "id_rsa" in str(t.get("description")) for t in tools),
@@ -181,11 +181,11 @@ class TestRewriteAfterNCalls(unittest.TestCase):
         })
         self.assertEqual([], [
             t["name"] for t in first["result"]["tools"]
-            if "BLOCKED BY mcp-audit" in str(t.get("description"))
+            if "BLOCKED BY mcp-pin" in str(t.get("description"))
         ])
         self.assertIn("read_invoice", [
             t["name"] for t in tools
-            if "BLOCKED BY mcp-audit" in str(t.get("description"))
+            if "BLOCKED BY mcp-pin" in str(t.get("description"))
         ])
 
 
@@ -250,14 +250,14 @@ class TestGatewayTraces(unittest.TestCase):
             "call": reply,
         })
         self.assertTrue(reply["result"]["isError"])
-        self.assertIn("BLOCKED BY mcp-audit", reply["result"]["content"][0]["text"])
+        self.assertIn("BLOCKED BY mcp-pin", reply["result"]["content"][0]["text"])
 
 
 class TestHostileStdoutBeforeFrame(unittest.TestCase):
     def test_a_banner_is_not_a_jsonrpc_frame(self) -> None:
         env = dict(os.environ)
         env["PYTHONPATH"] = str(ROOT / "src")
-        env["MCP_AUDIT_HOSTILE"] = "banner"
+        env["MCP_PIN_HOSTILE"] = "banner"
         stdin = (
             json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
                         "params": {}}) + "\n"
@@ -265,7 +265,7 @@ class TestHostileStdoutBeforeFrame(unittest.TestCase):
                           "params": {}}) + "\n"
         )
         result = subprocess.run(
-            [sys.executable, "-m", "mcp_audit", "guard", "--quiet",
+            [sys.executable, "-m", "mcp_pin", "guard", "--quiet",
              "--allow-unapproved", "--name", "h", "--",
              sys.executable, str(HOSTILE)],
             input=stdin, capture_output=True, text=True, timeout=30, env=env,

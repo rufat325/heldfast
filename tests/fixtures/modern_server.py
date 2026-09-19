@@ -6,7 +6,7 @@ modern-only server would. Exists so the dual-era probe is tested against a
 server that actually speaks the current protocol rather than only against a
 legacy one.
 
-MCP_AUDIT_FIXTURE_SILENT=1 makes it ignore unknown methods entirely instead
+MCP_PIN_FIXTURE_SILENT=1 makes it ignore unknown methods entirely instead
 of erroring, which is the harder legacy-detection case: the probe must not
 block waiting for a reply that never comes.
 """
@@ -36,7 +36,7 @@ def send(msg: dict) -> None:
 
 
 def main() -> int:
-    silent = os.environ.get("MCP_AUDIT_FIXTURE_SILENT") == "1"
+    silent = os.environ.get("MCP_PIN_FIXTURE_SILENT") == "1"
     for line in sys.stdin:
         line = line.strip()
         if not line:

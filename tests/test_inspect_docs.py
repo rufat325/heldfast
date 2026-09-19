@@ -14,10 +14,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit import clients, inspect as inspect_mod, rule_docs  # noqa: E402
-from mcp_audit.model import ServerSpec, SkillSpec, ToolSpec  # noqa: E402
-from mcp_audit.parsers import normalize_tool_grants, parse_config  # noqa: E402
-from mcp_audit.rules import all_rules  # noqa: E402
+from mcp_pin import clients, inspect as inspect_mod, rule_docs  # noqa: E402
+from mcp_pin.model import ServerSpec, SkillSpec, ToolSpec  # noqa: E402
+from mcp_pin.parsers import normalize_tool_grants, parse_config  # noqa: E402
+from mcp_pin.rules import all_rules  # noqa: E402
 
 
 class TestClientRegistry(unittest.TestCase):
@@ -156,7 +156,7 @@ class TestRuleDocs(unittest.TestCase):
         self.assertEqual(
             expected, actual,
             "docs/rules.md is stale; regenerate with "
-            "`mcp-audit rules --markdown -o docs/rules.md`",
+            "`mcp-pin rules --markdown -o docs/rules.md`",
         )
 
     def test_every_rule_appears_in_the_markdown(self) -> None:
@@ -204,14 +204,14 @@ class TestTheUsageBlockIsTrue(unittest.TestCase):
 
     def _parser(self):
         sys.path.insert(0, str(ROOT / "src"))
-        from mcp_audit.cli import build_parser
+        from mcp_pin.cli import build_parser
         return build_parser()
 
     def test_every_command_it_names_exists(self) -> None:
         commands = set()
         for line in self._usage_block().splitlines():
             line = line.split("#", 1)[0].strip()
-            if not line.startswith("mcp-audit"):
+            if not line.startswith("mcp-pin"):
                 continue
             rest = line.split()[1:]
             if rest and not rest[0].startswith("-"):
@@ -230,7 +230,7 @@ class TestTheUsageBlockIsTrue(unittest.TestCase):
         parser = self._parser()
         for line in self._usage_block().splitlines():
             line = line.split("#", 1)[0].strip()
-            if not line.startswith("mcp-audit ") or " -- " in line:
+            if not line.startswith("mcp-pin ") or " -- " in line:
                 continue
             argv = line.split()[1:]
             if not argv:
@@ -249,14 +249,14 @@ class TestTheUsageBlockIsTrue(unittest.TestCase):
         block = self._usage_block()
         for command in sorted(self._parser().mcp_commands):
             with self.subTest(command=command):
-                self.assertIn(f"mcp-audit {command}", block,
+                self.assertIn(f"mcp-pin {command}", block,
                               f"`{command}` is not in the README usage block")
 
 
 class TestNewCommands(unittest.TestCase):
     def _run(self, *args: str) -> subprocess.CompletedProcess:
         env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), NO_COLOR="1")
-        return subprocess.run([sys.executable, "-m", "mcp_audit", *args],
+        return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
                               capture_output=True, text=True, env=env, cwd=str(ROOT))
 
     def test_explain_known_rule(self) -> None:

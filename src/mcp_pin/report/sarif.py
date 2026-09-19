@@ -122,7 +122,7 @@ def render_sarif(findings: list[Finding], *, base: Path | None = None,
             {
                 "tool": {
                     "driver": {
-                        "name": "mcp-audit",
+                        "name": "mcp-pin",
                         "version": version,
                         "informationUri": INFORMATION_URI,
                         "rules": descriptors,

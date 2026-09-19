@@ -36,7 +36,7 @@ from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec
 # still do.
 PROTOCOL_VERSION = "2026-07-28"
 LEGACY_PROTOCOL_VERSION = "2024-11-05"
-CLIENT_INFO = {"name": "mcp-audit", "version": "0.1.0"}
+CLIENT_INFO = {"name": "mcp-pin", "version": "0.1.0"}
 
 
 @dataclass

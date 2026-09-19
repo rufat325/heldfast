@@ -72,7 +72,7 @@ def _register_scan(sub: argparse._SubParsersAction) -> None:
     llm_group = scan.add_argument_group(
         "semantic classifier (optional)",
         "Sends tool descriptions and skill text to the Anthropic API for judgement. "
-        "Needs: pip install 'mcp-audit[llm]' and ANTHROPIC_API_KEY.",
+        "Needs: pip install 'mcp-pin[llm]' and ANTHROPIC_API_KEY.",
     )
     llm_group.add_argument("--llm", action="store_true",
                            help="enable MCPA018. NOTE: this transmits agent-facing text "
@@ -300,8 +300,8 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
         description=(
             "Sit between the client and an MCP server, and refuse to pass through tools "
             "that are unapproved or whose definition changed since approval. Reads the "
-            "same .mcp-audit.lock the CI gate reads, so one artifact governs both. "
-            "Usage: mcp-audit guard -- <server command...>"
+            "same .mcp-pin.lock the CI gate reads, so one artifact governs both. "
+            "Usage: mcp-pin guard -- <server command...>"
         ),
     )
     guard_p.add_argument("--lock", metavar="PATH", default=None,
@@ -348,18 +348,18 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
 def _register_serve(sub: argparse._SubParsersAction) -> None:
     sub.add_parser(
         "serve",
-        help="run mcp-audit as an MCP server over stdio",
+        help="run mcp-pin as an MCP server over stdio",
         description=(
             "Expose the scanner's analysis over MCP so an agent can check a server "
             "configuration before a human installs it. Read-only: no probing, and "
-            "path scanning only when MCP_AUDIT_ALLOW_PATH_SCAN is set."
+            "path scanning only when MCP_PIN_ALLOW_PATH_SCAN is set."
         ),
     )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="mcp-audit",
+        prog="mcp-pin",
         description="Security scanner for MCP server configurations and agent skills.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -369,7 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  2  the scan itself could not complete\n"
         ),
     )
-    parser.add_argument("--version", action="version", version=f"mcp-audit {__version__}")
+    parser.add_argument("--version", action="version", version=f"mcp-pin {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     _register_scan(sub)

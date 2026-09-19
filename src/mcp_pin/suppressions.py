@@ -5,7 +5,7 @@ open endpoint from one that negotiates OAuth at connect time, and telling
 someone to live with a permanent false positive is how a scanner gets removed
 from CI. So the advice to "suppress this" has to be backed by a mechanism.
 
-Format (`.mcp-audit-ignore`), one rule per line:
+Format (`.mcp-pin-ignore`), one rule per line:
 
     MCPA008                     # suppress this rule everywhere
     MCPA008 open-endpoint       # suppress it for one server
@@ -24,7 +24,8 @@ from pathlib import Path
 
 from .findings import Finding
 
-DEFAULT_IGNORE_NAME = ".mcp-audit-ignore"
+DEFAULT_IGNORE_NAME = ".mcp-pin-ignore"
+LEGACY_IGNORE_NAME = ".mcp-audit-ignore"
 
 
 @dataclass(frozen=True)
@@ -91,12 +92,15 @@ def load(explicit: str | None, roots: list[Path]) -> tuple[list[Suppression], li
         sup, errs = parse_ignore_file(p)
         return sup, errs, p
     for root in roots:
-        candidate = (root if root.is_dir() else root.parent) / DEFAULT_IGNORE_NAME
-        if candidate.is_file():
-            sup, errs = parse_ignore_file(candidate)
-            return sup, errs, candidate
-    cwd_candidate = Path.cwd() / DEFAULT_IGNORE_NAME
-    if cwd_candidate.is_file():
-        sup, errs = parse_ignore_file(cwd_candidate)
-        return sup, errs, cwd_candidate
+        base = root if root.is_dir() else root.parent
+        for name in (DEFAULT_IGNORE_NAME, LEGACY_IGNORE_NAME):
+            candidate = base / name
+            if candidate.is_file():
+                sup, errs = parse_ignore_file(candidate)
+                return sup, errs, candidate
+    for name in (DEFAULT_IGNORE_NAME, LEGACY_IGNORE_NAME):
+        cwd_candidate = Path.cwd() / name
+        if cwd_candidate.is_file():
+            sup, errs = parse_ignore_file(cwd_candidate)
+            return sup, errs, cwd_candidate
     return [], [], None

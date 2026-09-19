@@ -3,7 +3,7 @@
 The guard enforces the lockfile. This is the evidence that it did, and that
 nobody has since rewritten the story: every entry carries the hash of the one
 before it, so removing, reordering or altering a line breaks the chain from
-that point on and `mcp-audit verify-log` says exactly where.
+that point on and `mcp-pin verify-log` says exactly where.
 
 This is the cheap half of the idea. It proves nobody edited the file after the
 fact; it does not prove who wrote it, because that needs a signing key and a

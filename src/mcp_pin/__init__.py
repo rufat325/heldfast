@@ -1,4 +1,4 @@
-"""mcp-audit -- a zero-dependency security scanner for MCP servers and agent skills."""
+"""mcp-pin -- a zero-dependency security scanner for MCP servers and agent skills."""
 
 __version__ = "0.1.0"
 

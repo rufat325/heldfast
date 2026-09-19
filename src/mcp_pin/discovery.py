@@ -1,6 +1,6 @@
 """Find and parse MCP configuration wherever the clients hide it.
 
-`mcp-audit` with no arguments should find everything on the machine, because
+`mcp-pin` with no arguments should find everything on the machine, because
 the whole premise of "shadow MCP" is that nobody knows what is installed.
 """
 
@@ -121,7 +121,7 @@ def project_relative_paths() -> list[tuple[str, str]]:
 # there are collected by exact path in candidate_config_paths(), so walking
 # them turns up nothing the scan does not already have.
 #
-# Only directories *below* a root are pruned, so pointing mcp-audit straight
+# Only directories *below* a root are pruned, so pointing mcp-pin straight
 # at a path inside one of these still scans it.
 _SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build",

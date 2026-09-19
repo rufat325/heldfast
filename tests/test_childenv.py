@@ -26,8 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.childenv import BASE, build, notable  # noqa: E402
-from mcp_audit.model import ServerSpec  # noqa: E402
+from mcp_pin.childenv import BASE, build, notable  # noqa: E402
+from mcp_pin.model import ServerSpec  # noqa: E402
 
 PARENT = {
     "PATH": "/usr/bin", "HOME": "/home/me", "SystemRoot": "C:/Windows",
@@ -213,7 +213,7 @@ class TestTheProbeIsolatesToo(unittest.TestCase):
         self._tmp.cleanup()
 
     def _probe(self, **env) -> str:
-        from mcp_audit.probe import probe_stdio
+        from mcp_pin.probe import probe_stdio
         s = ServerSpec(name="peek", source=str(self.project / ".mcp.json"),
                        client="claude-code", transport="stdio",
                        command=sys.executable,

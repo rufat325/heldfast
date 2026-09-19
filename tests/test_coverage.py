@@ -22,9 +22,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit import coverage  # noqa: E402
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin import coverage  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
 
 
 def spec(name: str, command: str = "node", args: list | None = None,
@@ -219,7 +219,7 @@ class TestTheWholeReport(unittest.TestCase):
     def test_a_fully_covered_server_counts_as_one(self) -> None:
         """Approved, pinned, policed -- and wrapped. The last one is not
         decoration: without it none of the others is in the path."""
-        server = spec("alpha", "mcp-audit",
+        server = spec("alpha", "mcp-pin",
                       ["guard", "--", "npx", "-y", "pkg@1.0.0"])
         lock = Lock()
         lock.record([server], [ToolSpec(server="alpha", name="read",
@@ -249,7 +249,7 @@ class TestTheWholeReport(unittest.TestCase):
         """In the recommended setup the server is named only in the lockfile;
         the client points at the gateway. This read as "no longer configured"
         and the tool punished its own advice."""
-        gateway = spec("everything", "mcp-audit", ["gateway"])
+        gateway = spec("everything", "mcp-pin", ["gateway"])
         fronted = spec("alpha", "npx", ["-y", "pkg@1.0.0"])
         lock = Lock()
         lock.record([fronted], [], [])
@@ -264,7 +264,7 @@ class TestTheWholeReport(unittest.TestCase):
     def test_the_gateway_entry_is_not_reported_as_a_server(self) -> None:
         """Approving the thing that enforces approvals is circular, so it has
         none by design -- flagging it would flag the one entry doing the work."""
-        data = self._built(Lock(), [spec("everything", "mcp-audit", ["gateway"])])
+        data = self._built(Lock(), [spec("everything", "mcp-pin", ["gateway"])])
         self.assertEqual([], [r for r in data["servers"]
                               if r["identity"].endswith(":everything")])
 

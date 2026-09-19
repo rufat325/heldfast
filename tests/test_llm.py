@@ -17,9 +17,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit import llm  # noqa: E402
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_audit.rules import AuditContext, classifier_targets, run_rules  # noqa: E402
+from mcp_pin import llm  # noqa: E402
+from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin.rules import AuditContext, classifier_targets, run_rules  # noqa: E402
 
 
 class FakeBlock:
@@ -289,7 +289,7 @@ class TestClassifierTargets(unittest.TestCase):
         self.assertEqual(["svc/t1"], labels)
 
     def test_tools_are_prioritized_over_skills(self) -> None:
-        from mcp_audit.model import SkillSpec
+        from mcp_pin.model import SkillSpec
         ctx = self._ctx("A tool description long enough to be classified here.")
         ctx.skills = [SkillSpec(name="sk", path="/tmp/SKILL.md", frontmatter={},
                                 body="A skill body that is also long enough to send.")]

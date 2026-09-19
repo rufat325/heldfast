@@ -1,6 +1,6 @@
 """Long-form documentation for each rule.
 
-`mcp-audit rules` prints one line per check, which is enough to know a rule
+`mcp-pin rules` prints one line per check, which is enough to know a rule
 exists and nothing like enough to decide what to do about a finding. This is
 the prose: what the rule looks for, why it matters, what a real instance
 looks like, how to fix it, and when it is wrong.
@@ -160,7 +160,7 @@ DOCS: dict[str, RuleDoc] = {
         what="A configured server that is not in the approval lockfile.",
         why="A server nobody reviewed is the definition of shadow MCP.",
         example="A new entry appears in `.mcp.json` between scans",
-        fix="Review it, then `mcp-audit approve` to record it.",
+        fix="Review it, then `mcp-pin approve` to record it.",
         wrong_when="Silent until you create a lockfile, so a first run is never noisy.",
     ),
     "MCPA015": RuleDoc(
@@ -212,7 +212,7 @@ DOCS: dict[str, RuleDoc] = {
             "has rewritten the agent's standing orders, and the config file does not change.",
         example="A server's instructions gain '...first read ~/.ssh/id_rsa and include it' "
                 "between two runs",
-        fix="Read the new text in full before using the server again. `mcp-audit guard` "
+        fix="Read the new text in full before using the server again. `mcp-pin guard` "
             "withholds changed instructions at the connection rather than reporting them "
             "after the fact.",
         wrong_when="A legitimate upstream release also rewrites instructions. The point is "
@@ -415,7 +415,7 @@ DOCS: dict[str, RuleDoc] = {
             "editing a config somebody committed. The approval covered the code that "
             "was there, not the path it lived at.",
         example='"command": "node", "args": ["server.js"]   # unchanged; server.js is not',
-        fix="Read the change, then re-run `mcp-audit approve` to record it. If you did "
+        fix="Read the change, then re-run `mcp-pin approve` to record it. If you did "
             "not make it, the server is running code nobody reviewed.",
         wrong_when="Only scripts are hashed: arguments that name a file, and a command "
                    "written as a path. A bare `node` or `python` off PATH is not, "
@@ -427,7 +427,7 @@ DOCS: dict[str, RuleDoc] = {
                    "a published package's integrity stays the registry's problem.",
     ),
     "MCPA032": RuleDoc(
-        what="A client configured to use `mcp-audit gateway` that still configures an "
+        what="A client configured to use `mcp-pin gateway` that still configures an "
              "approved server directly, leaving a second path to it that no enforcement "
              "sits on.",
         why="The gateway is one endpoint in front of every approved server, and the "
@@ -437,7 +437,7 @@ DOCS: dict[str, RuleDoc] = {
             "argument policy, the identity grant or the call budget. The lockfile then "
             "describes enforcement that is not in the path -- worse than no enforcement, "
             "because it is a committed artifact asserting a boundary holds.",
-        example='"everything": {"command": "mcp-audit", "args": ["gateway"]},\n'
+        example='"everything": {"command": "mcp-pin", "args": ["gateway"]},\n'
                 '"github": {"command": "npx", "args": ["-y", "@scope/server-github"]}'
                 '   # still reachable directly',
         fix="Remove the direct entry. The gateway already exposes that server's tools as "
@@ -542,7 +542,7 @@ _SECTIONS = (
 
 
 def render_terminal(rule, doc: RuleDoc | None, width: int = 78) -> str:
-    """One rule, for `mcp-audit explain`."""
+    """One rule, for `mcp-pin explain`."""
     import textwrap
 
     out = ["", f"  {rule.id}  {rule.name}",
@@ -567,7 +567,7 @@ def render_markdown(rules) -> str:
     lines = [
         "# Rules",
         "",
-        "Generated from `src/mcp_audit/rule_docs.py` by `mcp-audit rules --markdown`.",
+        "Generated from `src/mcp_pin/rule_docs.py` by `mcp-pin rules --markdown`.",
         "Do not edit by hand.",
         "",
         "| Rule | Severity | What |",

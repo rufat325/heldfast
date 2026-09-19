@@ -25,9 +25,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec  # noqa: E402
-from mcp_audit.probe import _parse_tools  # noqa: E402
-from mcp_audit.rules import AuditContext, run_rules  # noqa: E402
+from mcp_pin.model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin.probe import _parse_tools  # noqa: E402
+from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
 
 SERVER = ServerSpec(name="invoices", source="/p/.mcp.json", client="claude-code",
                     transport="stdio", command="node", args=["s.js"])

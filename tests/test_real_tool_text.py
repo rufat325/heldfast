@@ -27,8 +27,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_audit.rules import AuditContext, run_rules  # noqa: E402
+from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
 
 # Verbatim from the official MCP servers repository, the Python SDK and
 # FastMCP. Nothing here is invented, which is the point.
@@ -192,7 +192,7 @@ class TestSkillBodiesDocumentSetup(unittest.TestCase):
     """
 
     def _skill(self, body: str):
-        from mcp_audit.model import SkillSpec
+        from mcp_pin.model import SkillSpec
         spec = SkillSpec(name="setup", path="/p/SKILL.md", frontmatter={}, body=body)
         return [f for f in run_rules(AuditContext(skills=[spec]))
                 if f.rule_id == "MCPA012"]

@@ -1,4 +1,4 @@
-"""mcp-audit as an MCP server.
+"""mcp-pin as an MCP server.
 
 The rest of this package is an MCP *client*: it connects to servers and reads
 what they advertise. This module is the mirror image -- it exposes the
@@ -19,7 +19,7 @@ tool an attacker who controls the agent can call:
 - Probing is not exposed at all. `--probe` *launches local processes*, and
   reaching that over a tool call would turn "an agent read a web page" into
   "an agent started a process". The CLI keeps that capability; this does not.
-- Path scanning is opt-in per deployment via MCP_AUDIT_ALLOW_PATH_SCAN,
+- Path scanning is opt-in per deployment via MCP_PIN_ALLOW_PATH_SCAN,
   because an agent that can scan arbitrary paths can use findings as an
   oracle for what exists on the filesystem.
 - Findings pass through the same redaction chokepoint as every other output,
@@ -28,7 +28,7 @@ tool an attacker who controls the agent can call:
 The tool descriptions below are written the way this scanner would want to
 read them: they describe what the tool does and nothing else. No imperatives
 aimed at the agent, no instructions about other tools, no mandated side
-effects. `mcp-audit` scanning its own server is expected to come back clean,
+effects. `mcp-pin` scanning its own server is expected to come back clean,
 and a test asserts exactly that.
 """
 
@@ -55,9 +55,9 @@ from .rules import AuditContext, all_rules, run_rules
 PROTOCOL_VERSION = "2026-07-28"
 LEGACY_PROTOCOL_VERSION = "2024-11-05"
 SUPPORTED_VERSIONS = [PROTOCOL_VERSION, LEGACY_PROTOCOL_VERSION]
-SERVER_INFO = {"name": "mcp-audit", "version": __version__}
+SERVER_INFO = {"name": "mcp-pin", "version": __version__}
 
-ALLOW_PATH_SCAN = os.environ.get("MCP_AUDIT_ALLOW_PATH_SCAN", "").lower() in ("1", "true", "yes")
+ALLOW_PATH_SCAN = os.environ.get("MCP_PIN_ALLOW_PATH_SCAN", "").lower() in ("1", "true", "yes")
 
 
 def _tool_definitions() -> list[dict[str, Any]]:
@@ -168,7 +168,7 @@ def _tool_definitions() -> list[dict[str, Any]]:
                         "type": "string",
                         "description": (
                             "Path to the approval lockfile. Defaults to "
-                            ".mcp-audit.lock beside the configuration."
+                            ".mcp-pin.lock beside the configuration."
                         ),
                     },
                 },
@@ -204,7 +204,7 @@ def tool_check_config(args: dict[str, Any]) -> dict[str, Any]:
     # parse_config reads from disk, so the supplied text goes to a temporary
     # file that is removed immediately. Nothing is written to a real client
     # configuration, which is the point of this tool.
-    tmp = Path(tempfile.mkdtemp(prefix="mcp-audit-")) / ".mcp.json"
+    tmp = Path(tempfile.mkdtemp(prefix="mcp-pin-")) / ".mcp.json"
     try:
         tmp.write_text(raw, encoding="utf-8")
         servers, errors = parse_config(tmp, "supplied")
@@ -283,21 +283,20 @@ def tool_check_coverage(args: dict[str, Any]) -> dict[str, Any]:
     `serve` had drifted three cycles behind the rest of the tool: it could
     report on a configuration's *findings* and knew nothing about whether any
     of this installation's guarantees were in force. That is the question an
-    agent using mcp-audit as a server most obviously has about itself, and the
+    agent using mcp-pin as a server most obviously has about itself, and the
     one the command line had just learned to answer.
     """
     if not ALLOW_PATH_SCAN:
         raise ValueError("path scanning is not enabled on this server")
     from . import coverage as coverage_mod
     from .discovery import discover_config_files
-    from .lockfile import DEFAULT_LOCK_NAME, Lock
+    from .lockfile import Lock, resolve_lock_path
 
     target = Path(str(args.get("path") or "."))
     if not target.exists():
         raise ValueError(f"{target}: no such file or directory")
 
-    lock_arg = args.get("lock")
-    lock_path = Path(str(lock_arg)) if lock_arg else target / DEFAULT_LOCK_NAME
+    lock_path = resolve_lock_path(args.get("lock"), cwd=target if target.is_dir() else target.parent)
     try:
         lock = Lock.load(lock_path)
     except ValueError as exc:
@@ -316,7 +315,7 @@ def tool_check_coverage(args: dict[str, Any]) -> dict[str, Any]:
     if not lock.servers:
         payload["note"] = (
             "No approval lockfile was found, so nothing is pinned and none of these "
-            "guarantees can be in force. Run `mcp-audit approve --probe` first."
+            "guarantees can be in force. Run `mcp-pin approve --probe` first."
         )
     return payload
 

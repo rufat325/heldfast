@@ -29,9 +29,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.gateway import SEPARATOR, Gateway  # noqa: E402
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin.gateway import SEPARATOR, Gateway  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
 
 FAKE = ROOT / "tests" / "fixtures" / "fake_server.py"
 INIT = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
@@ -114,7 +114,7 @@ class TestTheWholeThingOverStdio(unittest.TestCase):
         # The fixture reads its mode from the environment, and the gateway
         # now passes through only what a server declares. Declaring it is the
         # same migration a real user makes for a token, so the tests do it.
-        mode = {"MCP_AUDIT_FIXTURE_MODE": "${MCP_AUDIT_FIXTURE_MODE}"}
+        mode = {"MCP_PIN_FIXTURE_MODE": "${MCP_PIN_FIXTURE_MODE}"}
         config = {"mcpServers": {
             "alpha": {"command": sys.executable, "args": [str(FAKE)], "env": mode},
             "beta": {"command": sys.executable, "args": [str(FAKE)], "env": mode},
@@ -130,8 +130,8 @@ class TestTheWholeThingOverStdio(unittest.TestCase):
              poisoned: bool = False) -> subprocess.CompletedProcess:
         env = dict(os.environ)
         env["PYTHONPATH"] = str(ROOT / "src")
-        env["MCP_AUDIT_FIXTURE_MODE"] = "poisoned" if poisoned else "benign"
-        return subprocess.run([sys.executable, "-m", "mcp_audit", *args],
+        env["MCP_PIN_FIXTURE_MODE"] = "poisoned" if poisoned else "benign"
+        return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
                               cwd=str(self.project), env=env, input=stdin,
                               capture_output=True, text=True, timeout=180)
 
@@ -175,7 +175,7 @@ class TestTheWholeThingOverStdio(unittest.TestCase):
                            "params": {"name": "ghost__do_thing", "arguments": {}}})
         reply = next(r for r in self._replies([INIT, call]) if r.get("id") == 4)
         self.assertTrue(reply["result"]["isError"])
-        self.assertIn("BLOCKED BY mcp-audit", reply["result"]["content"][0]["text"])
+        self.assertIn("BLOCKED BY mcp-pin", reply["result"]["content"][0]["text"])
 
     def test_drift_is_withheld_across_the_fleet(self) -> None:
         listed = next(r for r in self._replies([INIT, LIST], poisoned=True)
@@ -189,7 +189,7 @@ class TestTheWholeThingOverStdio(unittest.TestCase):
         config = json.loads((self.project / ".mcp.json").read_text(encoding="utf-8"))
         config["mcpServers"]["gamma"] = {
             "command": sys.executable, "args": [str(FAKE)],
-            "env": {"MCP_AUDIT_FIXTURE_MODE": "${MCP_AUDIT_FIXTURE_MODE}"}}
+            "env": {"MCP_PIN_FIXTURE_MODE": "${MCP_PIN_FIXTURE_MODE}"}}
         (self.project / ".mcp.json").write_text(json.dumps(config), encoding="utf-8")
 
         listed = next(r for r in self._replies([INIT, LIST]) if r.get("id") == 2)
@@ -204,7 +204,7 @@ class TestTheWholeThingOverStdio(unittest.TestCase):
         self.assertIn("supportedVersions", reply["result"])
 
     def test_the_session_can_be_recorded(self) -> None:
-        from mcp_audit.auditlog import verify
+        from mcp_pin.auditlog import verify
         trail = self.project / "trail.jsonl"
         result = self._run(["gateway", ".", "--no-user-configs", "--log", str(trail)],
                            stdin=INIT + "\n" + LIST + "\n")

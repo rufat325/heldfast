@@ -23,11 +23,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit import status as status_mod  # noqa: E402
-from mcp_audit.auditlog import AuditLog  # noqa: E402
-from mcp_audit.findings import Finding, Location, Severity  # noqa: E402
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import PromptSpec, ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin import status as status_mod  # noqa: E402
+from mcp_pin.auditlog import AuditLog  # noqa: E402
+from mcp_pin.findings import Finding, Location, Severity  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import PromptSpec, ServerSpec, ToolSpec  # noqa: E402
 
 
 def spec(name: str) -> ServerSpec:
@@ -43,7 +43,7 @@ def finding(rule_id: str, server: str, severity: Severity = Severity.CRITICAL) -
 
 def approved(names: list[str]) -> Lock:
     specs = [spec(n) for n in names]
-    lock = Lock(path=Path("/p/.mcp-audit.lock"))
+    lock = Lock(path=Path("/p/.mcp-pin.lock"))
     lock.record(specs, [ToolSpec(server=n, name="read", description="Reads.",
                                  input_schema={}) for n in names], [])
     return lock
@@ -106,7 +106,7 @@ class TestTheStateWord(unittest.TestCase):
         lock = approved(["alpha", "beta"])
         gateway = ServerSpec(name="everything", source="/p/.mcp.json",
                              client="claude-code", transport="stdio",
-                             command="mcp-audit", args=["gateway"])
+                             command="mcp-pin", args=["gateway"])
         states = self._state(lock, [gateway], [])
         self.assertEqual("gateway", states["claude-code:alpha"])
         self.assertEqual("gateway", states["claude-code:beta"])
@@ -117,7 +117,7 @@ class TestTheStateWord(unittest.TestCase):
         lock = approved(["alpha"])
         gateway = ServerSpec(name="everything", source="/p/.mcp.json",
                              client="claude-code", transport="stdio",
-                             command="mcp-audit", args=["gateway"])
+                             command="mcp-pin", args=["gateway"])
         self.assertNotIn("claude-code:everything", self._state(lock, [gateway], []))
 
     def test_a_gateway_elsewhere_does_not_rescue_this_client(self) -> None:
@@ -125,7 +125,7 @@ class TestTheStateWord(unittest.TestCase):
         lock = approved(["alpha"])
         elsewhere = ServerSpec(name="everything", source="/p/cursor.json",
                                client="cursor", transport="stdio",
-                               command="mcp-audit", args=["gateway"])
+                               command="mcp-pin", args=["gateway"])
         self.assertEqual("GONE", self._state(lock, [elsewhere], [])["claude-code:alpha"])
 
     def test_a_server_that_was_probed_and_never_answered(self) -> None:
@@ -157,7 +157,7 @@ class TestTheStateWord(unittest.TestCase):
     def test_approved_without_probing_is_not_ok_either(self) -> None:
         """Nothing the server says is pinned, so nothing can drift. That is
         not a fault, and "ok" still overstates it: there is no baseline."""
-        lock = Lock(path=Path("/p/.mcp-audit.lock"))
+        lock = Lock(path=Path("/p/.mcp-pin.lock"))
         lock.record([spec("alpha")], [], [])
         self.assertEqual("UNPINNED",
                          self._state(lock, [spec("alpha")], [])["claude-code:alpha"])
@@ -165,7 +165,7 @@ class TestTheStateWord(unittest.TestCase):
     def test_a_server_offering_only_prompts_is_pinned(self) -> None:
         """Tools are not the only channel. An approval that recorded prompts
         has a real baseline and must not read as UNPINNED."""
-        lock = Lock(path=Path("/p/.mcp-audit.lock"))
+        lock = Lock(path=Path("/p/.mcp-pin.lock"))
         lock.record([spec("alpha")], [], [],
                     prompts=[PromptSpec(server="alpha", name="summarise",
                                         description="Summarises.")])
@@ -249,7 +249,7 @@ class TestRendering(unittest.TestCase):
     def test_no_lockfile_says_what_to_do(self) -> None:
         text = status_mod.render(status_mod.build(Lock(), [], []), color=False)
         self.assertIn("No approval lockfile", text)
-        self.assertIn("mcp-audit approve", text)
+        self.assertIn("mcp-pin approve", text)
 
     def test_an_unprobed_page_says_drift_was_not_checked(self) -> None:
         """Found as a stranger: with a poisoned server live, `scan --probe`

@@ -42,7 +42,7 @@ def unapproved_server(ctx: AuditContext) -> Iterable[Finding]:
             location=Location(path=s.source, line=s.line, snippet=s.command_line[:200] or (s.url or "")),
             evidence=f"server {s.identity()!r} is configured but absent from the lockfile",
             remediation=(
-                "Review the server, then run `mcp-audit approve` to record it. An MCP server "
+                "Review the server, then run `mcp-pin approve` to record it. An MCP server "
                 "nobody reviewed is the plain definition of shadow MCP."
             ),
             server=s.name,
@@ -346,7 +346,7 @@ def artifact_drift(ctx: AuditContext) -> Iterable[Finding]:
                     "Confirm you made this change. The launch command in the config is "
                     "identical to the one you approved, so nothing else here would "
                     "report it -- and editing a script nobody diffs is easier than "
-                    "editing a config somebody committed. Re-run `mcp-audit approve "
+                    "editing a config somebody committed. Re-run `mcp-pin approve "
                     "--probe` once you have read the change."
                 ),
                 server=s.name,

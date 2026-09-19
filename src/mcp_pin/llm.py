@@ -27,7 +27,7 @@ Two properties make this module unlike the rest of the scanner:
    - One item per request. Batching adversarial texts would let a poisoned
      description influence the verdict on its neighbours.
 
-The `anthropic` SDK is an optional extra (`pip install mcp-audit[llm]`);
+The `anthropic` SDK is an optional extra (`pip install mcp-pin[llm]`);
 the core scanner keeps its zero-dependency guarantee.
 """
 
@@ -46,7 +46,7 @@ from .secrets import redact
 
 DEFAULT_MODEL = "claude-opus-5"
 DEFAULT_EFFORT = "medium"
-CACHE_NAME = ".mcp-audit-llm-cache.json"
+CACHE_NAME = ".mcp-pin-llm-cache.json"
 MAX_CHARS = 8000
 
 SYSTEM_PROMPT = """\
@@ -155,9 +155,9 @@ def _load_client(api_key: str | None = None):
         import anthropic
     except ImportError:
         raise LLMUnavailable(
-            "the --llm tier needs the anthropic SDK, which mcp-audit does not "
+            "the --llm tier needs the anthropic SDK, which mcp-pin does not "
             "install by default.\n"
-            "           Install it with:  pip install 'mcp-audit[llm]'"
+            "           Install it with:  pip install 'mcp-pin[llm]'"
         ) from None
     try:
         return anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()

@@ -26,9 +26,9 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-POLICY-PURE | `Policy.check` does not open files, spawn processes, or read the environment. | `tests/test_kernel_properties.py` |
 | T-POLICY-DET | The same tool, arguments and rules produce the same `Decision`. | `tests/test_kernel_properties.py` |
 | T-FINGERPRINT | A change to name, title, description, input schema or annotations changes the tool digest. Byte-identical tools hash the same regardless of dict key order. | `tests/test_kernel_properties.py` |
-| T-LOCK-FUTURE | A lockfile with a version newer than this tool understands is refused, not silently truncated. | `tests/test_mcp_audit.py` |
-| T-JSONC | JSONC comments and trailing commas are stripped without eating `//` inside strings. Invalid JSON raises; it does not become `{}`. | `tests/test_mcp_audit.py`, `tests/test_kernel_properties.py` |
-| T-DRIFT | An approved tool whose live description changes fires MCPA015. | `tests/test_mcp_audit.py` |
+| T-LOCK-FUTURE | A lockfile with a version newer than this tool understands is refused, not silently truncated. | `tests/test_mcp_pin.py` |
+| T-JSONC | JSONC comments and trailing commas are stripped without eating `//` inside strings. Invalid JSON raises; it does not become `{}`. | `tests/test_mcp_pin.py`, `tests/test_kernel_properties.py` |
+| T-DRIFT | An approved tool whose live description changes fires MCPA015. | `tests/test_mcp_pin.py` |
 | T-ATTACK | Every registered rule except the documented exemptions has an attack that demonstrates it. Adding a rule without one fails the build. | `tests/test_attack_corpus.py` |
 | T-GOLDEN | The known-bad fixture still produces the pinned set of rule IDs. A rule that goes quiet is a bug. | `tests/test_golden_findings.py` |
 | T-MUTATION | Every catalogued fail-open edit of policy, fingerprint or JSONC is observed as a hole. Survival fails CI. | `tests/test_mutation.py` |

@@ -10,7 +10,7 @@ from pathlib import Path
 from . import __version__
 from .discovery import discover_config_files
 from .findings import Finding, Severity
-from .lockfile import DEFAULT_LOCK_NAME, Lock
+from .lockfile import Lock, resolve_lock_path
 from .model import ServerSpec, SkillSpec, ToolSpec
 from .parsers import discover_skills, parse_config
 from .probe import probe
@@ -172,7 +172,7 @@ def _collect_probe(out: "Collected", args: argparse.Namespace) -> None:
     if launchable and not getattr(args, "quiet", False):
         local = [s for s in launchable if s.transport == "stdio"]
         if local and not args.no_stdio_probe:
-            print("mcp-audit: --probe launches these servers as local "
+            print("mcp-pin: --probe launches these servers as local "
                   "processes: " + ", ".join(sorted(s.identity() for s in local)),
                   file=sys.stderr)
     for identity, reason in out.probe_skipped:
@@ -195,9 +195,7 @@ def collect(args: argparse.Namespace) -> Collected:
     return out
 
 def _resolve_lock_path(args: argparse.Namespace) -> Path:
-    if args.lock:
-        return Path(args.lock)
-    return Path.cwd() / DEFAULT_LOCK_NAME
+    return resolve_lock_path(getattr(args, "lock", None))
 
 
 def _validate_rule_ids(ids: list[str]) -> list[str]:
@@ -205,8 +203,8 @@ def _validate_rule_ids(ids: list[str]) -> list[str]:
     unknown = [i for i in ids if i.upper() not in known]
     if unknown:
         raise SystemExit(
-            f"mcp-audit: unknown rule id(s): {', '.join(unknown)}\n"
-            f"           run `mcp-audit rules` to list them"
+            f"mcp-pin: unknown rule id(s): {', '.join(unknown)}\n"
+            f"           run `mcp-pin rules` to list them"
         )
     return [i.upper() for i in ids]
 
@@ -240,7 +238,7 @@ def _apply_llm(args: argparse.Namespace, ctx: AuditContext, data: Collected) -> 
     if not args.no_llm_cache:
         cache_path = Path(args.llm_cache) if args.llm_cache else Path.cwd() / llm_mod.CACHE_NAME
     print(
-        f"mcp-audit: --llm will send up to {min(len(targets), args.llm_max_items)} "
+        f"mcp-pin: --llm will send up to {min(len(targets), args.llm_max_items)} "
         f"text(s) to the Anthropic API ({args.llm_model}).\n"
         "           Credentials are redacted first; cached verdicts are not re-sent.",
         file=sys.stderr,
@@ -252,7 +250,7 @@ def _apply_llm(args: argparse.Namespace, ctx: AuditContext, data: Collected) -> 
             verbose=args.verbose,
         )
     except llm_mod.LLMUnavailable as exc:
-        print(f"mcp-audit: {exc}", file=sys.stderr)
+        print(f"mcp-pin: {exc}", file=sys.stderr)
         return EXIT_ERROR
     ctx.llm_verdicts = llm_result.verdicts
     data.errors.extend(llm_result.errors)
@@ -288,10 +286,10 @@ def _emit_report(args: argparse.Namespace, report: str, findings: list[Finding])
     try:
         Path(args.output).write_text(report, encoding="utf-8")
     except OSError as exc:
-        print(f"mcp-audit: cannot write {args.output}: {exc}", file=sys.stderr)
+        print(f"mcp-pin: cannot write {args.output}: {exc}", file=sys.stderr)
         return EXIT_ERROR
     if args.format != "text":
-        print(f"mcp-audit: wrote {len(findings)} finding(s) to {args.output}", file=sys.stderr)
+        print(f"mcp-pin: wrote {len(findings)} finding(s) to {args.output}", file=sys.stderr)
     return None
 
 
@@ -302,7 +300,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     try:
         lock = Lock.load(lock_path)
     except ValueError as exc:
-        print(f"mcp-audit: {exc}", file=sys.stderr)
+        print(f"mcp-pin: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
     data = collect(args)
@@ -337,7 +335,7 @@ def cmd_approve(args: argparse.Namespace) -> int:
     try:
         previous = Lock.load(lock_path)
     except ValueError as exc:
-        print(f"mcp-audit: {exc}", file=sys.stderr)
+        print(f"mcp-pin: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
     data = collect(args)
@@ -347,7 +345,7 @@ def cmd_approve(args: argparse.Namespace) -> int:
 
     if not args.probe:
         print(
-            "mcp-audit: approving without --probe records configuration only.\n"
+            "mcp-pin: approving without --probe records configuration only.\n"
             "           Tool descriptions are the thing a rug pull changes, so an\n"
             "           approval without --probe cannot detect one. Re-run with --probe\n"
             "           once you are ready to launch the servers.",
@@ -374,7 +372,7 @@ def cmd_approve(args: argparse.Namespace) -> int:
     if res_total:
         parts.append(f"{res_total} resource(s)")
     parts.append(f"{len(lock.skills)} skill(s)")
-    print(f"mcp-audit: approved " + ", ".join(parts) + f" -> {written}")
+    print(f"mcp-pin: approved " + ", ".join(parts) + f" -> {written}")
     return EXIT_OK
 
 
@@ -400,7 +398,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         try:
             Path(args.output).write_text(text, encoding="utf-8")
         except OSError as exc:
-            print(f"mcp-audit: cannot write {args.output}: {exc}", file=sys.stderr)
+            print(f"mcp-pin: cannot write {args.output}: {exc}", file=sys.stderr)
             return EXIT_ERROR
     else:
         sys.stdout.write(text)
@@ -414,12 +412,12 @@ def cmd_guard(args: argparse.Namespace) -> int:
     if argv and argv[0] == "--":
         argv = argv[1:]
     if not argv:
-        print("mcp-audit: guard needs a server command, for example\n"
-              "           mcp-audit guard -- npx -y @scope/server@1.0.0",
+        print("mcp-pin: guard needs a server command, for example\n"
+              "           mcp-pin guard -- npx -y @scope/server@1.0.0",
               file=sys.stderr)
         return EXIT_ERROR
 
-    lock_path = Path(args.lock) if args.lock else Path.cwd() / DEFAULT_LOCK_NAME
+    lock_path = _resolve_lock_path(args)
     return guard_mod.run(
         argv,
         lock_path=lock_path,
@@ -446,12 +444,12 @@ def cmd_policy(args: argparse.Namespace) -> int:
     try:
         lock = Lock.load(lock_path)
     except ValueError as exc:
-        print(f"mcp-audit: {exc}", file=sys.stderr)
+        print(f"mcp-pin: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
     data = collect(args)
     if not data.tools:
-        print("mcp-audit: no tools to propose limits for. Argument limits are "
+        print("mcp-pin: no tools to propose limits for. Argument limits are "
               "written against a tool's schema, so this needs --probe.",
               file=sys.stderr)
         return EXIT_OK
@@ -468,7 +466,7 @@ def cmd_policy(args: argparse.Namespace) -> int:
             proposal[identities.get(server_name, server_name)] = rules
 
     if not proposal:
-        print("mcp-audit: no tool takes a path, a destination or a query. "
+        print("mcp-pin: no tool takes a path, a destination or a query. "
               "Nothing to limit.")
         return EXIT_OK
 
@@ -493,7 +491,7 @@ def cmd_policy(args: argparse.Namespace) -> int:
             existing[tool] = rule
             added += 1
     lock.save(lock_path)
-    print(f"mcp-audit: added {added} rule(s) to {lock_path}, left {kept} untouched.")
+    print(f"mcp-pin: added {added} rule(s) to {lock_path}, left {kept} untouched.")
     print("           Every added value is a placeholder and will refuse every call "
           "until you edit it.")
     return EXIT_OK
@@ -506,7 +504,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     try:
         lock = Lock.load(lock_path)
     except ValueError as exc:
-        print(f"mcp-audit: {exc}", file=sys.stderr)
+        print(f"mcp-pin: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
     data = collect(args)
@@ -538,7 +536,7 @@ def cmd_coverage(args: argparse.Namespace) -> int:
     try:
         lock = Lock.load(lock_path)
     except ValueError as exc:
-        print(f"mcp-audit: {exc}", file=sys.stderr)
+        print(f"mcp-pin: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
     # No rules are run: this reports on the control plane, not on the servers.
@@ -560,7 +558,7 @@ def cmd_gateway(args: argparse.Namespace) -> int:
     lock_path = _resolve_lock_path(args)
     data = collect(args)
     if not data.servers:
-        print("mcp-audit gateway: no MCP servers found to serve.", file=sys.stderr)
+        print("mcp-pin gateway: no MCP servers found to serve.", file=sys.stderr)
         return EXIT_ERROR
 
     return gateway_mod.run(
@@ -584,7 +582,7 @@ def cmd_verify_log(args: argparse.Namespace) -> int:
     from .auditlog import verify
 
     result = verify(args.path)
-    print(f"mcp-audit: {result.summary()}")
+    print(f"mcp-pin: {result.summary()}")
     for problem in result.problems[1:]:
         print(f"           also line {problem.line}: {problem.reason}")
     return EXIT_OK if result.ok else EXIT_FINDINGS
@@ -595,7 +593,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 
     path = Path(args.path)
     if not path.exists():
-        print(f"mcp-audit: {path}: no such file", file=sys.stderr)
+        print(f"mcp-pin: {path}: no such file", file=sys.stderr)
         return EXIT_ERROR
 
     payload = report_mod.build(path)
@@ -615,7 +613,7 @@ def cmd_explain(args: argparse.Namespace) -> int:
     rule_id = args.rule_id.upper()
     rule = next((r for r in all_rules() if r.id == rule_id), None)
     if rule is None:
-        print(f"mcp-audit: unknown rule id {args.rule_id!r}; run `mcp-audit rules`",
+        print(f"mcp-pin: unknown rule id {args.rule_id!r}; run `mcp-pin rules`",
               file=sys.stderr)
         return EXIT_ERROR
 
@@ -648,7 +646,7 @@ def cmd_rules(args: argparse.Namespace) -> int:
 
 
 def _with_default_command(parser: argparse.ArgumentParser, argv: list[str]) -> list[str]:
-    # Make `scan` the default command so bare `mcp-audit` and `mcp-audit .` work.
+    # Make `scan` the default command so bare `mcp-pin` and `mcp-pin .` work.
     known = getattr(parser, "mcp_commands", set())
     if not argv or (argv[0] not in known and not argv[0].startswith("-")):
         return ["scan", *argv]
@@ -686,7 +684,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return _COMMANDS.get(args.command, cmd_scan)(args)
     except KeyboardInterrupt:
-        print("\nmcp-audit: interrupted", file=sys.stderr)
+        print("\nmcp-pin: interrupted", file=sys.stderr)
         return EXIT_ERROR
     except BrokenPipeError:
         return EXIT_OK

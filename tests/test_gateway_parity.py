@@ -37,9 +37,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.gateway import Gateway  # noqa: E402
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin.gateway import Gateway  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
 
 FAKE = ROOT / "tests" / "fixtures" / "fake_server.py"
 
@@ -204,7 +204,7 @@ class TestListChangedIsNoticed(unittest.TestCase):
         trail does: "something changed its tools" is not actionable when
         eight servers are behind one endpoint."""
         import tempfile
-        from mcp_audit.auditlog import AuditLog
+        from mcp_pin.auditlog import AuditLog
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trail.jsonl"
             gateway, _ = gateway_with({"jsonrpc": "2.0", "id": 1, "result": {}},
@@ -237,8 +237,8 @@ class TestOverARealPipe(unittest.TestCase):
         self.project = Path(self._tmp.name)
         (self.project / ".mcp.json").write_text(json.dumps({"mcpServers": {
             "local": {"command": sys.executable, "args": [str(FAKE)],
-                      "env": {"MCP_AUDIT_FIXTURE_MODE":
-                              "${MCP_AUDIT_FIXTURE_MODE}"}},
+                      "env": {"MCP_PIN_FIXTURE_MODE":
+                              "${MCP_PIN_FIXTURE_MODE}"}},
         }}), encoding="utf-8")
         self._cli(["approve", ".", "--no-user-configs", "--probe"], mode="benign")
 
@@ -250,8 +250,8 @@ class TestOverARealPipe(unittest.TestCase):
         import subprocess
         env = dict(os.environ)
         env["PYTHONPATH"] = str(ROOT / "src")
-        env["MCP_AUDIT_FIXTURE_MODE"] = mode
-        return subprocess.run([sys.executable, "-m", "mcp_audit", *args],
+        env["MCP_PIN_FIXTURE_MODE"] = mode
+        return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
                               cwd=str(self.project), env=env, input=stdin,
                               capture_output=True, text=True, timeout=180)
 
@@ -310,7 +310,7 @@ class TestTheParityItself(unittest.TestCase):
         """Each of these was missing once. If the guard grows another, this
         fails until somebody decides whether the gateway needs it -- which is
         the decision that went unmade for three cycles."""
-        source = (ROOT / "src" / "mcp_audit" / "gateway.py").read_text(encoding="utf-8")
+        source = (ROOT / "src" / "mcp_pin" / "gateway.py").read_text(encoding="utf-8")
         for screen in ("screen_result_text", "screen_input_required",
                        "screen_server_request", "note_notification"):
             with self.subTest(screen=screen):

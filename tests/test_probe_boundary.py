@@ -35,7 +35,7 @@ sys.path.insert(0, str(ROOT / "src"))
 def run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "src")
-    return subprocess.run([sys.executable, "-m", "mcp_audit", *args],
+    return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
                           cwd=str(cwd), env=env, capture_output=True,
                           text=True, timeout=180)
 

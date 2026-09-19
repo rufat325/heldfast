@@ -238,7 +238,7 @@ def render(data: dict[str, Any], color: bool = True) -> str:
             "  No approval lockfile.",
             "",
             "  Nothing is pinned, so nothing can have drifted and the gateway has",
-            "  nothing to serve. Run `mcp-audit approve --probe` to record what is",
+            "  nothing to serve. Run `mcp-pin approve --probe` to record what is",
             "  here now.",
             "",
         ]

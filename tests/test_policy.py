@@ -23,10 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit.guard import Guard  # noqa: E402
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_audit.policy import Policy, normalize_path  # noqa: E402
+from mcp_pin.guard import Guard  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin.policy import Policy, normalize_path  # noqa: E402
 
 POLICY = {
     "read_file": {"paths": ["/workspace/**", "/tmp"]},
@@ -226,7 +226,7 @@ class TestSuggestion(unittest.TestCase):
     stamp."""
 
     def _tools(self):
-        from mcp_audit.model import ToolSpec
+        from mcp_pin.model import ToolSpec
         return [
             ToolSpec(server="s", name="read_file",
                      input_schema={"properties": {"path": {}}}),
@@ -241,8 +241,8 @@ class TestSuggestion(unittest.TestCase):
         ]
 
     def _suggest(self):
-        from mcp_audit.policy import suggest
-        from mcp_audit.rules.annotations import MUTATING_VERBS
+        from mcp_pin.policy import suggest
+        from mcp_pin.rules.annotations import MUTATING_VERBS
         return suggest(self._tools(), MUTATING_VERBS)
 
     def test_a_path_parameter_gets_a_path_limit(self) -> None:

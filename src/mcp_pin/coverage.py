@@ -68,7 +68,7 @@ def _approval(entry: dict | None) -> Layer:
     if not entry:
         return Layer("approved", "no",
                      "configured, never approved",
-                     "mcp-audit approve --probe")
+                     "mcp-pin approve --probe")
     when = str(entry.get("approved_at") or "")
     return Layer("approved", "yes", when)
 
@@ -84,7 +84,7 @@ def _tools(entry: dict | None) -> Layer:
     """
     if not entry:
         return Layer("tools pinned", "no", "nothing approved to pin",
-                     "mcp-audit approve --probe")
+                     "mcp-pin approve --probe")
     count = len(entry.get("tools") or {})
     if count:
         return Layer("tools pinned", "yes", f"{count} tool(s) fingerprinted")
@@ -98,7 +98,7 @@ def _tools(entry: dict | None) -> Layer:
     return Layer(
         "tools pinned", "no",
         "approved without --probe, so no tool definition was recorded",
-        "mcp-audit approve --probe")
+        "mcp-pin approve --probe")
 
 
 def _code(entry: dict | None, spec: Any) -> Layer:
@@ -143,7 +143,7 @@ def _code(entry: dict | None, spec: Any) -> Layer:
             return Layer(
                 "code pinned", "no",
                 "a local script is named but no digest was recorded",
-                "mcp-audit approve")
+                "mcp-pin approve")
         return Layer(
             "code pinned", "no",
             f"names {named[0]!r}, which is not a file on this machine",
@@ -159,7 +159,7 @@ def _policy(entry: dict | None) -> Layer:
         return Layer(
             "argument policy", "no",
             "any argument reaches the server once the tool itself is approved",
-            "mcp-audit policy --probe")
+            "mcp-pin policy --probe")
     return Layer("argument policy", "yes", f"{len(limits)} tool(s) constrained")
 
 
@@ -195,7 +195,7 @@ def _in_path(key: str, entry: dict | None, spec: Any, fronting: set) -> Layer:
     like one.
     """
     if spec is not None and subcommand(spec) == "guard":
-        return Layer("enforced", "yes", "wrapped by `mcp-audit guard`")
+        return Layer("enforced", "yes", "wrapped by `mcp-pin guard`")
     if behind_gateway(key, entry, fronting):
         return Layer("enforced", "yes", "reached through the gateway")
     if spec is not None and spec.client in fronting:
@@ -209,7 +209,7 @@ def _in_path(key: str, entry: dict | None, spec: Any, fronting: set) -> Layer:
     return Layer(
         "enforced", "no",
         "the client talks to this server directly; nothing checks the lockfile at runtime",
-        "point the client at `mcp-audit gateway`, or wrap it with `mcp-audit guard`")
+        "point the client at `mcp-pin gateway`, or wrap it with `mcp-pin guard`")
 
 
 def for_server(lock: Lock, key: str, spec: Any,

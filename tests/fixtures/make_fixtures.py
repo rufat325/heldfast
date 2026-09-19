@@ -160,7 +160,7 @@ MCPA003 unpinned-github
 def main() -> int:
     # -- vulnerable corpus -------------------------------------------------
     write_json(VULN / ".mcp.json", VULNERABLE_MCP_JSON)
-    (VULN / ".mcp-audit-ignore").write_text(IGNORE_FILE, encoding="utf-8")
+    (VULN / ".mcp-pin-ignore").write_text(IGNORE_FILE, encoding="utf-8")
     (VULN / ".cursor").mkdir(parents=True, exist_ok=True)
     (VULN / ".cursor" / "mcp.json").write_text(CURSOR_MCP_JSONC, encoding="utf-8")
 

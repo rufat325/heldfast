@@ -25,12 +25,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_audit import inspect as inspect_mod  # noqa: E402
-from mcp_audit.discovery import _strip_jsonc, find_key_line  # noqa: E402
-from mcp_audit.findings import redact  # noqa: E402
-from mcp_audit.guard import Guard  # noqa: E402
-from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_pin import inspect as inspect_mod  # noqa: E402
+from mcp_pin.discovery import _strip_jsonc, find_key_line  # noqa: E402
+from mcp_pin.findings import redact  # noqa: E402
+from mcp_pin.guard import Guard  # noqa: E402
+from mcp_pin.lockfile import Lock  # noqa: E402
+from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
 
 BS = chr(92)
 

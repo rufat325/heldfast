@@ -16,7 +16,7 @@ selected on the command line:
       }
     }
 
-    mcp-audit gateway --as finance
+    mcp-pin gateway --as finance
 
 WHAT THIS IS AND IS NOT
 -----------------------

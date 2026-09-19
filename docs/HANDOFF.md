@@ -9,9 +9,10 @@ Read this file and `docs/GUARANTEES.md` instead.
 
 - Feature freeze. No new clients, no new rules, no PyPI until
   the theorems in `docs/GUARANTEES.md` hold under the tests named there.
-- GitHub repo is `rufat325/mcp-pin`. The command, the wheel name, the
-  lockfile and the rule ids are still `mcp-audit` until a deliberate
-  rename. A clone URL is not a package name.
+- GitHub repo, command, wheel and lockfile are `mcp-pin`. Rule ids stay
+  `MCPA*`: a detection namespace is not a product name.
+- An existing `.mcp-audit.lock` is still loaded if `.mcp-pin.lock` is
+  absent, so renaming the file is not a silent loss of enforcement.
 - Last public commit on `main` before this freeze work:
   `d54123c Stop a name in a config from rewriting the report about it`
 
@@ -46,7 +47,8 @@ Read this file and `docs/GUARANTEES.md` instead.
    must fit on one page (`tests/test_function_size.py`).
 4. ~~`mypy --strict` on `policy.py`, `lockfile.py`, `model.py`, `findings.py`.~~
    Done, CI job `types`. Not a runtime dependency.
-5. Only then: PyPI, a name that can win search, more clients.
+5. ~~A name that can win search.~~ Done: repo, command, wheel and lockfile
+   are `mcp-pin`. Rule ids stay `MCPA*`. Then: PyPI, more clients.
 
 ## How to run
 

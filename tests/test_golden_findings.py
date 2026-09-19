@@ -18,8 +18,8 @@ PIN = Path(__file__).resolve().parent / "golden" / "vulnerable_rule_ids.txt"
 
 
 def _scan_vulnerable() -> set[str]:
-    from mcp_audit.parsers import parse_config
-    from mcp_audit.rules import AuditContext, run_rules
+    from mcp_pin.parsers import parse_config
+    from mcp_pin.rules import AuditContext, run_rules
 
     fixtures = ROOT / "tests" / "fixtures"
     vuln = fixtures / "vulnerable" / ".mcp.json"
