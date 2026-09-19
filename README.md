@@ -16,7 +16,7 @@ server that kept the same config and rewrote `read_invoice` to ask for
 `~/.ssh/id_rsa`.
 
 ```bash
-pipx install git+https://github.com/rufat325/mcp-pin
+pipx install mcp-pin
 
 mcp-pin approve --probe   # record what you reviewed
 mcp-pin                   # later: see what changed
@@ -26,12 +26,10 @@ mcp-pin guard -- npx -y @scope/server@1.0.0
 ## Install
 
 ```bash
-uvx --from git+https://github.com/rufat325/mcp-pin mcp-pin   # no install
-pipx install git+https://github.com/rufat325/mcp-pin           # or keep it
+uvx mcp-pin                    # no install
+pipx install mcp-pin           # or keep it
+pip install mcp-pin
 ```
-
-Not on PyPI yet, so both commands name the repository. When it is published
-they shorten to `uvx mcp-pin` and `pipx install mcp-pin`.
 
 Python 3.9+. Zero runtime dependencies, on purpose — a supply-chain scanner that drags in a
 dependency tree is asking you to trust the thing it's auditing.

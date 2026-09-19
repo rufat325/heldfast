@@ -55,7 +55,8 @@ Read this file and `docs/GUARANTEES.md` instead.
 8. ~~Golden traces for sampling / elicitation / roots / a screened result.~~
    Done.
 9. ~~README first screen is the pin.~~ Done. GIF is a live filesystem
-   wrap plus the rug pull. Long form is `docs/MANUAL.md`. PyPI still waits.
+   wrap plus the rug pull. Long form is `docs/MANUAL.md`.
+   [PyPI `mcp-pin` 0.1.0](https://pypi.org/project/mcp-pin/).
 10. ~~JSON-RPC batches skip the pump.~~ Done: `_screen_outbound` / `_client_to_server`.
 11. ~~`.mcp-pin-ignore` could hide MCPA015.~~ Done: `PINNED` lockfile theorems.
 12. ~~`NODE_OPTIONS` / `PYTHONPATH` inherited.~~ Done: declare them or they stay out.
@@ -66,9 +67,7 @@ Read this file and `docs/GUARANTEES.md` instead.
 17. ~~Probe gate launches on a rule exception.~~ Done: launches nothing.
 18. ~~Drift first-match on bare name.~~ Done: `_entry_for` refuses to guess.
 19. ~~Public-repo hygiene.~~ Done: noreply authors, SHA-pinned actions,
-    `SECURITY.md`. Register `mcp-pin` on PyPI before the first tweet; a
-    name squat is the remaining supply-chain hole this repo cannot close
-    from git.
+    `SECURITY.md`. [PyPI `mcp-pin` 0.1.0](https://pypi.org/project/mcp-pin/).
 20. ~~Scan looked for the lock in cwd, not the tree.~~ Done: a lock beside
     the scanned directory is the lock; the Action job on the clean fixture
     no longer files MCPA014 because the runner's cwd is the repo root.

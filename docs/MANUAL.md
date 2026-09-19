@@ -31,12 +31,10 @@ The config file was byte-identical across those two scans.
 ## Install
 
 ```bash
-uvx --from git+https://github.com/rufat325/mcp-pin mcp-pin   # no install
-pipx install git+https://github.com/rufat325/mcp-pin           # or keep it
+uvx mcp-pin
+pipx install mcp-pin
+pip install mcp-pin
 ```
-
-Not on PyPI yet, so both commands name the repository. When it is published
-they shorten to `uvx mcp-pin` and `pipx install mcp-pin`.
 
 Python 3.9+. Zero runtime dependencies, on purpose — a supply-chain scanner that drags in a
 dependency tree is asking you to trust the thing it's auditing. The JSONC parser,

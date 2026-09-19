@@ -20,5 +20,5 @@ this tool is a pin, not a sandbox.
 The GitHub Action must be pinned to a commit SHA. `@main` moves.
 The third-party actions this repo uses are pinned the same way.
 
-The PyPI name `mcp-pin` is reserved for this project. Until a tag is
-published, install from git at a SHA.
+Install the package from PyPI (`pipx install mcp-pin`). A git SHA is
+still the pin for the Action.
