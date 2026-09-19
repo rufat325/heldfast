@@ -423,7 +423,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
         lock_path=lock_path,
         policy=args.policy,
         server_name=args.name,
-        strict=args.strict,
+        strict=not args.fail_open,
         block_severity=Severity.parse(args.block_severity),
         quiet=args.quiet,
         deny_sampling=args.deny_sampling,

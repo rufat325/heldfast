@@ -185,7 +185,8 @@ class TestTheGuardEnforcesIt(unittest.TestCase):
 
     def test_a_server_with_no_policy_does_no_argument_work(self) -> None:
         lock = Lock()
-        lock.servers = {"test:h": {"name": "h", "client": "test", "tools": {}}}
+        lock.servers = {"test:h": {"name": "h", "client": "test",
+                                   "tools": {"anything": {"fingerprint": "x"}}}}
         guard = Guard("h", lock, quiet=True)
         self.assertFalse(guard.call_policy)
         self.assertIsNone(guard.check_call(self._call("anything", {"p": "/etc/shadow"})))
@@ -271,9 +272,9 @@ class TestSuggestion(unittest.TestCase):
 
 class TestMalformedPolicyCannotBreakTheProxy(unittest.TestCase):
     """Policy is hand-written, so it arrives malformed sooner or later. This
-    runs on the guard's pump thread, where an exception does not fail open --
-    it stops forwarding and hangs the agent, which is worse than one unchecked
-    call and far more confusing to debug.
+    runs on the guard's pump thread. An exception refuses the call (fail
+    closed) rather than forwarding it or tearing the session down.
+    `--fail-open` is the opt-out.
 
     Found by fuzzing: a null left in a list raised TypeError out of
     normalize_path, and a null in a sql list raised AttributeError.
@@ -313,7 +314,7 @@ class TestMalformedPolicyCannotBreakTheProxy(unittest.TestCase):
         self.assertTrue(policy.check("t", {"p": "/w/ok"}))
         self.assertFalse(policy.check("t", {"p": "/etc/passwd"}))
 
-    def test_the_guard_fails_open_and_says_so(self) -> None:
+    def test_the_guard_fails_closed_on_a_policy_exception(self) -> None:
         class Exploding:
             def __bool__(self):
                 return True
@@ -322,14 +323,20 @@ class TestMalformedPolicyCannotBreakTheProxy(unittest.TestCase):
                 raise RuntimeError("boom")
 
         lock = Lock()
-        lock.servers = {"test:h": {"name": "h", "client": "test", "tools": {}}}
-        guard = Guard("h", lock, quiet=True)
-        guard.call_policy = Exploding()
+        lock.servers = {"test:h": {"name": "h", "client": "test",
+                                   "tools": {"t": {"fingerprint": "x"}}}}
+        closed = Guard("h", lock, quiet=True)
+        closed.call_policy = Exploding()
+        refusal = closed.check_call({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                     "params": {"name": "t", "arguments": {}}})
+        self.assertIsNotNone(refusal)
+        self.assertTrue(closed.stats.internal_errors)
 
-        refusal = guard.check_call({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                                    "params": {"name": "t", "arguments": {}}})
-        self.assertIsNone(refusal, "an internal error must not block the call")
-        self.assertTrue(guard.stats.internal_errors)
+        opened = Guard("h", lock, quiet=True, strict=False)
+        opened.call_policy = Exploding()
+        self.assertIsNone(opened.check_call(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "t", "arguments": {}}}))
 
 
 BS = chr(92)   # a literal backslash, written this way because every

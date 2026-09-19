@@ -2,14 +2,17 @@
 
 [![ci](https://github.com/rufat325/mcp-pin/actions/workflows/ci.yml/badge.svg)](https://github.com/rufat325/mcp-pin/actions/workflows/ci.yml)
 
-Security scanner for MCP server configs and agent skills. No runtime dependencies.
+You approve an MCP server. mcp-pin records what you approved. Later it tells
+you what moved, and `guard` refuses the rest.
+
+No runtime dependencies.
 
 ```bash
 pipx install git+https://github.com/rufat325/mcp-pin
 
-mcp-pin                  # scan what's configured on this machine
-mcp-pin approve --probe  # record what you reviewed
-mcp-pin                  # later: see what changed
+mcp-pin approve --probe   # record what you reviewed
+mcp-pin                   # later: see what changed
+mcp-pin guard -- npx -y @scope/server@1.0.0
 ```
 
 ## Why
@@ -1087,9 +1090,10 @@ outright that never runs, and a server which ignores stdin close would otherwise
 indefinitely. Setting this up is best effort: failing to arrange your own cleanup is not a
 reason to refuse to start.
 
-Two failure modes, two deliberate answers. A *security* event (drift, unapproved tool) fails
-closed. An *internal* error (corrupt lockfile, a rule raising) fails open and says so loudly
-on stderr, because a scanner bug should not take down your agent. `--strict` inverts that.
+Two failure modes, two deliberate answers. A *security* event (drift, unapproved
+tool) fails closed. An *internal* error (corrupt lockfile, a rule raising) also
+fails closed: the call is refused, the uninspected result is withheld.
+`--fail-open` restores the old "don't take the agent down" behaviour.
 
 ## The LLM tier (`--llm`)
 
@@ -1140,10 +1144,10 @@ where you are, probe in a sandbox.
 
 ## What it doesn't do
 
-- No runtime blocking or proxying. It's a scanner.
-- Doesn't call tools, only `initialize` and `tools/list`.
-- Can't tell you a description is malicious, only that it's unusual or that it changed.
-  Anything below 100% confidence is a heuristic and says so.
+- Doesn't call tools, only `initialize` and `tools/list` (and whatever `guard`
+  is proxying).
+- Can't tell you a description is malicious, only that it's unusual or that it
+  changed. Anything below 100% confidence is a heuristic and says so.
 - Typosquat detection works off a static list of known packages, so it misses impersonations
   of servers it hasn't heard of.
 - MCPA006 is POSIX only, no Windows ACL support.
@@ -1194,7 +1198,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-873 tests, stdlib unittest, nothing to install.
+882 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](docs/GUARANTEES.md). Continue work from

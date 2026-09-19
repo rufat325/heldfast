@@ -25,11 +25,10 @@ Two different failures, two different answers, both deliberate:
 
 - A *security* event (a tool changed, a tool is unapproved) fails closed. That
   is the entire point.
-- An *internal* error (the lockfile is corrupt, a rule raises) fails open, and
-  says so loudly on stderr. A scanner bug should not take down the user's
-  agent; silently breaking every tool call is how a security tool gets ripped
-  out and never reinstalled. `--strict` inverts this for people who would
-  rather lose the agent than lose the guarantee.
+- An *internal* error (the lockfile is corrupt, a rule raises) also fails
+  closed: the call is refused, the result is withheld. `--fail-open` restores
+  the old "don't take the agent down" behaviour for people who would rather
+  lose the boundary than the session.
 
 Everything diagnostic goes to stderr. Stdout is the protocol channel and
 carries nothing but JSON-RPC.
@@ -58,6 +57,22 @@ POLICIES = ("block", "strip", "warn")
 DEFAULT_POLICY = "block"
 
 
+def _tool_from_wire(server: str, raw: dict[str, Any]) -> ToolSpec:
+    """The same fields `probe` hashes, so a title or output schema changing
+    after approval is drift here too, not only in the scanner."""
+    icons = raw.get("icons")
+    return ToolSpec(
+        server=server,
+        name=str(raw.get("name") or ""),
+        title=str(raw.get("title") or ""),
+        description=str(raw.get("description") or ""),
+        input_schema=raw.get("inputSchema") or raw.get("input_schema") or {},
+        output_schema=raw.get("outputSchema") or raw.get("output_schema") or {},
+        annotations=raw.get("annotations") or {},
+        icons=list(icons) if isinstance(icons, list) else [],
+    )
+
+
 @dataclass
 class GuardStats:
     forwarded: int = 0
@@ -82,7 +97,7 @@ class GuardStats:
 
 class Guard:
     def __init__(self, server_name: str, lock: Lock, *, policy: str = DEFAULT_POLICY,
-                 strict: bool = False, block_severity: Severity = Severity.CRITICAL,
+                 strict: bool = True, block_severity: Severity = Severity.CRITICAL,
                  quiet: bool = False, deny_sampling: bool = False,
                  deny_elicitation: bool = False,
                  deny_roots: bool = False,
@@ -113,6 +128,9 @@ class Guard:
         # tool *definitions*. This one constrains tool *arguments*.
         self.call_policy = Policy.from_lock_entry(self._resolve_entry())
         self._locked_instructions = self._load_locked_instructions()
+        # Last tools/list, keyed by name. check_call uses this so a tool
+        # withheld from the catalogue cannot still be executed.
+        self._listed: dict[str, ToolSpec] = {}
 
     # -- lockfile ----------------------------------------------------------
 
@@ -254,24 +272,25 @@ class Guard:
         The lockfile says this tool is the one that was approved. Policy says
         what it may be asked to do, which is a different question: a
         `delete_file` whose definition has not changed by a byte is still the
-        tool that deletes ~/.ssh/id_rsa when something talks the agent into
-        asking for that.
+        tool that deletes ~/.ssh/id_rsa if something talks the agent into
+        asking for that. Identity is checked first, including against the
+        last tools/list: a tool the catalogue withheld must not still run.
         """
-        if not self.call_policy or message.get("method") != "tools/call":
+        if message.get("method") != "tools/call":
             return None
         params = message.get("params")
         if not isinstance(params, dict):
             return None
-
         name = str(params.get("name") or "")
+        refused = self._identity_refusal(message, name)
+        if refused is not None:
+            return refused
+        if not self.call_policy:
+            return None
         try:
             decision = self.call_policy.check(name, params.get("arguments"))
         except Exception as exc:
-            self.stats.internal_errors.append(f"policy raised: {exc}")
-            self.log(f"INTERNAL ERROR checking {name}: {exc}")
-            if self.strict:
-                raise
-            return None
+            return self._on_policy_error(message, name, exc)
         if decision.allowed:
             return None
         if self.dry_run:
@@ -282,6 +301,41 @@ class Guard:
         self.log(f"DENIED {name}: {decision.reason}")
         return self._refusal_result(message, name, decision.reason)
 
+    def _identity_refusal(self, message: dict[str, Any], name: str
+                          ) -> dict[str, Any] | None:
+        tool = self._listed.get(name)
+        if tool is not None:
+            verdict, reason = self._verdict(tool)
+            if verdict == "allow":
+                verdict, content_reason = self._content_verdict(tool)
+                if verdict == "deny":
+                    reason = content_reason
+        elif self._locked_tools is None:
+            verdict, reason = self._verdict(ToolSpec(server=self.server_name, name=name))
+        elif name not in self._locked_tools:
+            verdict, reason = "deny", "tool was not present at approval"
+        else:
+            return None
+        if verdict == "allow":
+            return None
+        if self.dry_run:
+            self.stats.calls_would_deny.append(f"{name}: identity")
+            self.log(f"WOULD DENY {name}: {reason}")
+            return None
+        self.stats.calls_denied.append(f"{name}: {reason}")
+        self.log(f"DENIED {name}: {reason}")
+        return self._refusal_result(message, name, reason)
+
+    def _on_policy_error(self, message: dict[str, Any], name: str,
+                         exc: BaseException) -> dict[str, Any] | None:
+        self.stats.internal_errors.append(f"policy raised: {exc}")
+        self.log(f"INTERNAL ERROR checking {name}: {exc}")
+        if not self.strict:
+            return None
+        return self._refusal_result(
+            message, name,
+            "internal error checking policy; refusing rather than forwarding")
+
     def _content_verdict(self, tool: ToolSpec) -> tuple[str, str]:
         """Run the poisoning rules over this tool's own text."""
         try:
@@ -291,8 +345,8 @@ class Guard:
         except Exception as exc:  # a rule bug must not break the connection
             self.stats.internal_errors.append(f"rules raised: {exc}")
             self.log(f"INTERNAL ERROR running rules on {tool.name}: {exc}")
-            return ("deny", "internal error and --strict is set") if self.strict else \
-                   ("allow", "internal error; failing open")
+            return ("deny", "internal error running rules; refusing rather than allowing") \
+                if self.strict else ("allow", "internal error; failing open")
 
         worst = [f for f in findings if f.severity >= self.block_severity]
         if worst:
@@ -308,13 +362,8 @@ class Guard:
                 kept.append(raw)
                 continue
             self.stats.tools_seen += 1
-            tool = ToolSpec(
-                server=self.server_name,
-                name=str(raw.get("name") or ""),
-                description=str(raw.get("description") or ""),
-                input_schema=raw.get("inputSchema") or {},
-                annotations=raw.get("annotations") or {},
-            )
+            tool = _tool_from_wire(self.server_name, raw)
+            self._listed[tool.name] = tool
 
             verdict, reason = self._verdict(tool)
             if verdict == "allow":
@@ -593,9 +642,26 @@ class Guard:
         except Exception as exc:
             self.stats.internal_errors.append(str(exc))
             self.log(f"INTERNAL ERROR inspecting message: {exc}")
-            if self.strict:
-                raise
+            if not self.strict:
+                return message
+            return self._on_inspect_error(message)
         return message
+
+    def _on_inspect_error(self, message: dict[str, Any]) -> dict[str, Any]:
+        if message.get("method") and "id" in message and "result" not in message:
+            return self.deny_response(message)
+        return {
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "result": {
+                "content": [{
+                    "type": "text",
+                    "text": ("[WITHHELD BY mcp-pin] internal error inspecting this "
+                             "message; refusing rather than forwarding uninspected data."),
+                }],
+                "isError": True,
+            },
+        }
 
     def summary(self) -> str:
         s = self.stats
@@ -823,7 +889,7 @@ def _shutdown(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None) -> N
 
 
 def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
-        server_name: str | None = None, strict: bool = False,
+        server_name: str | None = None, strict: bool = True,
         block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
         deny_sampling: bool = False, deny_elicitation: bool = False,
         deny_roots: bool = False, result_policy: str = "annotate",

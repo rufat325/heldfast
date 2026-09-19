@@ -49,6 +49,12 @@ Read this file and `docs/GUARANTEES.md` instead.
    Done, CI job `types`. Not a runtime dependency.
 5. ~~A name that can win search.~~ Done: repo, command, wheel and lockfile
    are `mcp-pin`. Rule ids stay `MCPA*`. Then: PyPI, more clients.
+6. ~~Guard fails closed on kernel exceptions.~~ Done: `--fail-open` is the
+   opt-out. A withheld catalogue cannot still be called.
+7. ~~Mutants for lockfile load and the guard pump.~~ Done.
+8. ~~Golden traces for sampling / elicitation / roots / a screened result.~~
+   Done.
+9. ~~README first screen is the pin.~~ Done. PyPI still waits.
 
 ## How to run
 

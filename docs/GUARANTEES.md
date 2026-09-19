@@ -32,7 +32,8 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-ATTACK | Every registered rule except the documented exemptions has an attack that demonstrates it. Adding a rule without one fails the build. | `tests/test_attack_corpus.py` |
 | T-GOLDEN | The known-bad fixture still produces the pinned set of rule IDs. A rule that goes quiet is a bug. | `tests/test_golden_findings.py` |
 | T-MUTATION | Every catalogued fail-open edit of policy, fingerprint or JSONC is observed as a hole. Survival fails CI. | `tests/test_mutation.py` |
-| T-TRACE | Guard and gateway still emit the pinned JSON-RPC conversations (allow, deny, banner-before-frame, rewrite-after-N). | `tests/test_golden_traces.py` |
+| T-TRACE | Guard and gateway still emit the pinned JSON-RPC conversations (allow, deny, banner-before-frame, rewrite-after-N, sampling, elicitation, roots, result fence). | `tests/test_golden_traces.py` |
+| T-FAIL-CLOSED | A kernel exception in `guard` refuses the call or withholds the result. A tool withheld from `tools/list` cannot still be executed. Forwarding either requires `--fail-open`. | `tests/test_guard.py`, `tests/test_mutation.py`, `tests/test_malformed_input.py` |
 | T-TYPES | `policy.py`, `lockfile.py`, `model.py` and `findings.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
 | T-SIZE | Functions in `cli.py` and `guard.py` fit on one page (60 lines). | `tests/test_function_size.py` |
 | T-WHEEL | The published wheel has no runtime dependencies. | `.github/workflows/release.yml` |

@@ -316,8 +316,12 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
                          choices=[s.label for s in Severity],
                          help="minimum content-rule severity that rejects a tool "
                               "(default: critical)")
+    guard_p.add_argument("--fail-open", action="store_true",
+                         help="forward a call when an internal error happens instead of "
+                              "refusing it (the default is to refuse)")
     guard_p.add_argument("--strict", action="store_true",
-                         help="fail closed on internal errors too, not just on drift")
+                         help="fail closed on internal errors (the default; "
+                              "--fail-open inverts this)")
     guard_p.add_argument("--quiet", action="store_true", help="suppress stderr diagnostics")
     guard_p.add_argument("--dry-run", action="store_true",
                          help="report what the argument policy would block, and "
@@ -360,7 +364,7 @@ def _register_serve(sub: argparse._SubParsersAction) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mcp-pin",
-        description="Security scanner for MCP server configurations and agent skills.",
+        description="Pin the MCP servers you approved, and refuse the drift.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "exit codes:\n"

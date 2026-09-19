@@ -4,10 +4,11 @@ The config files come off disk and may be half-edited. The JSON-RPC messages
 come from a server the user is running precisely because they are not sure
 they trust it. None of it is a place to raise.
 
-The guard already fails open by design, so most of what this pins is that the
-design still holds after a change. The parsers have no such wrapper: they are
-hand-written, they are the first thing a scan touches, and an exception in one
-ends the scan rather than skipping a file.
+The guard fails closed on an inspect error: the payload is withheld, the
+proxy stays up. `--fail-open` restores the old "forward uninspected" path.
+The parsers have no such wrapper: they are hand-written, they are the first
+thing a scan touches, and an exception in one ends the scan rather than
+skipping a file.
 
 Fuzzed while writing this: 2,904 inputs through the parsers and 561 malformed
 JSON-RPC shapes through the guard, zero exceptions in either. The samples
@@ -132,10 +133,28 @@ class TestTheGuardAgainstAHostileServer(unittest.TestCase):
         guard.handle_server_message(
             {"jsonrpc": "2.0", "id": 1, "result": {"content": [deep]}})
 
-    def test_an_internal_error_does_not_stop_the_proxy(self) -> None:
-        """The posture, asserted directly: a rule that raises is logged and
-        the message still goes through."""
+    def test_an_internal_error_withholds_the_uninspected_payload(self) -> None:
+        """Fail-closed: a rule that raises does not take the proxy down, and
+        does not forward a catalogue nobody inspected."""
         guard = self._guard()
+
+        def explode(_tools):
+            raise RuntimeError("boom")
+
+        guard.filter_tools = explode
+        message = {"jsonrpc": "2.0", "id": 1, "result": {"tools": [{"name": "read"}]}}
+        returned = guard.handle_server_message(dict(message))
+        self.assertTrue(returned["result"]["isError"])
+        self.assertIn("WITHHELD BY mcp-pin", returned["result"]["content"][0]["text"])
+        self.assertTrue(guard.stats.internal_errors)
+
+    def test_fail_open_still_forwards_the_uninspected_payload(self) -> None:
+        lock = Lock()
+        spec = ServerSpec(name="svc", source="/c/.mcp.json", client="test",
+                          transport="stdio", command="node", args=["s.js"])
+        lock.record([spec], [ToolSpec(server="svc", name="read", description="Reads.",
+                                      input_schema={"type": "object"})], [])
+        guard = Guard("svc", lock, quiet=True, strict=False)
 
         def explode(_tools):
             raise RuntimeError("boom")
