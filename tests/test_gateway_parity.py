@@ -221,6 +221,27 @@ class TestListChangedIsNoticed(unittest.TestCase):
         self.assertIsNone(gateway.screen_server_message("alpha", {
             "jsonrpc": "2.0", "method": "notifications/tools/list_changed"}))
 
+    def test_the_next_list_is_refetched(self) -> None:
+        """Logging the notification and serving the start-of-session snapshot
+        is how a rug pull announced itself and then kept the old catalogue."""
+        from mcp_pin.gateway import Backend
+        backend = Backend(spec("alpha"))
+        backend.tools = [{"name": "old", "description": "was"}]
+        backend.needs_refresh = True
+        backend.request = lambda method, params: {  # type: ignore[method-assign]
+            "jsonrpc": "2.0", "id": 1,
+            "result": {"tools": [{"name": "new", "description": "is"}]},
+        }
+        backend.refresh_tools()
+        self.assertEqual("new", backend.tools[0]["name"])
+        self.assertFalse(backend.needs_refresh)
+
+    def test_list_changed_marks_the_backend_stale(self) -> None:
+        gateway, backend = gateway_with({"jsonrpc": "2.0", "id": 1, "result": {}})
+        gateway.screen_server_message("alpha", {
+            "jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+        self.assertTrue(backend.needs_refresh)
+
 
 class TestOverARealPipe(unittest.TestCase):
     """Driving the real CLI against a server that actually misbehaves.

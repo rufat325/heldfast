@@ -120,5 +120,24 @@ class TestProbeDoesNotRunWhatItIsJudging(unittest.TestCase):
         self.assertFalse(self.marker.exists())
 
 
+class TestARuleCrashDoesNotLaunch(unittest.TestCase):
+    """`--probe` executes the server. A scanner bug is not a reason to do that."""
+
+    def test_an_exception_in_the_static_pass_launches_nothing(self) -> None:
+        from unittest.mock import patch
+        from mcp_pin.cli import Collected, _gate_servers
+        from mcp_pin.findings import Severity
+        from mcp_pin.model import ServerSpec
+
+        out = Collected()
+        out.servers = [ServerSpec(name="s", source="/p/.mcp.json", client="c",
+                                  transport="stdio", command="node")]
+        with patch("mcp_pin.cli.run_rules", side_effect=RuntimeError("boom")):
+            launchable, skipped = _gate_servers(out, Severity.HIGH)
+        self.assertEqual([], launchable)
+        self.assertEqual(1, len(skipped))
+        self.assertIn("static pre-pass failed", skipped[0][1])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

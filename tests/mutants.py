@@ -601,6 +601,79 @@ got = unpinned_findings([ServerSpec(name="s", source="/p/.mcp.json",
 FAIL_OPEN = got == []
 """,
     ),
+    Mutant(
+        id="gateway-list-changed-stale",
+        theorem="T-LIST-CHANGED",
+        path="gateway.py",
+        original="                    backend.needs_refresh = True",
+        replacement="                    pass",
+        harm="A tools/list_changed notification is logged and the old catalogue is kept.",
+        probe="""
+from mcp_pin.gateway import Gateway
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec, ToolSpec
+spec = ServerSpec(name="alpha", source="/p/.mcp.json", client="claude-code",
+                  transport="stdio", command="node")
+lock = Lock()
+lock.record([spec], [ToolSpec(server="alpha", name="x", description="d",
+                              input_schema={})], [])
+g = Gateway([spec], lock, quiet=True, allow_unapproved=True)
+backend = g.backends["alpha"]
+g.screen_server_message("alpha", {
+    "jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+FAIL_OPEN = not getattr(backend, "needs_refresh", False)
+""",
+    ),
+    Mutant(
+        id="probe-gate-launches-on-crash",
+        theorem="T-PROBE-GATE",
+        path="cli.py",
+        original="        return [], [(s.identity(), why) for s in out.servers]",
+        replacement="        return list(out.servers), []",
+        harm="A rule exception in the static pass launches every server.",
+        probe="""
+from unittest.mock import patch
+from mcp_pin.cli import Collected, _gate_servers
+from mcp_pin.findings import Severity
+from mcp_pin.model import ServerSpec
+out = Collected()
+out.servers = [ServerSpec(name="s", source="/p/.mcp.json", client="c",
+                          transport="stdio", command="node")]
+with patch("mcp_pin.cli.run_rules", side_effect=RuntimeError("boom")):
+    launchable, skipped = _gate_servers(out, Severity.HIGH)
+FAIL_OPEN = len(launchable) == 1
+""",
+    ),
+    Mutant(
+        id="drift-first-github",
+        theorem="T-DRIFT-ID",
+        path="rules/drift.py",
+        original="""    if len(matches) == 1:
+        return matches[0]
+    return None
+""",
+        replacement="""    if matches:
+        return matches[0]
+    return None
+""",
+        harm="Cursor's github pin is compared against Claude's live tools.",
+        probe="""
+from mcp_pin.model import ToolSpec
+from mcp_pin.rules import AuditContext, run_rules
+live = ToolSpec(server="github", name="read", description="Reads.",
+                input_schema={"type": "object"})
+lock = {"servers": {
+    "cursor:github": {"name": "github",
+                      "tools": {"read": {"fingerprint": "not-this",
+                                         "description_preview": "x"}}},
+    "claude-code:github": {"name": "github",
+                           "tools": {"read": {"fingerprint": live.fingerprint(),
+                                              "description_preview": "Reads."}}},
+}}
+fired = {f.rule_id for f in run_rules(AuditContext(tools=[live], lock=lock))}
+FAIL_OPEN = "MCPA015" in fired
+""",
+    ),
 )
 
 

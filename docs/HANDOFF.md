@@ -61,6 +61,9 @@ Read this file and `docs/GUARANTEES.md` instead.
 13. ~~Gateway mux by bare name.~~ Done: second `github` is refused, not overwritten.
 14. ~~`--probe` children unbound.~~ Done: `posix_preexec` + `bind_child`.
 15. ~~Unpinned tree greens CI.~~ Done: MCPA014 HIGH without a lock.
+16. ~~Gateway `list_changed` not re-fingerprinted.~~ Done: next list/call re-fetches.
+17. ~~Probe gate launches on a rule exception.~~ Done: launches nothing.
+18. ~~Drift first-match on bare name.~~ Done: `_entry_for` refuses to guess.
 
 ## How to run
 

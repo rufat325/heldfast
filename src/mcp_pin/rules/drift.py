@@ -100,11 +100,7 @@ def tool_drift(ctx: AuditContext) -> Iterable[Finding]:
         observed.setdefault(t.server, {})[t.name] = t
 
     for server_name, current_tools in observed.items():
-        entry = next(
-            (e for ident, e in known.items()
-             if isinstance(e, dict) and e.get("name") == server_name),
-            None,
-        )
+        entry = _entry_for(known, server_name)
         if not entry or "tools" not in entry:
             continue
         locked_tools = entry.get("tools") or {}
@@ -237,11 +233,19 @@ def skill_drift(ctx: AuditContext) -> Iterable[Finding]:
 
 
 def _entry_for(known: dict, server_name: str) -> dict | None:
-    return next(
-        (e for e in known.values()
-         if isinstance(e, dict) and e.get("name") == server_name),
-        None,
-    )
+    """The lock entry for this server, or none if that would be a guess.
+
+    Keys are `client:name`. Taking the first bare-name match is how Cursor's
+    github was compared against Claude's.
+    """
+    hit = known.get(server_name)
+    if isinstance(hit, dict):
+        return hit
+    matches = [e for e in known.values()
+               if isinstance(e, dict) and e.get("name") == server_name]
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 @rule("MCPA019", "Server instructions changed since approval", Severity.CRITICAL)

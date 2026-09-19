@@ -103,6 +103,7 @@ class Backend:
         self.on_unsolicited: Any = None
         self._id = 0
         self._lock = threading.Lock()
+        self.needs_refresh = False
 
     @property
     def name(self) -> str:
@@ -147,11 +148,25 @@ class Backend:
         self.notify("notifications/initialized", {})
 
         listed = self.request("tools/list", {})
+        self._adopt_tools(listed)
+        return True
+
+    def _adopt_tools(self, listed: dict[str, Any] | None) -> None:
         if listed and isinstance(listed.get("result"), dict):
             tools = listed["result"].get("tools")
             if isinstance(tools, list):
                 self.tools = [t for t in tools if isinstance(t, dict)]
-        return True
+
+    def refresh_tools(self) -> None:
+        """Re-read tools/list after the server said the catalogue changed.
+
+        Must not run from inside request()'s wait loop: that holds _lock.
+        The flag is set there; the next tools/list or call pulls.
+        """
+        if not self.needs_refresh:
+            return
+        self.needs_refresh = False
+        self._adopt_tools(self.request("tools/list", {}))
 
     def _send(self, message: dict[str, Any]) -> bool:
         if self.proc is None or self.proc.stdin is None:
@@ -354,6 +369,9 @@ class Gateway:
         """
         out: list[dict[str, Any]] = []
         for name, backend in self.backends.items():
+            pull = getattr(backend, "refresh_tools", None)
+            if callable(pull):
+                pull()
             guard = self.guards[name]
             screened = guard.filter_tools([dict(t) for t in backend.tools])
             for tool in screened:
@@ -446,6 +464,10 @@ class Gateway:
 
         name, tool = split
         backend, guard = self.backends[name], self.guards[name]
+        pull = getattr(backend, "refresh_tools", None)
+        if callable(pull):
+            pull()
+            guard.filter_tools([dict(t) for t in backend.tools])
 
         if self.identity is not None:
             if self.identity.denies_tool(namespaced, tool):
@@ -564,6 +586,10 @@ class Gateway:
             if self.trail:
                 self.trail.record("list_changed", subject=name, detail=method)
             self.log(f"{name}: {method} -- the server says its catalogue changed")
+            if method == "notifications/tools/list_changed":
+                backend = self.backends.get(name)
+                if backend is not None:
+                    backend.needs_refresh = True
             return None
 
         if "id" not in message:

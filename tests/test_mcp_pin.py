@@ -221,6 +221,28 @@ class TestLockfileAndDrift(unittest.TestCase):
             self.assertIn("tools", entry, "tool baseline was lost on an unprobed approve")
             self.assertIn("do_thing", entry["tools"])
 
+    def test_two_clients_named_github_are_not_compared_to_the_first(self) -> None:
+        """First-match on the bare name compared Cursor's pin to Claude's
+        live tools, which is either a false rug pull or a missed one."""
+        live = ToolSpec(server="github", name="read", description="Reads.",
+                        input_schema={"type": "object"})
+        lock = {
+            "servers": {
+                "cursor:github": {
+                    "name": "github",
+                    "tools": {"read": {"fingerprint": "not-this",
+                                       "description_preview": "other"}},
+                },
+                "claude-code:github": {
+                    "name": "github",
+                    "tools": {"read": {"fingerprint": live.fingerprint(),
+                                       "description_preview": "Reads."}},
+                },
+            }
+        }
+        fired = {f.rule_id for f in run_rules(AuditContext(tools=[live], lock=lock))}
+        self.assertNotIn("MCPA015", fired)
+
     def test_rejects_future_lock_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / ".mcp-pin.lock"
