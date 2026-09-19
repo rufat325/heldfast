@@ -74,6 +74,12 @@ class ToolSpec:
     # enumerating the keys real servers put on a tool definition rather than
     # by remembering, which is how the last two channel gaps were found too.
     output_schema: dict[str, Any] = field(default_factory=dict)
+    # Icons shown beside this tool in the approval dialog. The spec's own type
+    # carries a warning -- consumers "SHOULD ensure icon URLs come from a
+    # trusted domain and SHOULD take appropriate precautions when consuming
+    # SVGs (which can contain script)" -- and a client fetches every one of
+    # them to render it. See MCPA033.
+    icons: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def display_name(self) -> str:
@@ -118,6 +124,11 @@ class ToolSpec:
         # would have arrived on an upgrade rather than on a change.
         if self.output_schema:
             body["output_schema"] = self.output_schema
+        # Same conditional, same reason. An icon swapped after approval changes
+        # what the user sees in the dialog they approve from, which is the same
+        # argument that put `title` in the hash.
+        if self.icons:
+            body["icons"] = self.icons
         payload = json.dumps(body, sort_keys=True, separators=(",", ":"),
                              ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -155,13 +166,17 @@ class PromptSpec:
     title: str = ""
     description: str = ""
     arguments: list[dict[str, Any]] = field(default_factory=list)
+    icons: list[dict[str, Any]] = field(default_factory=list)
 
     def fingerprint(self) -> str:
-        payload = json.dumps(
-            {"name": self.name, "title": self.title,
-             "description": self.description, "arguments": self.arguments},
-            sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-        )
+        body: dict[str, Any] = {
+            "name": self.name, "title": self.title,
+            "description": self.description, "arguments": self.arguments,
+        }
+        if self.icons:
+            body["icons"] = self.icons
+        payload = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                             ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -177,12 +192,14 @@ class ResourceSpec:
     mime_type: str = ""
     # resources/templates/list entries are the same shape with a uriTemplate.
     is_template: bool = False
+    icons: list[dict[str, Any]] = field(default_factory=list)
 
     def fingerprint(self) -> str:
         payload = json.dumps(
             {"uri": self.uri, "name": self.name, "title": self.title,
              "description": self.description, "mime_type": self.mime_type,
-             "is_template": self.is_template},
+             "is_template": self.is_template,
+             **({"icons": self.icons} if self.icons else {})},
             sort_keys=True, separators=(",", ":"), ensure_ascii=False,
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()

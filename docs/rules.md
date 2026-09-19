@@ -37,6 +37,7 @@ Do not edit by hand.
 | [MCPA030](#mcpa030) | critical | Tool parameter reaches a shell in the server's own source |
 | [MCPA031](#mcpa031) | high | Server script changed since approval |
 | [MCPA032](#mcpa032) | high | Approved server is also reachable without the gateway |
+| [MCPA033](#mcpa033) | high | Icon source is unsafe for a client to fetch or render |
 
 ## MCPA001
 
@@ -538,4 +539,20 @@ def count(path: str):
 **How to fix it.** Remove the direct entry. The gateway already exposes that server's tools as `<server>__<tool>`.
 
 **When it is wrong.** Only fires once a gateway is actually configured in that client, and only for servers the lockfile approved -- which are exactly the ones the gateway fronts. A machine that has not adopted the gateway is never reported, because 'you have not adopted this tool' is not a finding and is how a scanner earns a permanent ignore line. An unapproved server configured beside a gateway is MCPA014's business, not this rule's: the gateway would not have served it either.
+
+## MCPA033
+
+**Icon source is unsafe for a client to fetch or render** - severity `high`
+
+**What it looks for.** An icon a server declares for a tool, prompt or resource whose source is something a client should not fetch or render: a scheme that is not a way to retrieve an image, an inline SVG carrying script, or plaintext http.
+
+**Why it matters.** An icon is drawn beside the tool's name in the dialog where a person decides whether to allow the call, and the client fetches it to do that. The protocol's own type says consumers "SHOULD ensure icon URLs come from a trusted domain and SHOULD take appropriate precautions when consuming SVGs (which can contain script)". An SVG with a script element or an event handler gives the server execution in the surface the user is approving from; a non-image scheme hands the client's URL handler to the server's choosing; an http icon can be rewritten by anyone on the path, so the picture shown next to a destructive tool is not the server's own.
+
+```
+"icons": [{"src": "data:image/svg+xml,<svg onload=\"...\"/>"}]
+```
+
+**How to fix it.** Serve icons over https, or inline a small raster image as a data: URI. If the icon must be an SVG, ship one with no script, no event handlers and no foreignObject.
+
+**When it is wrong.** A remote https icon is never reported -- that is simply what an icon is. A data: URI is not reported either, despite data: being dangerous for a server URL, because inlining a small PNG avoids a fetch and is the better privacy answer; it is judged on what it inlines. The SVG check reads the decoded payload rather than the declared mime type, since the mime type is the server's claim about its own content.
 

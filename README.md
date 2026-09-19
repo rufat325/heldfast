@@ -367,6 +367,7 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA030 | critical | Tool parameter reaches a shell in the server's own source |
 | MCPA031 | high | Server script changed since approval |
 | MCPA032 | high | Approved server is also reachable without the gateway |
+| MCPA033 | high | Icon source is unsafe for a client to fetch or render |
 
 ### One attack per rule
 
@@ -711,6 +712,7 @@ lockfile pins all of them:
 | resources | `resources/list` | Resource descriptions |
 | annotations | on each tool | `readOnlyHint` and friends, which clients use to decide whether a call needs your approval |
 | titles | on tools, prompts and resources | the display name you actually read in an approval dialog |
+| icons | on tools, prompts and resources | the picture drawn beside the name in that dialog, which your client fetches to render |
 
 Pinning only tools leaves the other three free to change unnoticed - and `instructions`
 outranks every tool description, because it is not scoped to one tool. A server that
@@ -737,6 +739,16 @@ repositories and zero times in this codebase. Both schemas are now hashed and sc
 and the key is written into the hash only when a tool actually has one — writing it
 unconditionally would have reported a rug pull on every tool in every existing lockfile
 the moment somebody upgraded.
+
+Icons were missed the same way, and the spec's own type says why they matter: consumers
+"SHOULD ensure icon URLs come from a trusted domain and SHOULD take appropriate precautions
+when consuming SVGs (which can contain script)". An icon is drawn beside the tool's name in
+the dialog where a person decides to allow the call, and the client fetches it to do that —
+so the `src` is a request the server observes, content the client parses, and the image the
+tool is recognised by, all at once. MCPA033 reports a scheme that is not a way to fetch an
+image, an inline SVG carrying script, and a plaintext http icon; a remote https icon is
+never reported, because that is simply what an icon is. Icons are in the fingerprint too,
+for the same reason titles are.
 
 Tool annotations deserve their own note. A server attaches `readOnlyHint` and
 `destructiveHint` to its own tools, and clients use those to decide whether a call needs
@@ -1044,7 +1056,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-723 tests, stdlib unittest, nothing to install.
+743 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

@@ -82,6 +82,7 @@ def _parse_prompts(server: str, payload: dict[str, Any]) -> list[PromptSpec]:
                 title=str(p.get("title") or ""),
                 description=str(p.get("description") or ""),
                 arguments=[a for a in args if isinstance(a, dict)],
+                icons=_icons(p.get("icons")),
             ))
     return out
 
@@ -98,8 +99,21 @@ def _parse_resources(server: str, payload: dict[str, Any]) -> list[ResourceSpec]
                 description=str(r.get("description") or ""),
                 mime_type=str(r.get("mimeType") or ""),
                 is_template="uriTemplate" in r,
+                icons=_icons(r.get("icons")),
             ))
     return out
+
+
+def _icons(raw: Any) -> list[dict[str, Any]]:
+    """Icons as declared, or an empty list.
+
+    Kept as raw dicts like `annotations` is: the interesting part is the `src`
+    the client will fetch, and normalising past it would lose exactly what
+    MCPA033 reads.
+    """
+    if not isinstance(raw, list):
+        return []
+    return [i for i in raw if isinstance(i, dict)]
 
 
 def _parse_tools(server: str, payload: dict[str, Any]) -> list[ToolSpec]:
@@ -117,6 +131,7 @@ def _parse_tools(server: str, payload: dict[str, Any]) -> list[ToolSpec]:
                 input_schema=t.get("inputSchema") or t.get("input_schema") or {},
                 output_schema=t.get("outputSchema") or t.get("output_schema") or {},
                 annotations=t.get("annotations") or {},
+                icons=_icons(t.get("icons")),
             )
         )
     return out

@@ -450,6 +450,31 @@ DOCS: dict[str, RuleDoc] = {
                    "unapproved server configured beside a gateway is MCPA014's business, "
                    "not this rule's: the gateway would not have served it either.",
     ),
+    "MCPA033": RuleDoc(
+        what="An icon a server declares for a tool, prompt or resource whose source is "
+             "something a client should not fetch or render: a scheme that is not a way "
+             "to retrieve an image, an inline SVG carrying script, or plaintext http.",
+        why="An icon is drawn beside the tool's name in the dialog where a person "
+            "decides whether to allow the call, and the client fetches it to do that. "
+            "The protocol's own type says consumers \"SHOULD ensure icon URLs come from "
+            "a trusted domain and SHOULD take appropriate precautions when consuming "
+            "SVGs (which can contain script)\". An SVG with a script element or an "
+            "event handler gives the server execution in the surface the user is "
+            "approving from; a non-image scheme hands the client's URL handler to the "
+            "server's choosing; an http icon can be rewritten by anyone on the path, "
+            "so the picture shown next to a destructive tool is not the server's own.",
+        example='"icons": [{"src": "data:image/svg+xml,<svg onload=\\"...\\"/>"}]',
+        fix="Serve icons over https, or inline a small raster image as a data: URI. If "
+            "the icon must be an SVG, ship one with no script, no event handlers and no "
+            "foreignObject.",
+        wrong_when="A remote https icon is never reported -- that is simply what an icon "
+                   "is. A data: URI is not reported either, despite data: being "
+                   "dangerous for a server URL, because inlining a small PNG avoids a "
+                   "fetch and is the better privacy answer; it is judged on what it "
+                   "inlines. The SVG check reads the decoded payload rather than the "
+                   "declared mime type, since the mime type is the server's claim about "
+                   "its own content.",
+    ),
 }
 
 
