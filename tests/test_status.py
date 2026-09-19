@@ -27,7 +27,7 @@ from mcp_audit import status as status_mod  # noqa: E402
 from mcp_audit.auditlog import AuditLog  # noqa: E402
 from mcp_audit.findings import Finding, Location, Severity  # noqa: E402
 from mcp_audit.lockfile import Lock  # noqa: E402
-from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
+from mcp_audit.model import PromptSpec, ServerSpec, ToolSpec  # noqa: E402
 
 
 def spec(name: str) -> ServerSpec:
@@ -128,6 +128,50 @@ class TestTheStateWord(unittest.TestCase):
                                command="mcp-audit", args=["gateway"])
         self.assertEqual("GONE", self._state(lock, [elsewhere], [])["claude-code:alpha"])
 
+    def test_a_server_that_was_probed_and_never_answered(self) -> None:
+        """Found by installing the wheel and running the documented workflow
+        as a stranger: `approve --probe` on a server that is not installed
+        wrote an approval covering nothing, and this page said "ok".
+
+        The lockfile records the probe outcome and `coverage` had always
+        reported it. Two surfaces reading one file and disagreeing, and the
+        one that was wrong is the page an operator opens first.
+        """
+        lock = approved(["alpha"])
+        entry = lock.servers["claude-code:alpha"]
+        entry["probe"] = "no response: could not launch: no such file"
+        entry.pop("tools", None)
+        states = self._state(lock, [spec("alpha")], [])
+        self.assertEqual("FAILED", states["claude-code:alpha"])
+
+    def test_the_reason_it_failed_is_printed_beside_it(self) -> None:
+        """A state word with nothing under it is what made "ok" so misleading
+        here in the first place."""
+        lock = approved(["alpha"])
+        lock.servers["claude-code:alpha"]["probe"] = "no response: could not launch"
+        lock.servers["claude-code:alpha"].pop("tools", None)
+        text = status_mod.render(
+            status_mod.build(lock, [spec("alpha")], []), color=False)
+        self.assertIn("could not launch", text)
+
+    def test_approved_without_probing_is_not_ok_either(self) -> None:
+        """Nothing the server says is pinned, so nothing can drift. That is
+        not a fault, and "ok" still overstates it: there is no baseline."""
+        lock = Lock(path=Path("/p/.mcp-audit.lock"))
+        lock.record([spec("alpha")], [], [])
+        self.assertEqual("UNPINNED",
+                         self._state(lock, [spec("alpha")], [])["claude-code:alpha"])
+
+    def test_a_server_offering_only_prompts_is_pinned(self) -> None:
+        """Tools are not the only channel. An approval that recorded prompts
+        has a real baseline and must not read as UNPINNED."""
+        lock = Lock(path=Path("/p/.mcp-audit.lock"))
+        lock.record([spec("alpha")], [], [],
+                    prompts=[PromptSpec(server="alpha", name="summarise",
+                                        description="Summarises.")])
+        self.assertEqual("ok",
+                         self._state(lock, [spec("alpha")], [])["claude-code:alpha"])
+
     def test_findings_short_of_drift_still_show(self) -> None:
         lock = approved(["alpha"])
         states = self._state(lock, [spec("alpha")],
@@ -206,6 +250,26 @@ class TestRendering(unittest.TestCase):
         text = status_mod.render(status_mod.build(Lock(), [], []), color=False)
         self.assertIn("No approval lockfile", text)
         self.assertIn("mcp-audit approve", text)
+
+    def test_an_unprobed_page_says_drift_was_not_checked(self) -> None:
+        """Found as a stranger: with a poisoned server live, `scan --probe`
+        reported the rug pull and `status` printed "ok" -- because it had not
+        read the live definitions and did not say so.
+
+        A page that cannot tell "checked and fine" from "did not look" is the
+        failure this project keeps naming, and it was on its own front screen.
+        """
+        lock = approved(["alpha"])
+        text = status_mod.render(
+            status_mod.build(lock, [spec("alpha")], []), color=False)
+        self.assertIn("drift is unchecked", text)
+        self.assertIn("--probe", text)
+
+    def test_a_probed_page_does_not_say_that(self) -> None:
+        lock = approved(["alpha"])
+        text = status_mod.render(
+            status_mod.build(lock, [spec("alpha")], [], probed=True), color=False)
+        self.assertNotIn("drift is unchecked", text)
 
     def test_the_state_word_appears(self) -> None:
         lock = approved(["alpha"])

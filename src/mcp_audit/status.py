@@ -40,6 +40,8 @@ class ServerStatus:
     configured: bool = False
     approved: bool = False
     fronted: bool = False
+    probe: str = ""
+    pins_nothing: bool = False
     findings: list[Finding] = field(default_factory=list)
 
     @property
@@ -71,11 +73,22 @@ class ServerStatus:
             return "DRIFTED"
         if self.worst is not None and self.worst >= Severity.HIGH:
             return "FINDINGS"
+        # An approval covering a server that does not start. The lockfile
+        # records the probe outcome and `coverage` has always said this;
+        # `status` read the same file and printed "ok", which is the worse of
+        # the two to get wrong because it is the page an operator opens first.
+        if self.probe.startswith("no response"):
+            return "FAILED"
+        # Approved without --probe, so nothing the server says is pinned and
+        # nothing can drift. Not a fault, but "ok" overstates it: there is no
+        # baseline here to compare against.
+        if self.pins_nothing:
+            return "UNPINNED"
         return "ok"
 
 
 def build(lock: Lock, servers: list, findings: list[Finding],
-          log_path: Path | None = None) -> dict[str, Any]:
+          log_path: Path | None = None, probed: bool = False) -> dict[str, Any]:
     """The whole picture as data, so the renderer stays dumb."""
     by_name: dict[str, list[Finding]] = {}
     for finding in findings:
@@ -100,6 +113,11 @@ def build(lock: Lock, servers: list, findings: list[Finding],
             configured=key in configured,
             approved=True,
             fronted=behind_gateway(key, entry, fronting),
+            probe=str(entry.get("probe") or ""),
+            # Every channel a server controls, not just tools: one that offers
+            # only prompts or resources has a real baseline pinned.
+            pins_nothing=not any(entry.get(k) for k in
+                                 ("tools", "prompts", "resources", "instructions")),
             findings=by_name.get(name, []),
         ))
 
@@ -125,6 +143,13 @@ def build(lock: Lock, servers: list, findings: list[Finding],
                  "events": _recent_events(log_path)}
 
     return {
+        # Whether the live definitions were read at all. Without it this page
+        # prints "ok" beside a server whose tool descriptions have been
+        # rewritten, because the drift check compares the lockfile against
+        # what was observed and nothing was observed. A page that cannot tell
+        # "checked and fine" from "did not look" is the failure this project
+        # keeps naming, and it had it on its own front screen.
+        "probed": probed,
         "lockfile": {
             "path": str(lock.path) if lock.path else "",
             "exists": bool(lock.servers or lock.skills),
@@ -146,6 +171,13 @@ def build(lock: Lock, servers: list, findings: list[Finding],
                 "approved_at": r.approved_at, "tools": r.tools,
                 "policy": r.has_policy, "artifacts": r.has_artifacts,
                 "configured": r.configured,
+                # The state word alone is what made this wrong: "ok" next to a
+                # server that does not start read as a clean bill of health.
+                "note": (
+                    r.probe[13:].strip() if r.probe.startswith("no response")
+                    else "approved without --probe, so nothing it says is pinned"
+                    if r.pins_nothing and r.state == "UNPINNED" else ""
+                ),
                 "findings": [
                     {"rule_id": f.rule_id, "severity": f.severity.label,
                      "title": f.title}
@@ -184,6 +216,8 @@ _STATE_COLOR = {
     "UNAPPROVED": "\033[33m",
     "GONE": "\033[33m",
     "gateway": "\033[32m",
+    "FAILED": "\033[33m",
+    "UNPINNED": "\033[33m",
     "FINDINGS": "\033[33m",
     "ok": "\033[32m",
 }
@@ -209,6 +243,10 @@ def render(data: dict[str, Any], color: bool = True) -> str:
 
     lines.append(f"  approved {lock['generated']}   "
                  f"{lock['servers']} server(s), {lock['skills']} skill(s)")
+    if not data.get("probed", False):
+        lines.append("  " + paint(
+            "tool definitions were not read, so drift is unchecked -- "
+            "re-run with --probe", "\033[33m"))
     lines.append("")
 
     width = max((len(s["identity"]) for s in data["servers"]), default=10)
@@ -220,6 +258,8 @@ def render(data: dict[str, Any], color: bool = True) -> str:
             "  policy" if server["policy"] else "",
             "  pinned-code" if server["artifacts"] else "",
         ))
+        if server.get("note"):
+            lines.append("              %s" % server["note"])
         for finding in server["findings"]:
             lines.append("              %-8s %s" % (finding["rule_id"], finding["title"]))
     lines.append("")

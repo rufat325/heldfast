@@ -812,7 +812,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     findings = run_rules(ctx)
 
     log_path = Path(args.log) if args.log else None
-    payload = status_mod.build(lock, data.servers, findings, log_path)
+    payload = status_mod.build(lock, data.servers, findings, log_path,
+                               probed=data.probed)
 
     if args.format == "json":
         print(json.dumps(payload, indent=2))
