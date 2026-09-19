@@ -146,6 +146,29 @@ target. `NODE_OPTIONS` is judged on its contents, so sizing the heap stays quiet
 so it does nothing for `python server.py`, and reporting it would be a finding nobody can
 act on.
 
+### A name in a config cannot rewrite the report about it
+
+Every page here — the scan report, `status`, `coverage`, `report` — exists to show an
+operator the truth, and every one interpolates names that came out of a config file. So a
+server called
+
+```
+notes\rok          claude-code:evil    9 tool(s)
+```
+
+rendered as a line whose carriage return sent the cursor back to column zero and overwrote
+everything before it. You saw `ok  claude-code:evil` and the real verdict was gone.
+`\x1b[2K\x1b[1A` is worse: it erases the line *above*, so one entry could delete a different
+server's finding from the page.
+
+`Finding.__post_init__` was already the single chokepoint for keeping secrets out of a
+report. It is now the chokepoint for keeping the report readable too — the same idea aimed
+at a different attack on the same reader, since a secret in the output is a leak and a
+control character in it is a forgery. Control characters are escaped rather than stripped,
+because a name that contains one is itself worth seeing. Evidence keeps its newlines,
+because MCPA015 prints `was:` and `now:` on their own lines; a *name* does not, because a
+newline there forges a whole row.
+
 ### CI
 
 ```yaml
@@ -1171,7 +1194,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-832 tests, stdlib unittest, nothing to install.
+844 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

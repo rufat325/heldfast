@@ -57,3 +57,47 @@ def preview(value: str) -> str:
     if len(v) <= 12:
         return v[:2] + "*" * max(len(v) - 2, 0)
     return f"{v[:6]}...{v[-2:]} ({len(v)} chars)"
+
+
+# ---------------------------------------------------------------------------
+# Control characters, which are an attack on the reader rather than a leak.
+
+# C0 and C1 controls, minus the tab and newline a renderer legitimately uses.
+# ESC is the one that matters most: `\x1b[2K\x1b[1A` erases the line above.
+_CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def safe_text(value: Any, limit: int = 4000) -> str:
+    """Text that cannot rewrite the terminal it is printed to.
+
+    Server names, tool names and evidence all originate in a config file or a
+    server's own replies, and a config file is the thing people paste out of a
+    README. A name carrying a carriage return overwrites the verdict beside
+    it -- a carriage return mid-name renders as a clean line and the real one
+    is gone -- and an ANSI erase sequence deletes a *different* server's
+    finding from the page above it.
+
+    That matters here more than in most programs: every one of these surfaces
+    exists to show an operator the truth, so a name that edits the report is
+    an attack on the only output that was supposed to be trustworthy.
+
+    Escaped rather than dropped, because a name containing a control character
+    is itself worth seeing: it comes back as a visible escape and stays on
+    one line.
+    """
+    text = str(value if value is not None else "")
+    if len(text) > limit:
+        text = text[:limit] + "..."
+    return _CONTROLS.sub(lambda m: "\\x%02x" % ord(m.group(0)), text)
+
+
+def safe_name(value: Any, limit: int = 300) -> str:
+    """`safe_text`, and the newline too.
+
+    Evidence is legitimately multi-line -- MCPA015 prints `was:` and `now:` on
+    their own lines -- so `safe_text` leaves newlines alone. A *name* is a
+    different thing: one in a config carrying a newline forges an entire row
+    in the table it appears in, which is the same forgery as the carriage
+    return with none of the subtlety.
+    """
+    return safe_text(value, limit).replace("\n", "\\n").replace("\r", "\\r")

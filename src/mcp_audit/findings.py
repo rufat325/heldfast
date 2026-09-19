@@ -11,7 +11,7 @@ import enum
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from .secrets import redact
+from .secrets import redact, safe_name, safe_text
 
 
 class Severity(enum.IntEnum):
@@ -80,9 +80,19 @@ class Finding:
         # rule author cannot leak a credential into a report by forgetting to.
         # Rules that intentionally show a truncated preview are unaffected,
         # because a truncated token no longer matches a full token pattern.
-        self.evidence = redact(self.evidence)
+        self.evidence = safe_text(redact(self.evidence))
+        # The same chokepoint, for a different attack on the same reader. A
+        # secret in the report is a leak; a control character in it rewrites
+        # the report. `notes\rok` overwrites the verdict printed beside it and
+        # an ANSI erase sequence deletes the line above, so a hostile config
+        # could delete another server's finding from the page.
+        self.title = safe_name(self.title)
+        self.remediation = safe_text(self.remediation)
+        if self.server:
+            self.server = safe_name(self.server)
         if self.location.snippet:
-            self.location = replace(self.location, snippet=redact(self.location.snippet))
+            self.location = replace(
+                self.location, snippet=safe_name(redact(self.location.snippet)))
 
     def key(self) -> tuple:
         """Identity for dedup and for baseline suppression."""

@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from .auditlog import verify
+from .secrets import safe_name
 
 
 @dataclass
@@ -94,15 +95,17 @@ def sessions(entries: list) -> list[Session]:
     current: Session | None = None
 
     def start(entry: dict) -> Session:
-        return Session(started=str(entry.get("time") or ""),
-                       subject=str(entry.get("subject") or ""),
-                       detail=str(entry.get("detail") or ""),
+        return Session(started=safe_name(entry.get("time")),
+                       subject=safe_name(entry.get("subject")),
+                       detail=safe_name(entry.get("detail")),
                        line=int(entry.get("_line") or 0))
 
     for entry in entries:
-        event = str(entry.get("event") or "")
-        subject = str(entry.get("subject") or "")
-        detail = str(entry.get("detail") or "")
+        # Names in the trail came from a config, so they can carry a
+        # carriage return that overwrites the line they are printed on.
+        event = safe_name(entry.get("event"))
+        subject = safe_name(entry.get("subject"))
+        detail = safe_name(entry.get("detail"))
 
         if event == "session_start":
             if current is not None:
@@ -117,7 +120,7 @@ def sessions(entries: list) -> list[Session]:
                               line=int(entry.get("_line") or 0))
 
         if event == "session_end":
-            current.ended = str(entry.get("time") or "")
+            current.ended = safe_name(entry.get("time"))
             current.summary = detail
             found.append(current)
             current = None

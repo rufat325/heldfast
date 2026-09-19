@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .auditlog import verify
+from .secrets import safe_name
 from .findings import Finding, Severity
 from .enforcement import behind_gateway, fronting_clients, is_gateway
 from .identity import all_identities
@@ -167,7 +168,8 @@ def build(lock: Lock, servers: list, findings: list[Finding],
         },
         "servers": [
             {
-                "identity": r.identity, "name": r.name, "state": r.state,
+                "identity": safe_name(r.identity), "name": safe_name(r.name),
+                "state": r.state,
                 "approved_at": r.approved_at, "tools": r.tools,
                 "policy": r.has_policy, "artifacts": r.has_artifacts,
                 "configured": r.configured,
@@ -179,8 +181,9 @@ def build(lock: Lock, servers: list, findings: list[Finding],
                     if r.pins_nothing and r.state == "UNPINNED" else ""
                 ),
                 "findings": [
-                    {"rule_id": f.rule_id, "severity": f.severity.label,
-                     "title": f.title}
+                    {"rule_id": safe_name(f.rule_id),
+                     "severity": f.severity.label,
+                     "title": safe_name(f.title)}
                     for f in sorted(r.findings, key=lambda f: -f.severity.value)[:4]
                 ],
             }
@@ -202,10 +205,10 @@ def _recent_events(path: Path, limit: int = 5) -> list[dict[str, Any]]:
                     entry = json.loads(line)
                 except ValueError:
                     continue
-                events.append({"time": entry.get("time", ""),
-                               "event": entry.get("event", ""),
-                               "subject": entry.get("subject", ""),
-                               "decision": entry.get("decision", "")})
+                events.append({"time": safe_name(entry.get("time", "")),
+                               "event": safe_name(entry.get("event", "")),
+                               "subject": safe_name(entry.get("subject", "")),
+                               "decision": safe_name(entry.get("decision", ""))})
     except OSError:
         return []
     return events[-limit:]

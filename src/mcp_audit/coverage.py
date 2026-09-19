@@ -36,6 +36,7 @@ from .artifacts import _candidates, named_scripts
 from .enforcement import behind_gateway, fronting_clients, is_gateway, subcommand
 from .identity import all_identities
 from .lockfile import Lock
+from .secrets import safe_name
 from .rules.execution import _FLOATING, extract_package, split_package
 
 # Runners that fetch from a registry at launch. Nothing of theirs is on disk
@@ -241,7 +242,7 @@ def build(lock: Lock, servers: list) -> dict[str, Any]:
             continue
         layers = for_server(lock, key, configured.get(key), fronting)
         rows.append({
-            "identity": key,
+            "identity": safe_name(key),
             "configured": key in configured,
             # Reachable covers both paths. A fronted server is absent from the
             # config on purpose and calling it "no longer configured" told the
@@ -250,7 +251,7 @@ def build(lock: Lock, servers: list) -> dict[str, Any]:
             "gaps": sum(1 for layer in layers if layer.gap),
             "layers": [
                 {"name": l.name, "state": l.state,
-                 "detail": l.detail, "remedy": l.remedy}
+                 "detail": safe_name(l.detail), "remedy": safe_name(l.remedy)}
                 for l in layers
             ],
         })
