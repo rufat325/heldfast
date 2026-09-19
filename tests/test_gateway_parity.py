@@ -236,7 +236,9 @@ class TestOverARealPipe(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.project = Path(self._tmp.name)
         (self.project / ".mcp.json").write_text(json.dumps({"mcpServers": {
-            "local": {"command": sys.executable, "args": [str(FAKE)]},
+            "local": {"command": sys.executable, "args": [str(FAKE)],
+                      "env": {"MCP_AUDIT_FIXTURE_MODE":
+                              "${MCP_AUDIT_FIXTURE_MODE}"}},
         }}), encoding="utf-8")
         self._cli(["approve", ".", "--no-user-configs", "--probe"], mode="benign")
 

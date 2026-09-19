@@ -249,6 +249,15 @@ def build_parser() -> argparse.ArgumentParser:
     gateway_p.add_argument("--deny-elicitation", action="store_true",
                            help="refuse elicitation/create requests, which ask you for "
                                 "input through the client's own dialog")
+    gateway_p.add_argument("--share-env", metavar="NAME", action="append", default=[],
+                           help="also pass this environment variable through to every "
+                                "backend (repeatable). By default a backend gets the "
+                                "infrastructure it needs plus what its own config "
+                                "declares, so one server's token does not reach the rest")
+    gateway_p.add_argument("--no-isolate-env", action="store_true",
+                           help="give every backend the gateway's whole environment, "
+                                "as clients do. Restores the behaviour from before "
+                                "isolation existed")
     gateway_p.add_argument("--quiet", action="store_true")
     gateway_p.add_argument("-v", "--verbose", action="store_true")
 
@@ -866,6 +875,8 @@ def cmd_gateway(args: argparse.Namespace) -> int:
         max_calls=args.max_calls,
         deny_sampling=args.deny_sampling,
         deny_elicitation=args.deny_elicitation,
+        isolate_env=not args.no_isolate_env,
+        share_env=set(args.share_env or []),
     )
 
 

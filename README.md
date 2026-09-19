@@ -71,6 +71,7 @@ mcp-audit guard --dry-run -- npx pkg   # what would the policy block?
 mcp-audit policy --probe               # propose argument limits to review
 mcp-audit gateway                      # one endpoint in front of every approved server
 mcp-audit gateway --as finance         # ...restricted to one declared identity
+mcp-audit gateway --share-env CI       # ...also passing one env var to every backend
 mcp-audit status                       # what is approved, what moved, what happened
 mcp-audit coverage                     # which guarantees are in force, and why not
 mcp-audit serve                        # run as an MCP server
@@ -145,7 +146,7 @@ client ──stdio──> mcp-audit gateway ──stdio──> github server
 }}}
 ```
 
-Point the client at that instead of at the servers. Four things follow that per-server
+Point the client at that instead of at the servers. Five things follow that per-server
 wrapping cannot give you:
 
 **Name collisions become impossible rather than reported.** Tools are exposed as
@@ -156,6 +157,8 @@ it has nowhere to occur. Making a problem impossible beats reporting it.
 **An unapproved server is never started.** Not "started and then filtered" — the process is
 the thing that reads your files, so withholding its tools after paying to run it would be
 theatre. `--allow-unapproved` admits it if you mean to.
+
+**One server's secrets stay with that server.** See below.
 
 **One audit trail covers the fleet**, so "what did the agent do" has a single answer rather
 than eight files to correlate.
@@ -215,6 +218,43 @@ whoever writes the client configuration chooses it — which is the only kind th
 anything for a local stdio transport. Treating a name the caller picked as authorization is
 how an access-control layer becomes decoration, and there is a test asserting it does not
 happen.
+
+### One server's secrets stay with that server
+
+Every MCP client starts each server with its own environment, so a token exported once
+reaches all of them. The gateway did the same — which means the GitHub token was also
+handed to the filesystem server, the postgres server, and whatever else was behind the same
+endpoint, each of them a different publisher's code.
+
+That is not a regression; it is what everything does. It is also the one thing the gateway
+is uniquely placed to fix, and a component calling itself an admission boundary while
+handing every backend every secret on the machine is not one. So a backend now gets the
+infrastructure it needs to run, plus exactly what its own config entry declares:
+
+```jsonc
+"github": {
+  "command": "npx", "args": ["-y", "@scope/server-github@1.2.3"],
+  "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }     // resolved from the gateway's env
+}
+```
+
+Declaring is already the documented shape, and references still resolve from the gateway's
+own environment — so the secret stays out of the config file and out of every other server.
+What changes is only that an *undeclared* variable no longer arrives by accident.
+
+The allowlist is the whole risk, so it came from evidence rather than guesswork: 2,406 real
+server files across the official servers repo, both SDKs, FastMCP and the community sample
+were read for every environment variable they consult. The 192 names divide cleanly —
+`PATH`, `HOME`, `APPDATA`, `XDG_CONFIG_HOME`, `USERPROFILE` are how a process finds its
+runtime; almost everything else is a credential or one server's setting. The rest of the
+base set is the platform floor nothing greps for because nothing has to: a Windows process
+without `SystemRoot` cannot open a socket, and that failure looks nothing like a missing
+variable.
+
+**If a server stops authenticating after this**, the gateway names the credential-shaped
+variables it withheld, on stderr, per server. Declare it in that server's `env`, pass
+`--share-env NAME` to give it to all of them, or `--no-isolate-env` to restore the old
+behaviour entirely.
 
 ### A ceiling on calls (`--max-calls`)
 
@@ -1056,7 +1096,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-749 tests, stdlib unittest, nothing to install.
+770 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

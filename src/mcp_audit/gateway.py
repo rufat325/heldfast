@@ -48,6 +48,8 @@ from pathlib import Path
 from typing import Any
 
 from .auditlog import AuditLog
+from .childenv import build as build_env
+from .childenv import notable
 from .findings import Severity
 from .guard import Guard
 from .identity import Identity, UnknownIdentity
@@ -85,9 +87,13 @@ class Backend:
     concurrency for its own sake.
     """
 
-    def __init__(self, spec: ServerSpec, timeout: float = 30.0) -> None:
+    def __init__(self, spec: ServerSpec, timeout: float = 30.0, *,
+                 isolate_env: bool = True, share_env: set | None = None) -> None:
         self.spec = spec
         self.timeout = timeout
+        self.isolate_env = isolate_env
+        self.share_env = share_env or set()
+        self.withheld: list = []
         self.proc: subprocess.Popen | None = None
         self.error: str | None = None
         self.tools: list[dict[str, Any]] = []
@@ -111,9 +117,10 @@ class Backend:
             return False
 
         exe = shutil.which(self.spec.command) or self.spec.command
-        env = dict(os.environ)
-        env.update(self.spec.env)
-        env.setdefault("PYTHONUNBUFFERED", "1")
+        # A backend gets what it declared plus the infrastructure it needs to
+        # run, and not every other server's credentials. See childenv.
+        env, self.withheld = build_env(self.spec, share=self.share_env,
+                                       isolate=self.isolate_env)
 
         try:
             self.proc = subprocess.Popen(
@@ -238,7 +245,9 @@ class Gateway:
                  identity: Identity | None = None,
                  max_calls: int = 0,
                  deny_sampling: bool = False,
-                 deny_elicitation: bool = False) -> None:
+                 deny_elicitation: bool = False,
+                 isolate_env: bool = True,
+                 share_env: set | None = None) -> None:
         self.lock = lock
         self.quiet = quiet
         self.trail = trail
@@ -273,7 +282,9 @@ class Gateway:
                          f"Run `mcp-audit approve --probe`, or pass "
                          f"--allow-unapproved.")
                 continue
-            backend = Backend(spec, timeout=timeout)
+            backend = Backend(spec, timeout=timeout,
+                              isolate_env=isolate_env,
+                              share_env=share_env)
             backend.on_unsolicited = self.screen_server_message
             self.backends[spec.name] = backend
             self.guards[spec.name] = guard
@@ -294,8 +305,19 @@ class Gateway:
                 self.stats.backends_started += 1
                 self.log(f"started {backend.spec.identity()} "
                          f"({len(backend.tools)} tool(s) offered)")
+                # Naming the credential-shaped variables it did not get. A
+                # server that stops authenticating after this lands is looking
+                # for one of these, and one stderr line is the difference
+                # between a one-line fix and an afternoon.
+                hidden = notable(backend.withheld)
+                if hidden:
+                    self.log(f"  {name}: not given {', '.join(hidden[:6])}"
+                             f"{' and %d more' % (len(hidden) - 6) if len(hidden) > 6 else ''}"
+                             f" -- declare it in the server's env, or pass "
+                             f"--share-env NAME")
                 if self.trail:
-                    self.trail.record("backend_started", subject=backend.spec.identity())
+                    self.trail.record("backend_started", subject=backend.spec.identity(),
+                                      detail=f"withheld={len(backend.withheld)}")
             else:
                 # Operational failure: report it and carry on. One broken
                 # server should not remove the agent's whole tool surface.
@@ -574,7 +596,8 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
         allow_unapproved: bool = False, dry_run: bool = False, quiet: bool = False,
         timeout: float = 30.0, log_path: Path | None = None,
         act_as: str | None = None, max_calls: int = 0,
-        deny_sampling: bool = False, deny_elicitation: bool = False) -> int:
+        deny_sampling: bool = False, deny_elicitation: bool = False,
+        isolate_env: bool = True, share_env: set | None = None) -> int:
     """Serve the gateway on stdio until the client goes away."""
     try:
         lock = Lock.load(lock_path)
@@ -605,7 +628,8 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
                       dry_run=dry_run, quiet=quiet, timeout=timeout, trail=trail,
                       identity=identity, max_calls=max_calls,
                       deny_sampling=deny_sampling,
-                      deny_elicitation=deny_elicitation)
+                      deny_elicitation=deny_elicitation,
+                      isolate_env=isolate_env, share_env=share_env)
     if not gateway.backends:
         print("mcp-audit gateway: nothing approved to serve. Run "
               "`mcp-audit approve --probe` first, or pass --allow-unapproved.",

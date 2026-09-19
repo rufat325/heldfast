@@ -111,9 +111,13 @@ class TestTheWholeThingOverStdio(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.project = Path(self._tmp.name)
+        # The fixture reads its mode from the environment, and the gateway
+        # now passes through only what a server declares. Declaring it is the
+        # same migration a real user makes for a token, so the tests do it.
+        mode = {"MCP_AUDIT_FIXTURE_MODE": "${MCP_AUDIT_FIXTURE_MODE}"}
         config = {"mcpServers": {
-            "alpha": {"command": sys.executable, "args": [str(FAKE)]},
-            "beta": {"command": sys.executable, "args": [str(FAKE)]},
+            "alpha": {"command": sys.executable, "args": [str(FAKE)], "env": mode},
+            "beta": {"command": sys.executable, "args": [str(FAKE)], "env": mode},
         }}
         (self.project / ".mcp.json").write_text(json.dumps(config, indent=2),
                                                 encoding="utf-8")
@@ -183,8 +187,9 @@ class TestTheWholeThingOverStdio(unittest.TestCase):
 
     def test_a_server_added_after_approval_is_not_started(self) -> None:
         config = json.loads((self.project / ".mcp.json").read_text(encoding="utf-8"))
-        config["mcpServers"]["gamma"] = {"command": sys.executable,
-                                         "args": [str(FAKE)]}
+        config["mcpServers"]["gamma"] = {
+            "command": sys.executable, "args": [str(FAKE)],
+            "env": {"MCP_AUDIT_FIXTURE_MODE": "${MCP_AUDIT_FIXTURE_MODE}"}}
         (self.project / ".mcp.json").write_text(json.dumps(config), encoding="utf-8")
 
         listed = next(r for r in self._replies([INIT, LIST]) if r.get("id") == 2)
