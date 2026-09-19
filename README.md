@@ -57,6 +57,7 @@ mcp-audit                              # scan discovered configs + skills
 mcp-audit scan ./my-project            # scan one project
 mcp-audit scan --no-user-configs .     # project only, skip ~/ configs
 mcp-audit scan --probe                 # also read live tool descriptions
+mcp-audit scan --safe                  # never execute, never connect
 mcp-audit scan --no-source             # skip reading server source
 mcp-audit approve --probe              # write .mcp-audit.lock
 mcp-audit inspect                      # what is configured, no judgement
@@ -79,6 +80,27 @@ YAML or TOML (Goose, Codex) are reported as found-but-unparsed rather than skipp
 honest first question is usually "how many MCP servers do I even have?" rather than "which
 of them are dangerous". Env values are shown as reference / placeholder / literal and never
 printed.
+
+### Probing executes things, and the scanner says so
+
+Reading a server's live tool definitions means running it. `--probe` therefore starts every
+configured STDIO server as a local process, and names them on stderr before it does.
+
+Until recently it did that *before* any rule had looked at the config, so a scan of a
+hostile config ran the payload and then reported on it. Now the static verdict comes first,
+and a server already carrying a finding at or above `--probe-gate` (default `high`) is not
+launched at all:
+
+```
+not probed  claude-code:evil -- MCPA002 (critical) -- Remote code fetched and piped
+            to an interpreter. Re-run with --probe-gate off to launch it anyway.
+```
+
+That helps and does not solve it, which is worth saying plainly: a server can be statically
+unremarkable and still hostile, and reading its live tools means running it. So `--safe`
+executes nothing and connects to nothing whatever else is asked for, and says that it
+ignored `--probe` rather than quietly doing less than you asked. A scan without `--probe`
+has always been safe in this sense, and there is now a test holding it that way.
 
 Output is text by default. `-f json` or `-f sarif` for machines — SARIF uploads straight to
 GitHub code scanning. Findings carry MITRE ATLAS technique IDs and CWE references.
@@ -762,7 +784,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-550 tests, stdlib unittest, nothing to install.
+557 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

@@ -33,6 +33,13 @@ def _add_scan_arguments(p: argparse.ArgumentParser) -> None:
     p.add_argument("--no-skills", action="store_true", help="skip SKILL.md discovery")
     p.add_argument("--no-source", action="store_true",
                    help="skip reading MCP server source for shell-injection flows")
+    p.add_argument("--safe", action="store_true",
+                   help="never execute anything and never open a connection, "
+                        "whatever else is asked for")
+    p.add_argument("--probe-gate", default="high",
+                   choices=("critical", "high", "medium", "low", "off"),
+                   help="refuse to launch a server already carrying a static "
+                        "finding this severe (default: high)")
     p.add_argument("--probe", action="store_true",
                    help="connect to each server and read its tool definitions. "
                         "WARNING: this launches local STDIO servers")
@@ -257,6 +264,60 @@ class Collected:
         self.config_count = 0
         self.probed = False
         self.source_flows: list = []
+        # (identity, reason) for servers deliberately not launched.
+        self.probe_skipped: list = []
+
+
+_GATE_NAMES = {
+    "critical": Severity.CRITICAL,
+    "high": Severity.HIGH,
+    "medium": Severity.MEDIUM,
+    "low": Severity.LOW,
+    "off": None,
+}
+
+
+def _severity_named(name: str):
+    return _GATE_NAMES.get(str(name).lower(), Severity.HIGH)
+
+
+def _gate_servers(out: "Collected", gate) -> tuple[list, list]:
+    """(servers safe to launch, [(identity, why not)]).
+
+    Runs everything that needs no probe data -- the config rules, the skill
+    rules, the source scanner -- and holds back any server already carrying a
+    finding at or above the gate. Launching a server the scanner is about to
+    call dangerous is the one thing a security tool should not do.
+    """
+    if gate is None:
+        return list(out.servers), []
+
+    try:
+        findings = run_rules(AuditContext(
+            servers=out.servers, skills=out.skills,
+            source_flows=out.source_flows, config_errors=out.errors))
+    except Exception as exc:                      # a rule bug must not gate
+        return list(out.servers), [("<rules>", f"static pre-pass failed: {exc}")]
+
+    worst: dict[str, Finding] = {}
+    for finding in findings:
+        if finding.server is None or finding.severity < gate:
+            continue
+        current = worst.get(finding.server)
+        if current is None or finding.severity > current.severity:
+            worst[finding.server] = finding
+
+    launchable, skipped = [], []
+    for server in out.servers:
+        blocker = worst.get(server.name)
+        if blocker is None:
+            launchable.append(server)
+            continue
+        skipped.append((server.identity(),
+                        f"{blocker.rule_id} ({blocker.severity.label}) -- "
+                        f"{blocker.title}. Re-run with --probe-gate off to "
+                        f"launch it anyway."))
+    return launchable, skipped
 
 
 def collect(args: argparse.Namespace) -> Collected:
@@ -291,9 +352,36 @@ def collect(args: argparse.Namespace) -> Collected:
         out.source_flows = scan_source_tree(
             [r for r in roots if r.exists()], max_depth=args.depth + 2)
 
-    if args.probe:
+    if args.probe and getattr(args, "safe", False):
+        out.errors.append(
+            "--safe was given, so nothing was launched or connected to; "
+            "--probe was ignored")
+
+    if args.probe and not getattr(args, "safe", False):
+        # Static verdict FIRST. Probing a STDIO server means executing it, and
+        # until this ran, `scan --probe` launched every configured server
+        # before a single rule had looked at the config -- so a config that
+        # the scanner was about to call dangerous had already had its say.
+        #
+        # This does not make probing safe. Reading a server's live tools means
+        # running it, and no amount of static analysis makes that free. What
+        # it does is stop the tool from executing something it was itself
+        # about to report, and give a name to the servers it declined.
+        gate = _severity_named(getattr(args, "probe_gate", "high"))
+        launchable, out.probe_skipped = _gate_servers(out, gate)
+
+        if launchable and not getattr(args, "quiet", False):
+            local = [s for s in launchable if s.transport == "stdio"]
+            if local and not args.no_stdio_probe:
+                print("mcp-audit: --probe launches these servers as local "
+                      "processes: " + ", ".join(sorted(s.identity() for s in local)),
+                      file=sys.stderr)
+
+        for identity, reason in out.probe_skipped:
+            out.errors.append(f"not probed: {identity} -- {reason}")
+
         results = probe(
-            out.servers,
+            launchable,
             timeout=args.probe_timeout,
             allow_stdio=not args.no_stdio_probe,
             verbose=args.verbose,

@@ -76,7 +76,12 @@ def render_terminal(
     add("")
 
     for err in errors:
-        add(f"  {paint('parse error', _COLORS[Severity.MEDIUM])} {err}")
+        # Not everything on this channel is a parse failure. "not probed:"
+        # lines are a deliberate refusal to launch something, which is a
+        # different kind of news and was reading as a malfunction.
+        label = "not probed" if err.startswith("not probed:") else "parse error"
+        text = err[len("not probed:"):].strip() if label == "not probed" else err
+        add(f"  {paint(label, _COLORS[Severity.MEDIUM])} {text}")
     if errors:
         add("")
 
