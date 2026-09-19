@@ -1198,7 +1198,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-882 tests, stdlib unittest, nothing to install.
+890 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](docs/GUARANTEES.md). Continue work from

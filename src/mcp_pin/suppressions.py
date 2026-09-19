@@ -5,6 +5,9 @@ open endpoint from one that negotiates OAuth at connect time, and telling
 someone to live with a permanent false positive is how a scanner gets removed
 from CI. So the advice to "suppress this" has to be backed by a mechanism.
 
+Lockfile theorems (MCPA014-017, 019, 020, 031) cannot be suppressed. A pin
+that a committed one-line file can switch off is not a pin.
+
 Format (`.mcp-pin-ignore`), one rule per line:
 
     MCPA008                     # suppress this rule everywhere
@@ -26,6 +29,12 @@ from .findings import Finding
 
 DEFAULT_IGNORE_NAME = ".mcp-pin-ignore"
 LEGACY_IGNORE_NAME = ".mcp-audit-ignore"
+
+# Lockfile theorems. The ignore file exists for heuristic false positives
+# (MCPA008). A pin that a committed one-line file can switch off is not a pin.
+PINNED = frozenset({
+    "MCPA014", "MCPA015", "MCPA016", "MCPA017", "MCPA019", "MCPA020", "MCPA031",
+})
 
 
 @dataclass(frozen=True)
@@ -62,6 +71,11 @@ def parse_ignore_file(path: Path) -> tuple[list[Suppression], list[str]]:
         if not (rule_id.startswith("MCPA") and rule_id[4:].isdigit()):
             errors.append(f"{path}:{lineno}: {parts[0]!r} is not a rule id")
             continue
+        if rule_id in PINNED:
+            errors.append(
+                f"{path}:{lineno}: {rule_id} cannot be suppressed "
+                "(it is a lockfile theorem, not a heuristic)")
+            continue
         server = parts[1] if len(parts) > 1 else "*"
         out.append(Suppression(rule_id, server, comment.strip(), lineno))
     return out, errors
@@ -75,6 +89,9 @@ def apply(findings: list[Finding], suppressions: list[Suppression]
     kept: list[Finding] = []
     dropped: list[tuple[Finding, Suppression]] = []
     for f in findings:
+        if f.rule_id in PINNED:
+            kept.append(f)
+            continue
         rule = next((s for s in suppressions if s.matches(f)), None)
         if rule is None:
             kept.append(f)

@@ -319,6 +319,23 @@ class TestSuppressions(unittest.TestCase):
         self.assertEqual(findings, kept)
         self.assertEqual([], dropped)
 
+    def test_a_drift_finding_cannot_be_ignored(self) -> None:
+        """A committed ignore line must not switch off T-DRIFT."""
+        rules = [suppressions.Suppression("MCPA015", "*", "", 1)]
+        kept, dropped = suppressions.apply(
+            [self._finding("MCPA015", "invoices")], rules)
+        self.assertEqual(1, len(kept))
+        self.assertEqual([], dropped)
+
+    def test_parse_rejects_a_pinned_rule(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / ".mcp-pin-ignore"
+            p.write_text("MCPA015\nMCPA008\n", encoding="utf-8")
+            rules, errors = suppressions.parse_ignore_file(p)
+            self.assertEqual(["MCPA008"], [r.rule_id for r in rules])
+            self.assertEqual(1, len(errors))
+            self.assertIn("cannot be suppressed", errors[0])
+
     def test_cli_reports_rather_than_hides(self) -> None:
         """Suppressed findings must still be visible as a count."""
         ensure_fixtures()

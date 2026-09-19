@@ -59,14 +59,14 @@ _RUNTIME = {
 }
 
 # Language runtimes: how an interpreter finds the code it is being asked to
-# run. Withholding these does not protect anything and breaks every server
-# installed in a virtualenv or a node prefix.
+# run. Loaders that execute a file (`NODE_OPTIONS=--require`, `PYTHONPATH`
+# shadowing) are not inherited; a server that needs one declares it.
 _TOOLCHAIN = {
-    "PYTHONPATH", "PYTHONHOME", "PYTHONUNBUFFERED", "PYTHONIOENCODING",
+    "PYTHONHOME", "PYTHONUNBUFFERED", "PYTHONIOENCODING",
     "PYTHONUTF8", "PYTHONDONTWRITEBYTECODE", "VIRTUAL_ENV", "CONDA_PREFIX",
     "CONDA_DEFAULT_ENV", "PIPX_HOME", "PIPX_BIN_DIR", "UV_CACHE_DIR",
     "UV_PYTHON", "UV_INDEX",
-    "NODE_PATH", "NODE_OPTIONS", "NODE_ENV", "NVM_DIR", "NVM_BIN",
+    "NODE_PATH", "NODE_ENV", "NVM_DIR", "NVM_BIN",
     "npm_config_prefix", "npm_config_cache", "NPM_CONFIG_PREFIX",
     "BUN_INSTALL", "DENO_DIR", "JAVA_HOME", "GOPATH", "GOROOT", "DOTNET_ROOT",
 }

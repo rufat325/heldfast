@@ -785,23 +785,37 @@ def _launch(argv: list[str]) -> subprocess.Popen | None:
         return None
 
 
-def _answer_client(lock: threading.Lock, payload: dict[str, Any]) -> None:
+def _as_frames(payload: Any) -> list[dict[str, Any]]:
+    """Every JSON-RPC object in a line. A batch is an array of them.
+
+    A non-dict on this channel is not a frame. Dropping it is how a tools/list
+    stuffed into a batch stops skipping filter_tools.
+    """
+    if isinstance(payload, dict):
+        return [payload]
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    return []
+
+
+def _screen_outbound(guard: "Guard", payload: Any) -> Any:
+    """Inspect a server-to-client payload, including a JSON-RPC batch."""
+    if isinstance(payload, dict):
+        return guard.handle_server_message(payload)
+    if isinstance(payload, list):
+        return [guard.handle_server_message(item) for item in _as_frames(payload)]
+    return payload
+
+
+def _answer_client(lock: threading.Lock, payload: Any) -> None:
     with lock:
         sys.stdout.write(json.dumps(payload) + "\n")
         sys.stdout.flush()
 
 
-def _maybe_refuse(guard: Guard, trail: AuditLog | None, line: str,
-                  stdout_lock: threading.Lock) -> bool:
-    """True if the line was answered here and must not be forwarded."""
-    if not (guard.call_policy or trail is not None):
-        return False
-    try:
-        message = json.loads(line)
-    except (ValueError, TypeError):
-        return False
-    if not isinstance(message, dict):
-        return False
+def _refuse_one(guard: Guard, trail: AuditLog | None, message: dict[str, Any],
+                stdout_lock: threading.Lock) -> bool:
+    """True if this frame was answered here and must not be forwarded."""
     if trail is not None:
         _record_request(trail, message)
     refusal = guard.check_call(message)
@@ -816,15 +830,39 @@ def _maybe_refuse(guard: Guard, trail: AuditLog | None, line: str,
     return True
 
 
+def _client_to_server(guard: Guard, trail: AuditLog | None, line: str,
+                      stdout_lock: threading.Lock) -> str | None:
+    """What to write to the server, or None if the line was fully answered.
+
+    Always inspects. The previous short-circuit (no policy, no trail) skipped
+    identity checks on the wire, so a withheld tool still ran.
+    """
+    try:
+        payload = json.loads(line)
+    except (ValueError, TypeError):
+        return line
+    frames = _as_frames(payload)
+    if isinstance(payload, dict):
+        return None if _refuse_one(guard, trail, payload, stdout_lock) else line
+    if not isinstance(payload, list):
+        return line
+    forward = [item for item in frames
+               if not _refuse_one(guard, trail, item, stdout_lock)]
+    if not forward:
+        return None
+    return json.dumps(forward) + "\n"
+
+
 def _pump_client(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None,
                  stdout_lock: threading.Lock) -> None:
     try:
         for line in sys.stdin:
             if proc.stdin is None:
                 break
-            if _maybe_refuse(guard, trail, line, stdout_lock):
+            out = _client_to_server(guard, trail, line, stdout_lock)
+            if out is None:
                 continue
-            proc.stdin.write(line)
+            proc.stdin.write(out)
             proc.stdin.flush()
     except (OSError, ValueError):
         pass
@@ -846,7 +884,7 @@ def _pump_server(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None,
                 continue
             guard.stats.forwarded += 1
             try:
-                message = json.loads(stripped)
+                payload = json.loads(stripped)
             except json.JSONDecodeError:
                 # Not JSON. Pass it through untouched rather than dropping it;
                 # some servers emit banner text before the protocol starts.
@@ -854,9 +892,7 @@ def _pump_server(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None,
                     sys.stdout.write(line)
                     sys.stdout.flush()
                 continue
-            if isinstance(message, dict):
-                message = guard.handle_server_message(message)
-            _answer_client(stdout_lock, message)
+            _answer_client(stdout_lock, _screen_outbound(guard, payload))
     except (OSError, ValueError) as exc:
         guard.log(f"transport error: {exc}")
         if trail is not None:

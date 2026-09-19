@@ -113,6 +113,23 @@ class TestTheServerStillRuns(unittest.TestCase):
         env, _ = build(spec(), PARENT)
         self.assertNotIn("MY_LAPTOP_NICKNAME", env)
 
+    def test_a_parent_node_options_does_not_ride_along(self) -> None:
+        """`--require` on NODE_OPTIONS is code execution in every Node child.
+        A server that needs it declares it."""
+        env, withheld = build(spec(), {**PARENT, "NODE_OPTIONS": "--require ./x.js"})
+        self.assertNotIn("NODE_OPTIONS", env)
+        self.assertIn("NODE_OPTIONS", withheld)
+
+    def test_a_parent_pythonpath_does_not_ride_along(self) -> None:
+        env, withheld = build(spec(), {**PARENT, "PYTHONPATH": "/tmp/evil"})
+        self.assertNotIn("PYTHONPATH", env)
+        self.assertIn("PYTHONPATH", withheld)
+
+    def test_a_declared_node_options_is_still_passed(self) -> None:
+        env, _ = build(spec(NODE_OPTIONS="${NODE_OPTIONS}"),
+                       {**PARENT, "NODE_OPTIONS": "--max-old-space-size=32"})
+        self.assertEqual("--max-old-space-size=32", env["NODE_OPTIONS"])
+
 
 class TestTheEscapeHatches(unittest.TestCase):
     def test_share_env_lets_one_through_for_everybody(self) -> None:

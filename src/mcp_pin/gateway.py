@@ -592,6 +592,30 @@ class Gateway:
         return ", ".join(bits)
 
 
+def _one_reply(gateway: "Gateway", message: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        return gateway.handle(message)
+    except Exception as exc:          # never take the agent down
+        gateway.log(f"INTERNAL ERROR: {exc}")
+        return gateway._error(message.get("id"),
+                              f"[mcp-pin] internal error: {exc}")
+
+
+def _replies_for(gateway: "Gateway", payload: Any) -> Any:
+    if isinstance(payload, dict):
+        return _one_reply(gateway, payload)
+    if not isinstance(payload, list):
+        return None
+    out = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        reply = _one_reply(gateway, item)
+        if reply is not None:
+            out.append(reply)
+    return out or None
+
+
 def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
         allow_unapproved: bool = False, dry_run: bool = False, quiet: bool = False,
         timeout: float = 30.0, log_path: Path | None = None,
@@ -651,17 +675,11 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
                 message = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if not isinstance(message, dict):
+            replies = _replies_for(gateway, message)
+            if replies is None:
                 continue
-            try:
-                reply = gateway.handle(message)
-            except Exception as exc:          # never take the agent down
-                gateway.log(f"INTERNAL ERROR: {exc}")
-                reply = gateway._error(message.get("id"),
-                                       f"[mcp-pin] internal error: {exc}")
-            if reply is not None:
-                sys.stdout.write(json.dumps(reply) + "\n")
-                sys.stdout.flush()
+            sys.stdout.write(json.dumps(replies) + "\n")
+            sys.stdout.flush()
     except (OSError, ValueError) as exc:
         gateway.log(f"transport error: {exc}")
     finally:
