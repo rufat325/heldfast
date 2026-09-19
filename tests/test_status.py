@@ -98,6 +98,36 @@ class TestTheStateWord(unittest.TestCase):
         states = self._state(lock, [spec("alpha")], [])
         self.assertEqual("GONE", states["claude-code:beta"])
 
+    def test_a_server_the_gateway_fronts_is_not_gone(self) -> None:
+        """The recommended setup has one config entry, the gateway, and names
+        the servers it fronts only in the lockfile. That read as GONE, so the
+        correct configuration reported as a pile of missing servers and the
+        tool punished its own advice."""
+        lock = approved(["alpha", "beta"])
+        gateway = ServerSpec(name="everything", source="/p/.mcp.json",
+                             client="claude-code", transport="stdio",
+                             command="mcp-audit", args=["gateway"])
+        states = self._state(lock, [gateway], [])
+        self.assertEqual("gateway", states["claude-code:alpha"])
+        self.assertEqual("gateway", states["claude-code:beta"])
+
+    def test_the_gateway_entry_is_not_reported_as_unapproved(self) -> None:
+        """It has no approval by design: approving the thing that enforces
+        approvals is circular."""
+        lock = approved(["alpha"])
+        gateway = ServerSpec(name="everything", source="/p/.mcp.json",
+                             client="claude-code", transport="stdio",
+                             command="mcp-audit", args=["gateway"])
+        self.assertNotIn("claude-code:everything", self._state(lock, [gateway], []))
+
+    def test_a_gateway_elsewhere_does_not_rescue_this_client(self) -> None:
+        """Two clients are two agents."""
+        lock = approved(["alpha"])
+        elsewhere = ServerSpec(name="everything", source="/p/cursor.json",
+                               client="cursor", transport="stdio",
+                               command="mcp-audit", args=["gateway"])
+        self.assertEqual("GONE", self._state(lock, [elsewhere], [])["claude-code:alpha"])
+
     def test_findings_short_of_drift_still_show(self) -> None:
         lock = approved(["alpha"])
         states = self._state(lock, [spec("alpha")],

@@ -36,6 +36,7 @@ Do not edit by hand.
 | [MCPA029](#mcpa029) | high | Command allowlist includes a binary that runs arbitrary commands |
 | [MCPA030](#mcpa030) | critical | Tool parameter reaches a shell in the server's own source |
 | [MCPA031](#mcpa031) | high | Server script changed since approval |
+| [MCPA032](#mcpa032) | high | Approved server is also reachable without the gateway |
 
 ## MCPA001
 
@@ -520,4 +521,21 @@ def count(path: str):
 **How to fix it.** Read the change, then re-run `mcp-audit approve` to record it. If you did not make it, the server is running code nobody reviewed.
 
 **When it is wrong.** Only scripts are hashed: arguments that name a file, and a command written as a path. A bare `node` or `python` off PATH is not, because system interpreters update for reasons unrelated to this server and a rule that fires on every Node patch gets turned off. Updating your own server fires this, exactly as a legitimate tool description change fires MCPA015 -- that is the rule working, and re-approving is the answer. Nothing is fetched over the network, so a published package's integrity stays the registry's problem.
+
+## MCPA032
+
+**Approved server is also reachable without the gateway** - severity `high`
+
+**What it looks for.** A client configured to use `mcp-audit gateway` that still configures an approved server directly, leaving a second path to it that no enforcement sits on.
+
+**Why it matters.** The gateway is one endpoint in front of every approved server, and the client is meant to point at it *instead of* at the servers. Adding it without removing what it replaces leaves both paths live: the agent sees each tool twice and the second copy answers without the lockfile, the argument policy, the identity grant or the call budget. The lockfile then describes enforcement that is not in the path -- worse than no enforcement, because it is a committed artifact asserting a boundary holds.
+
+```
+"everything": {"command": "mcp-audit", "args": ["gateway"]},
+"github": {"command": "npx", "args": ["-y", "@scope/server-github"]}   # still reachable directly
+```
+
+**How to fix it.** Remove the direct entry. The gateway already exposes that server's tools as `<server>__<tool>`.
+
+**When it is wrong.** Only fires once a gateway is actually configured in that client, and only for servers the lockfile approved -- which are exactly the ones the gateway fronts. A machine that has not adopted the gateway is never reported, because 'you have not adopted this tool' is not a finding and is how a scanner earns a permanent ignore line. An unapproved server configured beside a gateway is MCPA014's business, not this rule's: the gateway would not have served it either.
 

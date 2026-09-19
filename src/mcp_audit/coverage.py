@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import _candidates, named_scripts
+from .enforcement import behind_gateway, fronting_clients, is_gateway, subcommand
 from .identity import all_identities
 from .lockfile import Lock
 from .rules.execution import _FLOATING, extract_package, split_package
@@ -112,7 +113,8 @@ def _code(entry: dict | None, spec: Any) -> Layer:
         return Layer("code pinned", "yes", f"{len(pinned)} file(s) hashed")
 
     if spec is None:
-        return Layer("code pinned", "n/a", "server is no longer configured")
+        return Layer("code pinned", "n/a",
+                     "not configured directly; nothing here to hash")
 
     if spec.is_remote:
         return Layer("code pinned", "n/a",
@@ -182,7 +184,35 @@ def _reachable_by(lock: Lock, name: str) -> Layer:
     return Layer("identity", "yes", "reachable by " + ", ".join(who))
 
 
-def for_server(lock: Lock, key: str, spec: Any) -> list[Layer]:
+def _in_path(key: str, entry: dict | None, spec: Any, fronting: set) -> Layer:
+    """Whether anything is between the client and this server at runtime.
+
+    The layer that makes the others mean something. An approved, digest-pinned,
+    policed server whose client talks straight to it has none of that in force
+    -- the lockfile is then a committed artifact describing a boundary that is
+    not in the path, which is worse than having no boundary because it reads
+    like one.
+    """
+    if spec is not None and subcommand(spec) == "guard":
+        return Layer("enforced", "yes", "wrapped by `mcp-audit guard`")
+    if behind_gateway(key, entry, fronting):
+        return Layer("enforced", "yes", "reached through the gateway")
+    if spec is not None and spec.client in fronting:
+        # A gateway exists for this client and the server is *also* configured
+        # directly, so the agent has both paths. MCPA032 reports it as a
+        # finding; here it is the reason the layer is not in force.
+        return Layer(
+            "enforced", "no",
+            "a gateway is configured and this server is reachable around it (MCPA032)",
+            "remove the direct entry; the gateway already exposes its tools")
+    return Layer(
+        "enforced", "no",
+        "the client talks to this server directly; nothing checks the lockfile at runtime",
+        "point the client at `mcp-audit gateway`, or wrap it with `mcp-audit guard`")
+
+
+def for_server(lock: Lock, key: str, spec: Any,
+               fronting: set | None = None) -> list[Layer]:
     entry = lock.servers.get(key)
     if not isinstance(entry, dict):
         entry = None
@@ -192,12 +222,16 @@ def for_server(lock: Lock, key: str, spec: Any) -> list[Layer]:
         _tools(entry),
         _code(entry, spec),
         _policy(entry),
+        _in_path(key, entry, spec, fronting or set()),
         _reachable_by(lock, name),
     ]
 
 
 def build(lock: Lock, servers: list) -> dict[str, Any]:
-    configured = {s.identity(): s for s in servers}
+    # The gateway's own entry is not a server to report on: it is the thing
+    # doing the reporting's work, and it has no approval by design.
+    configured = {s.identity(): s for s in servers if not is_gateway(s)}
+    fronting = fronting_clients(servers)
     keys = sorted(set(lock.servers) | set(configured))
 
     rows = []
@@ -205,10 +239,14 @@ def build(lock: Lock, servers: list) -> dict[str, Any]:
         entry = lock.servers.get(key)
         if key in lock.servers and not isinstance(entry, dict):
             continue
-        layers = for_server(lock, key, configured.get(key))
+        layers = for_server(lock, key, configured.get(key), fronting)
         rows.append({
             "identity": key,
             "configured": key in configured,
+            # Reachable covers both paths. A fronted server is absent from the
+            # config on purpose and calling it "no longer configured" told the
+            # operator the recommended setup had lost their servers.
+            "reachable": key in configured or behind_gateway(key, entry, fronting),
             "gaps": sum(1 for layer in layers if layer.gap),
             "layers": [
                 {"name": l.name, "state": l.state,
@@ -236,7 +274,8 @@ def render(data: dict[str, Any], color: bool = True, verbose: bool = False) -> s
 
     lines = [""]
     for row in data["servers"]:
-        suffix = "" if row["configured"] else "   (no longer configured)"
+        suffix = "" if row.get("reachable", row["configured"]) \
+            else "   (no longer configured)"
         lines.append(f"  {row['identity']}{suffix}")
         for layer in row["layers"]:
             if layer["state"] == "n/a" and not verbose:

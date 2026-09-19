@@ -426,6 +426,30 @@ DOCS: dict[str, RuleDoc] = {
                    "re-approving is the answer. Nothing is fetched over the network, so "
                    "a published package's integrity stays the registry's problem.",
     ),
+    "MCPA032": RuleDoc(
+        what="A client configured to use `mcp-audit gateway` that still configures an "
+             "approved server directly, leaving a second path to it that no enforcement "
+             "sits on.",
+        why="The gateway is one endpoint in front of every approved server, and the "
+            "client is meant to point at it *instead of* at the servers. Adding it "
+            "without removing what it replaces leaves both paths live: the agent sees "
+            "each tool twice and the second copy answers without the lockfile, the "
+            "argument policy, the identity grant or the call budget. The lockfile then "
+            "describes enforcement that is not in the path -- worse than no enforcement, "
+            "because it is a committed artifact asserting a boundary holds.",
+        example='"everything": {"command": "mcp-audit", "args": ["gateway"]},\n'
+                '"github": {"command": "npx", "args": ["-y", "@scope/server-github"]}'
+                '   # still reachable directly',
+        fix="Remove the direct entry. The gateway already exposes that server's tools as "
+            "`<server>__<tool>`.",
+        wrong_when="Only fires once a gateway is actually configured in that client, and "
+                   "only for servers the lockfile approved -- which are exactly the ones "
+                   "the gateway fronts. A machine that has not adopted the gateway is "
+                   "never reported, because 'you have not adopted this tool' is not a "
+                   "finding and is how a scanner earns a permanent ignore line. An "
+                   "unapproved server configured beside a gateway is MCPA014's business, "
+                   "not this rule's: the gateway would not have served it either.",
+    ),
 }
 
 

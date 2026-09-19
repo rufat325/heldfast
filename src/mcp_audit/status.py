@@ -24,6 +24,7 @@ from typing import Any
 
 from .auditlog import verify
 from .findings import Finding, Severity
+from .enforcement import behind_gateway, fronting_clients, is_gateway
 from .identity import all_identities
 from .lockfile import Lock
 
@@ -38,6 +39,7 @@ class ServerStatus:
     has_artifacts: bool = False
     configured: bool = False
     approved: bool = False
+    fronted: bool = False
     findings: list[Finding] = field(default_factory=list)
 
     @property
@@ -55,6 +57,12 @@ class ServerStatus:
         its own terms.
         """
         if not self.configured:
+            # In the recommended setup an approved server is named only in the
+            # lockfile: the client points at the gateway, which fronts it. That
+            # read as GONE, so the correct configuration reported as a pile of
+            # missing servers and the tool punished its own advice.
+            if self.fronted:
+                return "gateway"
             return "GONE"
         if not self.approved:
             return "UNAPPROVED"
@@ -75,6 +83,7 @@ def build(lock: Lock, servers: list, findings: list[Finding],
             by_name.setdefault(finding.server, []).append(finding)
 
     configured = {s.identity(): s for s in servers}
+    fronting = fronting_clients(servers)
     rows: list[ServerStatus] = []
 
     for key, entry in sorted(lock.servers.items()):
@@ -90,6 +99,7 @@ def build(lock: Lock, servers: list, findings: list[Finding],
             has_artifacts=bool(entry.get("artifacts")),
             configured=key in configured,
             approved=True,
+            fronted=behind_gateway(key, entry, fronting),
             findings=by_name.get(name, []),
         ))
 
@@ -98,6 +108,11 @@ def build(lock: Lock, servers: list, findings: list[Finding],
     known = {row.identity for row in rows}
     for key, spec in sorted(configured.items()):
         if key in known:
+            continue
+        if is_gateway(spec):
+            # The gateway entry itself. Approving the thing that enforces
+            # approvals is circular, so it has none by design and reporting it
+            # as unapproved would flag the one entry that is doing the work.
             continue
         rows.append(ServerStatus(identity=key, name=spec.name, configured=True,
                                  findings=by_name.get(spec.name, [])))
@@ -168,6 +183,7 @@ _STATE_COLOR = {
     "DRIFTED": "\033[31m",
     "UNAPPROVED": "\033[33m",
     "GONE": "\033[33m",
+    "gateway": "\033[32m",
     "FINDINGS": "\033[33m",
     "ok": "\033[32m",
 }

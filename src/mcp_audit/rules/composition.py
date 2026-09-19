@@ -33,6 +33,7 @@ from typing import Iterable
 
 from ..findings import Finding, Location, Severity
 from ..model import ServerSpec
+from ..enforcement import subcommand
 from .base import AuditContext, rule
 
 # Packages and binaries that grant filesystem access. Matched against the
@@ -230,3 +231,75 @@ def exfiltration_reach(ctx: AuditContext) -> Iterable[Finding]:
                     confidence=0.9,
                     tags=["composition", "exfiltration"],
                 )
+
+
+# --------------------------------------------------------------------------
+# Enforcement that is configured and bypassable.
+
+
+# Only fires once the gateway is configured. Reporting every unguarded server
+# would be reporting "you have not adopted this tool", which is not a finding
+# and is how a scanner earns a permanent --ignore line. The signal is narrower
+# and much stronger: enforcement has been set up, and there is a way around it.
+@rule("MCPA032", "Approved server is also reachable without the gateway", Severity.HIGH)
+def bypassable_gateway(ctx: AuditContext) -> Iterable[Finding]:
+    """A gateway entry beside the direct entries it was meant to replace.
+
+    `mcp-audit gateway` is one endpoint in front of every approved server, and
+    the client is supposed to point at it *instead of* at the servers. Adding
+    it without removing what it replaces leaves both paths live: the agent
+    sees each tool twice, and the second copy answers without passing the
+    lockfile, the argument policy, the identity grant or the call budget.
+
+    The lockfile then describes enforcement that is not happening, which is
+    worse than no enforcement -- it is a committed artifact saying the
+    boundary holds.
+    """
+    approved = set((ctx.lock or {}).get("servers") or {})
+    if not approved:
+        return  # nothing approved, so the gateway fronts nothing to bypass
+
+    by_client: dict[str, list[ServerSpec]] = defaultdict(list)
+    for server in ctx.servers:
+        if not server.disabled:
+            by_client[server.client].append(server)
+
+    for client, servers in sorted(by_client.items()):
+        subcommands = {s.name: subcommand(s) for s in servers}
+        if "gateway" not in subcommands.values():
+            continue
+        fronted = sorted(
+            name for name, sub in subcommands.items()
+            if not sub and f"{client}:{name}" in approved
+        )
+        if not fronted:
+            continue
+        for server in servers:
+            if server.name not in fronted:
+                continue
+            yield Finding(
+                rule_id="MCPA032",
+                title="Approved server is also reachable without the gateway",
+                severity=Severity.HIGH,
+                location=Location(path=server.source, line=server.line,
+                                  snippet=server.command_line),
+                evidence=(
+                    f"in {client}: a gateway is configured, and {server.name!r} is also "
+                    f"configured directly. The agent can reach it on either path, and "
+                    f"the direct one answers without the lockfile, the argument policy, "
+                    f"the identity grant or the call budget."
+                ),
+                remediation=(
+                    "Remove the direct entry. The gateway already exposes this server as "
+                    f"'{server.name}__<tool>'; leaving the original beside it means the "
+                    "agent sees every tool twice and one copy is unenforced. The lockfile "
+                    "otherwise describes a boundary that is not in the path, which is "
+                    "worse than having no boundary -- it is a committed artifact "
+                    "asserting one."
+                ),
+                server=server.name,
+                atlas=["AML.T0051"],
+                cwe=["CWE-693"],
+                confidence=0.95,
+                tags=["composition", "enforcement"],
+            )

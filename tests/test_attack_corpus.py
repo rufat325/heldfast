@@ -299,6 +299,23 @@ class TestCompositionAttacks(unittest.TestCase):
                             input_schema={"properties": {"url": {"type": "string"}}})])
         self.assertTrue(caught("MCPA028", ctx))
 
+    def test_the_gateway_added_beside_the_entries_it_replaces(self) -> None:
+        """Not an intrusion -- the way this is actually got wrong.
+
+        You follow the README, add the gateway, and leave the original
+        entries in place. Every tool now appears twice and one copy answers
+        without the lockfile, the policy, the identity or the budget, while
+        the committed lockfile says otherwise.
+        """
+        direct = server("github", command="npx", args=["-y", "@scope/server-github"])
+        lock = Lock()
+        lock.record([direct], [], [])
+        ctx = AuditContext(
+            servers=[server("everything", command="mcp-audit", args=["gateway"]),
+                     direct],
+            lock={"servers": lock.servers, "skills": lock.skills})
+        self.assertTrue(caught("MCPA032", ctx))
+
 
 class TestEveryRuleHasAnAttack(unittest.TestCase):
     """The point of the file.

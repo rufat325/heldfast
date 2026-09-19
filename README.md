@@ -161,6 +161,11 @@ than eight files to correlate.
 
 **Different agents can get different surfaces.** See below.
 
+Point the client at the gateway *instead of* at the servers — not as well. Leaving the
+original entries beside it means every tool appears twice and one copy answers without the
+lockfile, the policy, the identity grant or the budget; MCPA032 reports exactly that, and
+only once a gateway is configured, so a machine that has not adopted it is never nagged.
+
 Everything `guard` enforces applies here to all of them at once: drifted tools withheld,
 argument policy checked before the call leaves, results screened on the way back. The
 failure posture is the same too — a security event fails closed, while a backend that will
@@ -276,6 +281,21 @@ at `pkg@1.2.3` reads `n/a`: the version *is* the pin, and demanding a digest as 
 be nagging. Nothing here is scored, because a percentage invites people to raise the number
 rather than close the gap, and the gaps are not equal.
 
+One layer is different from the rest, and it is the one that makes them mean anything:
+
+```
+    no   enforced         the client talks to this server directly; nothing checks
+                          the lockfile at runtime
+                          -> point the client at `mcp-audit gateway`, or wrap it
+                             with `mcp-audit guard`
+```
+
+An approved, digest-pinned, argument-policed server whose client talks straight to it has
+none of that in force. The lockfile is then a committed artifact describing a boundary that
+is not in the path — which is worse than having no boundary, because it reads like one.
+MCPA032 reports the sharper version of the same thing: a gateway configured *beside* the
+entries it was meant to replace, so every tool appears twice and one copy is unenforced.
+
 Writing this found a case where the report guessed and guessed wrong. A server that was
 launched at approve time and never answered has no tools recorded — identical, from the
 outside, to one nobody probed — and it printed "approved without `--probe`" and pointed at
@@ -343,6 +363,7 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA029 | high | Command allowlist includes a binary that runs arbitrary commands |
 | MCPA030 | critical | Tool parameter reaches a shell in the server's own source |
 | MCPA031 | high | Server script changed since approval |
+| MCPA032 | high | Approved server is also reachable without the gateway |
 
 ### One attack per rule
 
@@ -952,7 +973,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-631 tests, stdlib unittest, nothing to install.
+657 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

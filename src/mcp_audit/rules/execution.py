@@ -12,6 +12,7 @@ import re
 from typing import Iterable
 
 from ..findings import Finding, Location, Severity
+from ..enforcement import unwrap_launcher
 from .base import AuditContext, rule
 
 SHELL_BINARIES = {
@@ -200,23 +201,6 @@ def curl_pipe_shell(ctx: AuditContext) -> Iterable[Finding]:
 _PYTHON_RUNNERS = {"uvx", "pipx"}
 
 _PEP508_SPLIT = re.compile(r"(===|==|>=|<=|~=|!=|>|<)")
-
-
-def unwrap_launcher(command: str, args: list) -> tuple[str, list]:
-    """See through `cmd /c <runner> ...` to the runner underneath.
-
-    Windows users are told to write `cmd /c npx -y <pkg>`, because a package
-    runner is a batch file there and CreateProcess cannot execute one. Every
-    rule that reasons about the runner was reading `cmd` and giving up, so the
-    same unpinned package that is reported on macOS was silently fine on
-    Windows. Found by writing a test that asserted MCPA003 still fires after
-    MCPA001 stopped.
-    """
-    if _basename(command or "") in ("cmd", "cmd.exe") and args:
-        rest = [str(a) for a in args]
-        if rest[0].lower() in ("/c", "/k") and len(rest) > 1:
-            return rest[1], rest[2:]
-    return command, list(args)
 
 
 def extract_package(s) -> tuple[str, str] | None:

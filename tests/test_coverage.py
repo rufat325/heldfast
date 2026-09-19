@@ -217,7 +217,10 @@ class TestTheWholeReport(unittest.TestCase):
         self.assertFalse(beta["configured"])
 
     def test_a_fully_covered_server_counts_as_one(self) -> None:
-        server = spec("alpha", "npx", ["-y", "pkg@1.0.0"])
+        """Approved, pinned, policed -- and wrapped. The last one is not
+        decoration: without it none of the others is in the path."""
+        server = spec("alpha", "mcp-audit",
+                      ["guard", "--", "npx", "-y", "pkg@1.0.0"])
         lock = Lock()
         lock.record([server], [ToolSpec(server="alpha", name="read",
                                         description="Reads.", input_schema={})], [])
@@ -225,6 +228,45 @@ class TestTheWholeReport(unittest.TestCase):
         data = self._built(lock, [server])
         self.assertEqual(1, data["fully_covered"])
         self.assertEqual(1, data["total"])
+
+    def test_everything_pinned_but_nothing_in_the_path_is_not_covered(self) -> None:
+        """The failure this layer exists for: a lockfile describing a boundary
+        while the client talks straight to the server. Reading "fully covered"
+        there would make the report actively misleading."""
+        server = spec("alpha", "npx", ["-y", "pkg@1.0.0"])
+        lock = Lock()
+        lock.record([server], [ToolSpec(server="alpha", name="read",
+                                        description="Reads.", input_schema={})], [])
+        lock.servers[server.identity()]["policy"] = {"read": {"paths": ["/w/**"]}}
+        data = self._built(lock, [server])
+        self.assertEqual(0, data["fully_covered"])
+        enforced = next(l for l in data["servers"][0]["layers"]
+                        if l["name"] == "enforced")
+        self.assertEqual("no", enforced["state"])
+        self.assertIn("directly", enforced["detail"])
+
+    def test_a_fronted_server_is_enforced_and_not_missing(self) -> None:
+        """In the recommended setup the server is named only in the lockfile;
+        the client points at the gateway. This read as "no longer configured"
+        and the tool punished its own advice."""
+        gateway = spec("everything", "mcp-audit", ["gateway"])
+        fronted = spec("alpha", "npx", ["-y", "pkg@1.0.0"])
+        lock = Lock()
+        lock.record([fronted], [], [])
+        data = self._built(lock, [gateway])
+        row = next(r for r in data["servers"] if r["identity"] == "claude-code:alpha")
+        self.assertTrue(row["reachable"])
+        enforced = next(l for l in row["layers"] if l["name"] == "enforced")
+        self.assertEqual("yes", enforced["state"])
+        self.assertNotIn("no longer configured",
+                         coverage.render(data, color=False))
+
+    def test_the_gateway_entry_is_not_reported_as_a_server(self) -> None:
+        """Approving the thing that enforces approvals is circular, so it has
+        none by design -- flagging it would flag the one entry doing the work."""
+        data = self._built(Lock(), [spec("everything", "mcp-audit", ["gateway"])])
+        self.assertEqual([], [r for r in data["servers"]
+                              if r["identity"].endswith(":everything")])
 
     def test_nothing_anywhere_says_so(self) -> None:
         text = coverage.render(coverage.build(Lock(), []), color=False)
