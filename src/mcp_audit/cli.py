@@ -170,6 +170,43 @@ def build_parser() -> argparse.ArgumentParser:
                                "rule already there untouched")
     policy_p.add_argument("-v", "--verbose", action="store_true")
 
+    gateway_p = sub.add_parser(
+        "gateway",
+        help="one MCP endpoint in front of every approved server",
+        description=(
+            "Starts every approved server from the lockfile and serves them as a "
+            "single MCP server, applying the same approval checks, argument "
+            "policy and result screening that `guard` applies to one. Tool names "
+            "are namespaced server__tool, so two servers offering the same name "
+            "cannot collide. Point your client at this instead of at the servers."
+        ),
+    )
+    gateway_p.add_argument("paths", nargs="*", help="where to look for configs")
+    gateway_p.add_argument("--no-user-configs", action="store_true")
+    gateway_p.add_argument("--no-skills", action="store_true", default=True,
+                           help=argparse.SUPPRESS)
+    gateway_p.add_argument("--no-source", action="store_true", default=True,
+                           help=argparse.SUPPRESS)
+    gateway_p.add_argument("--probe", action="store_true", default=False,
+                           help=argparse.SUPPRESS)
+    gateway_p.add_argument("--safe", action="store_true", default=False,
+                           help=argparse.SUPPRESS)
+    gateway_p.add_argument("--depth", type=int, default=6, metavar="N")
+    gateway_p.add_argument("--lock", metavar="PATH", default=None)
+    gateway_p.add_argument("--policy", choices=("block", "strip", "warn"),
+                           default="block")
+    gateway_p.add_argument("--allow-unapproved", action="store_true",
+                           help="start servers that are not in the lockfile "
+                                "(they are refused by default)")
+    gateway_p.add_argument("--dry-run", action="store_true",
+                           help="report what the argument policy would refuse, "
+                                "and forward the call anyway")
+    gateway_p.add_argument("--timeout", type=float, default=30.0, metavar="SECONDS")
+    gateway_p.add_argument("--log", metavar="PATH", default=None,
+                           help="append a hash-chained record of the session")
+    gateway_p.add_argument("--quiet", action="store_true")
+    gateway_p.add_argument("-v", "--verbose", action="store_true")
+
     verify_p = sub.add_parser(
         "verify-log",
         help="check that a guard audit log has not been altered",
@@ -685,6 +722,26 @@ def cmd_policy(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_gateway(args: argparse.Namespace) -> int:
+    from . import gateway as gateway_mod
+
+    lock_path = _resolve_lock_path(args)
+    data = collect(args)
+    if not data.servers:
+        print("mcp-audit gateway: no MCP servers found to serve.", file=sys.stderr)
+        return EXIT_ERROR
+
+    return gateway_mod.run(
+        data.servers, lock_path,
+        policy=args.policy,
+        allow_unapproved=args.allow_unapproved,
+        dry_run=args.dry_run,
+        quiet=args.quiet,
+        timeout=args.timeout,
+        log_path=Path(args.log) if args.log else None,
+    )
+
+
 def cmd_verify_log(args: argparse.Namespace) -> int:
     from .auditlog import verify
 
@@ -753,6 +810,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_rules(args)
         if args.command == "explain":
             return cmd_explain(args)
+        if args.command == "gateway":
+            return cmd_gateway(args)
         if args.command == "policy":
             return cmd_policy(args)
         if args.command == "verify-log":

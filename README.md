@@ -68,6 +68,7 @@ mcp-audit guard --log trail.jsonl -- npx pkg   # proxy and record the session
 mcp-audit verify-log trail.jsonl       # check the record was not altered
 mcp-audit guard --dry-run -- npx pkg   # what would the policy block?
 mcp-audit policy --probe               # propose argument limits to review
+mcp-audit gateway                      # one endpoint in front of every approved server
 mcp-audit serve                        # run as an MCP server
 ```
 
@@ -118,6 +119,48 @@ broke.
 
 The action installs itself from the checked-out copy, uploads SARIF to code
 scanning and writes a job summary. Inputs are in [action.yml](action.yml).
+
+### One endpoint in front of everything (`gateway`)
+
+`guard` wraps one server. That is the right shape for one connection and the wrong shape
+for a machine — an agent has eight servers from three publishers, and the properties worth
+enforcing are the ones that only exist across the whole set.
+
+```
+client ──stdio──> mcp-audit gateway ──stdio──> github server
+                        │                 └──> filesystem server
+                        │                 └──> postgres server
+                        ▼
+                  lockfile + policy + one audit trail
+```
+
+```jsonc
+{ "mcpServers": { "everything": {
+    "command": "mcp-audit",
+    "args": ["gateway", "--log", "trail.jsonl"]
+}}}
+```
+
+Point the client at that instead of at the servers. Three things follow that per-server
+wrapping cannot give you:
+
+**Name collisions become impossible rather than reported.** Tools are exposed as
+`server__tool`, so two servers offering `read_file` become `notes__read_file` and
+`helper__read_file`. MCPA027 exists because that collision leaves the model guessing; here
+it has nowhere to occur. Making a problem impossible beats reporting it.
+
+**An unapproved server is never started.** Not "started and then filtered" — the process is
+the thing that reads your files, so withholding its tools after paying to run it would be
+theatre. `--allow-unapproved` admits it if you mean to.
+
+**One audit trail covers the fleet**, so "what did the agent do" has a single answer rather
+than eight files to correlate.
+
+Everything `guard` enforces applies here to all of them at once: drifted tools withheld,
+argument policy checked before the call leaves, results screened on the way back. The
+failure posture is the same too — a security event fails closed, while a backend that will
+not start is reported and the others carry on, because one broken server should not take
+the agent's whole tool surface with it.
 
 ### Suppressing things
 
@@ -784,7 +827,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-557 tests, stdlib unittest, nothing to install.
+570 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
