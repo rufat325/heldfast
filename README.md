@@ -706,7 +706,7 @@ lockfile pins all of them:
 | Surface | Where it comes from | Why it matters |
 |---|---|---|
 | `instructions` | the `initialize` response | The spec says this "can be thought of like a hint to the model. For example, this information **MAY be added to the system prompt**." Highest privilege text on the connection. |
-| tools | `tools/list` | Descriptions and input schemas, injected as tool metadata |
+| tools | `tools/list` | Descriptions and **both** schemas, injected as tool metadata |
 | prompts | `prompts/list` | Template and argument descriptions |
 | resources | `resources/list` | Resource descriptions |
 | annotations | on each tool | `readOnlyHint` and friends, which clients use to decide whether a call needs your approval |
@@ -726,6 +726,17 @@ The name can stay honest while the display lies: a tool named `delete_all_files`
 "Read a document" reads as harmless in the dialog you actually look at. MCPA026 catches
 that, and titles are in the fingerprint so changing one after approval trips the drift
 rules.
+
+A tool carries two schemas and `outputSchema` was missed entirely — not parsed, so not in
+the fingerprint and never screened. Its property descriptions reach the model exactly as
+the input schema's do, so a server could add one after approval, or rewrite the
+descriptions inside one, and neither the drift check nor the content rules saw anything.
+Found by enumerating every key real servers put on a tool definition and diffing against
+what the hash covers: `outputSchema` appeared 32 times across the ecosystem's own
+repositories and zero times in this codebase. Both schemas are now hashed and scanned,
+and the key is written into the hash only when a tool actually has one — writing it
+unconditionally would have reported a rug pull on every tool in every existing lockfile
+the moment somebody upgraded.
 
 Tool annotations deserve their own note. A server attaches `readOnlyHint` and
 `destructiveHint` to its own tools, and clients use those to decide whether a call needs
@@ -1033,7 +1044,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-710 tests, stdlib unittest, nothing to install.
+723 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

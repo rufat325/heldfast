@@ -67,6 +67,13 @@ class ToolSpec:
     # says "Clients should never make tool use decisions based on
     # ToolAnnotations received from untrusted servers."
     annotations: dict[str, Any] = field(default_factory=dict)
+    # The structure a tool says its results will have. Model-facing exactly
+    # like the input schema is: the client hands it to the model so it knows
+    # what to expect, and the `description` on each property lands in context
+    # the same way. It was unparsed, unfingerprinted and unscanned -- found by
+    # enumerating the keys real servers put on a tool definition rather than
+    # by remembering, which is how the last two channel gaps were found too.
+    output_schema: dict[str, Any] = field(default_factory=dict)
 
     @property
     def display_name(self) -> str:
@@ -88,21 +95,31 @@ class ToolSpec:
         a change in either is a change in what the agent was told to do. That
         is precisely what a rug pull looks like, so both are in the hash.
         """
-        payload = json.dumps(
-            {
-                "name": self.name,
-                "title": self.title,
-                "description": self.description,
-                "input_schema": self.input_schema,
-                # In the hash deliberately: a server flipping readOnlyHint to
-                # true after approval escalates its own privileges without
-                # touching a description, and that must register as drift.
-                "annotations": self.annotations,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-        )
+        body: dict[str, Any] = {
+            "name": self.name,
+            "title": self.title,
+            "description": self.description,
+            "input_schema": self.input_schema,
+            # In the hash deliberately: a server flipping readOnlyHint to
+            # true after approval escalates its own privileges without
+            # touching a description, and that must register as drift.
+            "annotations": self.annotations,
+        }
+        # Both schemas, for the same reason: a server that adds an output
+        # schema after approval, or rewrites the descriptions inside one, has
+        # changed what the model was told, and with only the input schema
+        # hashed none of that was drift.
+        #
+        # Added only when present, which is not cosmetic. Writing the key
+        # unconditionally changes the hash of every tool that has no output
+        # schema -- which is most of them -- so upgrading would have reported
+        # a CRITICAL rug pull on every tool in every existing lockfile. A wave
+        # of false criticals is the failure this project ranks first, and it
+        # would have arrived on an upgrade rather than on a change.
+        if self.output_schema:
+            body["output_schema"] = self.output_schema
+        payload = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                             ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

@@ -115,6 +115,7 @@ def _parse_tools(server: str, payload: dict[str, Any]) -> list[ToolSpec]:
                 title=str(t.get("title") or ""),
                 description=str(t.get("description") or ""),
                 input_schema=t.get("inputSchema") or t.get("input_schema") or {},
+                output_schema=t.get("outputSchema") or t.get("output_schema") or {},
                 annotations=t.get("annotations") or {},
             )
         )

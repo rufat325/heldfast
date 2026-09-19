@@ -264,11 +264,17 @@ def _targets(ctx: AuditContext) -> list[Target]:
         if t.description:
             out.append(Target("tool", f"{t.server}/{t.name}", path, line,
                               t.description, False, t.server))
-        for prop, meta in (t.input_schema.get("properties") or {}).items():
-            desc = (meta or {}).get("description") if isinstance(meta, dict) else None
-            if desc:
-                out.append(Target("tool-param", f"{t.server}/{t.name}.{prop}", path, line,
-                                  str(desc), False, t.server))
+        # Both schemas. The output schema's property descriptions reach the
+        # model exactly as the input schema's do -- the client hands it over so
+        # the model knows what shape to expect -- and it was unscanned because
+        # nothing parsed it at all.
+        for kind, schema in (("tool-param", t.input_schema),
+                             ("tool-output-param", t.output_schema)):
+            for prop, meta in ((schema or {}).get("properties") or {}).items():
+                desc = (meta or {}).get("description") if isinstance(meta, dict) else None
+                if desc:
+                    out.append(Target(kind, f"{t.server}/{t.name}.{prop}", path, line,
+                                      str(desc), False, t.server))
     for sk in ctx.skills:
         out.append(Target("skill", sk.name, sk.path, 0, sk.body, True, None))
         desc = sk.frontmatter.get("description")
