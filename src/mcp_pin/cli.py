@@ -78,8 +78,8 @@ def _gate_servers(out: "Collected", gate) -> tuple[list, list]:
         findings = run_rules(AuditContext(
             servers=out.servers, skills=out.skills,
             source_flows=out.source_flows, config_errors=out.errors))
-    except Exception as extra:                      # a rule bug must not launch
-        why = f"static pre-pass failed: {extra}"
+    except Exception as err:                      # a rule bug must not launch
+        why = f"static pre-pass failed: {err}"
         return [], [(s.identity(), why) for s in out.servers]
 
     worst: dict[str, Finding] = {}
