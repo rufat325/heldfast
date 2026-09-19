@@ -7,8 +7,11 @@ Read this file and `docs/GUARANTEES.md` instead.
 
 ## Where it is
 
-- Feature freeze. No new clients, no new rules, no rename, no PyPI until
+- Feature freeze. No new clients, no new rules, no PyPI until
   the theorems in `docs/GUARANTEES.md` hold under the tests named there.
+- GitHub repo is `rufat325/mcp-pin`. The command, the wheel name, the
+  lockfile and the rule ids are still `mcp-audit` until a deliberate
+  rename. A clone URL is not a package name.
 - Last public commit on `main` before this freeze work:
   `d54123c Stop a name in a config from rewriting the report about it`
 

@@ -18,7 +18,7 @@ from ..findings import Finding, Severity, atlas_title
 from ..rules.base import all_rules
 
 SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
-INFORMATION_URI = "https://github.com/rufat325/mcp-audit"
+INFORMATION_URI = "https://github.com/rufat325/mcp-pin"
 
 
 def _uri(path: str, base: Path | None) -> tuple[str, str | None]:

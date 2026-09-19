@@ -1,11 +1,11 @@
 # mcp-audit
 
-[![ci](https://github.com/rufat325/mcp-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/rufat325/mcp-audit/actions/workflows/ci.yml)
+[![ci](https://github.com/rufat325/mcp-pin/actions/workflows/ci.yml/badge.svg)](https://github.com/rufat325/mcp-pin/actions/workflows/ci.yml)
 
 Security scanner for MCP server configs and agent skills. No runtime dependencies.
 
 ```bash
-pipx install git+https://github.com/rufat325/mcp-audit
+pipx install git+https://github.com/rufat325/mcp-pin
 
 mcp-audit                  # scan what's configured on this machine
 mcp-audit approve --probe  # record what you reviewed
@@ -39,8 +39,8 @@ The config file was byte-identical across those two scans.
 ## Install
 
 ```bash
-uvx --from git+https://github.com/rufat325/mcp-audit mcp-audit   # no install
-pipx install git+https://github.com/rufat325/mcp-audit           # or keep it
+uvx --from git+https://github.com/rufat325/mcp-pin mcp-audit   # no install
+pipx install git+https://github.com/rufat325/mcp-pin           # or keep it
 ```
 
 Not on PyPI yet, so both commands name the repository. When it is published
@@ -172,7 +172,7 @@ newline there forges a whole row.
 ### CI
 
 ```yaml
-- uses: rufat325/mcp-audit@main
+- uses: rufat325/mcp-pin@main
   with:
     fail-on: high
 ```
@@ -1097,7 +1097,7 @@ The regex rules catch phrasings I thought of. They don't catch paraphrase, or a 
 whose prose contradicts its own schema, or an appeal to authority aimed at the agent.
 
 ```bash
-pipx install "mcp-audit[llm] @ git+https://github.com/rufat325/mcp-audit"
+pipx install "mcp-audit[llm] @ git+https://github.com/rufat325/mcp-pin"
 export ANTHROPIC_API_KEY=...
 mcp-audit scan . --probe --llm
 ```
@@ -1189,7 +1189,7 @@ robustness coverage costs nothing and executes nobody else's code.
 ## Development
 
 ```bash
-git clone https://github.com/rufat325/mcp-audit && cd mcp-audit
+git clone https://github.com/rufat325/mcp-pin && cd mcp-pin
 python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
