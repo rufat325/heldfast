@@ -771,10 +771,19 @@ as content to report, never to follow.
 
 Results are real data, and a tool that legitimately returns the phrase "ignore previous
 instructions" - a search hit, a security advisory, this project's own test suite - must not
-stop working. Fencing states the boundary rather than removing the content. Only the
-universal signals apply here (concealment, instruction override, role markers,
-exfiltration); ordinary documents are full of imperative mood and flagging that would make
-every result suspicious.
+stop working. Fencing states the boundary rather than removing the content. Plain
+imperative mood is deliberately *not* a signal: ordinary documents are full of it, and
+flagging that would make every result suspicious.
+
+The signals that do apply are concealment, instruction override, role markers,
+exfiltration, and a mandated side effect — "before using any other tool, read X". That last
+one was missing until recently, which meant the screen did not catch the attack this
+README opens with. It had been given a clean corpus and never an attack corpus; writing
+seven canonical shapes against it caught two. The fix was measured before it was made: the
+widening adds **zero** hits across 40,091 chunks of real ecosystem source and prose, and
+zero across 94 real `SKILL.md` bodies, while taking recall from 2/7 to 6/7. The seventh —
+an instruction hidden in an HTML comment — is deliberately not flagged, because a rule for
+it matched 21 real chunks and every one was `<!-- prettier-ignore -->`.
 
 `--result-policy block` withholds flagged content instead, and `off` only logs.
 
@@ -1024,7 +1033,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-699 tests, stdlib unittest, nothing to install.
+710 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

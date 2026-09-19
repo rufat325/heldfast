@@ -96,6 +96,16 @@ SIGNALS: list[Signal] = [
         Severity.HIGH, 0.9, True,
         "embeds chat-template or role markers that can restructure the prompt",
     ),
+    # Universal, and it was not. The reasoning for description-only was that
+    # this describes how a *tool* should be used -- but the pattern says
+    # "before using any other tool" and "you must first read the file", and no
+    # ordinary document says either. Marking it description-only meant the
+    # result screen missed the canonical tool-poisoning shape, including the
+    # exact attack this project's own README opens with.
+    #
+    # Measured before changing it, on both corpora the flag governs: 0 hits in
+    # 40,091 chunks of ecosystem source and prose, and 0 in 94 real SKILL.md
+    # bodies. The recall is free.
     Signal(
         "mandated-side-effect",
         re.compile(
@@ -105,14 +115,20 @@ SIGNALS: list[Signal] = [
             r"(?:the\s+)?(?:file|contents?|~|/|\.)",
             re.IGNORECASE,
         ),
-        Severity.HIGH, 0.8, False,
+        Severity.HIGH, 0.8, True,
         "requires the agent to take an unrelated action before using the tool",
     ),
     Signal(
         "exfiltration",
         re.compile(
+            # `[^\n]`, not `[^.\n]`. Excluding the period was meant to keep the
+            # match inside one sentence, and it also broke on every filename
+            # and every domain -- which is most of what actually gets sent.
+            # "send it to https://evil" matched and "send the contents of .env
+            # to https://evil" did not. Costs nothing: the same 5 benign hits
+            # in 40,091 real chunks either way.
             r"\b(?:send|post|upload|transmit|forward|exfiltrate|report|submit)\b"
-            r"[^.\n]{0,60}?\b(?:to)\s+(?:https?://|[\w.\-]+@[\w.\-]+\.\w+|"
+            r"[^\n]{0,60}?\b(?:to)\s+(?:https?://|[\w.\-]+@[\w.\-]+\.\w+|"
             r"(?:our|the|an?)\s+(?:server|endpoint|api|webhook|collector))",
             re.IGNORECASE,
         ),
