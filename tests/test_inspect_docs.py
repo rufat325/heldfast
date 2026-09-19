@@ -185,6 +185,74 @@ class TestRuleDocs(unittest.TestCase):
         )
 
 
+class TestTheUsageBlockIsTrue(unittest.TestCase):
+    """The first thing anyone runs is a line copied out of the usage block.
+
+    A command or flag that was renamed leaves a README that looks right and
+    fails on paste, and nothing in a passing suite notices -- the README's
+    rule table and test count are already assertions for exactly this reason.
+    The block grew by six commands and several flags in one stretch of work,
+    which is when this kind of drift happens.
+    """
+
+    @staticmethod
+    def _usage_block() -> str:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        start = readme.index("## Usage")
+        body = readme[start:]
+        return body[body.index("```bash") + 7: body.index("```", body.index("```bash") + 7)]
+
+    def _parser(self):
+        sys.path.insert(0, str(ROOT / "src"))
+        from mcp_audit.cli import build_parser
+        return build_parser()
+
+    def test_every_command_it_names_exists(self) -> None:
+        commands = set()
+        for line in self._usage_block().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if not line.startswith("mcp-audit"):
+                continue
+            rest = line.split()[1:]
+            if rest and not rest[0].startswith("-"):
+                commands.add(rest[0])
+
+        known = set(self._parser().mcp_commands)
+        self.assertTrue(commands, "the usage block named no commands")
+        self.assertEqual(set(), commands - known,
+                         "the README names commands that do not exist: %s"
+                         % sorted(commands - known))
+
+    def test_every_flag_it_names_is_accepted(self) -> None:
+        """Parsed rather than pattern-matched: argparse deciding it is valid
+        is the only check that means anything."""
+        import argparse
+        parser = self._parser()
+        for line in self._usage_block().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if not line.startswith("mcp-audit ") or " -- " in line:
+                continue
+            argv = line.split()[1:]
+            if not argv:
+                continue
+            with self.subTest(line=line):
+                try:
+                    parser.parse_args(argv)
+                except SystemExit:
+                    self.fail(f"the README line `{line}` does not parse")
+                except argparse.ArgumentError as exc:
+                    self.fail(f"`{line}`: {exc}")
+
+    def test_every_command_appears_in_the_usage_block(self) -> None:
+        """The other direction. A command nobody documents is one nobody
+        finds, which is the same as not having built it."""
+        block = self._usage_block()
+        for command in sorted(self._parser().mcp_commands):
+            with self.subTest(command=command):
+                self.assertIn(f"mcp-audit {command}", block,
+                              f"`{command}` is not in the README usage block")
+
+
 class TestNewCommands(unittest.TestCase):
     def _run(self, *args: str) -> subprocess.CompletedProcess:
         env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), NO_COLOR="1")
