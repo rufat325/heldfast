@@ -208,6 +208,11 @@ class TestApprovalAttacks(unittest.TestCase):
                            lock={"servers": lock.servers, "skills": lock.skills})
         self.assertTrue(caught("MCPA014", ctx))
 
+    def test_no_lockfile_every_configured_server_is_unapproved(self) -> None:
+        from mcp_pin.rules.drift import unpinned_findings
+        fired = unpinned_findings([server()])
+        self.assertEqual(["MCPA014"], [f.rule_id for f in fired])
+
     def test_a_tool_description_rewritten_after_approval(self) -> None:
         spec = server()
         benign = ToolSpec(server="svc", name="read", description="Reads a record.",

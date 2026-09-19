@@ -310,6 +310,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
         return llm_fail
 
     findings: list[Finding] = run_rules(ctx, enabled=only, disabled=disabled)
+    if lock.is_empty and (only is None or "MCPA014" in only) and "MCPA014" not in (disabled or set()):
+        from .rules.drift import unpinned_findings
+        findings.extend(unpinned_findings(data.servers))
     findings = [f for f in findings if f.severity >= Severity.parse(args.min_severity)]
 
     suppressed: list = []

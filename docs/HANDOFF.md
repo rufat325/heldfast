@@ -58,6 +58,9 @@ Read this file and `docs/GUARANTEES.md` instead.
 10. ~~JSON-RPC batches skip the pump.~~ Done: `_screen_outbound` / `_client_to_server`.
 11. ~~`.mcp-pin-ignore` could hide MCPA015.~~ Done: `PINNED` lockfile theorems.
 12. ~~`NODE_OPTIONS` / `PYTHONPATH` inherited.~~ Done: declare them or they stay out.
+13. ~~Gateway mux by bare name.~~ Done: second `github` is refused, not overwritten.
+14. ~~`--probe` children unbound.~~ Done: `posix_preexec` + `bind_child`.
+15. ~~Unpinned tree greens CI.~~ Done: MCPA014 HIGH without a lock.
 
 ## How to run
 

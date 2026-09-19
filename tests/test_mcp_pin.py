@@ -194,8 +194,16 @@ class TestLockfileAndDrift(unittest.TestCase):
     def test_no_lock_means_no_drift_findings(self) -> None:
         ctx = self._ctx("Does a thing.")
         fired = {f.rule_id for f in run_rules(ctx)}
-        for rule_id in ("MCPA014", "MCPA015", "MCPA016", "MCPA017"):
+        for rule_id in ("MCPA015", "MCPA016", "MCPA017"):
             self.assertNotIn(rule_id, fired, "drift rules fired without a lockfile")
+
+    def test_no_lock_means_every_server_is_unapproved(self) -> None:
+        """The scan command, not a unit AuditContext: a CI job that never
+        ran `approve` must not look clean."""
+        from mcp_pin.rules.drift import unpinned_findings
+        fired = unpinned_findings(self._ctx("Does a thing.").servers)
+        self.assertEqual(["MCPA014"], [f.rule_id for f in fired])
+        self.assertEqual(Severity.HIGH, fired[0].severity)
 
     def test_unprobed_approval_keeps_tool_baseline(self) -> None:
         """`approve` without --probe must not silently erase the tool fingerprints."""
@@ -383,8 +391,17 @@ class TestCli(unittest.TestCase):
 
     def test_clean_exits_zero(self) -> None:
         ensure_fixtures()
-        r = self._run("scan", "tests/fixtures/clean", "--no-user-configs")
+        r = self._run("scan", "tests/fixtures/clean", "--no-user-configs",
+                      "--lock", "tests/fixtures/clean/.mcp-pin.lock")
         self.assertEqual(0, r.returncode, r.stdout + r.stderr)
+
+    def test_an_unpinned_tree_fails_the_default_threshold(self) -> None:
+        """No lockfile, configured servers, default --fail-on high: exit 1.
+        A CI job that never ran `approve` must not look clean."""
+        ensure_fixtures()
+        r = self._run("scan", "tests/fixtures/clean", "--no-user-configs")
+        self.assertEqual(1, r.returncode)
+        self.assertIn("MCPA014", r.stdout + r.stderr)
 
     def test_vulnerable_exits_one(self) -> None:
         ensure_fixtures()

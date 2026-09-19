@@ -105,6 +105,26 @@ class TestApprovalIsEnforcedBeforeStarting(unittest.TestCase):
         self.assertIn("gamma", gateway.backends)
 
 
+class TestTwoClientsAreNotOneServer(unittest.TestCase):
+    """Lock entries are keyed client:name. The gateway keyed backends by
+    the bare name, so the second `github` silently replaced the first."""
+
+    def test_the_second_github_is_not_started(self) -> None:
+        cursor = ServerSpec(name="github", source="/c/.mcp.json", client="cursor",
+                            transport="stdio", command="node", args=["s.js"])
+        claude = ServerSpec(name="github", source="/d/.mcp.json",
+                            client="claude-code", transport="stdio",
+                            command="node", args=["s.js"])
+        lock = Lock()
+        lock.record([cursor, claude], [
+            ToolSpec(server="github", name="x", description="d", input_schema={}),
+        ], [])
+        gateway = Gateway([cursor, claude], lock, quiet=True, allow_unapproved=True)
+        self.assertEqual(["cursor:github"],
+                         [b.spec.identity() for b in gateway.backends.values()])
+        self.assertIn("claude-code:github", gateway.stats.backends_refused)
+
+
 class TestTheWholeThingOverStdio(unittest.TestCase):
     """The gateway as a client meets it: a real process, real backends."""
 

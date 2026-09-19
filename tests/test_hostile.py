@@ -195,6 +195,13 @@ class TestChildLifetime(unittest.TestCase):
         else:
             self.assertIsNone(hook)
 
+    def test_the_probe_binds_the_child_the_same_way(self) -> None:
+        """`--probe` launches code nobody has reviewed. Orphaning it is
+        the same bug the guard already paid for."""
+        src = (ROOT / "src" / "mcp_pin" / "probe.py").read_text(encoding="utf-8")
+        self.assertIn("preexec_fn=posix_preexec()", src)
+        self.assertIn("bind_child(proc)", src)
+
     @unittest.skipUnless(sys.platform == "win32", "job objects are Windows-only")
     def test_killed_guard_takes_the_server_with_it(self) -> None:
         """This asked wmic to enumerate processes and matched command lines.

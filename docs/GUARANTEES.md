@@ -37,6 +37,9 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-BATCH | A JSON-RPC batch is inspected per frame. A `tools/list` stuffed into an array cannot skip `filter_tools`. | `tests/test_guard.py`, `tests/test_mutation.py` |
 | T-PINNED | A `.mcp-pin-ignore` line cannot hide a lockfile theorem (MCPA014–017, 019, 020, 031). | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
 | T-ISOLATE-LOADER | `NODE_OPTIONS` and `PYTHONPATH` do not ride from the parent into a child unless the server declared them. | `tests/test_childenv.py`, `tests/test_mutation.py` |
+| T-MUX | Two servers with the same bare name from different clients are not silently overwritten; the second is refused. | `tests/test_gateway.py`, `tests/test_mutation.py` |
+| T-PROBE-LIFE | `--probe` binds the child the same way `guard` does (`posix_preexec` / job object). | `tests/test_hostile.py`, `tests/test_mutation.py` |
+| T-UNPINNED | A scan of configured servers with no lockfile fires MCPA014 at HIGH, so default `--fail-on high` fails the build. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
 | T-TYPES | `policy.py`, `lockfile.py`, `model.py` and `findings.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
 | T-SIZE | Functions in `cli.py` and `guard.py` fit on one page (60 lines). | `tests/test_function_size.py` |
 | T-WHEEL | The published wheel has no runtime dependencies. | `.github/workflows/release.yml` |

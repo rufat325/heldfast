@@ -161,7 +161,8 @@ DOCS: dict[str, RuleDoc] = {
         why="A server nobody reviewed is the definition of shadow MCP.",
         example="A new entry appears in `.mcp.json` between scans",
         fix="Review it, then `mcp-pin approve` to record it.",
-        wrong_when="Silent until you create a lockfile, so a first run is never noisy.",
+        wrong_when="A lockfile that has not been committed yet. Create one with "
+                   "`mcp-pin approve` rather than living without a baseline.",
     ),
     "MCPA015": RuleDoc(
         what="A tool whose name, description or input schema no longer matches what was "

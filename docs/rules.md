@@ -18,7 +18,7 @@ Do not edit by hand.
 | [MCPA011](#mcpa011) | high | Invisible characters in agent-facing text |
 | [MCPA012](#mcpa012) | high | Sensitive credential path referenced in agent-facing text |
 | [MCPA013](#mcpa013) | medium | Skill requests broad or dangerous tool permissions |
-| [MCPA014](#mcpa014) | medium | Server is not in the approval lockfile |
+| [MCPA014](#mcpa014) | high | Server is not in the approval lockfile |
 | [MCPA015](#mcpa015) | critical | Tool definition changed since approval (possible rug pull) |
 | [MCPA016](#mcpa016) | high | Server launch command changed since approval |
 | [MCPA017](#mcpa017) | high | Skill content changed since approval |
@@ -243,7 +243,7 @@ A description that looks clean but carries U+E0000-block characters
 
 ## MCPA014
 
-**Server is not in the approval lockfile** - severity `medium`
+**Server is not in the approval lockfile** - severity `high`
 
 **What it looks for.** A configured server that is not in the approval lockfile.
 
@@ -255,7 +255,7 @@ A new entry appears in `.mcp.json` between scans
 
 **How to fix it.** Review it, then `mcp-pin approve` to record it.
 
-**When it is wrong.** Silent until you create a lockfile, so a first run is never noisy.
+**When it is wrong.** A lockfile that has not been committed yet. Create one with `mcp-pin approve` rather than living without a baseline.
 
 ## MCPA015
 

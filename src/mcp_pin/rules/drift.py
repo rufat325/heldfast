@@ -4,7 +4,10 @@ These are the only rules with memory. Everything else asks "is this config
 dangerous"; these ask "is this the config you agreed to". A rug pull is
 invisible to the first question and obvious to the second.
 
-All of these no-op when no lock exists, so a first run is never noisy.
+MCPA015–017, 019, 020, 031 no-op when no lock exists: there is no
+baseline to drift from. MCPA014 does the opposite. Without a lock every
+configured server is unapproved, which is the state a CI job that never
+ran `approve` would otherwise report as clean.
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ def _lock(ctx: AuditContext) -> dict:
     return {"servers": servers, "skills": skills}
 
 
-@rule("MCPA014", "Server is not in the approval lockfile", Severity.MEDIUM)
+@rule("MCPA014", "Server is not in the approval lockfile", Severity.HIGH)
 def unapproved_server(ctx: AuditContext) -> Iterable[Finding]:
     """A server appeared that was never reviewed."""
     lock = _lock(ctx)
@@ -33,12 +36,14 @@ def unapproved_server(ctx: AuditContext) -> Iterable[Finding]:
         return
     known = lock["servers"]
     for s in ctx.servers:
+        if s.disabled:
+            continue
         if s.identity() in known:
             continue
         yield Finding(
             rule_id="MCPA014",
             title="Server is not in the approval lockfile",
-            severity=Severity.MEDIUM,
+            severity=Severity.HIGH,
             location=Location(path=s.source, line=s.line, snippet=s.command_line[:200] or (s.url or "")),
             evidence=f"server {s.identity()!r} is configured but absent from the lockfile",
             remediation=(
@@ -49,6 +54,37 @@ def unapproved_server(ctx: AuditContext) -> Iterable[Finding]:
             atlas=["AML.T0010"],
             tags=["drift", "shadow-mcp"],
         )
+
+
+def unpinned_findings(servers: list) -> list[Finding]:
+    """MCPA014 for a scan that has servers and no lockfile.
+
+    The rule itself still no-ops without a lock so a unit test of some other
+    rule does not also fail this one, and so `--probe` is not gated on
+    "you have not approved this yet" -- launching is opt-in, the CI failure
+    is the scan's.
+    """
+    out: list[Finding] = []
+    for s in servers:
+        if getattr(s, "disabled", False):
+            continue
+        out.append(Finding(
+            rule_id="MCPA014",
+            title="Server is not in the approval lockfile",
+            severity=Severity.HIGH,
+            location=Location(path=s.source, line=getattr(s, "line", 0),
+                              snippet=s.command_line[:200] or (s.url or "")),
+            evidence=(f"no approval lockfile; server {s.identity()!r} "
+                      "has not been reviewed"),
+            remediation=(
+                "Review the server, then run `mcp-pin approve` to record it. An MCP server "
+                "nobody reviewed is the plain definition of shadow MCP."
+            ),
+            server=s.name,
+            atlas=["AML.T0010"],
+            tags=["drift", "shadow-mcp"],
+        ))
+    return out
 
 
 @rule("MCPA015", "Tool definition changed since approval (possible rug pull)", Severity.CRITICAL)

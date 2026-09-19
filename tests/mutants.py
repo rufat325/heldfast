@@ -534,6 +534,73 @@ env, _ = build(spec, {"PYTHONPATH": "/tmp/evil", "PATH": "/bin"})
 FAIL_OPEN = "PYTHONPATH" in env
 """,
     ),
+    Mutant(
+        id="gateway-mux-by-name",
+        theorem="T-MUX",
+        path="gateway.py",
+        original="""            if spec.name in self.backends:
+                other = self.backends[spec.name].spec.identity()
+                self.stats.backends_refused.append(spec.identity())
+                self.log(
+                    f"not started: {spec.identity()} shares the name {spec.name!r} "
+                    f"with {other}. Two clients configuring the same name are not "
+                    f"the same server; guessing which is which is how one client's "
+                    f"approvals get enforced against the other's."
+                )
+                continue
+""",
+        replacement="",
+        harm="The second client:github silently replaces the first.",
+        probe="""
+from mcp_pin.gateway import Gateway
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec, ToolSpec
+a = ServerSpec(name="github", source="/a", client="cursor",
+               transport="stdio", command="node")
+b = ServerSpec(name="github", source="/b", client="claude-code",
+               transport="stdio", command="node")
+lock = Lock()
+lock.record([a, b], [ToolSpec(server="github", name="x",
+                              description="d", input_schema={})], [])
+g = Gateway([a, b], lock, quiet=True, allow_unapproved=True)
+ids = [be.spec.identity() for be in g.backends.values()]
+FAIL_OPEN = "cursor:github" not in ids
+""",
+    ),
+    Mutant(
+        id="probe-unbound-child",
+        theorem="T-PROBE-LIFE",
+        path="probe.py",
+        original="            preexec_fn=posix_preexec(),",
+        replacement="",
+        harm="Killing mcp-pin mid-probe orphans the server.",
+        probe="""
+import inspect
+from mcp_pin import probe as p
+FAIL_OPEN = "posix_preexec" not in inspect.getsource(p.probe_stdio)
+""",
+    ),
+    Mutant(
+        id="mcpa014-silent-without-lock",
+        theorem="T-UNPINNED",
+        path="rules/drift.py",
+        original="""    out: list[Finding] = []
+    for s in servers:
+""",
+        replacement="""    return []
+    out: list[Finding] = []
+    for s in servers:
+""",
+        harm="A scan with no lockfile reports an unreviewed fleet as clean.",
+        probe="""
+from mcp_pin.model import ServerSpec
+from mcp_pin.rules.drift import unpinned_findings
+got = unpinned_findings([ServerSpec(name="s", source="/p/.mcp.json",
+                                    client="c", transport="stdio",
+                                    command="node")])
+FAIL_OPEN = got == []
+""",
+    ),
 )
 
 

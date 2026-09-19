@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .childenv import build as build_child_env
+from .lifetime import bind_child, posix_preexec
 from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec
 
 # The current protocol revision. Kept alongside the legacy one because the
@@ -170,9 +171,12 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0,
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            preexec_fn=posix_preexec(),
         )
     except (OSError, ValueError) as exc:
         return ProbeResult(s.name, [], f"could not launch: {exc}")
+
+    bind_child(proc)
 
     stderr_tail: list[str] = []
 

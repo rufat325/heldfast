@@ -180,6 +180,23 @@ def main() -> int:
     clean_skill_dir.mkdir(parents=True, exist_ok=True)
     (clean_skill_dir / "SKILL.md").write_text(CLEAN_SKILL, encoding="utf-8")
 
+    # A clean tree is one that has been approved. Without this lock, MCPA014
+    # (unreviewed server) would fire on every well-configured server, and the
+    # clean corpus would stop meaning "this config is fine".
+    src = HERE.parent.parent / "src"
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
+    from mcp_pin.discovery import discover_config_files
+    from mcp_pin.lockfile import Lock
+    from mcp_pin.parsers import parse_config
+    servers = []
+    for cfg, client in discover_config_files([CLEAN], scan_user=False):
+        parsed, _ = parse_config(cfg, client)
+        servers.extend(parsed)
+    lock = Lock(path=CLEAN / ".mcp-pin.lock")
+    lock.record(servers, [], [])
+    lock.save()
+
     print(f"fixtures written to {HERE}")
     return 0
 

@@ -286,6 +286,16 @@ class Gateway:
                               isolate_env=isolate_env,
                               share_env=share_env)
             backend.on_unsolicited = self.screen_server_message
+            if spec.name in self.backends:
+                other = self.backends[spec.name].spec.identity()
+                self.stats.backends_refused.append(spec.identity())
+                self.log(
+                    f"not started: {spec.identity()} shares the name {spec.name!r} "
+                    f"with {other}. Two clients configuring the same name are not "
+                    f"the same server; guessing which is which is how one client's "
+                    f"approvals get enforced against the other's."
+                )
+                continue
             self.backends[spec.name] = backend
             self.guards[spec.name] = guard
 

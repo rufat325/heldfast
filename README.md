@@ -470,7 +470,7 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA011 | high | Invisible characters in agent-facing text |
 | MCPA012 | high | Credential path referenced in agent-facing text |
 | MCPA013 | medium | Skill asks for broad or dangerous tool permissions |
-| MCPA014 | medium | Server not in the approval lockfile |
+| MCPA014 | high | Server not in the approval lockfile |
 | MCPA015 | critical | Tool definition changed since approval |
 | MCPA016 | high | Server launch command changed since approval |
 | MCPA017 | high | Skill content changed since approval |
@@ -1198,7 +1198,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-890 tests, stdlib unittest, nothing to install.
+895 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](docs/GUARANTEES.md). Continue work from
