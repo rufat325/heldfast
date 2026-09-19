@@ -64,6 +64,10 @@ Read this file and `docs/GUARANTEES.md` instead.
 16. ~~Gateway `list_changed` not re-fingerprinted.~~ Done: next list/call re-fetches.
 17. ~~Probe gate launches on a rule exception.~~ Done: launches nothing.
 18. ~~Drift first-match on bare name.~~ Done: `_entry_for` refuses to guess.
+19. ~~Public-repo hygiene.~~ Done: noreply authors, SHA-pinned actions,
+    `SECURITY.md`. Register `mcp-pin` on PyPI before the first tweet; a
+    name squat is the remaining supply-chain hole this repo cannot close
+    from git.
 
 ## How to run
 

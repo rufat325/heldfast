@@ -184,6 +184,23 @@ class TestRuleDocs(unittest.TestCase):
             % (stated.group(1), actual),
         )
 
+    def test_the_action_example_is_not_floating_main(self) -> None:
+        """@main is whoever pushed last."""
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertNotIn("mcp-pin@main", readme)
+        self.assertRegex(readme, r"mcp-pin@[0-9a-f]{40}")
+
+    def test_third_party_actions_are_pinned_to_a_commit(self) -> None:
+        roots = [ROOT / "action.yml", *(ROOT / ".github").rglob("*.yml")]
+        floating = []
+        for path in roots:
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if "uses:" not in line or "./" in line:
+                    continue
+                if not re.search(r"@[0-9a-f]{40}\b", line):
+                    floating.append(f"{path.relative_to(ROOT)}:{lineno}: {line.strip()}")
+        self.assertFalse(floating, "floating action tags:\n  " + "\n  ".join(floating))
+
 
 class TestTheUsageBlockIsTrue(unittest.TestCase):
     """The first thing anyone runs is a line copied out of the usage block.

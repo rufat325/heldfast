@@ -96,7 +96,7 @@ class TestExfiltrationReach(unittest.TestCase):
     def test_home_directory_plus_an_arbitrary_destination(self) -> None:
         ctx = AuditContext(
             servers=[server("files", args=["-y", "@modelcontextprotocol/server-filesystem",
-                                           "/home/rufat"]),
+                                           "/home/dev"]),
                      server("web", args=["-y", "@modelcontextprotocol/server-fetch"])],
             tools=[tool("web", "fetch", FETCH_SCHEMA)],
         )
@@ -111,7 +111,7 @@ class TestExfiltrationReach(unittest.TestCase):
         on every developer who has both servers installed."""
         ctx = AuditContext(
             servers=[server("files", args=["-y", "@modelcontextprotocol/server-filesystem",
-                                           "/home/rufat/projects/app"]),
+                                           "/home/dev/projects/app"]),
                      server("web", args=["-y", "@modelcontextprotocol/server-fetch"])],
             tools=[tool("web", "fetch", FETCH_SCHEMA)],
         )
@@ -120,7 +120,7 @@ class TestExfiltrationReach(unittest.TestCase):
     def test_credential_directories_count_however_deep(self) -> None:
         ctx = AuditContext(
             servers=[server("files", args=["-y", "@modelcontextprotocol/server-filesystem",
-                                           "/home/rufat/.ssh"]),
+                                           "/home/dev/.ssh"]),
                      server("web", args=["-y", "server-fetch"])],
             tools=[tool("web", "post", FETCH_SCHEMA)],
         )
@@ -252,7 +252,7 @@ class TestTheCleanCorpusStaysClean(unittest.TestCase):
         ctx = AuditContext(
             servers=[
                 server("filesystem", args=["-y", "@modelcontextprotocol/server-filesystem",
-                                           "/home/rufat/code/app"]),
+                                           "/home/dev/code/app"]),
                 server("github", args=["-y", "@modelcontextprotocol/server-github"],
                        env={"GITHUB_TOKEN": "${env:GITHUB_TOKEN}"}),
                 server("postgres", args=["-y", "@modelcontextprotocol/server-postgres"]),

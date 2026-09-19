@@ -175,13 +175,15 @@ newline there forges a whole row.
 ### CI
 
 ```yaml
-- uses: rufat325/mcp-pin@main
+# Pin a commit SHA. `@main` is whoever pushed last.
+- uses: rufat325/mcp-pin@c6c8b0bd1252cdb2c72ba7a1d18b7897ca02f200
   with:
     fail-on: high
 ```
 
 The action installs itself from the checked-out copy, uploads SARIF to code
 scanning and writes a job summary. Inputs are in [action.yml](action.yml).
+Private reports: [SECURITY.md](SECURITY.md).
 
 ### One endpoint in front of everything (`gateway`)
 
@@ -1198,7 +1200,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-899 tests, stdlib unittest, nothing to install.
+901 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](docs/GUARANTEES.md). Continue work from
