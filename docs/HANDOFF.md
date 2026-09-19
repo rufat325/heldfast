@@ -30,13 +30,17 @@ Read this file and `docs/GUARANTEES.md` instead.
 - `tests/test_kernel_properties.py` — purity, determinism, fingerprint, JSONC
 - `tests/test_golden_findings.py` — pinned rule IDs on the known-bad tree
 - `tests/test_guarantees.py` — this document and the guarantees file stay coupled
+- `tests/mutants.py` + `tests/test_mutation.py` — catalogued fail-open edits must die
+- `tests/golden/traces/` — pinned JSON-RPC conversations for guard and gateway
 
 ## Next, in order
 
-1. Mutation-score the kernels (`policy.py`, `model.ToolSpec.fingerprint`,
-   `discovery._strip_jsonc`). Fail CI under a threshold you pick.
-2. Golden JSON-RPC traces for `guard` / `gateway` (allow, deny, hostile
-   stdout-before-frame, rewrite-after-N-calls).
+1. ~~Mutation-score the kernels (`policy.py`, `model.ToolSpec.fingerprint`,
+   `discovery._strip_jsonc`). Fail CI under a threshold you pick.~~ Done:
+   16 fail-open mutants, score must be 1.0. Not mutmut; equivalent mutants
+   are excluded on purpose.
+2. ~~Golden JSON-RPC traces for `guard` / `gateway` (allow, deny, hostile
+   stdout-before-frame, rewrite-after-N-calls).~~ Done: `tests/golden/traces/`.
 3. Split `cli.py` and `guard.py` only after (1) and (2). Small functions,
    same behaviour, same tests.
 4. `mypy --strict` on `policy.py`, `lockfile.py`, `model.py`, `findings.py`
