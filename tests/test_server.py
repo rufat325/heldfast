@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import json
+import tempfile
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -180,16 +181,106 @@ class TestTools(unittest.TestCase):
             srv.tool_explain_rule({"rule_id": "MCPA999"})
 
 
+class TestCoverageOverMCP(unittest.TestCase):
+    """`serve` had drifted three cycles behind the command line.
+
+    It could report a configuration's findings and knew nothing about whether
+    any of this installation's guarantees were in force -- which is the
+    question an agent using mcp-audit as a server most obviously has about
+    itself. Same drift as probe.py/server.py, one layer up.
+    """
+
+    def setUp(self) -> None:
+        self._original = srv.ALLOW_PATH_SCAN
+        srv.ALLOW_PATH_SCAN = True
+        self._tmp = tempfile.TemporaryDirectory()
+        self.project = Path(self._tmp.name)
+        (self.project / ".mcp.json").write_text(json.dumps({"mcpServers": {
+            "github": {"command": "npx", "args": ["-y", "@scope/srv"]},
+        }}), encoding="utf-8")
+
+    def tearDown(self) -> None:
+        srv.ALLOW_PATH_SCAN = self._original
+        self._tmp.cleanup()
+
+    def _approve(self) -> None:
+        from mcp_audit.lockfile import Lock
+        from mcp_audit.parsers import parse_config
+        servers, _ = parse_config(self.project / ".mcp.json", "claude-code")
+        lock = Lock(path=self.project / ".mcp-audit.lock")
+        lock.record(servers, [], [])
+        lock.save()
+
+    def test_it_is_gated_with_path_scanning(self) -> None:
+        """It reads the lockfile and the local configuration, which is the
+        same disclosure as scan_path and gets the same switch."""
+        srv.ALLOW_PATH_SCAN = False
+        self.assertNotIn("check_coverage",
+                         {t["name"] for t in srv._tool_definitions()})
+        with self.assertRaises(ValueError):
+            srv.tool_check_coverage({"path": str(self.project)})
+
+    def test_it_reports_the_layers(self) -> None:
+        self._approve()
+        out = srv.tool_check_coverage({"path": str(self.project)})
+        row = next(r for r in out["servers"] if r["identity"].endswith(":github"))
+        names = {l["name"] for l in row["layers"]}
+        self.assertEqual(
+            {"approved", "tools pinned", "code pinned", "argument policy",
+             "enforced", "identity"}, names)
+
+    def test_no_lockfile_does_not_read_as_no_gaps(self) -> None:
+        """An agent relaying "0 gaps" for a machine with nothing pinned would
+        be reporting a boundary that does not exist."""
+        out = srv.tool_check_coverage({"path": str(self.project)})
+        self.assertIn("note", out)
+        self.assertIn("approve --probe", out["note"])
+
+    def test_an_explicit_lock_path_is_honoured(self) -> None:
+        self._approve()
+        moved = self.project / "elsewhere.lock"
+        (self.project / ".mcp-audit.lock").rename(moved)
+        out = srv.tool_check_coverage({"path": str(self.project),
+                                       "lock": str(moved)})
+        self.assertNotIn("note", out)
+
+    def test_a_missing_path_is_an_error_not_an_empty_answer(self) -> None:
+        with self.assertRaises(ValueError):
+            srv.tool_check_coverage({"path": str(self.project / "nope")})
+
+    def test_it_starts_nothing(self) -> None:
+        """The whole point of the gated read-only tools. `coverage` runs no
+        rules and probes nothing, so there is no path to a subprocess."""
+        import subprocess
+        original = subprocess.Popen
+        subprocess.Popen = lambda *a, **k: self.fail("serve started a process")
+        try:
+            self._approve()
+            srv.tool_check_coverage({"path": str(self.project)})
+        finally:
+            subprocess.Popen = original
+
+
 class TestSelfConsistency(unittest.TestCase):
     """This server's own descriptions must pass this package's own rules."""
 
     def test_our_tool_descriptions_are_clean(self) -> None:
         spec = ServerSpec(name="mcp-audit", source="<self>", client="self",
                           transport="stdio", command="mcp-audit", args=["serve"])
+        # Every definition, including the ones gated behind path scanning. The
+        # gated tools were never checked against this package's own rules,
+        # which is exactly where an unreviewed description would hide.
+        original = srv.ALLOW_PATH_SCAN
+        srv.ALLOW_PATH_SCAN = True
+        try:
+            definitions = srv._tool_definitions()
+        finally:
+            srv.ALLOW_PATH_SCAN = original
+        self.assertIn("check_coverage", {d["name"] for d in definitions})
         tools = [
             ToolSpec(server="mcp-audit", name=d["name"], description=d["description"],
                      input_schema=d.get("inputSchema", {}))
-            for d in srv._tool_definitions()
+            for d in definitions
         ]
         findings = run_rules(AuditContext(servers=[spec], tools=tools))
         self.assertEqual(

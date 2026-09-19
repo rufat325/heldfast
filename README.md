@@ -782,8 +782,8 @@ config before you install it:
 
 Then: *"here's a server config I found in a README, is it safe to install?"*
 
-Three tools — `check_config` (analyzes JSON text in memory, writes nothing), `list_rules`,
-`explain_rule`.
+Three tools by default — `check_config` (analyzes JSON text in memory, writes nothing),
+`list_rules` and `explain_rule` — plus two more behind the path-scanning switch below.
 
 The server is narrower than the CLI on purpose, because a tool an agent can call is a tool
 an attacker who controls the agent can call:
@@ -792,7 +792,12 @@ an attacker who controls the agent can call:
 - Probing isn't exposed at all. `--probe` starts local processes, and putting that behind a
   tool call turns "agent read a web page" into "agent started a process".
 - Path scanning is off unless you set `MCP_AUDIT_ALLOW_PATH_SCAN`, since an agent that can
-  scan arbitrary paths can use findings as a filesystem oracle.
+  scan arbitrary paths can use findings as a filesystem oracle. That switch also exposes
+  `check_coverage`, which answers *"am I actually protected right now"* — the same per-layer
+  report as the `coverage` command, for an agent asking about its own installation. It
+  reads the lockfile and the configuration and runs no rules, so there is no path from it
+  to a process. A machine with no lockfile gets a note saying so rather than a clean-looking
+  zero.
 - Input it can't parse raises an error instead of returning zero findings. "0 findings" for
   a config nothing could read is a clean bill of health nobody earned.
 
@@ -973,7 +978,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-657 tests, stdlib unittest, nothing to install.
+663 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

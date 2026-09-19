@@ -142,6 +142,39 @@ def _tool_definitions() -> list[dict[str, Any]]:
                 "required": ["path"],
             },
         })
+        # Gated with scan_path and for the same reason: both read the local
+        # filesystem and describe what is configured on this machine.
+        tools.append({
+            "name": "check_coverage",
+            "description": (
+                "Reports which of this installation's security guarantees are actually "
+                "in force for each configured Model Context Protocol server: whether it "
+                "was approved, whether its tool definitions and its code are pinned, "
+                "whether its arguments are constrained, whether anything enforces that "
+                "at runtime, and which declared identities may reach it. For each "
+                "guarantee that is not in force, returns the reason and the command "
+                "that would change it. Reads the approval lockfile and the "
+                "configuration files under a path. Reads files only; no server is "
+                "started and nothing is modified."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Directory to read configuration from.",
+                    },
+                    "lock": {
+                        "type": "string",
+                        "description": (
+                            "Path to the approval lockfile. Defaults to "
+                            ".mcp-audit.lock beside the configuration."
+                        ),
+                    },
+                },
+                "required": ["path"],
+            },
+        })
     return tools
 
 
@@ -244,11 +277,56 @@ def tool_scan_path(args: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def tool_check_coverage(args: dict[str, Any]) -> dict[str, Any]:
+    """Answer "am I actually protected" for the agent asking it.
+
+    `serve` had drifted three cycles behind the rest of the tool: it could
+    report on a configuration's *findings* and knew nothing about whether any
+    of this installation's guarantees were in force. That is the question an
+    agent using mcp-audit as a server most obviously has about itself, and the
+    one the command line had just learned to answer.
+    """
+    if not ALLOW_PATH_SCAN:
+        raise ValueError("path scanning is not enabled on this server")
+    from . import coverage as coverage_mod
+    from .discovery import discover_config_files
+    from .lockfile import DEFAULT_LOCK_NAME, Lock
+
+    target = Path(str(args.get("path") or "."))
+    if not target.exists():
+        raise ValueError(f"{target}: no such file or directory")
+
+    lock_arg = args.get("lock")
+    lock_path = Path(str(lock_arg)) if lock_arg else target / DEFAULT_LOCK_NAME
+    try:
+        lock = Lock.load(lock_path)
+    except ValueError as exc:
+        raise ValueError(f"could not read {lock_path}: {exc}") from exc
+
+    servers = []
+    for cfg, client in discover_config_files([target], scan_user=False):
+        found, _ = parse_config(cfg, client)
+        servers.extend(found)
+
+    payload = coverage_mod.build(lock, servers)
+    payload["lockfile"] = str(lock_path)
+    # Absent is not the same as satisfied, and an agent relaying "0 gaps" for
+    # a machine with no lockfile would be reporting a boundary that does not
+    # exist. No rule runs here to say so, so this does.
+    if not lock.servers:
+        payload["note"] = (
+            "No approval lockfile was found, so nothing is pinned and none of these "
+            "guarantees can be in force. Run `mcp-audit approve --probe` first."
+        )
+    return payload
+
+
 HANDLERS = {
     "check_config": tool_check_config,
     "list_rules": tool_list_rules,
     "explain_rule": tool_explain_rule,
     "scan_path": tool_scan_path,
+    "check_coverage": tool_check_coverage,
 }
 
 
