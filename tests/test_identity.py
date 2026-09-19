@@ -30,7 +30,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from mcp_audit.gateway import Gateway  # noqa: E402
-from mcp_audit.identity import Identity, UnknownIdentity, all_identities  # noqa: E402
+from mcp_audit.identity import (Identity, MalformedIdentity,  # noqa: E402
+                                UnknownIdentity, all_identities)
 from mcp_audit.lockfile import Lock  # noqa: E402
 from mcp_audit.model import ServerSpec, ToolSpec  # noqa: E402
 
@@ -107,6 +108,115 @@ class TestResolution(unittest.TestCase):
 
     def test_a_lockfile_with_no_identities_is_not_an_error(self) -> None:
         self.assertEqual({}, all_identities(Lock()))
+
+
+class TestAMalformedGrantFailsClosed(unittest.TestCase):
+    """Found by attacking the layer rather than exercising it.
+
+    The functional tests asked "does a grant grant, does a deny deny" and all
+    passed. They never asked what a *broken* entry does, and the answer was
+    the worst available one: absent `servers` means every server, and a
+    malformed `servers` was normalised to absent -- so writing
+    `"servers": "alpha"` instead of `["alpha"]`, an obvious hand-edit of a
+    file this project expects to be hand-edited, silently converted a
+    restricted identity into an unrestricted one.
+
+    That is precisely the inversion the class's own error message promises
+    not to make.
+    """
+
+    def _lock(self, entry: dict) -> Lock:
+        lock = Lock()
+        lock.identities = {"reader": entry}
+        return lock
+
+    def test_a_grant_written_as_a_string_is_refused(self) -> None:
+        with self.assertRaises(MalformedIdentity):
+            Identity.from_lock(self._lock({"servers": "alpha"}), "reader")
+
+    def test_other_broken_shapes_are_refused_too(self) -> None:
+        for servers in ({"alpha": True}, 5, True):
+            with self.subTest(servers=servers):
+                with self.assertRaises(MalformedIdentity):
+                    Identity.from_lock(self._lock({"servers": servers}), "reader")
+
+    def test_it_is_refused_as_an_unknown_identity_would_be(self) -> None:
+        """A subclass, so every caller that already refuses an unknown name
+        refuses an unreadable one without being taught to."""
+        self.assertTrue(issubclass(MalformedIdentity, UnknownIdentity))
+
+    def test_the_error_says_why_guessing_was_refused(self) -> None:
+        try:
+            Identity.from_lock(self._lock({"servers": "alpha"}), "reader")
+        except MalformedIdentity as exc:
+            self.assertIn("every server", str(exc))
+
+    def test_a_malformed_identity_stays_visible_rather_than_vanishing(self) -> None:
+        """Skipping it would leave `status` and `coverage` showing a clean
+        page for a lockfile the gateway refuses to start against -- two
+        surfaces reading one file and disagreeing."""
+        identities = all_identities(self._lock({"servers": "alpha"}))
+        self.assertIn("reader", identities)
+        self.assertEqual([], identities["reader"].servers)
+        self.assertFalse(identities["reader"].may_use_server("alpha"))
+        self.assertIn("MALFORMED", identities["reader"].description)
+
+
+class TestADenyThatDoesNotBiteIsNotADeny(unittest.TestCase):
+    """The same bug pointed the other way, and one this codebase has seen
+    before: `test_grants_are_not_split_into_characters` exists elsewhere for
+    exactly this. `"deny": "wipe"` iterated the string into
+    ['w','i','p','e'], which denies nothing at all."""
+
+    def _ident(self, **entry) -> Identity:
+        lock = Lock()
+        lock.identities = {"reader": entry}
+        return Identity.from_lock(lock, "reader")
+
+    def test_a_deny_written_as_one_string_denies_that_tool(self) -> None:
+        self.assertTrue(self._ident(deny="wipe").denies_tool("github__wipe", "wipe"))
+
+    def test_it_is_not_split_into_characters(self) -> None:
+        self.assertEqual(["wipe"], self._ident(deny="wipe").deny)
+
+    def test_whitespace_nobody_meant_to_type(self) -> None:
+        self.assertTrue(
+            self._ident(deny=["  wipe  "]).denies_tool("github__wipe", "wipe"))
+
+    def test_a_case_mismatch_still_refuses(self) -> None:
+        """Tool names are case-sensitive, so this can refuse a genuinely
+        different tool. That is the safe direction: an operator who writes
+        `Wipe` meaning `wipe` gets a refusal they can see, rather than the
+        call they were trying to prevent."""
+        self.assertTrue(self._ident(deny=["Wipe"]).denies_tool("github__wipe", "wipe"))
+        self.assertTrue(self._ident(deny=["wipe"]).denies_tool("github__Wipe", "Wipe"))
+
+    def test_a_grant_is_deliberately_not_case_folded(self) -> None:
+        """The two lists err in opposite directions on purpose. Folding a
+        grant hands out access nobody wrote down; folding a deny refuses a
+        call loudly and is fixed in one line."""
+        self.assertFalse(self._ident(servers=["alpha"]).may_use_server("ALPHA"))
+
+    def test_a_grant_still_tolerates_stray_whitespace(self) -> None:
+        self.assertTrue(self._ident(servers=["alpha"]).may_use_server("  alpha "))
+
+
+class TestAGrantReachesExactlyAsFarAsItReads(unittest.TestCase):
+    """No prefix or separator confusion. `alpha` must not reach `alpha_extra`
+    or `alpha__evil`, because tool names are namespaced with `__` and a
+    server is free to call itself anything."""
+
+    def _ident(self, servers: list) -> Identity:
+        lock = Lock()
+        lock.identities = {"reader": {"servers": servers}}
+        return Identity.from_lock(lock, "reader")
+
+    def test_neighbours_are_not_granted(self) -> None:
+        reader = self._ident(["alpha"])
+        self.assertTrue(reader.may_use_server("alpha"))
+        for other in ("beta", "alpha_extra", "alpha__evil", "alph", "alphaa"):
+            with self.subTest(server=other):
+                self.assertFalse(reader.may_use_server(other))
 
 
 class TestTheGatewayHonoursIt(unittest.TestCase):

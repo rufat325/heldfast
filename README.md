@@ -239,9 +239,20 @@ An identity is declared in the lockfile and selected at launch:
 A server outside the grant is **never started**, not started and hidden. A denied tool is
 absent from `tools/list` *and* refused at call time, because nothing stops a client asking
 for a name it was never shown. An identity policy narrows what the server-level policy
-already allows; it cannot widen it. `--as` naming an identity the lockfile does not declare
-exits 2 rather than running unrestricted — a typo in a deployment must not quietly produce
-an unrestricted agent.
+already allows; it cannot widen it — both gates run, so it can only add refusals. `--as`
+naming an identity the lockfile does not declare exits 2 rather than running unrestricted —
+a typo in a deployment must not quietly produce an unrestricted agent.
+
+**A broken grant is refused too**, which it wasn't at first. Absent `servers` means every
+server, and a malformed one was normalised to absent — so `"servers": "alpha"` instead of
+`["alpha"]`, an obvious hand-edit of a file meant to be hand-edited, quietly turned a
+restricted identity into an unrestricted one. The same bug pointed the other way made
+`"deny": "wipe"` iterate into `['w','i','p','e']` and deny nothing. Both now fail closed,
+and a malformed identity still appears in `status` rather than vanishing from it.
+
+The two lists err in opposite directions on purpose: a grant matches exactly, because
+folding case would hand out access nobody wrote down, while a deny folds case and strips
+whitespace, because refusing one call too many is loud and fixed in a line.
 
 **What this is not.** The `clientInfo` a client sends in `initialize` is self-declared:
 anything able to reach the gateway can claim any name. It is written to the audit trail,
@@ -1143,7 +1154,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-800 tests, stdlib unittest, nothing to install.
+812 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

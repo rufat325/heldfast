@@ -51,6 +51,39 @@ class UnknownIdentity(ValueError):
     """Raised when --as names something the lockfile does not define."""
 
 
+class MalformedIdentity(UnknownIdentity):
+    """Raised when the lockfile defines it but not in a shape that can be read.
+
+    A subclass, so every existing caller that refuses on an unknown identity
+    refuses on an unreadable one too. Those are the same decision: the
+    operator asked for a restricted principal and the file cannot say what the
+    restriction is, and guessing is how an access-control layer becomes
+    decoration.
+    """
+
+
+def _clean(value: Any) -> str:
+    """A name as written, minus the whitespace nobody meant to type.
+
+    No tool or server name meaningfully carries leading or trailing space, so
+    stripping it can only help -- and `"deny": ["wipe "]` silently matching
+    nothing is the kind of failure that looks like the rule simply not
+    working.
+    """
+    return str(value if value is not None else "").strip()
+
+
+def _as_names(value: Any) -> list:
+    """A list of names from whatever the lockfile actually holds."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [_clean(value)] if _clean(value) else []
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    return [_clean(v) for v in value if _clean(v)]
+
+
 @dataclass
 class Identity:
     """One principal's authority over the gateway's tool surface."""
@@ -77,19 +110,41 @@ class Identity:
 
         servers = entry.get("servers")
         if servers is not None and not isinstance(servers, list):
-            servers = None
+            # Absent means "every server", so a malformed grant used to be
+            # read as *no restriction at all* -- `"servers": "alpha"` instead
+            # of `["alpha"]` silently turned a restricted identity into an
+            # unrestricted one. That is the inversion this class's other error
+            # message promises not to make, in a file the project expects to
+            # be hand-edited. It refuses now.
+            raise MalformedIdentity(
+                f"identity {name!r} has a malformed 'servers' entry: expected a "
+                f"list of server names, found {type(servers).__name__}. Refusing "
+                f"to guess -- absent means every server, so reading a broken "
+                f"grant leniently would hand this agent everything."
+            )
         return cls(
             name=name,
-            servers=[str(s) for s in servers] if servers is not None else None,
-            deny=[str(d) for d in entry.get("deny") or [] if isinstance(d, str)],
+            servers=[_clean(s) for s in servers] if servers is not None else None,
+            # A bare string is what somebody means by one entry. Iterating it
+            # produced ['w','i','p','e'], which denies nothing: the same
+            # character-splitting bug this codebase already has a test for
+            # elsewhere, repeated here.
+            deny=_as_names(entry.get("deny")),
             policy=entry.get("policy") if isinstance(entry.get("policy"), dict) else {},
             description=str(entry.get("description") or ""),
         )
 
     def may_use_server(self, server_name: str) -> bool:
+        """Exact, and deliberately not case-folded.
+
+        Folding here would *widen* a grant, and the two lists err in opposite
+        directions on purpose: a grant that matches too much hands out access
+        nobody wrote down, while a deny that matches too much refuses a call
+        loudly and is fixed in one line.
+        """
         if self.servers is None:
             return True
-        return server_name in self.servers
+        return _clean(server_name) in self.servers
 
     def denies_tool(self, namespaced: str, bare: str) -> bool:
         """Deny entries may be written namespaced or bare.
@@ -97,8 +152,14 @@ class Identity:
         `github__delete_repository` names one tool on one server.
         `delete_repository` denies it wherever it appears, which is what
         somebody writing a fleet-wide rule means.
+
+        Matched case-insensitively, unlike a grant. MCP tool names are
+        case-sensitive, so this can refuse a genuinely different tool -- but an
+        operator who writes `Wipe` meaning `wipe` gets a refusal they can see
+        rather than a call they tried to prevent.
         """
-        return namespaced in self.deny or bare in self.deny
+        wanted = {_clean(namespaced).lower(), _clean(bare).lower()}
+        return any(d.lower() in wanted for d in self.deny)
 
     def policy_for(self, namespaced: str, bare: str) -> Policy:
         """The identity's extra argument limits for this tool.
@@ -118,11 +179,22 @@ class Identity:
 
 
 def all_identities(lock: Any) -> dict[str, Identity]:
+    """Every declared identity, including the ones that cannot be read.
+
+    A malformed entry is kept rather than skipped, granting nothing and
+    saying why. Dropping it would leave `status` and `coverage` showing a
+    clean page for a lockfile the gateway refuses to start against -- two
+    surfaces reading one file and disagreeing, which is a mistake this
+    project has already made once.
+    """
     entries = getattr(lock, "identities", None) or {}
     out: dict[str, Identity] = {}
     for name in entries:
         try:
             out[name] = Identity.from_lock(lock, name)
+        except MalformedIdentity as exc:
+            out[name] = Identity(name=name, servers=[],
+                                 description=f"MALFORMED -- {exc}")
         except UnknownIdentity:      # pragma: no cover - name came from the keys
             continue
     return out
