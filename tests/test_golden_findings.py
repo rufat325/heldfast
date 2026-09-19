@@ -42,6 +42,12 @@ class TestGoldenVulnerableTree(unittest.TestCase):
         self.assertTrue(PIN.is_file(), f"missing pin file {PIN}")
         got = _scan_vulnerable()
         expected = _pin()
+        # MCPA006 is POSIX mode bits. The rule returns on win32; the
+        # Windows ACL equivalent is listed as best-effort in GUARANTEES.md.
+        # Pinning it here would make every Windows job fail for a finding
+        # the tool correctly does not claim.
+        if sys.platform == "win32":
+            expected = expected - {"MCPA006"}
         self.assertEqual(
             expected, got,
             "known-bad fixture drifted.\n"
