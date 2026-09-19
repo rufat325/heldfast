@@ -151,14 +151,20 @@ class TestTheWholeThingOverStdio(unittest.TestCase):
         self.assertEqual(len(names), len(set(names)))
 
     def test_a_call_is_routed_to_the_named_backend(self) -> None:
-        """fake_server implements no tools/call, so its own -32601 coming back
-        is the proof the call reached it rather than being answered here."""
+        """The backend's own answer coming back is the proof the call reached
+        it rather than being answered here.
+
+        This used to assert the fixture's -32601, because fake_server had no
+        tools/call at all. It grew one to exercise the server->client
+        screening, so the proof is now the content it returns -- which is the
+        same claim on more direct evidence.
+        """
         call = json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
                            "params": {"name": "alpha__read_invoice",
                                       "arguments": {"invoice_id": "INV-1"}}})
         reply = next(r for r in self._replies([INIT, LIST, call]) if r.get("id") == 3)
-        self.assertIn("error", reply)
-        self.assertIn("tools/call", reply["error"]["message"])
+        self.assertNotIn("error", reply)
+        self.assertIn("Invoice 41", reply["result"]["content"][0]["text"])
 
     def test_a_tool_no_backend_offers_is_refused_here(self) -> None:
         call = json.dumps({"jsonrpc": "2.0", "id": 4, "method": "tools/call",

@@ -92,6 +92,9 @@ class Backend:
         self.error: str | None = None
         self.tools: list[dict[str, Any]] = []
         self.instructions: str = ""
+        # Called with (server_name, message) for anything that is not the
+        # reply being waited on. Returns a message to send back, or None.
+        self.on_unsolicited: Any = None
         self._id = 0
         self._lock = threading.Lock()
 
@@ -157,7 +160,14 @@ class Backend:
         self._send({"jsonrpc": "2.0", "method": method, "params": params})
 
     def request(self, method: str, params: dict[str, Any]) -> dict[str, Any] | None:
-        """Send and wait for the matching reply, discarding notifications."""
+        """Send and wait for the matching reply.
+
+        Anything arriving that is not the reply goes to `on_unsolicited` --
+        server-initiated requests and notifications both. This used to discard
+        them, which fails closed and also meant a server asking to run a
+        completion, or announcing that its tool list just changed, left no
+        trace at all.
+        """
         with self._lock:
             self._id += 1
             request_id = self._id
@@ -183,8 +193,14 @@ class Backend:
                         message = json.loads(line)
                     except json.JSONDecodeError:
                         continue      # banner text, which servers really emit
-                    if isinstance(message, dict) and message.get("id") == request_id:
+                    if not isinstance(message, dict):
+                        continue
+                    if message.get("id") == request_id:
                         return message
+                    if self.on_unsolicited is not None:
+                        answer = self.on_unsolicited(self.name, message)
+                        if answer is not None:
+                            self._send(answer)
                 return None
             finally:
                 timer.cancel()
@@ -220,7 +236,9 @@ class Gateway:
                  quiet: bool = False, timeout: float = 30.0,
                  trail: AuditLog | None = None,
                  identity: Identity | None = None,
-                 max_calls: int = 0) -> None:
+                 max_calls: int = 0,
+                 deny_sampling: bool = False,
+                 deny_elicitation: bool = False) -> None:
         self.lock = lock
         self.quiet = quiet
         self.trail = trail
@@ -243,7 +261,9 @@ class Gateway:
                 continue
             guard = Guard(spec.identity(), lock, policy=policy, quiet=True,
                           block_severity=block_severity,
-                          allow_unapproved=allow_unapproved, dry_run=dry_run)
+                          allow_unapproved=allow_unapproved, dry_run=dry_run,
+                          deny_sampling=deny_sampling,
+                          deny_elicitation=deny_elicitation)
             # An unapproved server is not started at all. Withholding its tools
             # after paying to run it would be theatre -- the process is the
             # thing that reads your files.
@@ -253,7 +273,9 @@ class Gateway:
                          f"Run `mcp-audit approve --probe`, or pass "
                          f"--allow-unapproved.")
                 continue
-            self.backends[spec.name] = Backend(spec, timeout=timeout)
+            backend = Backend(spec, timeout=timeout)
+            backend.on_unsolicited = self.screen_server_message
+            self.backends[spec.name] = backend
             self.guards[spec.name] = guard
 
     def log(self, message: str) -> None:
@@ -467,9 +489,68 @@ class Gateway:
         self.stats.calls_forwarded += 1
         result = reply.get("result")
         if isinstance(result, dict):
-            reply["result"] = guard.screen_result_text(result)
+            # Both screens, and both are load-bearing. `screen_result_text`
+            # reads what the server said; `screen_input_required` reads what
+            # it is asking the *client* to do -- which, since MRTR, arrives
+            # inside the result rather than as a separate request. Calling
+            # only the first left a server on the current protocol able to ask
+            # the user for a credential through the client's own dialog with
+            # nothing in the way, which the guard has screened since it
+            # learned about MRTR and this did not.
+            reply["result"] = guard.screen_input_required(
+                guard.screen_result_text(result))
         reply["id"] = request_id
         return reply
+
+    def screen_server_message(self, name: str, message: dict[str, Any]) -> dict | None:
+        """Screen something a backend sent that was not a reply.
+
+        Returns a message to send *back to that server*, or None to send
+        nothing. Two kinds arrive here.
+
+        A server-initiated request -- `sampling/createMessage` asks the client
+        to run a completion on the user's model and the user's bill;
+        `elicitation/create` asks it to collect input from the user, which is
+        the shape of a credential phish wearing the client's own dialog.
+        Neither is illegitimate, so the default is to allow and record. What
+        matters is that they stop being invisible, and the gateway's read loop
+        was dropping them on the floor -- which fails closed and also leaves
+        no trace that a server ever asked.
+
+        A notification -- `notifications/tools/list_changed` and its siblings.
+        A notification has no id, so it is never answered; the point is that
+        the one moment a rug pull announces itself is written down instead of
+        passing in silence.
+        """
+        guard = self.guards.get(name)
+        if guard is None:
+            return None
+
+        method = str(message.get("method") or "")
+        if method in guard.LIST_CHANGED:
+            guard.note_notification(message)
+            if self.trail:
+                self.trail.record("list_changed", subject=name, detail=method)
+            self.log(f"{name}: {method} -- the server says its catalogue changed")
+            return None
+
+        if "id" not in message:
+            return None      # some other notification; nothing to decide
+
+        if not guard.screen_server_request(message):
+            if self.trail:
+                self.trail.record("denied", subject=f"{name}:{method}",
+                                  decision="block")
+            self.log(f"{name}: DENIED {method}")
+            denial = guard.deny_response(message)
+            # The server is waiting on *its* id. An error carrying any other
+            # one leaves it waiting forever, which is a hang and not a refusal.
+            denial["id"] = message.get("id")
+            return denial
+
+        if self.trail:
+            self.trail.record("server_request", subject=f"{name}:{method}")
+        return None
 
     def summary(self) -> str:
         s = self.stats
@@ -492,7 +573,8 @@ class Gateway:
 def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
         allow_unapproved: bool = False, dry_run: bool = False, quiet: bool = False,
         timeout: float = 30.0, log_path: Path | None = None,
-        act_as: str | None = None, max_calls: int = 0) -> int:
+        act_as: str | None = None, max_calls: int = 0,
+        deny_sampling: bool = False, deny_elicitation: bool = False) -> int:
     """Serve the gateway on stdio until the client goes away."""
     try:
         lock = Lock.load(lock_path)
@@ -521,7 +603,9 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
 
     gateway = Gateway(servers, lock, policy=policy, allow_unapproved=allow_unapproved,
                       dry_run=dry_run, quiet=quiet, timeout=timeout, trail=trail,
-                      identity=identity, max_calls=max_calls)
+                      identity=identity, max_calls=max_calls,
+                      deny_sampling=deny_sampling,
+                      deny_elicitation=deny_elicitation)
     if not gateway.backends:
         print("mcp-audit gateway: nothing approved to serve. Run "
               "`mcp-audit approve --probe` first, or pass --allow-unapproved.",

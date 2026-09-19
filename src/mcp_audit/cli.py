@@ -241,6 +241,14 @@ def build_parser() -> argparse.ArgumentParser:
     gateway_p.add_argument("--timeout", type=float, default=30.0, metavar="SECONDS")
     gateway_p.add_argument("--log", metavar="PATH", default=None,
                            help="append a hash-chained record of the session")
+    # The same two the guard has taken since it learned about them. The
+    # gateway screened neither until the halves were compared.
+    gateway_p.add_argument("--deny-sampling", action="store_true",
+                           help="refuse sampling/createMessage requests, which ask your "
+                                "model to generate on a server's behalf")
+    gateway_p.add_argument("--deny-elicitation", action="store_true",
+                           help="refuse elicitation/create requests, which ask you for "
+                                "input through the client's own dialog")
     gateway_p.add_argument("--quiet", action="store_true")
     gateway_p.add_argument("-v", "--verbose", action="store_true")
 
@@ -855,6 +863,8 @@ def cmd_gateway(args: argparse.Namespace) -> int:
         log_path=Path(args.log) if args.log else None,
         act_as=args.act_as,
         max_calls=args.max_calls,
+        deny_sampling=args.deny_sampling,
+        deny_elicitation=args.deny_elicitation,
     )
 
 

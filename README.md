@@ -168,7 +168,9 @@ lockfile, the policy, the identity grant or the budget; MCPA032 reports exactly 
 only once a gateway is configured, so a machine that has not adopted it is never nagged.
 
 Everything `guard` enforces applies here to all of them at once: drifted tools withheld,
-argument policy checked before the call leaves, results screened on the way back. The
+argument policy checked before the call leaves, results screened on the way back,
+server-initiated requests screened on the way in (`--deny-sampling`, `--deny-elicitation`),
+and `notifications/tools/list_changed` recorded rather than ignored. The
 failure posture is the same too — a security event fails closed, while a backend that will
 not start is reported and the others carry on, because one broken server should not take
 the agent's whole tool surface with it.
@@ -781,7 +783,7 @@ notice says as much rather than implying the content has been made safe.
 
 ### Requests travelling the other way
 
-Three methods go server to client, and `guard` is the only place that sees them:
+Three methods go server to client, and the proxy is the only place that sees them:
 
 - `sampling/createMessage` asks your client to run a completion. The prompt is the
   server's; the model and the bill are yours.
@@ -801,6 +803,15 @@ server-initiated requests outright, which the spec calls a breaking change. Ther
 entries are removed from the map rather than the result being rejected, since servers MUST
 NOT assume a client will fulfil them. `requestState` is passed through untouched; clients
 MUST NOT inspect or modify it.
+
+**`gateway` screens these too, and did not until recently.** It is worth writing down
+because the README recommends the gateway over the guard, and the gateway is the newer of
+the two: it screened result *text* and not `inputRequests`, so a server on the current
+protocol could ask for a credential through the client's own dialog with nothing in the
+way. Its read loop also discarded server-initiated requests and `list_changed`
+notifications rather than screening them — which fails closed and leaves no trace that a
+server ever asked. Found by listing what `guard` screens and grepping `gateway` for each;
+there is now a test that fails if the guard grows a screen the gateway does not call.
 
 ## Using it from an agent
 
@@ -1013,7 +1024,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-683 tests, stdlib unittest, nothing to install.
+699 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

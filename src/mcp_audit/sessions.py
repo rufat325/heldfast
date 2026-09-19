@@ -52,6 +52,12 @@ class Session:
     failures: list = field(default_factory=list)
     announced: list = field(default_factory=list)
     errors: list = field(default_factory=list)
+    # Anything this reader has no specific bucket for. It is shown rather than
+    # dropped: the writer and the reader are two halves that drift, and a
+    # silently ignored event is how `server_request` and `list_changed` -- both
+    # of them security events -- were written to the trail and then left out of
+    # the report of it.
+    other: list = field(default_factory=list)
 
     @property
     def unterminated(self) -> bool:
@@ -128,6 +134,9 @@ def sessions(entries: list) -> list[Session]:
             current.announced.append({"subject": subject, "detail": detail})
         elif event == "transport_error":
             current.errors.append(detail)
+        else:
+            current.other.append({"event": event, "subject": subject,
+                                  "detail": detail})
 
     if current is not None:
         found.append(current)
@@ -168,6 +177,7 @@ def build(path: Path) -> dict[str, Any]:
                 "failures": s.failures,
                 "announced": s.announced,
                 "errors": s.errors,
+                "other": s.other,
             }
             for s in found
         ],
@@ -238,6 +248,10 @@ def render(data: dict[str, Any], color: bool = True, verbose: bool = False) -> s
             lines.append("    " + paint(label, "\033[31m") + "   %s%s"
                          % (refusal["subject"],
                             f" -- {refusal['detail']}" if refusal["detail"] else ""))
+        for item in session.get("other", []):
+            lines.append("    %-10s %s%s" % (
+                item["event"], item["subject"],
+                f"  {item['detail']}" if item["detail"] else ""))
         for error in session["errors"]:
             lines.append("    transport  " + error)
         lines.append("")
