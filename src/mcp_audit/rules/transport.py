@@ -155,7 +155,9 @@ def bind_all_interfaces(ctx: AuditContext) -> Iterable[Finding]:
         # evidence string. A scanner that prints the secrets it finds into CI
         # logs has created the exposure it was hired to detect.
         in_args = BIND_ALL.search(" ".join(s.args))
-        env_hits = [k for k, v in s.env.items() if BIND_ALL.search(v)]
+        # str() for the same reason as classify_secret: the parser coerces,
+        # but a rule should not raise on input it did not parse itself.
+        env_hits = [k for k, v in s.env.items() if BIND_ALL.search(str(v or ""))]
         if not in_args and not env_hits:
             continue
         if in_args:

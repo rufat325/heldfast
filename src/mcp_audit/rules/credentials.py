@@ -84,7 +84,11 @@ def classify_secret(key: str, value: str) -> tuple[str, float] | None:
     The fuzzy entropy fallback is the opposite case: it has no structure to
     rely on, so it gets the full placeholder filtering.
     """
-    v = value.strip()
+    # Coerced rather than assumed. The config parser turns every env value
+    # into a string, so nothing in the CLI reaches here with anything else --
+    # but this is a library function a later rule may call with unparsed
+    # input, and a scan that raises is worse than one that reports nothing.
+    v = str(value or "").strip()
     if not v:
         return None
 

@@ -38,6 +38,8 @@ Do not edit by hand.
 | [MCPA031](#mcpa031) | high | Server script changed since approval |
 | [MCPA032](#mcpa032) | high | Approved server is also reachable without the gateway |
 | [MCPA033](#mcpa033) | high | Icon source is unsafe for a client to fetch or render |
+| [MCPA034](#mcpa034) | critical | Environment variable in the config runs code or reads traffic |
+| [MCPA035](#mcpa035) | high | Environment declaration collects a credential under another name |
 
 ## MCPA001
 
@@ -555,4 +557,36 @@ def count(path: str):
 **How to fix it.** Serve icons over https, or inline a small raster image as a data: URI. If the icon must be an SVG, ship one with no script, no event handlers and no foreignObject.
 
 **When it is wrong.** A remote https icon is never reported -- that is simply what an icon is. A data: URI is not reported either, despite data: being dangerous for a server URL, because inlining a small PNG avoids a fetch and is the better privacy answer; it is judged on what it inlines. The SVG check reads the decoded payload rather than the declared mime type, since the mime type is the server's claim about its own content.
+
+## MCPA034
+
+**Environment variable in the config runs code or reads traffic** - severity `critical`
+
+**What it looks for.** An `env` entry in a server's config that runs code at launch (`LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`, `BASH_ENV`, a `NODE_OPTIONS` that loads a module), decides what the command resolves to (`PATH`), or changes what the process trusts on the network.
+
+**Why it matters.** A config entry has two ways to decide what a process does. The command line is reviewed; the environment beside it was not read at all. `NODE_OPTIONS=--require ./x.js` runs a file in any Node process before the server's own first line, and the command stays `npx -y pkg@1.2.3` -- entirely unremarkable. `PATH` decides which binary `node` even is. `NODE_TLS_REJECT_UNAUTHORIZED=0` makes every certificate acceptable while the traffic still looks verified.
+
+```
+"env": { "NODE_OPTIONS": "--require ./telemetry.js" }
+```
+
+**How to fix it.** Remove the line. None of these is how an MCP server is configured, and an interpreter worth naming belongs in `command` as an absolute path, where it is visible in what you review.
+
+**When it is wrong.** Measured against 196 real config blocks carrying 40 `env` entries: not one sets any variable named here. `NODE_OPTIONS` is judged on its contents rather than its name, because sizing the heap is ordinary and loading a module is not. A proxy is MEDIUM and a judgement call -- machine-wide proxies are normal, one pinned into a single server's config is worth a look. `PYTHONSTARTUP` is deliberately absent: CPython reads it only in interactive mode, so it does nothing for `python server.py`, and reporting it would be a finding nobody can act on. `PYTHONPATH` and `VIRTUAL_ENV` can shadow a module and are also how a local server finds its own code, and real configs set them.
+
+## MCPA035
+
+**Environment declaration collects a credential under another name** - severity `high`
+
+**What it looks for.** An `env` declaration whose value references a credential-shaped variable but whose own key is not credential-shaped -- `"DEBUG": "${GITHUB_TOKEN}"`.
+
+**Why it matters.** Referencing a variable is the documented way to keep a secret out of a config file, and renaming one is legitimate: `GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}` is the same secret under the name that server wants. Binding it to a key that reads as a setting is different. It survives review, and it hands that server a credential belonging to another one. It is also the one thing the gateway's environment isolation cannot refuse, because a declaration is precisely what isolation honours -- so this rule is what makes that promise true.
+
+```
+"filesystem": { "env": { "LOG_LEVEL": "${AWS_SECRET_ACCESS_KEY}" } }
+```
+
+**How to fix it.** Name it for what it is, so a reviewer can see which servers hold which secrets by reading the config. If the server does not need that credential, delete the line.
+
+**When it is wrong.** A rename is not reported: when the key is itself credential-shaped the secret is still visible as a secret, which is the point. Of 40 real `env` entries exactly one is a reference, and its key matches its target, so this has no occurrences in the corpus. Matching is on whole words -- MONKEY is not a KEY.
 

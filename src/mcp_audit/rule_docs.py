@@ -475,6 +475,56 @@ DOCS: dict[str, RuleDoc] = {
                    "declared mime type, since the mime type is the server's claim about "
                    "its own content.",
     ),
+    "MCPA034": RuleDoc(
+        what="An `env` entry in a server's config that runs code at launch "
+             "(`LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`, `BASH_ENV`, a `NODE_OPTIONS` "
+             "that loads a module), decides what the command resolves to (`PATH`), or "
+             "changes what the process trusts on the network.",
+        why="A config entry has two ways to decide what a process does. The command "
+            "line is reviewed; the environment beside it was not read at all. "
+            "`NODE_OPTIONS=--require ./x.js` runs a file in any Node process before "
+            "the server's own first line, and the command stays `npx -y pkg@1.2.3` -- "
+            "entirely unremarkable. `PATH` decides which binary `node` even is. "
+            "`NODE_TLS_REJECT_UNAUTHORIZED=0` makes every certificate acceptable while "
+            "the traffic still looks verified.",
+        example='"env": { "NODE_OPTIONS": "--require ./telemetry.js" }',
+        fix="Remove the line. None of these is how an MCP server is configured, and "
+            "an interpreter worth naming belongs in `command` as an absolute path, "
+            "where it is visible in what you review.",
+        wrong_when="Measured against 196 real config blocks carrying 40 `env` entries: "
+                   "not one sets any variable named here. `NODE_OPTIONS` is judged on "
+                   "its contents rather than its name, because sizing the heap is "
+                   "ordinary and loading a module is not. A proxy is MEDIUM and a "
+                   "judgement call -- machine-wide proxies are normal, one pinned into "
+                   "a single server's config is worth a look. "
+                   "`PYTHONSTARTUP` is deliberately absent: CPython reads it only in "
+                   "interactive mode, so it does nothing for `python server.py`, and "
+                   "reporting it would be a finding nobody can act on. `PYTHONPATH` "
+                   "and `VIRTUAL_ENV` can shadow a module and are also how a local "
+                   "server finds its own code, and real configs set them.",
+    ),
+    "MCPA035": RuleDoc(
+        what="An `env` declaration whose value references a credential-shaped variable "
+             "but whose own key is not credential-shaped -- "
+             '`"DEBUG": "${GITHUB_TOKEN}"`.',
+        why="Referencing a variable is the documented way to keep a secret out of a "
+            "config file, and renaming one is legitimate: "
+            "`GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}` is the same secret under "
+            "the name that server wants. Binding it to a key that reads as a setting "
+            "is different. It survives review, and it hands that server a credential "
+            "belonging to another one. It is also the one thing the gateway's "
+            "environment isolation cannot refuse, because a declaration is precisely "
+            "what isolation honours -- so this rule is what makes that promise true.",
+        example='"filesystem": { "env": { "LOG_LEVEL": "${AWS_SECRET_ACCESS_KEY}" } }',
+        fix="Name it for what it is, so a reviewer can see which servers hold which "
+            "secrets by reading the config. If the server does not need that "
+            "credential, delete the line.",
+        wrong_when="A rename is not reported: when the key is itself credential-shaped "
+                   "the secret is still visible as a secret, which is the point. Of 40 "
+                   "real `env` entries exactly one is a reference, and its key matches "
+                   "its target, so this has no occurrences in the corpus. Matching is "
+                   "on whole words -- MONKEY is not a KEY.",
+    ),
 }
 
 
