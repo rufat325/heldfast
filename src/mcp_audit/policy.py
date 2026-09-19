@@ -41,7 +41,7 @@ import posixpath
 import re
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 # Leading keyword of a statement, used for both the SQL check and to decide
 # whether a string is SQL at all.
@@ -85,8 +85,32 @@ def looks_like_url(value: str) -> bool:
 
 
 def looks_like_sql(value: str) -> bool:
-    match = _SQL_LEAD.match(value or "")
+    # Unmasked first, or `/*!50000 DROP*/ TABLE t` is not recognised as SQL
+    # at all and the whole rule is skipped for it -- the gate mattering more
+    # than the check behind it.
+    match = _SQL_LEAD.match(unmask_sql(value))
     return bool(match) and match.group(1).lower() in _SQL_KEYWORDS
+
+
+def _decoded(value: str, rounds: int = 3) -> str:
+    """Percent-decoding applied until it stops changing anything.
+
+    `/workspace/%2e%2e/etc/passwd` is only an escape for a server that decodes
+    its argument -- one taking the path from a URI does, one calling open()
+    does not -- and `%252e%252e` is the same trick with one more layer. The
+    cost of decoding is a file genuinely named `%2e%2e` becoming unreachable,
+    which is a trade worth making in the direction of refusing.
+
+    Bounded, because "until stable" on hostile input is a loop somebody can
+    make expensive.
+    """
+    text = str(value or "")
+    for _ in range(rounds):
+        nxt = unquote(text)
+        if nxt == text:
+            break
+        text = nxt
+    return text
 
 
 def normalize_path(value: str) -> str:
@@ -95,7 +119,7 @@ def normalize_path(value: str) -> str:
     Matching the string as given is what makes a path allowlist theatre:
     `/workspace/../../etc/passwd` starts with `/workspace` and is not in it.
     """
-    text = value.replace("\\", "/").strip()
+    text = _decoded(value).replace("\\", "/").strip()
     if text.startswith("~"):
         # ~ is the user's home whatever that expands to, and the point of a
         # path allowlist is usually to keep a tool out of it. Given a stable
@@ -170,6 +194,15 @@ def path_is_allowed(value: str, patterns: list[str]) -> bool:
 
 
 def host_is_allowed(value: str, domains: list[str]) -> bool:
+    # A backslash in the authority is a parser differential, not a URL.
+    # Python reads `https://evil.io\@api.github.com/x` as userinfo `evil.io\`
+    # on host api.github.com; WHATWG parsers -- browsers, Node's `new URL`,
+    # Go -- treat `\` as `/`, which ends the authority at evil.io. So the
+    # policy would approve one host and the server would fetch another.
+    # Nothing legitimate needs it, so it is simply not an approved
+    # destination.
+    if "\\" in value.split("?", 1)[0]:
+        return False
     host = (urlsplit(value).hostname or "").lower().rstrip(".")
     if not host:
         return False
@@ -180,9 +213,47 @@ def host_is_allowed(value: str, domains: list[str]) -> bool:
     return False
 
 
+# MySQL runs what is inside `/*! ... */` and `/*!50000 ... */`. Treating it
+# as a comment is how `/*!50000 DROP*/ TABLE t` reached a database while the
+# policy read the remainder and saw no statement it recognised at all.
+_MYSQL_EXEC_COMMENT = re.compile(r"/\*!\d*\s?(.*?)\*/", re.DOTALL)
+
+# A SELECT that writes a file. The operation allowlist sees SELECT and is
+# satisfied; the engine writes to disk as the server's user.
+_SELECT_WRITES = re.compile(r"\binto\s+(?:out|dump)file\b", re.IGNORECASE)
+
+
+def unmask_sql(value: str) -> str:
+    """SQL as the engine will read it, not as a comment-stripper sees it."""
+    return _MYSQL_EXEC_COMMENT.sub(r" \1 ", str(value or ""))
+
+
+def _without_literals(sql: str) -> str:
+    """The statement with quoted contents blanked out.
+
+    Keyword matching has to ignore string literals or it reports the data
+    rather than the query: `WHERE note = 'into outfile'` is a search for a
+    phrase, not a write. Found by the precision case in the same commit that
+    added the check.
+    """
+    out, quote = [], ""
+    for ch in str(sql or ""):
+        if quote:
+            if ch == quote:
+                quote = ""
+            out.append(" " if ch != quote else ch)
+        elif ch in "'\"`":
+            quote = ch
+            out.append(ch)
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def sql_is_allowed(value: str, operations: list[str]) -> tuple[bool, str]:
     """(allowed, why not). Stacked statements are refused outright."""
     permitted = {op.lower() for op in operations}
+    value = unmask_sql(value)
     statements = [s for s in _split_statements(value) if s.strip()]
     if len(statements) > 1:
         return False, "more than one statement in a single argument"
@@ -192,6 +263,9 @@ def sql_is_allowed(value: str, operations: list[str]) -> tuple[bool, str]:
     keyword = match.group(1).lower()
     if keyword not in permitted:
         return False, f"{keyword.upper()} is not a permitted operation"
+    if keyword == "select" and _SELECT_WRITES.search(_without_literals(value)):
+        return False, ("SELECT ... INTO OUTFILE writes a file; permitting SELECT "
+                       "permits reading, not writing")
     return True, ""
 
 
@@ -266,7 +340,11 @@ class Policy:
         if not rule:
             return ALLOWED
 
-        if rule.get("deny") is True:
+        # Any truthy value, not just `True`. `deny` is the one boolean among
+        # four keys that are otherwise all lists, so `"deny": ["wipe"]` is the
+        # natural hand-edit -- and reading it strictly meant that entry denied
+        # nothing at all while looking like it denied something.
+        if rule.get("deny"):
             return Decision(False, "the policy denies this tool outright", "deny", tool)
 
         values = _strings_in(arguments)

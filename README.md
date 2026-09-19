@@ -598,14 +598,31 @@ The checks are deterministic, and most of the work is in not being fooled:
 
 | Written | Also blocks |
 |---|---|
-| `"paths": ["/workspace/**"]` | `/workspace/../../etc/passwd`, `~/.ssh/id_rsa`, `/workspace-evil/x`, a second path hidden in another argument |
-| `"domains": ["api.github.com"]` | `api.github.com.evil.io`, `169.254.169.254` |
-| `"sql": ["SELECT"]` | `SELECT 1; DROP TABLE users` |
+| `"paths": ["/workspace/**"]` | `/workspace/../../etc/passwd`, `~/.ssh/id_rsa`, `/workspace-evil/x`, `%2e%2e` and `%252e%252e`, a second path hidden in another argument |
+| `"domains": ["api.github.com"]` | `api.github.com.evil.io`, `api.github.com@evil.io`, `evil.io\@api.github.com`, `169.254.169.254` |
+| `"sql": ["SELECT"]` | `SELECT 1; DROP TABLE users`, `/*!50000 DROP*/ TABLE t`, `SELECT ... INTO OUTFILE` |
+| `"deny": true` | and `"deny": ["anything"]`, because that is how people write it |
 
 Paths are normalized before they are matched, `*` stays inside one directory while `**`
 spans them, domains match on label boundaries rather than substrings, and every string
 anywhere in the arguments is checked — including nested ones — because the interesting
 request is the one that hides a path in a field nobody thought about.
+
+Half that table is from asking which *other* spellings of the same evasions were never
+written down. Three are worth naming. `evil.io\@api.github.com` is a parser differential:
+Python reads the host as `api.github.com` while every WHATWG parser — browsers, Node's
+`new URL`, Go — treats `\` as `/` and stops at `evil.io`, so the policy approved one host
+and the server would have fetched another. `/*! ... */` is a comment to everything except
+MySQL, which executes it, and stripping it left a string the checker did not recognise as
+SQL at all — so the rule was skipped rather than failed. And `deny` is the one boolean among
+four otherwise-list-valued keys, so writing it as a list was the natural hand-edit and
+denied nothing while looking like it denied something.
+
+Two shapes are still allowed **on purpose** and say so in tests: a subdomain of a granted
+domain (suffix matching is what granting a domain means), and a destination written with no
+scheme (widening that needs a host-like pattern, and `README.md/section` fits every version
+of one worth writing — there is no corpus of real tool *arguments* to show precision
+against, so it is recorded rather than guessed at).
 
 ### Getting a first draft
 
@@ -1154,7 +1171,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-812 tests, stdlib unittest, nothing to install.
+832 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.
