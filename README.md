@@ -66,6 +66,7 @@ mcp-audit explain MCPA015              # describe one rule in full
 mcp-audit guard -- npx -y pkg@1.0.0    # proxy a server, enforce the lockfile
 mcp-audit guard --log trail.jsonl -- npx pkg   # proxy and record the session
 mcp-audit verify-log trail.jsonl       # check the record was not altered
+mcp-audit report trail.jsonl           # what the agent did: sessions, calls, refusals
 mcp-audit guard --dry-run -- npx pkg   # what would the policy block?
 mcp-audit policy --probe               # propose argument limits to review
 mcp-audit gateway                      # one endpoint in front of every approved server
@@ -563,6 +564,40 @@ This is the cheap half of the idea, and it says so: it proves the file was not e
 the fact. It does not prove who wrote it, because that needs a signing key, and a key needs
 somewhere to live — which a zero-dependency scanner has no business inventing.
 
+### Reading it back (`report`)
+
+`verify-log` says the chain is intact. That is not the question anyone has afterwards.
+
+```bash
+mcp-audit report trail.jsonl
+```
+
+```
+  chain intact  8 entries
+
+  2026-09-19T04:22:27Z  as reader
+    policy=block budget=2
+    client claimed to be 'totally-the-finance-agent'  (self-declared, not authenticated)
+    started   claude-code:local
+    2 call(s)
+         2  local__read_invoice
+    budget   local__read_invoice
+    refused   local__list_invoices -- identity=reader
+
+  1 session(s), 2 call(s), 2 refused
+```
+
+That completes the loop: scan finds it, approve pins it, guard and gateway enforce it, and
+this reads the record back.
+
+Two things it deliberately will not do. **A broken chain is not summarised as though it
+were whole** — everything after the first bad line is unverified, so it is not counted, and
+"412 calls, 3 refused" over an edited file would launder a tampered log into a clean-looking
+report. And **a session with no end is reported as unterminated** rather than merged into
+the next one, because gluing two together attributes one agent's calls to another. Exits
+non-zero on a broken chain, same as `verify-log`, since in CI that is the only signal
+anyone reads.
+
 ## Reading the server's own source
 
 Everything above reads what a server *declares*. MCPA030 reads what it *is*. If you point
@@ -978,7 +1013,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-663 tests, stdlib unittest, nothing to install.
+683 tests, stdlib unittest, nothing to install.
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which
 doesn't survive editors or diffs — which is exactly why it's worth testing.

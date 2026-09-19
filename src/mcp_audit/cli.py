@@ -255,6 +255,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_p.add_argument("path", metavar="PATH", help="the log file to check")
 
+    report_p = sub.add_parser(
+        "report",
+        help="what the agent did: sessions, calls, refusals",
+        description=(
+            "Reads back an audit trail written by `guard --log` or "
+            "`gateway --log`: which sessions ran, as which identity, what they "
+            "called and what was refused. Verifies the chain first and reports "
+            "only the entries it could verify -- a summary of a file that was "
+            "edited would launder a tampered log into a clean-looking report."
+        ),
+    )
+    report_p.add_argument("path", metavar="PATH", help="the trail to read")
+    report_p.add_argument("-f", "--format", choices=("text", "json"), default="text")
+    report_p.add_argument("-v", "--verbose", action="store_true",
+                          help="list every tool rather than the busiest few")
+    report_p.add_argument("--no-color", action="store_true")
+
     guard_p = sub.add_parser(
         "guard",
         help="proxy a server and enforce the approval lockfile at runtime",
@@ -851,6 +868,25 @@ def cmd_verify_log(args: argparse.Namespace) -> int:
     return EXIT_OK if result.ok else EXIT_FINDINGS
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    from . import sessions as report_mod
+
+    path = Path(args.path)
+    if not path.exists():
+        print(f"mcp-audit: {path}: no such file", file=sys.stderr)
+        return EXIT_ERROR
+
+    payload = report_mod.build(path)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        sys.stdout.write(report_mod.render(
+            payload, color=not args.no_color, verbose=args.verbose))
+    # A broken chain exits non-zero for the same reason `verify-log` does: in
+    # CI this is the only signal anyone reads.
+    return EXIT_OK if payload["integrity"]["intact"] else EXIT_FINDINGS
+
+
 def cmd_explain(args: argparse.Namespace) -> int:
     from . import rule_docs
 
@@ -919,6 +955,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_policy(args)
         if args.command == "verify-log":
             return cmd_verify_log(args)
+        if args.command == "report":
+            return cmd_report(args)
         if args.command == "guard":
             return cmd_guard(args)
         if args.command == "serve":
