@@ -69,6 +69,11 @@ class Decision:
 
 ALLOWED = Decision(True)
 
+# Constraint keys this tool knows how to enforce. Anything else in a rule is
+# a hand-edit for a checker that does not exist, and ignoring it would fail
+# *open* on the one field somebody thought they had covered.
+KNOWN_CONSTRAINTS = frozenset({"deny", "paths", "domains", "sql"})
+
 
 def looks_like_path(value: str) -> bool:
     if not value or _URL_LIKE.match(value):
@@ -346,6 +351,14 @@ class Policy:
         # nothing at all while looking like it denied something.
         if rule.get("deny"):
             return Decision(False, "the policy denies this tool outright", "deny", tool)
+
+        unknown = [key for key in rule if key not in KNOWN_CONSTRAINTS]
+        if unknown:
+            return Decision(
+                False,
+                f"unknown policy constraint {unknown[0]!r}; "
+                f"refusing rather than ignoring it",
+                "unknown", unknown[0])
 
         values = _strings_in(arguments)
 
