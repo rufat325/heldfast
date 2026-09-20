@@ -78,7 +78,9 @@ Read this file and `docs/GUARANTEES.md` instead.
     checked.
 23. ~~Guard did not bind the launch command at spawn.~~ Done: T-LAUNCH.
 24. ~~Re-approval rubber-stamped drift.~~ Done: T-REVIEW. Word-level diff,
-    `--yes` to write.
+    `--yes` / `--yes-tool` to write.
+25. ~~Prompts and resources pinned but not filtered at runtime.~~ Done:
+    T-SURFACE.
 
 ## How to run
 

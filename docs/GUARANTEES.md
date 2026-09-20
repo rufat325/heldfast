@@ -43,7 +43,8 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-LOCK-TREE | A lockfile sitting in the scanned directory is the lockfile, even when cwd is somewhere else. | `tests/test_mcp_pin.py` |
 | T-ARTIFACT | If the lock recorded local-script digests, `guard` and `gateway` refuse to start the child when those bytes have moved. A registry package has no local file; the version string is the pin. | `tests/test_artifacts.py`, `tests/test_guard.py`, `tests/test_mutation.py` |
 | T-LAUNCH | If the lock recorded a command line, `guard` and `gateway` refuse to start a different argv. | `tests/test_guard.py`, `tests/test_mutation.py` |
-| T-REVIEW | Re-approval of a lock that moved prints the word-level diff and does not write unless `--yes`. | `tests/test_review.py`, `tests/test_mutation.py` |
+| T-REVIEW | Re-approval of a lock that moved prints the word-level diff and does not write unless `--yes` or `--yes-tool` names every drifted tool. A digest or command change still needs `--yes`. | `tests/test_review.py`, `tests/test_mutation.py` |
+| T-SURFACE | If the lock recorded prompts or resources, `guard` filters `prompts/list` and `resources/list` and refuses `prompts/get` / `resources/read` the same way it does tools. A lock that never recorded that layer is not pretend-enforced. | `tests/test_guard.py`, `tests/test_mutation.py` |
 | T-LIST-CHANGED | `notifications/tools/list_changed` marks the backend stale; the next `tools/list` or call re-fetches and re-screens. | `tests/test_gateway_parity.py`, `tests/test_mutation.py` |
 | T-PROBE-GATE | A rule exception in the static pre-pass launches nothing. | `tests/test_probe_boundary.py`, `tests/test_mutation.py` |
 | T-DRIFT-ID | Two lock entries sharing a bare name are not compared against the first match. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |

@@ -604,8 +604,9 @@ FAIL_OPEN = launch_mismatch("python server.py", ["python", "evil.py"]) is None
         id="approve-overwrites-drift",
         theorem="T-REVIEW",
         path="cli.py",
-        original="""        if not yes:
-            print("mcp-pin: lock not written. Pass --yes after you have read the diff.",
+        original="""        if not acknowledged(moved, yes=yes, yes_tools=yes_tools):
+            print("mcp-pin: lock not written. Pass --yes after you have read the diff, "
+                  "or --yes-tool NAME for each drifted tool.",
                   file=sys.stderr)
             return EXIT_ERROR
 """,
@@ -615,6 +616,36 @@ FAIL_OPEN = launch_mismatch("python server.py", ["python", "evil.py"]) is None
 import inspect
 from mcp_pin import cli
 FAIL_OPEN = "lock not written" not in inspect.getsource(cli._commit_lock)
+""",
+    ),
+    Mutant(
+        id="guard-forwards-drifted-prompt",
+        theorem="T-SURFACE",
+        path="guard.py",
+        original="""                if isinstance(result.get("prompts"), list):
+                    result["prompts"] = self.filter_prompts(result["prompts"])
+""",
+        replacement="",
+        harm="A rewritten prompt template reaches the client unfiltered.",
+        probe="""
+import inspect
+from mcp_pin.guard import Guard
+FAIL_OPEN = "filter_prompts" not in inspect.getsource(Guard.handle_server_message)
+""",
+    ),
+    Mutant(
+        id="guard-forwards-drifted-resource",
+        theorem="T-SURFACE",
+        path="guard.py",
+        original="""                if isinstance(result.get("resources"), list):
+                    result["resources"] = self.filter_resources(result["resources"])
+""",
+        replacement="",
+        harm="A rewritten resource description reaches the client unfiltered.",
+        probe="""
+import inspect
+from mcp_pin.guard import Guard
+FAIL_OPEN = 'result["resources"]' not in inspect.getsource(Guard.handle_server_message)
 """,
     ),
     Mutant(

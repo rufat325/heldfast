@@ -50,6 +50,25 @@ def word_diff(old: str, new: str) -> str:
     return " ".join(bits)
 
 
+def acknowledged(moved: list[Change], *, yes: bool,
+                 yes_tools: list[str] | None = None) -> bool:
+    """True if every change has been named.
+
+    `--yes` names them all. `--yes-tool` names one tool. A digest or
+    command change is not a tool and still needs `--yes`.
+    """
+    if not moved or yes:
+        return True
+    named = set(yes_tools or [])
+    if not named:
+        return False
+    for item in moved:
+        if item.kind == "tool" and item.name in named:
+            continue
+        return False
+    return True
+
+
 def changes(previous: Lock, current: Lock) -> list[Change]:
     out: list[Change] = []
     out.extend(_server_changes(previous, current))

@@ -179,6 +179,19 @@ class PromptSpec:
                              ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
+    @classmethod
+    def from_wire(cls, server: str, raw: dict[str, Any]) -> "PromptSpec":
+        args = raw.get("arguments") or []
+        icons = raw.get("icons")
+        return cls(
+            server=server,
+            name=str(raw.get("name") or ""),
+            title=str(raw.get("title") or ""),
+            description=str(raw.get("description") or ""),
+            arguments=[a for a in args if isinstance(a, dict)],
+            icons=list(icons) if isinstance(icons, list) else [],
+        )
+
 
 @dataclass
 class ResourceSpec:
@@ -203,6 +216,20 @@ class ResourceSpec:
             sort_keys=True, separators=(",", ":"), ensure_ascii=False,
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def from_wire(cls, server: str, raw: dict[str, Any]) -> "ResourceSpec":
+        icons = raw.get("icons")
+        return cls(
+            server=server,
+            uri=str(raw.get("uri") or raw.get("uriTemplate") or ""),
+            name=str(raw.get("name") or ""),
+            title=str(raw.get("title") or ""),
+            description=str(raw.get("description") or ""),
+            mime_type=str(raw.get("mimeType") or ""),
+            is_template="uriTemplate" in raw,
+            icons=list(icons) if isinstance(icons, list) else [],
+        )
 
 
 def instructions_fingerprint(text: str) -> str:

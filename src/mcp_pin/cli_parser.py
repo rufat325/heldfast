@@ -104,6 +104,11 @@ def _register_approve(sub: argparse._SubParsersAction) -> None:
         help="write the lock even when something moved since the last pin; "
              "the diff is still printed",
     )
+    approve.add_argument(
+        "--yes-tool", metavar="NAME", action="append", default=[],
+        help="acknowledge this drifted tool (repeatable); a digest or command "
+             "change still needs --yes",
+    )
 
 
 def _register_inspect(sub: argparse._SubParsersAction) -> None:

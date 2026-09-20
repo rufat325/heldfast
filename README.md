@@ -104,8 +104,12 @@ different command than the one you pinned. A registry package
 (`npx pkg@1.2.3`) has no local file: the version string is the pin.
 
 `approve --probe` on a lock that moved prints the words that changed and
-refuses to write until `--yes`. A credential path in the new text is graded
-critical; a wording tweak is not the same event.
+refuses to write until `--yes`, or `--yes-tool NAME` for each drifted tool.
+A credential path in the new text is graded critical; a wording tweak is
+not the same event. A digest or launch-command change still needs `--yes`.
+
+`guard` pins tools, instructions, prompts and resources — whatever the lock
+recorded. A lock that never recorded prompts is not pretend-enforced.
 
 ```json
 {
@@ -205,7 +209,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-921 tests, stdlib unittest, nothing to install.
+929 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

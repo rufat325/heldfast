@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mcp_pin.lockfile import Lock, launch_mismatch  # noqa: E402
 from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_pin.review import changes, grade, render, word_diff  # noqa: E402
+from mcp_pin.review import acknowledged, changes, grade, render, word_diff  # noqa: E402
 
 FAKE = ROOT / "tests" / "fixtures" / "fake_server.py"
 
@@ -127,6 +127,30 @@ class TestApproveRefusesToRubberStamp(unittest.TestCase):
             r = _run("approve", ".", "--no-user-configs", "--yes", cwd=project)
             self.assertEqual(0, r.returncode, r.stderr)
             self.assertIn("digest moved", r.stderr)
+
+    def test_yes_tool_does_not_cover_a_digest_change(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td)
+            (project / ".mcp.json").write_text(json.dumps({
+                "mcpServers": {"notes": {"command": "node", "args": ["s.js"]}}
+            }), encoding="utf-8")
+            script = project / "s.js"
+            script.write_text("v1", encoding="utf-8")
+            self.assertEqual(0, _run("approve", ".", "--no-user-configs", cwd=project).returncode)
+            script.write_text("v2", encoding="utf-8")
+            r = _run("approve", ".", "--no-user-configs", "--yes-tool", "read", cwd=project)
+            self.assertEqual(2, r.returncode, r.stderr)
+            self.assertIn("lock not written", r.stderr)
+
+    def test_yes_tool_names_the_drifted_tool(self) -> None:
+        old = _lock_with("Read an invoice")
+        new = _lock_with("Read an invoice by identifier")
+        moved = changes(old, new)
+        self.assertTrue(moved)
+        self.assertFalse(acknowledged(moved, yes=False, yes_tools=[]))
+        self.assertTrue(acknowledged(moved, yes=False, yes_tools=["read_invoice"]))
+        self.assertFalse(acknowledged(moved, yes=False, yes_tools=["other"]))
+        self.assertTrue(acknowledged(moved, yes=True, yes_tools=[]))
 
 
 class TestGuardBindsTheLaunch(unittest.TestCase):

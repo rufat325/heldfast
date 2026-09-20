@@ -50,7 +50,7 @@ from .auditlog import AuditLog
 from .lifetime import bind_child, posix_preexec
 from .lockfile import DEFAULT_LOCK_NAME, Lock, launch_mismatch
 from .policy import Policy
-from .model import ServerSpec, ToolSpec, instructions_fingerprint
+from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec, instructions_fingerprint
 from .rules import AuditContext, run_rules, scan_untrusted_text
 
 # What to do with a tool that is not approved, or whose definition changed.
@@ -132,6 +132,8 @@ class Guard:
         # Last tools/list, keyed by name. check_call uses this so a tool
         # withheld from the catalogue cannot still be executed.
         self._listed: dict[str, ToolSpec] = {}
+        self._listed_prompts: dict[str, PromptSpec] = {}
+        self._listed_resources: dict[str, ResourceSpec] = {}
 
     # -- lockfile ----------------------------------------------------------
 
@@ -188,6 +190,32 @@ class Guard:
         if isinstance(recorded, dict):
             return str(recorded.get("fingerprint") or "")
         return None
+
+    def _surface_verdict(self, field: str, key: str, fingerprint: str
+                         ) -> tuple[str, str]:
+        """Allow/deny a prompt or resource against the lock.
+
+        A missing field means this layer was never recorded, so we do not
+        pretend to enforce it. An empty recorded map is an allowlist of
+        nothing. Unknown server follows the tool rule.
+        """
+        entry = self._resolve_entry()
+        if entry is None:
+            if self.allow_unapproved:
+                return "allow", "server not in lockfile; --allow-unapproved is set"
+            return "deny", "server is not in the lockfile"
+        if field not in entry:
+            return "allow", "layer was not pinned"
+        locked = entry.get(field)
+        if not isinstance(locked, dict):
+            return "allow", "layer was not pinned"
+        recorded = locked.get(key)
+        if recorded is None:
+            return "deny", f"{field[:-1]} was not present at approval"
+        pinned = recorded.get("fingerprint") if isinstance(recorded, dict) else ""
+        if pinned != fingerprint:
+            return "deny", f"{field[:-1]} definition changed since approval"
+        return "allow", "matches approved fingerprint"
 
     def check_instructions(self, text: str) -> str:
         """Return the instructions to forward, replacing them if they changed.
@@ -268,18 +296,19 @@ class Guard:
         }
 
     def check_call(self, message: dict[str, Any]) -> dict[str, Any] | None:
-        """A refusal to send back, or None to forward the call.
-
-        The lockfile says this tool is the one that was approved. Policy says
-        what it may be asked to do, which is a different question: a
-        `delete_file` whose definition has not changed by a byte is still the
-        tool that deletes ~/.ssh/id_rsa if something talks the agent into
-        asking for that. Identity is checked first, including against the
-        last tools/list: a tool the catalogue withheld must not still run.
-        """
-        if message.get("method") != "tools/call":
-            return None
+        """A refusal to send back, or None to forward the call."""
+        method = str(message.get("method") or "")
         params = message.get("params")
+        if method == "prompts/get" and isinstance(params, dict):
+            return self._refuse_surface(
+                message, "prompts", str(params.get("name") or ""),
+                self._listed_prompts.get(str(params.get("name") or "")))
+        if method == "resources/read" and isinstance(params, dict):
+            uri = str(params.get("uri") or "")
+            return self._refuse_surface(
+                message, "resources", uri, self._listed_resources.get(uri))
+        if method != "tools/call":
+            return None
         if not isinstance(params, dict):
             return None
         name = str(params.get("name") or "")
@@ -327,6 +356,32 @@ class Guard:
         self.log(f"DENIED {name}: {reason}")
         return self._refusal_result(message, name, reason)
 
+    def _refuse_surface(self, message: dict[str, Any], field: str, key: str,
+                        spec: PromptSpec | ResourceSpec | None
+                        ) -> dict[str, Any] | None:
+        """Refuse prompts/get or resources/read the same way tools/call is."""
+        if spec is not None:
+            verdict, reason = self._surface_verdict(field, key, spec.fingerprint())
+        else:
+            entry = self._resolve_entry()
+            if entry is None:
+                verdict, reason = self._surface_verdict(field, key, "")
+            elif field not in entry:
+                return None
+            elif not isinstance(entry.get(field), dict) or key not in (entry.get(field) or {}):
+                verdict, reason = "deny", f"{field[:-1]} was not present at approval"
+            else:
+                return None
+        if verdict == "allow":
+            return None
+        if self.dry_run:
+            self.stats.calls_would_deny.append(f"{key}: identity")
+            self.log(f"WOULD DENY {key}: {reason}")
+            return None
+        self.stats.calls_denied.append(f"{key}: {reason}")
+        self.log(f"DENIED {key}: {reason}")
+        return self._refusal_result(message, key, reason)
+
     def _on_policy_error(self, message: dict[str, Any], name: str,
                          exc: BaseException) -> dict[str, Any] | None:
         self.stats.internal_errors.append(f"policy raised: {exc}")
@@ -360,7 +415,6 @@ class Guard:
         kept: list[dict[str, Any]] = []
         for raw in tools:
             if not isinstance(raw, dict):
-                kept.append(raw)
                 continue
             self.stats.tools_seen += 1
             tool = _tool_from_wire(self.server_name, raw)
@@ -394,6 +448,47 @@ class Guard:
                     f"reviewing the change."
                 )
                 blocked["inputSchema"] = {"type": "object", "properties": {}}
+                kept.append(blocked)
+        return kept
+
+    def filter_prompts(self, items: list[Any]) -> list[Any]:
+        return self._filter_surface(items, "prompts")
+
+    def filter_resources(self, items: list[Any]) -> list[Any]:
+        return self._filter_surface(items, "resources")
+
+    def _filter_surface(self, items: list[Any], field: str) -> list[Any]:
+        kept: list[Any] = []
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
+            if field == "prompts":
+                spec: PromptSpec | ResourceSpec = PromptSpec.from_wire(
+                    self.server_name, raw)
+                key = spec.name
+                self._listed_prompts[spec.name] = spec
+            else:
+                spec = ResourceSpec.from_wire(self.server_name, raw)
+                key = spec.uri
+                self._listed_resources[spec.uri] = spec
+            verdict, reason = self._surface_verdict(field, key, spec.fingerprint())
+            if verdict == "allow":
+                kept.append(raw)
+                continue
+            self.stats.tools_blocked.append(key)
+            if self.policy == "warn":
+                self.log(f"ALLOWED (policy=warn) {key}: {reason}")
+                kept.append(raw)
+            elif self.policy == "strip":
+                self.log(f"STRIPPED {key}: {reason}")
+            else:
+                self.log(f"BLOCKED {key}: {reason}")
+                blocked = dict(raw)
+                blocked["description"] = (
+                    f"[BLOCKED BY mcp-pin] This {field[:-1]} is not approved: "
+                    f"{reason}. It cannot be used. Run `mcp-pin approve --probe` "
+                    f"after reviewing the change."
+                )
                 kept.append(blocked)
         return kept
 
@@ -631,6 +726,13 @@ class Guard:
             if isinstance(result, dict):
                 if isinstance(result.get("tools"), list):
                     result["tools"] = self.filter_tools(result["tools"])
+                if isinstance(result.get("prompts"), list):
+                    result["prompts"] = self.filter_prompts(result["prompts"])
+                if isinstance(result.get("resources"), list):
+                    result["resources"] = self.filter_resources(result["resources"])
+                if isinstance(result.get("resourceTemplates"), list):
+                    result["resourceTemplates"] = self.filter_resources(
+                        result["resourceTemplates"])
                 # The initialize response carries `instructions`, which the
                 # spec permits a client to add to the system prompt.
                 if "instructions" in result and isinstance(result["instructions"], str):

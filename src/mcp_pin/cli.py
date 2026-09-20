@@ -359,14 +359,16 @@ def _approval_summary(lock: Lock) -> str:
     return ", ".join(parts)
 
 
-def _commit_lock(lock: Lock, previous: Lock, *, yes: bool) -> int:
+def _commit_lock(lock: Lock, previous: Lock, *, yes: bool,
+                 yes_tools: list[str] | None = None) -> int:
     """Write the pin, or refuse if something moved and nobody said --yes."""
-    from .review import changes, render
+    from .review import acknowledged, changes, render
     moved = [] if previous.is_empty else changes(previous, lock)
     if moved:
         print(render(moved), end="", file=sys.stderr)
-        if not yes:
-            print("mcp-pin: lock not written. Pass --yes after you have read the diff.",
+        if not acknowledged(moved, yes=yes, yes_tools=yes_tools):
+            print("mcp-pin: lock not written. Pass --yes after you have read the diff, "
+                  "or --yes-tool NAME for each drifted tool.",
                   file=sys.stderr)
             return EXIT_ERROR
     written = lock.save()
@@ -402,7 +404,8 @@ def cmd_approve(args: argparse.Namespace) -> int:
                 instructions=data.instructions, previous=previous,
                 probe_status=data.probe_status)
     lock.merge_unprobed(previous)
-    return _commit_lock(lock, previous, yes=bool(getattr(args, "yes", False)))
+    return _commit_lock(lock, previous, yes=bool(getattr(args, "yes", False)),
+                        yes_tools=list(getattr(args, "yes_tool", None) or []))
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
