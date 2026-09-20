@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fake_npm_cache import empty_npm_cache, fake_npm_cache  # noqa: E402
+from fake_npm_cache import (empty_npm_cache, fake_npm_cache,  # noqa: E402
+                            sri_for)
 from mcp_pin.findings import Severity  # noqa: E402
 from mcp_pin.guard import Guard, _client_to_server, _screen_outbound  # noqa: E402
 from mcp_pin.lockfile import Lock  # noqa: E402
@@ -412,12 +413,22 @@ class TestRegistryArtifactIsCheckedBeforeSpawn(unittest.TestCase):
         self.assertIn("has changed", str(reason))
 
     def test_a_matching_cached_tarball_starts(self) -> None:
+        """The cache has to genuinely verify, bytes included.
+
+        Written with a made-up SRI this passed while the verdict was actually
+        `absent` -- no blob behind the index entry -- so it proved that an
+        unverifiable artifact starts, which is a different test.
+        """
         from mcp_pin.guard import _pin_still_holds
 
-        guard, argv = self._guard({"npm:@scope/pkg@1.2.3": "sha512-approved"})
+        content = b"the approved tarball"
+        guard, argv = self._guard({"npm:@scope/pkg@1.2.3": sri_for(content)})
         with tempfile.TemporaryDirectory() as tmp:
-            with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", "sha512-approved"):
+            with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", content=content):
                 self.assertIsNone(_pin_still_holds(guard, argv))
+                # ... and it is verified, not merely unrefused.
+                self.assertIsNone(_pin_still_holds(guard, argv,
+                                                   require_integrity=True))
 
     def test_a_cold_cache_starts_unless_the_operator_asked_otherwise(self) -> None:
         """Refusing every launch on a machine that has not fetched the package
@@ -439,7 +450,8 @@ class TestRegistryArtifactIsCheckedBeforeSpawn(unittest.TestCase):
         import socket
         from mcp_pin.guard import _pin_still_holds
 
-        guard, argv = self._guard({"npm:@scope/pkg@1.2.3": "sha512-approved"})
+        content = b"the approved tarball"
+        guard, argv = self._guard({"npm:@scope/pkg@1.2.3": sri_for(content)})
         real = socket.socket
 
         def forbidden(*args, **kwargs):
@@ -448,7 +460,7 @@ class TestRegistryArtifactIsCheckedBeforeSpawn(unittest.TestCase):
         socket.socket = forbidden
         try:
             with tempfile.TemporaryDirectory() as tmp:
-                with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", "sha512-approved"):
+                with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", content=content):
                     self.assertIsNone(_pin_still_holds(guard, argv))
         finally:
             socket.socket = real
@@ -479,6 +491,69 @@ class TestRegistryArtifactIsCheckedBeforeSpawn(unittest.TestCase):
                         server_name="svc", quiet=True)
         self.assertEqual(2, code)
         self.assertIn("has changed", err.getvalue())
+
+
+
+class TestRequireIntegrityReachesTheLaunchPath(unittest.TestCase):
+    """The flag has to change more than a finding's severity.
+
+    A repo that gates CI on integrity while developer machines went on
+    launching unverified servers would have the loop open at the end that
+    matters. `scan` raising MCPA037 to high is the CI half; these are the
+    other half, driven through the real command line so the plumbing from
+    argparse to the pre-spawn check is covered and not just the function that
+    does the work.
+    """
+
+    def _lock_dir(self, tmp: str) -> Path:
+        spec = ServerSpec(name="svc", source=str(Path(tmp) / ".mcp.json"),
+                          client="test", transport="stdio", command="npx",
+                          args=["-y", "@scope/pkg@1.2.3"])
+        lock = Lock(path=Path(tmp) / ".mcp-pin.lock")
+        lock.record([spec], [], [])
+        lock.servers[spec.identity()]["integrity"] = {
+            "npm:@scope/pkg@1.2.3": "sha512-approved"}
+        lock.save()
+        return Path(tmp) / ".mcp-pin.lock"
+
+    def _guard(self, lock_path: Path, *flags: str, cache: str) -> subprocess.CompletedProcess:
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), NO_COLOR="1")
+        env["npm_config_cache"] = cache
+        return subprocess.run(
+            [sys.executable, "-m", "mcp_pin", "guard",
+             "--name", "svc", "--lock", str(lock_path), *flags,
+             "--", "npx", "-y", "@scope/pkg@1.2.3"],
+            capture_output=True, text=True, timeout=90, env=env,
+            stdin=subprocess.DEVNULL, cwd=str(ROOT))
+
+    def test_an_unverifiable_artifact_refuses_to_start_with_the_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_path = self._lock_dir(tmp)
+            cold = str(Path(tmp) / "no-cache-here")
+            refused = self._guard(lock_path, "--require-integrity", cache=cold)
+        self.assertEqual(2, refused.returncode, refused.stderr)
+        self.assertIn("could not be verified", refused.stderr)
+
+    def test_without_the_flag_the_same_launch_is_allowed(self) -> None:
+        """Otherwise every cold cache refuses, and the pin gets removed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_path = self._lock_dir(tmp)
+            cold = str(Path(tmp) / "no-cache-here")
+            allowed = self._guard(lock_path, cache=cold)
+        # It gets past the pin and fails on npx not existing, or runs and ends
+        # at EOF on stdin. Either way it is not the pin refusing.
+        self.assertNotIn("could not be verified", allowed.stderr)
+
+    def test_the_gateway_takes_the_same_flag(self) -> None:
+        """Parity: the component the README recommends cannot be the weaker
+        one, and this is a flag that only helps if it is everywhere."""
+        from mcp_pin.cli import build_parser
+        for command in ("scan", "guard", "gateway"):
+            with self.subTest(command=command):
+                args = build_parser().parse_args(
+                    [command, "--require-integrity"]
+                    + (["--", "x"] if command == "guard" else []))
+                self.assertTrue(getattr(args, "require_integrity", False))
 
 
 if __name__ == "__main__":

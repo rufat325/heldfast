@@ -169,8 +169,8 @@ newline there forges a whole row.
 ```
 
 The action installs itself from the checked-out copy, uploads SARIF to code
-scanning and writes a job summary. Inputs are in [action.yml](action.yml).
-Private reports: [SECURITY.md](SECURITY.md).
+scanning and writes a job summary. Inputs are in [action.yml](../action.yml).
+Private reports: [SECURITY.md](../SECURITY.md).
 
 ### One endpoint in front of everything (`gateway`)
 
@@ -441,7 +441,7 @@ excluded. `--no-ignore` turns it off.
 
 ## Rules
 
-Full catalog with rationale, examples and known false positives: [docs/rules.md](docs/rules.md).
+Full catalog with rationale, examples and known false positives: [docs/rules.md](rules.md).
 `mcp-pin explain MCPA015` prints any single rule.
 
 The catalog is generated from the code, so it cannot drift from it. This page used to repeat it as a third copy of the same table, which is a copy nothing checks -- and a table nothing checks is a table describing an older version of the tool.
@@ -558,9 +558,16 @@ mcp-pin guard: approved artifact npm:@scope/pkg@1.2.3 has changed: npm cache
 holds sha512-ZmFrZQ== for this version; sha512-cmVhbA== was approved
 ```
 
-That one reads the artifact your package manager is already holding — npm's `_cacache` index,
-pip's `http-v2` body — and opens no socket. A registry lookup there would put a DNS timeout
-between you and your agent starting, and would tell a registry every time a server launches.
+That one reads the artifact your package manager is already holding and opens no socket. A
+registry lookup there would put a DNS timeout between you and your agent starting, and would
+tell a registry every time a server launches.
+
+It reads both halves of the cache. npm's `_cacache` keeps an index entry naming an integrity
+hash and the tarball itself under `content-v2`; the blob is hashed rather than trusted, because
+the index is a *claim about* the content and the cache is writable by the same user who owns
+the server's files. An index entry edited to name the approved hash with something else beside
+it would otherwise read as verified. pip's `http-v2` body is the wheel itself, so that half was
+always bytes. Hashing costs about 3ms per artifact.
 
 Three answers, and they are kept apart on purpose:
 
@@ -568,20 +575,37 @@ Three answers, and they are kept apart on purpose:
 |---|---|---|
 | verified | the cache holds the approved bytes | starts |
 | changed | the cache holds different bytes | refuses, always |
-| could not verify | nothing on disk and no registry answer | starts, and says so; refuses under `--require-integrity` |
+| could not verify | nothing on disk that can answer | starts, and says so; refuses under `--require-integrity` |
 
-The last row is the one that is easy to get wrong. If "could not verify" printed like
-"verified", anyone able to break the lookup would buy silence, and an air-gapped CI runner
-would buy the same silence by accident. So it is MCPA037, low by default so an offline runner
-is not broken, and `--require-integrity` makes it high — which `--fail-on high` then fails on.
+**`--require-integrity` is accepted by `scan`, `guard` and `gateway`, and changes all three.**
+On a scan it raises MCPA037 to high, which the default `--fail-on high` then fails on. On
+`guard` and `gateway` it changes the launch path: an artifact that cannot be verified is a
+refusal to start, not a warning. Gating CI on integrity while developer machines launched
+unverified servers anyway would leave the loop open at the end that matters, so the flag does
+both. Without it, "could not verify" starts and says so — because refusing every launch on a
+machine that has not fetched the package yet makes the pin unusable, and an unusable pin gets
+removed.
+
+The most common way to reach that row is an empty cache. On a fresh machine or a clean CI
+runner nothing is cached, `npx -y` fetches at spawn, and what arrives is unseen until it has
+already run. That is "could not verify", and it is why the flag exists rather than being the
+default.
 
 `--safe` promises to execute nothing and connect to nothing. It therefore skips the registry
 lookup entirely, and `coverage` reports the registry pin as unverified for that run rather
 than quietly skipping it.
 
-What this does not cover: the dependency tree the package installs beneath itself. Pinning the
-top-level tarball leaves those floating, and a compromised transitive dependency is the more
-common real path.
+Two things this does not cover, stated plainly because the vocabulary of pinning invites
+more credit than it earns:
+
+- **It proves the cache agrees with the approval, not that the executed bytes do.** The check
+  happens before the spawn and reads the disk. A cache written in the window after it, or a
+  package manager that ignores its cache and refetches, is outside what any pre-spawn read
+  can see. What it does buy is that the cheap attack — rewrite what is already on disk —
+  stops being silent.
+- **The dependency tree the package installs beneath itself is not pinned.** Pinning the
+  top-level tarball leaves those floating, and a compromised transitive dependency is the
+  more common real path.
 
 ## Constraining what a tool may be asked to do
 
@@ -1201,11 +1225,11 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-902 tests, stdlib unittest, nothing to install.
+994 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
-[`docs/GUARANTEES.md`](docs/GUARANTEES.md). Continue work from
-[`docs/HANDOFF.md`](docs/HANDOFF.md).
+[`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from
+[`docs/HANDOFF.md`](HANDOFF.md).
 
 
 Fixtures are generated rather than committed because some contain invisible Unicode, which

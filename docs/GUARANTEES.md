@@ -47,7 +47,7 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-SURFACE | If the lock recorded prompts or resources, `guard` filters `prompts/list` and `resources/list` and refuses `prompts/get` / `resources/read` the same way it does tools. A lock that never recorded that layer is not pretend-enforced. | `tests/test_guard.py`, `tests/test_mutation.py` |
 | T-YES-CRITICAL | `approve --yes` does not overwrite a critical-graded drift. That change must be named with `--yes-tool`. | `tests/test_review.py`, `tests/test_mutation.py` |
 | T-INTEGRITY | If the lock recorded a registry tarball hash, a different live hash fires MCPA036. | `tests/test_integrity.py`, `tests/test_mutation.py` |
-| T-CACHE | If the lock recorded a registry artifact hash, `guard` and `gateway` refuse to start the child when the local package cache holds different bytes for it. Checked offline, before the spawn. | `tests/test_pkgcache.py`, `tests/test_guard.py`, `tests/test_gateway_parity.py`, `tests/test_mutation.py` |
+| T-CACHE | If the lock recorded a registry artifact hash, `guard` and `gateway` refuse to start the child when the local package cache holds different bytes for it. The cached content is hashed, not its index's claim about itself. Checked offline, before the spawn. | `tests/test_pkgcache.py`, `tests/test_guard.py`, `tests/test_gateway_parity.py`, `tests/test_mutation.py` |
 | T-UNVERIFIED | An artifact that could not be checked is reported as MCPA037 and never as verified. `--require-integrity` makes it high, and makes `guard` and `gateway` refuse to start. | `tests/test_pkgcache.py`, `tests/test_attack_corpus.py`, `tests/test_mutation.py` |
 | T-SAFE-OFFLINE | `--safe` opens no socket. No registry is contacted by a scan or an approval under it, and what that costs is stated rather than silently skipped. | `tests/test_integrity.py`, `tests/test_mutation.py` |
 | T-LIST-CHANGED | `notifications/tools/list_changed` marks the backend stale; the next `tools/list` or call re-fetches and re-screens. | `tests/test_gateway_parity.py`, `tests/test_mutation.py` |
@@ -83,7 +83,12 @@ We do not claim these. Do not imply them in output.
 - Pinning the dependency tree a registry package installs beneath itself.
   MCPA036 pins the top-level artifact only
 - Verifying a registry artifact that no local package cache holds and no
-  registry will answer for. That is reported (MCPA037), not guessed
+  registry will answer for. That is reported (MCPA037), not guessed. An empty
+  cache is the common case on a fresh machine or a clean runner
+- Proving that the bytes a package manager finally executes are the verified
+  ones. T-CACHE compares the cache against the approval before the spawn; a
+  cache written after that check, or a package manager that refetches instead
+  of reading its cache, is outside what reading the disk can see
 - Stopping a client that talks to the server *beside* the gateway (MCPA032 reports it)
 - Proving a regex matches "all prompt injection"
 

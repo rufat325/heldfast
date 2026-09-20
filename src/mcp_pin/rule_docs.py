@@ -568,14 +568,21 @@ DOCS: dict[str, RuleDoc] = {
                 'unchecked',
         fix="Re-run where the registry is reachable, or on a machine whose package "
             "cache holds the artifact. A build that must not pass on 'could not "
-            "see' should pass `--require-integrity`, which makes this high and "
-            "fails the default `--fail-on high`. `guard` and `gateway` take the "
-            "same flag and refuse to start rather than run something unverified.",
+            "see' should pass `--require-integrity`. All three commands honour it "
+            "and it changes more than a severity: on `scan` it raises this to high "
+            "so the default `--fail-on high` fails, and on `guard` and `gateway` it "
+            "changes the launch path, refusing to start rather than running "
+            "something unverified. Gating CI on integrity while developer machines "
+            "still launched unverified servers would leave the loop open at the "
+            "end that matters.",
         wrong_when="This is not a report that anything changed. The recorded hash "
-                   "still stands and the approval is still the approval. On a "
-                   "deliberately offline runner it is expected, and low by "
-                   "default for that reason. `--safe` guarantees no connection is "
-                   "made, so under it this fires for every pinned registry launch.",
+                   "still stands and the approval is still the approval. The "
+                   "commonest way to reach it is an empty cache -- a fresh machine "
+                   "or a clean CI runner has nothing to compare, and `npx -y` "
+                   "fetches at spawn -- which is why it is low by default rather "
+                   "than a refusal. On a deliberately offline runner it is "
+                   "expected. `--safe` guarantees no connection is made, so under "
+                   "it this fires for every pinned registry launch.",
     ),
 }
 

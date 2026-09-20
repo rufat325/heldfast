@@ -164,25 +164,35 @@ class TestRuleDocs(unittest.TestCase):
         for r in all_rules():
             self.assertIn(f"## {r.id}", md)
 
-    def test_the_readme_test_count_is_true(self) -> None:
+    def test_every_stated_test_count_is_true(self) -> None:
         """It said 275 while the suite had grown to 286. A number in a README
         that nothing checks is a number that goes quietly wrong, which is the
         same reason the rule count is asserted against the registry rather
         than typed into a test.
 
+        It then went wrong a second way: the README was checked and the manual
+        was not, so the two documents stated different counts (988 and 902)
+        and both looked authoritative. A hand-maintained number in two places
+        is the duplicated rule table again. So every document that states one
+        is checked, and there is no document this test does not look at.
+
         Skipped tests are still loaded, so this count does not move between
         platforms.
         """
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        stated = re.search(r"(\d+) tests, stdlib unittest", readme)
-        self.assertIsNotNone(stated, "the README no longer states a test count")
-
         actual = unittest.defaultTestLoader.discover(str(ROOT / "tests")).countTestCases()
-        self.assertEqual(
-            int(stated.group(1)), actual,
-            "the README says %s tests and there are %s"
-            % (stated.group(1), actual),
-        )
+        docs = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]
+        found = 0
+        for path in docs:
+            text = path.read_text(encoding="utf-8")
+            for stated in re.finditer(r"(\d+) tests, stdlib unittest", text):
+                found += 1
+                with self.subTest(document=path.name):
+                    self.assertEqual(
+                        actual, int(stated.group(1)),
+                        "%s says %s tests and there are %s"
+                        % (path.name, stated.group(1), actual),
+                    )
+        self.assertGreater(found, 0, "no document states a test count any more")
 
     def test_the_action_example_is_not_floating_main(self) -> None:
         """@main is whoever pushed last."""
@@ -366,8 +376,32 @@ class TestTheReadmeMatchesTheCode(unittest.TestCase):
                     [], rows,
                     f"{name} lists {len(rows)} rules by hand; link to "
                     f"docs/rules.md instead, which is generated")
-                self.assertIn("docs/rules.md", text,
-                              f"{name} does not point at the rule catalog")
+                self.assertRegex(
+                    text, r"\]\((?:docs/)?rules\.md\)",
+                    f"{name} does not link to the rule catalog")
+
+    def test_every_relative_link_in_a_document_resolves(self) -> None:
+        """Five links in the manual pointed at nothing.
+
+        They were written as if from the repository root while the file lives
+        in `docs/`, so `docs/rules.md` resolved to `docs/docs/rules.md` and
+        `SECURITY.md` to a file that is not there. Nothing noticed, because a
+        broken relative link renders as a link. A test that asserted one of
+        those paths was part of what kept it broken.
+        """
+        docs = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]
+        broken = []
+        for path in docs:
+            text = path.read_text(encoding="utf-8")
+            for match in re.finditer(r"\]\(([^)\s]+)\)", text):
+                target = match.group(1)
+                if target.startswith(("http://", "https://", "#", "mailto:")):
+                    continue
+                resolved = (path.parent / target.split("#", 1)[0]).resolve()
+                if not resolved.exists():
+                    broken.append(f"{path.name} -> {target}")
+        self.assertEqual([], broken, "links that resolve to nothing:\n  "
+                                     + "\n  ".join(broken))
 
     def test_the_client_count_is_true(self) -> None:
         match = re.search(r"Finds configs for (\d+) clients", self._readme())

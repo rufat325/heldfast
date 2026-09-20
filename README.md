@@ -94,9 +94,12 @@ and fetches for itself at spawn time, so asking the registry at scan time is
 a report, not a pin — before starting the child, `guard` and `gateway` also
 compare the artifact your package manager is *holding* (npm's `_cacache`,
 pip's wheel cache) against the approved hash, offline, and refuse to start
-when it differs. A cold cache is not a pass: it says so, and
-`--require-integrity` turns "could not verify" into a refusal for runners
-that must not guess.
+when it differs. A cold cache is not a pass: it says so. `--require-integrity`
+is honoured by `scan`, `guard` and `gateway` alike — high severity on a
+scan, and a refusal to start on the two that launch things, so gating CI
+on integrity does not leave developer machines running unverified servers.
+An empty cache is the common case on a fresh machine, which is why that is
+a flag and not the default.
 
 On npm and PyPI a published version cannot be replaced, so the case MCPA036
 is for is everything else in the path: a private registry, a mirror or
@@ -177,7 +180,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-988 tests, stdlib unittest, nothing to install.
+994 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

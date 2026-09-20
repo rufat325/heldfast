@@ -13,20 +13,36 @@ This module closes the part of that window which can be closed without a
 network call: both package managers keep the artifact on disk, and both name
 it in a way that can be derived rather than searched.
 
-npm's `_cacache` stores an index entry per request URL, sharded as
-`index-v5/<h[0:2]>/<h[2:4]>/<h[4:]>` where `h` is sha256 of the cache key
-`make-fetch-happen:request-cache:<tarball url>`. The entry's JSON carries the
-SRI of the body it holds -- which is the same string npm's registry publishes
-as `dist.integrity`. Comparing those two needs no network and no npm.
+npm's `_cacache` has two halves and both are read. An index entry per request
+URL, sharded as `index-v5/<h[0:2]>/<h[2:4]>/<h[4:]>` where `h` is sha256 of
+the cache key `make-fetch-happen:request-cache:<tarball url>`, carries the SRI
+of the body it holds -- the same string npm's registry publishes as
+`dist.integrity`. The body itself lives under
+`content-v2/<algo>/<hex[0:2]>/<hex[2:4]>/<hex[4:]>`, keyed by that digest
+decoded from base64 to hex, and it is hashed here rather than trusted.
+
+Reading only the index would compare the cache's *claim* about its content,
+and the cache is writable by the same user who owns everything else on the
+machine: an index entry can be edited to name the approved hash while the blob
+beside it is something else. npm would fail that on read, but this module
+would have answered "verified" first, and a verdict that can be wrong is not a
+pin. Hashing the blob costs 2.7ms per artifact, measured over 777 of them.
 
 pip's `http-v2` stores the response body beside its metadata, sharded as
 `<h[0]>/<h[1]>/<h[2]>/<h[3]>/<h[4]>/<h>.body` where `h` is sha224 of the
 artifact URL. The body is the wheel, byte for byte, so its sha256 is the
-digest PyPI publishes.
+digest PyPI publishes. That half was always read as bytes.
 
 Both derivations were confirmed against the real caches on a developer
-machine -- 777 npm tarball entries, and three pip wheels whose cached bytes
-matched the sha256 PyPI publishes for them -- rather than read off a blog.
+machine -- all 777 npm tarball entries verified down to their content blobs,
+and three pip wheels whose cached bytes matched the sha256 PyPI publishes for
+them -- rather than read off a blog.
+
+What is still *not* proven, and is deliberately not claimed: that the bytes
+the package manager finally executes are these bytes. This says the cache
+agrees with the approval at the moment of the check. A cache entry written
+between the check and the fetch, or a package manager that ignores its cache,
+is outside what any pre-spawn read of the disk can see.
 
 What this cannot do is in `state`:
 
@@ -43,6 +59,8 @@ strong claim asks for it with `require=True` and gets a refusal instead.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -162,6 +180,50 @@ def _sri_matches(approved: str, found: str) -> bool | None:
     return all(mine[algo] == theirs[algo] for algo in shared)
 
 
+def content_path(root: Path, sri: str) -> Path | None:
+    """Where cacache keeps the bytes for one SRI hash.
+
+    `content-v2/<algo>/<hex[0:2]>/<hex[2:4]>/<hex[4:]>`, where the hex is the
+    base64 digest decoded. Confirmed against 777 real entries: every blob was
+    present and every one hashed to the SRI its index claimed.
+    """
+    algo, _, b64 = str(sri or "").split()[0].partition("-") if sri.strip() else ("", "", "")
+    if not algo or not b64:
+        return None
+    try:
+        hexed = base64.b64decode(b64, validate=True).hex()
+    except (ValueError, binascii.Error):
+        return None
+    if len(hexed) < 5 or algo not in hashlib.algorithms_available:
+        return None
+    return root / "content-v2" / algo / hexed[0:2] / hexed[2:4] / hexed[4:]
+
+
+def _content_holds(root: Path, sri: str) -> bool | None:
+    """Do the cached bytes actually hash to `sri`? None if they are not there.
+
+    Without this the check compares the index's *claim* about the content,
+    and the cache is writable by whoever owns the rest of the machine. An
+    index entry can be edited to name the approved hash while the blob beside
+    it is something else; npm would fail that on read, but this module would
+    have said "verified" first, and a verdict that can be wrong is not a pin.
+    """
+    blob = content_path(root, sri)
+    if blob is None:
+        return None
+    algo = sri.split()[0].partition("-")[0]
+    try:
+        if not blob.is_file() or blob.stat().st_size > MAX_BODY:
+            return None
+        digest = hashlib.new(algo)
+        with blob.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except (OSError, ValueError):
+        return None
+    return base64.b64encode(digest.digest()).decode() == sri.split()[0].partition("-")[2]
+
+
 def _check_npm(key: str, approved: str, name: str, version: str,
                url: str | None) -> CacheCheck:
     target = url or npm_tarball_url(name, version)
@@ -176,13 +238,26 @@ def _check_npm(key: str, approved: str, name: str, version: str,
             return CacheCheck(key, "absent",
                               "the cached entry uses a different hash algorithm, "
                               "so it cannot be compared")
-        if verdict:
-            return CacheCheck(key, "verified",
-                              f"npm cache holds these bytes ({found[:24]})")
-        return CacheCheck(
-            key, "changed",
-            f"npm cache holds {found[:24]} for this version; "
-            f"{approved[:24]} was approved")
+        if not verdict:
+            return CacheCheck(
+                key, "changed",
+                f"npm cache holds {found[:24]} for this version; "
+                f"{approved[:24]} was approved")
+        # The index agrees with the approval. Now read the bytes it points at,
+        # so the answer is about content rather than about a claim.
+        holds = _content_holds(root, found)
+        if holds is None:
+            return CacheCheck(
+                key, "absent",
+                "the npm cache names these bytes but does not hold them; the "
+                "next launch fetches them")
+        if not holds:
+            return CacheCheck(
+                key, "changed",
+                "the npm cache holds bytes that do not hash to the entry "
+                f"beside them ({found[:24]}), so they are not the approved ones")
+        return CacheCheck(key, "verified",
+                          f"npm cache holds these bytes ({found[:24]})")
     return CacheCheck(key, "absent",
                       "no npm cache entry for this tarball; the next launch "
                       "fetches it")
