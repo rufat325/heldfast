@@ -352,13 +352,19 @@ class TestARemedyMustBePossible(unittest.TestCase):
         lock.record([spec], [], [])
         return layers(lock, [spec])[spec.identity()]["enforced"]
 
-    def test_a_hosted_server_is_not_told_to_run_a_stdio_command(self) -> None:
+    def test_a_hosted_server_is_offered_the_gateway_and_not_the_guard(self) -> None:
+        """The remedy changed the day the gateway learned HTTP.
+
+        Before that it said "no fix available", which was honest. Now the fix
+        exists and the row has to say so -- but it still must not name `guard`,
+        which wraps a child process and has none to wrap.
+        """
         layer = self._enforced(spec("hosted", "", [], url="https://x.example/sse",
                                     transport="sse"))
         self.assertEqual("no", layer.state)
-        self.assertNotIn("mcp-pin guard", layer.remedy)
-        self.assertNotIn("mcp-pin gateway`", layer.remedy)
-        self.assertIn("stdio only", layer.detail)
+        self.assertIn("mcp-pin gateway", layer.remedy)
+        self.assertIn("cannot", layer.remedy)
+        self.assertNotIn("no fix available", layer.remedy)
 
     def test_a_local_server_still_gets_the_real_remedy(self) -> None:
         layer = self._enforced(spec("local", "node", ["s.js"]))

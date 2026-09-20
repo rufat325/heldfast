@@ -339,6 +339,25 @@ class TestTheParityItself(unittest.TestCase):
                 self.assertIn(screen, source,
                               f"gateway.py never calls guard.{screen}")
 
+    def test_no_transport_can_forget_the_pre_spawn_gate(self) -> None:
+        """The gate is inherited, not repeated.
+
+        When the HTTP transport arrived it copied the pin check, and the mutant
+        catalogue caught it immediately: the snippet occurred twice, so no
+        single edit could be attributed. Duplicating it is also how the gateway
+        ended up missing three screens the guard had. `start` is final now and
+        each transport implements `_start`, so a fourth transport that forgets
+        the gate cannot exist.
+        """
+        from mcp_pin.gateway import Backend, HttpBackend
+
+        self.assertIs(Backend.start, HttpBackend.start,
+                      "HttpBackend overrides start(), which skips the pin gate")
+        for kind in (Backend, HttpBackend):
+            with self.subTest(transport=kind.__name__):
+                self.assertIn("_start", kind.__dict__,
+                              f"{kind.__name__} implements no transport half")
+
     def test_the_gateway_refuses_everything_the_guard_refuses_before_spawn(self) -> None:
         """Parity on the launch path, not just on the message path.
 

@@ -176,8 +176,16 @@ def _registry(entry: dict | None, spec: Any, offline: bool = False) -> Layer:
                          "do not start this server until you know why")
         good = [c for c in checks if c.state == "verified"]
         if good and len(good) == len(checks):
+            # How far the pin reaches, from the artifact's own manifest. Said
+            # here rather than as a finding: about seven dependency specs in
+            # eight float across real packages, so a rule would fire on
+            # everyone forever and get switched off -- MCPA003 taught that at
+            # 69%. It is a fact about the guarantee, which is this page's job.
+            from .pkgcache import dependency_reach
+            reach = dependency_reach(recorded, urls if isinstance(urls, dict) else None)
+            extra = f"; {reach.describe()}" if reach.read else ""
             return Layer("registry pin", "yes",
-                         f"{key} verified against the local package cache")
+                         f"{key} verified against the local package cache{extra}")
         why = next((c.detail for c in checks if c.state != "verified"), "")
         if offline:
             why = f"{why}; --safe was given, so no registry was contacted"
@@ -265,18 +273,19 @@ def _in_path(key: str, entry: dict | None, spec: Any, fronting: set) -> Layer:
             "a gateway is configured and this server is reachable around it (MCPA032)",
             "remove the direct entry; the gateway already exposes its tools")
     if spec is not None and spec.is_remote:
-        # Both remedies below are stdio-only, so offering them here would send
-        # the operator to fetch two commands that cannot wrap a `url`. A
-        # remedy that cannot be carried out is worse than none: it reads as
-        # "you forgot something" when the honest answer is "this tool does not
-        # do it yet".
+        # `guard` wraps a child process and cannot wrap a `url`, so naming it
+        # here would send the operator after a command that cannot work. The
+        # gateway can: it speaks Streamable HTTP to a hosted backend and makes
+        # the same decisions it makes for a local one. This row said "no fix
+        # available" until that existed, and saying so was better than naming
+        # an impossible one -- but it has to change the day the fix lands.
         return Layer(
             "enforced", "no",
-            "hosted transport; `guard` and `gateway` are stdio only, so nothing "
-            "checks the lockfile at the call site",
-            "no fix available today -- this server is reviewed and pinned but "
-            "not enforced at runtime. An HTTP backend for the gateway is the "
-            "intended path")
+            "the client talks to this hosted server directly; nothing checks "
+            "the lockfile at the call site",
+            "point the client at `mcp-pin gateway`, which fronts hosted servers "
+            "over HTTP. `mcp-pin guard` cannot: it wraps a child process and "
+            "there is none")
     return Layer(
         "enforced", "no",
         "the client talks to this server directly; nothing checks the lockfile at runtime",

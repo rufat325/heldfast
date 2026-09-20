@@ -56,6 +56,7 @@ from .identity import Identity, UnknownIdentity
 from .lifetime import bind_child, posix_preexec
 from .lockfile import Lock
 from .model import ServerSpec
+from .probe import SESSION_HEADER
 
 PROTOCOL_VERSION = "2026-07-28"
 LEGACY_PROTOCOL_VERSION = "2024-11-05"
@@ -114,10 +115,13 @@ class Backend:
     def name(self) -> str:
         return self.spec.name
 
-    def start(self) -> bool:
-        import os
-        import shutil
+    def pin_reason(self) -> str | None:
+        """Why this backend must not be started, or None.
 
+        Shared by both transports. For a remote backend every recorded value
+        is empty and this is a no-op, which is the honest answer: there is no
+        local artifact to hash and no argv to compare.
+        """
         from .artifacts import mismatch
         from .lockfile import launch_mismatch
         from .pkgcache import refusal
@@ -125,13 +129,28 @@ class Backend:
         # Offline, and on the launch path on purpose: the registry answer is
         # a scan-time opinion, while the package cache holds the bytes this
         # spawn is about to run.
-        reason = (mismatch(self.recorded_artifacts)
-                  or launch_mismatch(self.approved_launch, self.spec.argv)
-                  or refusal(self.recorded_integrity, self.artifact_urls,
-                             require=self.require_integrity))
+        return (mismatch(self.recorded_artifacts)
+                or launch_mismatch(self.approved_launch, self.spec.argv)
+                or refusal(self.recorded_integrity, self.artifact_urls,
+                           require=self.require_integrity))
+
+    def start(self) -> bool:
+        """Refuse on a moved pin, then hand over to the transport.
+
+        Deliberately final: the pin check lives here once and each transport
+        implements `_start`. Repeating the check per transport is how the
+        gateway ended up missing three screens the guard had, and a new
+        transport that forgot it would fail open in the one place that matters.
+        """
+        reason = self.pin_reason()
         if reason:
             self.error = reason
             return False
+        return self._start()
+
+    def _start(self) -> bool:
+        import os
+        import shutil
 
         if not self.spec.command:
             self.error = "no command configured"
@@ -269,6 +288,109 @@ class Backend:
                     pass
 
 
+
+class HttpBackend(Backend):
+    """A hosted server, reached over Streamable HTTP instead of a pipe.
+
+    `guard` wraps a child process, so a server configured with a `url` has
+    nothing for it to sit between -- which left hosted MCP scanned and pinned
+    but never enforced at the call site. That is the wrong half to be missing,
+    because hosted is where the ecosystem is going.
+
+    Nothing about the gateway's decisions was ever tied to the child being
+    local: it resolves the lock entry, filters the catalogue, screens the
+    result and counts the call, all on messages. Only the transport was tied,
+    so only the transport is replaced here. Every screen the stdio path gets,
+    this gets, because the Gateway applies them to whatever `request` returns.
+
+    Two honest differences from the stdio path, both in the direction of less
+    reachable rather than less checked:
+
+    * **No server-initiated requests.** Sampling, elicitation and roots arrive
+      on a long-lived GET stream this does not open, so a hosted server cannot
+      ask the client for anything. The channel is absent rather than
+      unscreened. The same shapes arriving *inside a result* are screened as
+      usual, because those come back in the POST reply.
+    * **No lifetime binding.** There is no child to outlive us.
+    """
+
+    def __init__(self, spec: ServerSpec, timeout: float = 30.0, **kw: Any) -> None:
+        super().__init__(spec, timeout, **kw)
+        self.session: str = ""
+
+    def _headers(self) -> dict[str, str]:
+        out = dict(self.spec.headers or {})
+        if self.session:
+            out[SESSION_HEADER] = self.session
+        return out
+
+    def _start(self) -> bool:
+        if not self.spec.url:
+            self.error = "no url configured"
+            return False
+        if not self.spec.url.lower().startswith("https://"):
+            # The gateway is the one place that sees every call, so it is the
+            # last place that should carry them over a transport somebody can
+            # rewrite. MCPA007 reports this on a scan; refusing here means a
+            # reviewed lockfile cannot be enforced over cleartext by accident.
+            from .rules.transport import _host_of, is_loopback
+            if not is_loopback(_host_of(self.spec.url)):
+                self.error = ("refusing to front a non-loopback server over "
+                              "cleartext http; see MCPA007")
+                return False
+
+        reply = self.request("initialize", {
+            "protocolVersion": LEGACY_PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {"name": "mcp-pin-gateway", "version": "0.1.0"},
+        })
+        if reply is None or "error" in reply:
+            self.error = "did not answer initialize"
+            return False
+        self.instructions = str((reply.get("result") or {}).get("instructions") or "")
+        self.notify("notifications/initialized", {})
+        self._adopt_tools(self.request("tools/list", {}))
+        return True
+
+    def _exchange(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        from .probe import post_rpc
+
+        try:
+            payload, headers = post_rpc(str(self.spec.url), self._headers(),
+                                        message, self.timeout)
+        except Exception as exc:  # noqa: BLE001 - any transport fault is the same answer
+            self.error = f"request failed: {exc}"
+            return None
+        # The session id arrives on the initialize response and is required on
+        # everything after it. Missing it produces a server that works once.
+        for key, value in headers.items():
+            if key.lower() == SESSION_HEADER.lower() and value:
+                self.session = value
+        return payload
+
+    def notify(self, method: str, params: dict[str, Any]) -> None:
+        self._exchange({"jsonrpc": "2.0", "method": method, "params": params})
+
+    def request(self, method: str, params: dict[str, Any]) -> dict[str, Any] | None:
+        with self._lock:
+            self._id += 1
+            payload = self._exchange({"jsonrpc": "2.0", "id": self._id,
+                                      "method": method, "params": params})
+        if payload is None:
+            return None
+        # A notification the server piggy-backs on a reply still has to be
+        # seen: `notifications/tools/list_changed` is the one moment a rug pull
+        # announces itself, and dropping it here would be the same bug the
+        # stdio read loop already had.
+        if "id" not in payload and payload.get("method") and self.on_unsolicited:
+            answer = self.on_unsolicited(self.name, payload)
+            return answer if answer is not None else None
+        return payload
+
+    def close(self) -> None:
+        return None
+
+
 class Gateway:
     """Fronts several backends, enforcing the lockfile across all of them."""
 
@@ -318,9 +440,14 @@ class Gateway:
                          f"Run `mcp-pin approve --probe`, or pass "
                          f"--allow-unapproved.")
                 continue
-            backend = Backend(spec, timeout=timeout,
-                              isolate_env=isolate_env,
-                              share_env=share_env)
+            # The transport is the only thing that varies. Everything the
+            # gateway decides is decided on messages, so a hosted server gets
+            # the same catalogue filter, the same result screen and the same
+            # call budget as a local one.
+            kind = HttpBackend if spec.is_remote else Backend
+            backend = kind(spec, timeout=timeout,
+                           isolate_env=isolate_env,
+                           share_env=share_env)
             entry = guard._resolve_entry() or {}
             recorded = entry.get("artifacts")
             backend.recorded_artifacts = recorded if isinstance(recorded, dict) else {}

@@ -385,8 +385,19 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0,
 # HTTP / SSE
 # ---------------------------------------------------------------------------
 
-def _post_jsonrpc(url: str, headers: dict[str, str], payload: dict[str, Any],
-                  timeout: float) -> dict[str, Any]:
+SESSION_HEADER = "Mcp-Session-Id"
+
+
+def post_rpc(url: str, headers: dict[str, str], payload: dict[str, Any],
+             timeout: float) -> tuple[dict[str, Any], dict[str, str]]:
+    """One JSON-RPC exchange over Streamable HTTP: (reply, response headers).
+
+    Public because the gateway speaks to remote backends through it. Keeping
+    one implementation matters more than the few lines it saves: the SSE
+    framing below is the sort of thing that gets fixed in one copy and not the
+    other, and this repo has already paid for a client and a server drifting
+    apart on protocol detail.
+    """
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST")
     req.add_header("Content-Type", "application/json")
@@ -395,15 +406,22 @@ def _post_jsonrpc(url: str, headers: dict[str, str], payload: dict[str, Any],
         req.add_header(k, v)
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 - user-supplied URL by design
         raw = resp.read().decode("utf-8", errors="replace")
+        got = {k: v for k, v in resp.headers.items()}
     raw = raw.strip()
     if raw.startswith("event:") or raw.startswith("data:"):
         # Server-sent events framing: take the last data: payload.
         chunks = [ln[5:].strip() for ln in raw.splitlines() if ln.startswith("data:")]
         raw = chunks[-1] if chunks else "{}"
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
     except json.JSONDecodeError:
-        return {}
+        return {}, got
+    return (parsed if isinstance(parsed, dict) else {}), got
+
+
+def _post_jsonrpc(url: str, headers: dict[str, str], payload: dict[str, Any],
+                  timeout: float) -> dict[str, Any]:
+    return post_rpc(url, headers, payload, timeout)[0]
 
 
 def _describe_connection_error(exc: Exception) -> str:
@@ -431,15 +449,24 @@ def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
     if not s.url:
         return ProbeResult(s.name, [], "no url configured")
     try:
-        init = _post_jsonrpc(
+        init, headers = post_rpc(
             s.url, s.headers,
             {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": _initialize_params()},
             timeout,
         )
         if "error" in init:
             return ProbeResult(s.name, [], f"initialize failed: {init['error']}")
+        # Streamable HTTP hands out a session on initialize and requires it on
+        # everything after. Without this the probe worked against servers that
+        # do not bother and failed on every server that does -- which reads as
+        # "the endpoint is broken" and is the scanner's fault. Found when the
+        # gateway gained the same transport and a stub enforced the rule.
+        session = {k: v for k, v in headers.items()
+                   if k.lower() == SESSION_HEADER.lower() and v}
+        onward = dict(s.headers)
+        onward.update(session)
         listed = _post_jsonrpc(
-            s.url, s.headers,
+            s.url, onward,
             {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
             timeout,
         )
@@ -451,13 +478,13 @@ def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
         resources_payload: dict[str, Any] = {}
         if isinstance(caps, dict):
             if isinstance(caps.get("prompts"), dict):
-                reply = _post_jsonrpc(s.url, s.headers,
+                reply = _post_jsonrpc(s.url, onward,
                                       {"jsonrpc": "2.0", "id": 3, "method": "prompts/list",
                                        "params": {}}, timeout)
                 if "error" not in reply:
                     prompts_payload = reply
             if isinstance(caps.get("resources"), dict):
-                reply = _post_jsonrpc(s.url, s.headers,
+                reply = _post_jsonrpc(s.url, onward,
                                       {"jsonrpc": "2.0", "id": 4, "method": "resources/list",
                                        "params": {}}, timeout)
                 if "error" not in reply:
