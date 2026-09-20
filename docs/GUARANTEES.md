@@ -54,6 +54,9 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-POLICY-CONSISTENT | `--policy warn` is observe mode at both layers: a drifted tool is advertised unchanged *and* its call is forwarded, logged as a would-deny. `block` and `strip` refuse the call. | `tests/test_guard.py`, `tests/test_mutation.py` |
 | T-LOG-WHOLE | `verify-log` reports a truncated or rewritten chain, not just an internally consistent one. The head file the writer keeps is compared against the log, and `--expect-head` / `--expect-count` against a record kept elsewhere. | `tests/test_auditlog.py`, `tests/test_sessions.py`, `tests/test_mutation.py` |
 | T-LOG-KEYED | With `MCP_PIN_LOG_KEY` set the chain is HMAC-SHA256, so an attacker who can write the log cannot recompute it. Unkeyed output says it is tamper-evidence and not proof. | `tests/test_auditlog.py`, `tests/test_mutation.py` |
+| T-HOSTED | A server configured with a `url` is enforced by `gateway` exactly as a local one is: same catalogue filter, same call refusal, same result screen, same budget. `guard` still cannot wrap one, and the coverage row says so. | `tests/test_gateway_http.py`, `tests/test_coverage.py`, `tests/test_mutation.py` |
+| T-HOSTED-TLS | `gateway` refuses to front a non-loopback server over cleartext `http://`. | `tests/test_gateway_http.py` |
+| T-LOG-SEALED | A segment signed through `--sign-command` cannot be rewritten afterwards: dropping an entry and recomputing every hash leaves a signature that no longer verifies. A signer that fails costs the signature and never the record. | `tests/test_log_signing.py`, `tests/test_mutation.py` |
 | T-PROBE-GATE | A rule exception in the static pre-pass launches nothing. | `tests/test_probe_boundary.py`, `tests/test_mutation.py` |
 | T-DRIFT-ID | Two lock entries sharing a bare name are not compared against the first match. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
 | T-TYPES | `policy.py`, `lockfile.py`, `model.py`, `findings.py`, `pkgcache.py`, `auditlog.py` and `confusables.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
@@ -96,13 +99,23 @@ We try. Evasion is expected. A miss here is not a CVE in this tool.
 We do not claim these. Do not imply them in output.
 
 - Authenticating `--as`; it is a label the process claimed, not an identity
+- Proving who wrote an audit record on a machine the attacker already
+  controls. `--sign-command` seals a prefix so it cannot be rewritten
+  afterwards, and the key stays in whatever agent already holds it -- but a
+  live same-user attacker can ask that same agent to sign a story of their
+  own. Nothing on the same host closes that, and this does not claim to
 - Sandboxing the child server (`--probe` runs it)
 - Proxying remote HTTP/SSE MCP (scan only; `guard` is stdio)
 - Hashing a registry tarball when the registry could not be reached at
   approval. The approval says so at the time, `coverage` shows the layer as
   unverified rather than covered, and a scan reports MCPA037
 - Pinning the dependency tree a registry package installs beneath itself.
-  MCPA036 pins the top-level artifact only
+  MCPA036 pins the top-level artifact only. Resolving that tree needs the
+  package manager and the network, and the answer would differ tomorrow. What
+  *is* reported, read offline from the cached artifact's own manifest, is how
+  much of it floats -- `coverage` says so beside the pin. Measured across 60
+  real cached packages: 115 floating dependency specs against 17 exact, which
+  is why it is a stated fact and not a rule that would fire on everyone
 - Verifying a registry artifact that no local package cache holds and no
   registry will answer for. That is reported (MCPA037), not guessed. An empty
   cache is the common case on a fresh machine or a clean runner

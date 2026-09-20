@@ -86,11 +86,12 @@ close: [docs/TOOL-POISONING.md](docs/TOOL-POISONING.md).
 
 `scan` tells you. `guard` sits on stdio and will not pass the change through.
 
-Remote HTTP/SSE servers can be scanned and pinned; they cannot be wrapped, so
-you get the CI gate and not the call-site refusal. Closing that is the
-gateway's job — it already makes the decision per call for a whole fleet and
-needs an HTTP backend transport beside the stdio one. Not built yet; `coverage`
-says so per server rather than letting you assume otherwise.
+`guard` wraps a child process, so it cannot wrap a hosted server. `gateway`
+can: it speaks Streamable HTTP to a remote backend and makes the same
+decisions it makes for a local one — same catalogue filter, same call refusal,
+same result screen, same budget. It refuses to front a non-loopback server over
+cleartext `http://`. Point the client at the gateway and a hosted rug pull is
+withheld at the call site, not just reported.
 
 If the lock recorded a digest of a local script, `guard` and `gateway` will
 not start the child when those bytes have moved. They will also not start a
@@ -148,6 +149,12 @@ returned the scoped directory, `wipe_disk` came back
 
 The same lockfile is what CI reads. One artifact, three places: review, build, call site.
 
+`guard --log` leaves a hash-chained record, and `--sign-command` seals it with
+whatever already holds your keys (`ssh-keygen -Y sign`, a smartcard, a KMS
+CLI). A sealed prefix cannot be rewritten afterwards; an unkeyed chain can be,
+by anyone who can write the file. There is no `--signing-key` flag on purpose:
+a key handed to this process is a key this process can leak.
+
 `--probe` on `@modelcontextprotocol/server-memory@2026.8.31` recorded 9 tools and a
 following scan was clean.
 
@@ -188,7 +195,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1022 tests, stdlib unittest, nothing to install.
+1053 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

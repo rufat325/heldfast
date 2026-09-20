@@ -199,6 +199,53 @@ Read this file and `docs/GUARANTEES.md` instead.
     and there is no writeup of the Invariant Labs attack reproduced end to end.
     See NOTES.local.md.
 
+31. ~~The three open problems: hosted MCP, attribution, transitive pinning.~~
+    Done, with one of them only partly closable and said so.
+
+    **Hosted MCP is enforced.** `gateway` has an `HttpBackend` speaking
+    Streamable HTTP; `guard` still cannot wrap a `url` and never will, because
+    there is no child. The refactor that mattered was making `start()` final
+    and each transport implement `_start()`: the pre-spawn pin gate lives once
+    and a future transport cannot forget it. The mutant catalogue caught the
+    first version, where the gate was copied -- the snippet occurred twice, so
+    no single edit could be attributed, which is the catalogue doing exactly
+    its job. T-HOSTED, T-HOSTED-TLS.
+
+    Building it found a bug in code that predates it: `probe_http` discarded
+    the `Mcp-Session-Id` from the initialize response, so `scan --probe` worked
+    against hosted servers that do not enforce sessions and failed on every
+    server that does. That is very likely part of why only 4 of 15 real
+    endpoints were ever reachable. The stub in `tests/fixtures/http_server.py`
+    enforces the rule a real server does, which is why it surfaced at all.
+
+    **Attribution is delegated, not invented.** The blocker was never the
+    algorithm -- there is no asymmetric signing in the standard library -- it
+    was "a key needs somewhere to live". It should not live in this process at
+    all. `--sign-command` hands a short payload to whatever already holds keys
+    (`ssh-keygen -Y sign -U` keeps the private key in the agent) and records
+    what comes back, inside the hashed body so it cannot be swapped. There is
+    deliberately no `--signing-key`. T-LOG-SEALED.
+
+    What that buys, precisely: a signed prefix cannot be rewritten afterwards,
+    which is the gap an unkeyed chain cannot close at all. What it does not
+    buy: protection from a live same-user attacker, who can ask the same agent
+    to sign a story of their own. Nothing on the same host closes that, and the
+    out-of-scope list now says so rather than implying signing solved it.
+
+    **Transitive pinning is not possible from here, so it is measured
+    instead.** Resolving the tree needs the package manager and the network and
+    the answer differs tomorrow. What is answerable offline, from the cached
+    artifact's own manifest, is how much of it floats -- `coverage` reports
+    that beside the pin. It is deliberately not a rule: measured across 60 real
+    cached packages, 115 dependency specs float against 17 exact, so a finding
+    would fire on seven specs in eight, everywhere, forever. MCPA003 taught
+    that at 69%.
+
+    Also corrected in the same pass: the `coverage` row for a hosted server
+    said "no fix available today", which was true when it was written that
+    morning and false by the afternoon. A remedy line is a claim like any
+    other.
+
 ## How to run
 
 ```bash

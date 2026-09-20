@@ -657,10 +657,7 @@ FAIL_OPEN = 'result["resources"]' not in inspect.getsource(Guard.handle_server_m
         id="gateway-starts-rewritten-script",
         theorem="T-ARTIFACT",
         path="gateway.py",
-        original="""        reason = (mismatch(self.recorded_artifacts)
-                  or launch_mismatch(self.approved_launch, self.spec.argv)
-                  or refusal(self.recorded_integrity, self.artifact_urls,
-                             require=self.require_integrity))
+        original="""        reason = self.pin_reason()
         if reason:
             self.error = reason
             return False
@@ -867,9 +864,9 @@ FAIL_OPEN = _pin_still_holds(guard, ["npx", "-y", "@scope/pkg@1.2.3"]) is None
         id="gateway-starts-swapped-tarball",
         theorem="T-CACHE",
         path="gateway.py",
-        original="""                  or refusal(self.recorded_integrity, self.artifact_urls,
-                             require=self.require_integrity))""",
-        replacement="""                  )""",
+        original="""                or refusal(self.recorded_integrity, self.artifact_urls,
+                           require=self.require_integrity))""",
+        replacement="""                )""",
         harm=("The gateway starts a backend whose cached artifact was swapped. "
               "The README recommends the gateway, so this is the downgrade that "
               "matters most."),
@@ -1078,6 +1075,74 @@ tool = ToolSpec(server="svc", name="read", input_schema={"type": "object"},
 found = [f for f in run_rules(AuditContext(servers=[spec], tools=[tool]))
          if f.rule_id == "MCPA010"]
 FAIL_OPEN = not found
+""",
+    ),
+    Mutant(
+        id="hosted-server-bypasses-the-gateway",
+        theorem="T-HOSTED",
+        path="gateway.py",
+        original="""            kind = HttpBackend if spec.is_remote else Backend""",
+        replacement="""            kind = Backend""",
+        harm=("A hosted server falls back to the stdio backend, which has no "
+              "command to run, so it never starts and its tools silently "
+              "disappear instead of being enforced."),
+        probe="""
+import sys
+sys.path.insert(0, r"C:/Users/Administrator/Desktop/mcp-audit/tests/fixtures")
+import http_server
+from mcp_pin.gateway import Gateway
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec
+with http_server.serve("benign") as url:
+    spec = ServerSpec(name="invoices", source="/x/.mcp.json", client="c",
+                      transport="http", url=url)
+    lock = Lock()
+    lock.record([spec], [], [])
+    g = Gateway([spec], lock, quiet=True, allow_unapproved=True)
+    g.start()
+    FAIL_OPEN = "invoices" not in g.backends
+    g.close()
+""",
+    ),
+    Mutant(
+        id="segment-signature-not-checked",
+        theorem="T-LOG-SEALED",
+        path="auditlog.py",
+        original="""    if not result.problems and verify_command:
+        _check_segments(result, verify_command)""",
+        replacement="""    if False:
+        pass""",
+        harm=("A signed segment is reported as present and never verified, so a "
+              "rewritten prefix passes -- which is the only thing the signature "
+              "was there to stop."),
+        probe="""
+import json, os, subprocess, sys, tempfile
+from mcp_pin import auditlog
+root = r"C:/Users/Administrator/Desktop/mcp-audit"
+stub = root + "/tests/fixtures/stub_signer.py"
+sign = '"' + sys.executable + '" "' + stub + '" sign'
+verify = '"' + sys.executable + '" "' + stub + '" verify {sig}'
+tmp = tempfile.mkdtemp()
+path = os.path.join(tmp, "trail.jsonl")
+log = auditlog.AuditLog(path, "svc", signer=auditlog.Signer(sign))
+log.record("session_start")
+log.record("tool_call", subject="wipe_disk", decision="DENY")
+log.close_segment()
+with open(path, encoding="utf-8") as fh:
+    kept = [json.loads(x) for x in fh.read().splitlines()
+            if x.strip() and json.loads(x).get("subject") != "wipe_disk"]
+prev, seq = auditlog.GENESIS, 1
+for e in kept:
+    e["seq"], e["prev"] = seq, prev
+    e.pop("hash", None)
+    e["hash"] = auditlog._digest(e)
+    prev, seq = e["hash"], seq + 1
+with open(path, "w", encoding="utf-8") as fh:
+    for e in kept:
+        fh.write(json.dumps(e, sort_keys=True) + chr(10))
+with open(path + ".head", "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"seq": len(kept), "hash": prev}))
+FAIL_OPEN = auditlog.verify(path, verify_command=verify).ok
 """,
     ),
 )

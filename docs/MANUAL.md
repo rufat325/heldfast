@@ -1136,14 +1136,36 @@ two pipes, so a remote server configured with a `url` has nothing for it to wrap
 what you do not get is refusal at the call site. Said plainly because the alternative is
 someone assuming they are covered.
 
-If most of your servers are hosted, that is worth being blunt about: today you get the
-scan, the pin and the CI gate, and not the call-site refusal. The gateway is the component
-that closes it — it already fronts a fleet, holds one audit trail and makes the approval
-decision per call, and nothing about that design is tied to the child being local; what is
-missing is an HTTP/SSE backend transport beside the stdio one. That is the intended path
-rather than a second tool, and it is not built yet. Until it is, a remote server is
-reviewed and pinned but not enforced at the call site, and `coverage` says so per server
-rather than leaving you to work it out.
+**The gateway can.** Nothing the gateway decides was ever tied to the child being local: it
+resolves the lock entry, filters the catalogue, screens the result and counts the call, all
+on messages. So only the transport was replaced. Point the client at `mcp-pin gateway` and a
+server configured with a `url` gets the same enforcement a local one gets — the same
+catalogue filter, the same refusal at `tools/call`, the same result screen, the same
+`--max-calls` budget.
+
+```
+mcp-pin gateway: started claude-code:invoices (2 tool(s) offered)
+[BLOCKED BY mcp-pin] This tool is not approved: tool definition changed since approval.
+```
+
+Two differences from the stdio path, both in the direction of *less reachable* rather than
+less checked:
+
+- **No server-initiated requests.** Sampling, elicitation and roots arrive on a long-lived
+  GET stream the gateway does not open, so a hosted server cannot ask your client for
+  anything. The channel is absent rather than unscreened. The same shapes arriving inside a
+  *result* are screened exactly as they are over stdio, because those come back in the POST
+  reply and the screens are applied to whatever the backend returns.
+- **No lifetime binding.** There is no child process to outlive the gateway.
+
+It refuses to front a non-loopback server over cleartext `http://`. MCPA007 reports that on
+a scan; refusing here means a reviewed lockfile cannot be enforced over a transport somebody
+can rewrite by accident. Loopback is allowed, or nothing could be developed against.
+
+Building this found a bug in code that predates it: `probe_http` took the `Mcp-Session-Id`
+from the initialize response and threw it away, so `scan --probe` worked against hosted
+servers that do not enforce sessions and failed on every server that does — reporting it as
+the endpoint's fault. It carries the session now.
 
 `guard` also ties the server's lifetime to its own - a Job Object on Windows,
 `PR_SET_PDEATHSIG` on Linux. Its cleanup handles a normal exit, but if the guard is killed
@@ -1259,7 +1281,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1022 tests, stdlib unittest, nothing to install.
+1053 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from
