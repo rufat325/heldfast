@@ -284,6 +284,23 @@ class TestApprovalAttacks(unittest.TestCase):
                                lock={"servers": lock.servers, "skills": lock.skills})
             self.assertTrue(caught("MCPA031", ctx))
 
+    def test_the_tarball_behind_an_unchanged_version(self) -> None:
+        from mcp_pin import integrity as integ
+        spec = server("svc", command="npx", args=["-y", "@scope/pkg@1.2.3"])
+        lock = Lock()
+        lock.record([spec], [], [])
+        lock.servers[spec.identity()]["integrity"] = {
+            "npm:@scope/pkg@1.2.3": "sha512-old",
+        }
+        real = integ.get_json
+        integ.get_json = lambda url: {"dist": {"integrity": "sha512-new"}}
+        try:
+            ctx = AuditContext(servers=[spec],
+                               lock={"servers": lock.servers, "skills": {}})
+            self.assertTrue(caught("MCPA036", ctx))
+        finally:
+            integ.get_json = real
+
 
 class TestCompositionAttacks(unittest.TestCase):
     """Attacks that exist in the combination and in no single server."""

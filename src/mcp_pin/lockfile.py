@@ -273,7 +273,7 @@ class Lock:
                 continue
             carried = False
             for key in ("tools", "prompts", "resources", "instructions",
-                        "artifacts", "probe"):
+                        "artifacts", "integrity", "probe"):
                 if key not in entry and key in old:
                     entry[key] = old[key]
                     carried = True

@@ -55,6 +55,13 @@ class TestTheCodeLayerKnowsWhyNot(unittest.TestCase):
             lock.servers[server.identity()].update(entry)
         return layers(lock, [server])[server.identity()]["code pinned"]
 
+    def _registry(self, server: ServerSpec, entry: dict | None = None) -> coverage.Layer:
+        lock = Lock()
+        lock.record([server], [], [])
+        if entry:
+            lock.servers[server.identity()].update(entry)
+        return layers(lock, [server])[server.identity()]["registry pin"]
+
     def test_a_registry_launch_with_a_floating_version_is_a_real_gap(self) -> None:
         layer = self._code(spec("github", "npx", ["-y", "@scope/server-github"]))
         self.assertEqual("no", layer.state)
@@ -62,11 +69,22 @@ class TestTheCodeLayerKnowsWhyNot(unittest.TestCase):
         self.assertIn("@scope/server-github@", layer.remedy)
 
     def test_a_registry_launch_at_a_pinned_version_is_not_a_gap(self) -> None:
-        """The version *is* the pin. Demanding a digest as well would put a
-        permanent mark on the most correct thing a user can write."""
+        """Local-file hashing does not apply. The registry layer is the pin."""
         layer = self._code(spec("github", "npx", ["-y", "@scope/srv@1.2.3"]))
         self.assertEqual("n/a", layer.state)
         self.assertIn("1.2.3", layer.detail)
+
+    def test_a_pinned_version_without_a_tarball_hash_is_a_registry_gap(self) -> None:
+        layer = self._registry(spec("github", "npx", ["-y", "@scope/srv@1.2.3"]))
+        self.assertEqual("no", layer.state)
+        self.assertIn("name lookup", layer.detail)
+
+    def test_a_recorded_tarball_hash_is_covered(self) -> None:
+        layer = self._registry(
+            spec("github", "npx", ["-y", "@scope/srv@1.2.3"]),
+            {"integrity": {"npm:@scope/srv@1.2.3": "sha512-abc"}},
+        )
+        self.assertEqual("yes", layer.state)
 
     def test_the_pep508_spelling_counts_and_reads_properly(self) -> None:
         layer = self._code(spec("fetch", "uvx", ["mcp-server-fetch==0.6.2"]))

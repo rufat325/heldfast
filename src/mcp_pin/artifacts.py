@@ -22,9 +22,10 @@ reasons that have nothing to do with this server, and a rule that fires every
 time someone patches Node is a rule people turn off. `/opt/mcp/bin/server` is
 a path, is the server, and is hashed.
 
-Nothing is hashed over the network. A published package's integrity is the
-registry's problem and would need a fetch to check; this reads files that are
-already on the machine, which is the part nobody else is watching.
+Nothing is hashed over the network here. A published package's tarball
+hash is recorded separately (see integrity.py) when the registry answers;
+this module reads files that are already on the machine, which is the
+part nobody else is watching.
 """
 
 from __future__ import annotations

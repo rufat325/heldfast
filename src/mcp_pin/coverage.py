@@ -130,7 +130,7 @@ def _code(entry: dict | None, spec: Any) -> Layer:
             shown = version.lstrip("=@ ")
             return Layer(
                 "code pinned", "n/a",
-                f"fetched from a registry at {shown}; the version is the pin")
+                f"fetched from a registry at {shown}; local hashing does not apply")
         return Layer(
             "code pinned", "no",
             "fetched from a registry at launch, so there is no local file to hash",
@@ -151,6 +151,34 @@ def _code(entry: dict | None, spec: Any) -> Layer:
 
     return Layer("code pinned", "n/a",
                  "the launch command names no script")
+
+
+def _registry(entry: dict | None, spec: Any) -> Layer:
+    """The tarball hash, when the launch is a registry fetch."""
+    recorded = (entry or {}).get("integrity") or {}
+    if recorded:
+        key = next(iter(recorded))
+        return Layer("registry pin", "yes", f"{key}")
+
+    if spec is None or spec.is_remote:
+        return Layer("registry pin", "n/a", "not fetched from a registry")
+
+    found = extract_package(spec)
+    if not found or found[0] not in REGISTRY_RUNNERS:
+        return Layer("registry pin", "n/a", "not fetched from a registry")
+    runner, token = found
+    name, version = split_package(token, runner)
+    if version and not _FLOATING.match(version):
+        shown = version.lstrip("=@ ")
+        return Layer(
+            "registry pin", "no",
+            f"version {shown} is a name lookup, not a content pin",
+            "mcp-pin approve --probe records the tarball hash")
+    return Layer(
+        "registry pin", "no",
+        "fetched from a registry at launch with no version pin",
+        f"pin the version -- {name}==1.2.3" if runner in ("uvx", "pipx")
+        else f"pin the version -- {name}@1.2.3")
 
 
 def _policy(entry: dict | None) -> Layer:
@@ -222,6 +250,7 @@ def for_server(lock: Lock, key: str, spec: Any,
         _approval(entry),
         _tools(entry),
         _code(entry, spec),
+        _registry(entry, spec),
         _policy(entry),
         _in_path(key, entry, spec, fronting or set()),
         _reachable_by(lock, name),

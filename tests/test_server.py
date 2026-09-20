@@ -226,8 +226,8 @@ class TestCoverageOverMCP(unittest.TestCase):
         row = next(r for r in out["servers"] if r["identity"].endswith(":github"))
         names = {l["name"] for l in row["layers"]}
         self.assertEqual(
-            {"approved", "tools pinned", "code pinned", "argument policy",
-             "enforced", "identity"}, names)
+            {"approved", "tools pinned", "code pinned", "registry pin",
+             "argument policy", "enforced", "identity"}, names)
 
     def test_no_lockfile_does_not_read_as_no_gaps(self) -> None:
         """An agent relaying "0 gaps" for a machine with nothing pinned would

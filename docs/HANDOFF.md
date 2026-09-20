@@ -7,8 +7,9 @@ Read this file and `docs/GUARANTEES.md` instead.
 
 ## Where it is
 
-- Feature freeze. No new clients, no new rules, no PyPI until
-  the theorems in `docs/GUARANTEES.md` hold under the tests named there.
+- Feature freeze. No new clients. A new lockfile theorem is allowed when
+  it has a test that would fail if the implementation were deleted.
+  PyPI is live; a new version is a tag.
 - GitHub repo, command, wheel and lockfile are `mcp-pin`. Rule ids stay
   `MCPA*`: a detection namespace is not a product name.
 - An existing `.mcp-audit.lock` is still loaded if `.mcp-pin.lock` is
@@ -81,6 +82,8 @@ Read this file and `docs/GUARANTEES.md` instead.
     `--yes` / `--yes-tool` to write.
 25. ~~Prompts and resources pinned but not filtered at runtime.~~ Done:
     T-SURFACE.
+26. ~~`--yes` rubber-stamped a critical-graded change.~~ Done: T-YES-CRITICAL.
+27. ~~Registry pin was a version string.~~ Done: T-INTEGRITY / MCPA036.
 
 ## How to run
 

@@ -69,7 +69,8 @@ class ServerStatus:
             return "GONE"
         if not self.approved:
             return "UNAPPROVED"
-        drift = {"MCPA015", "MCPA016", "MCPA017", "MCPA019", "MCPA020", "MCPA031"}
+        drift = {"MCPA015", "MCPA016", "MCPA017", "MCPA019", "MCPA020", "MCPA031",
+                 "MCPA036"}
         if any(f.rule_id in drift for f in self.findings):
             return "DRIFTED"
         if self.worst is not None and self.worst >= Severity.HIGH:

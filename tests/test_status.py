@@ -68,7 +68,7 @@ class TestTheStateWord(unittest.TestCase):
 
     def test_every_drift_rule_counts_as_drift(self) -> None:
         for rule_id in ("MCPA015", "MCPA016", "MCPA017", "MCPA019",
-                        "MCPA020", "MCPA031"):
+                        "MCPA020", "MCPA031", "MCPA036"):
             with self.subTest(rule=rule_id):
                 lock = approved(["alpha"])
                 states = self._state(lock, [spec("alpha")], [finding(rule_id, "alpha")])

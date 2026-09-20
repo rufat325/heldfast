@@ -481,6 +481,7 @@ Full catalog with rationale, examples and known false positives: [docs/rules.md]
 | MCPA033 | high | Icon source is unsafe for a client to fetch or render |
 | MCPA034 | critical | Environment variable in the config runs code or reads traffic |
 | MCPA035 | high | Environment declaration collects a credential under another name |
+| MCPA036 | high | Registry artifact changed since approval |
 
 ### One attack per rule
 
@@ -1011,6 +1012,11 @@ an attacker who controls the agent can call:
 
 There's a test asserting mcp-pin's own server passes mcp-pin's own rules. Writing tool
 descriptions that survive your own tool-poisoning detector turns out to be a real constraint.
+
+What guards the guard: pin `mcp-pin serve` like any other STDIO server, or do not
+expose it. It is read-only and does not probe, but it is still a process an
+agent can call. This tool does not sandbox itself. That is out of scope in
+the same way `--as` is a label and not an identity.
 
 ## Enforcing it at runtime (`guard`)
 

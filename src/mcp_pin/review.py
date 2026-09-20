@@ -54,15 +54,20 @@ def acknowledged(moved: list[Change], *, yes: bool,
                  yes_tools: list[str] | None = None) -> bool:
     """True if every change has been named.
 
-    `--yes` names them all. `--yes-tool` names one tool. A digest or
-    command change is not a tool and still needs `--yes`.
+    `--yes` covers cosmetic drift. A critical-graded change must be named
+    with `--yes-tool`; `--yes` is not enough. That is the path of least
+    resistance, and the first thing a bump script or an agent will pass.
     """
-    if not moved or yes:
+    if not moved:
         return True
     named = set(yes_tools or [])
-    if not named:
-        return False
     for item in moved:
+        if item.grade == "critical":
+            if item.name not in named and item.identity not in named:
+                return False
+            continue
+        if yes:
+            continue
         if item.kind == "tool" and item.name in named:
             continue
         return False
@@ -118,6 +123,9 @@ def _entry_changes(ident: str, old: object, new: object) -> list[Change]:
     if (old.get("artifacts") or {}) != (new.get("artifacts") or {}):
         out.append(Change(ident, "code", ident, "digest moved",
                           "digest moved", "high"))
+    if (old.get("integrity") or {}) != (new.get("integrity") or {}):
+        out.append(Change(ident, "integrity", ident, "tarball hash moved",
+                          "tarball hash moved", "high"))
     out.extend(_named_map_changes(ident, "tool", old.get("tools"), new.get("tools")))
     out.extend(_named_map_changes(ident, "prompt", old.get("prompts"),
                                   new.get("prompts")))
@@ -164,7 +172,8 @@ def render(moved: list[Change]) -> str:
         return ""
     lines = [
         f"mcp-pin: {len(moved)} change(s) since the last pin.",
-        "         A credential path is not a typo. Pass --yes if you reviewed them.",
+        "         A credential path is not a typo. --yes covers cosmetic drift;",
+        "         a critical change must be named with --yes-tool.",
         "",
     ]
     for item in moved:

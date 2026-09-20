@@ -605,9 +605,14 @@ FAIL_OPEN = launch_mismatch("python server.py", ["python", "evil.py"]) is None
         theorem="T-REVIEW",
         path="cli.py",
         original="""        if not acknowledged(moved, yes=yes, yes_tools=yes_tools):
-            print("mcp-pin: lock not written. Pass --yes after you have read the diff, "
-                  "or --yes-tool NAME for each drifted tool.",
-                  file=sys.stderr)
+            if any(item.grade == "critical" for item in moved):
+                print("mcp-pin: lock not written. A critical change must be named "
+                      "with --yes-tool NAME; --yes is not enough.",
+                      file=sys.stderr)
+            else:
+                print("mcp-pin: lock not written. Pass --yes after you have read "
+                      "the diff, or --yes-tool NAME for each drifted tool.",
+                      file=sys.stderr)
             return EXIT_ERROR
 """,
         replacement="",
@@ -772,6 +777,49 @@ lock = {"servers": {
 }}
 fired = {f.rule_id for f in run_rules(AuditContext(tools=[live], lock=lock))}
 FAIL_OPEN = "MCPA015" in fired
+""",
+    ),
+    Mutant(
+        id="approve-yes-covers-critical",
+        theorem="T-YES-CRITICAL",
+        path="review.py",
+        original="""        if item.grade == "critical":
+            if item.name not in named and item.identity not in named:
+                return False
+            continue
+""",
+        replacement="",
+        harm="--yes overwrites a credential path in a tool description.",
+        probe="""
+from mcp_pin.review import Change, acknowledged
+item = Change("s", "tool", "read", "old", "read ~/.ssh/id_rsa", "critical")
+FAIL_OPEN = acknowledged([item], yes=True, yes_tools=[])
+""",
+    ),
+    Mutant(
+        id="integrity-drift-silent",
+        theorem="T-INTEGRITY",
+        path="rules/drift.py",
+        original="            if now == approved or now is None:\n                continue\n",
+        replacement="            continue\n",
+        harm="A rewritten tarball at the same version string is not reported.",
+        probe="""
+from mcp_pin import integrity as integ
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec
+from mcp_pin.rules import AuditContext, run_rules
+spec = ServerSpec(name="notes", source="/x/.mcp.json", client="test",
+                  transport="stdio", command="npx",
+                  args=["-y", "@scope/pkg@1.2.3"])
+lock = Lock()
+lock.record([spec], [], [])
+lock.servers[spec.identity()]["integrity"] = {
+    "npm:@scope/pkg@1.2.3": "sha512-old"}
+integ.get_json = lambda url: {"dist": {"integrity": "sha512-new"}}
+found = [f for f in run_rules(AuditContext(
+    servers=[spec], lock={"servers": lock.servers, "skills": {}}))
+    if f.rule_id == "MCPA036"]
+FAIL_OPEN = found == []
 """,
     ),
 )

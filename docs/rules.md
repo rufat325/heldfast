@@ -40,6 +40,7 @@ Do not edit by hand.
 | [MCPA033](#mcpa033) | high | Icon source is unsafe for a client to fetch or render |
 | [MCPA034](#mcpa034) | critical | Environment variable in the config runs code or reads traffic |
 | [MCPA035](#mcpa035) | high | Environment declaration collects a credential under another name |
+| [MCPA036](#mcpa036) | high | Registry artifact changed since approval |
 
 ## MCPA001
 
@@ -589,4 +590,20 @@ def count(path: str):
 **How to fix it.** Name it for what it is, so a reviewer can see which servers hold which secrets by reading the config. If the server does not need that credential, delete the line.
 
 **When it is wrong.** A rename is not reported: when the key is itself credential-shaped the secret is still visible as a secret, which is the point. Of 40 real `env` entries exactly one is a reference, and its key matches its target, so this has no occurrences in the corpus. Matching is on whole words -- MONKEY is not a KEY.
+
+## MCPA036
+
+**Registry artifact changed since approval** - severity `high`
+
+**What it looks for.** A registry package whose published artifact hash changed since approval, while the version in the launch command is byte-identical.
+
+**Why it matters.** `npx pkg@1.2.3` pins a name. The registry can serve different bytes for that name. npm and PyPI publish an integrity hash with each tarball; approval records it, and a later scan compares. A version string is a lookup, not a content pin.
+
+```
+"args": ["-y", "@scope/server@1.2.3"]   # unchanged; the tarball is not
+```
+
+**How to fix it.** Confirm the publish is yours, then `mcp-pin approve --probe --yes`. If you did not expect a new artifact at this version, stop.
+
+**When it is wrong.** A fetch that fails is not a finding. The recorded hash still stands; the scan could not see. Unpinned launches are MCPA003.
 

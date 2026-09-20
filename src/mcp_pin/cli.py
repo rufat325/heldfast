@@ -359,6 +359,18 @@ def _approval_summary(lock: Lock) -> str:
     return ", ".join(parts)
 
 
+def _stamp_integrity(lock: Lock, servers: list) -> None:
+    """Record registry tarball hashes. A miss is not a finding."""
+    from .integrity import lookup
+    for spec in servers:
+        entry = lock.servers.get(spec.identity())
+        if not isinstance(entry, dict):
+            continue
+        got = lookup(spec)
+        if got:
+            entry["integrity"] = got
+
+
 def _commit_lock(lock: Lock, previous: Lock, *, yes: bool,
                  yes_tools: list[str] | None = None) -> int:
     """Write the pin, or refuse if something moved and nobody said --yes."""
@@ -367,9 +379,14 @@ def _commit_lock(lock: Lock, previous: Lock, *, yes: bool,
     if moved:
         print(render(moved), end="", file=sys.stderr)
         if not acknowledged(moved, yes=yes, yes_tools=yes_tools):
-            print("mcp-pin: lock not written. Pass --yes after you have read the diff, "
-                  "or --yes-tool NAME for each drifted tool.",
-                  file=sys.stderr)
+            if any(item.grade == "critical" for item in moved):
+                print("mcp-pin: lock not written. A critical change must be named "
+                      "with --yes-tool NAME; --yes is not enough.",
+                      file=sys.stderr)
+            else:
+                print("mcp-pin: lock not written. Pass --yes after you have read "
+                      "the diff, or --yes-tool NAME for each drifted tool.",
+                      file=sys.stderr)
             return EXIT_ERROR
     written = lock.save()
     print(f"mcp-pin: approved {_approval_summary(lock)} -> {written}")
@@ -404,6 +421,7 @@ def cmd_approve(args: argparse.Namespace) -> int:
                 instructions=data.instructions, previous=previous,
                 probe_status=data.probe_status)
     lock.merge_unprobed(previous)
+    _stamp_integrity(lock, data.servers)
     return _commit_lock(lock, previous, yes=bool(getattr(args, "yes", False)),
                         yes_tools=list(getattr(args, "yes_tool", None) or []))
 

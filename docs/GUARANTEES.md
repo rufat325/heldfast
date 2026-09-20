@@ -35,16 +35,18 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-TRACE | Guard and gateway still emit the pinned JSON-RPC conversations (allow, deny, banner-before-frame, rewrite-after-N, sampling, elicitation, roots, result fence). | `tests/test_golden_traces.py` |
 | T-FAIL-CLOSED | A kernel exception in `guard` refuses the call or withholds the result. A tool withheld from `tools/list` cannot still be executed. Forwarding either requires `--fail-open`. | `tests/test_guard.py`, `tests/test_mutation.py`, `tests/test_malformed_input.py` |
 | T-BATCH | A JSON-RPC batch is inspected per frame. A `tools/list` stuffed into an array cannot skip `filter_tools`. | `tests/test_guard.py`, `tests/test_mutation.py` |
-| T-PINNED | A `.mcp-pin-ignore` line cannot hide a lockfile theorem (MCPA014–017, 019, 020, 031). | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
+| T-PINNED | A `.mcp-pin-ignore` line cannot hide a lockfile theorem (MCPA014–017, 019, 020, 031, 036). | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
 | T-ISOLATE-LOADER | `NODE_OPTIONS` and `PYTHONPATH` do not ride from the parent into a child unless the server declared them. | `tests/test_childenv.py`, `tests/test_mutation.py` |
 | T-MUX | Two servers with the same bare name from different clients are not silently overwritten; the second is refused. | `tests/test_gateway.py`, `tests/test_mutation.py` |
 | T-PROBE-LIFE | `--probe` binds the child the same way `guard` does (`posix_preexec` / job object). | `tests/test_hostile.py`, `tests/test_mutation.py` |
 | T-UNPINNED | A scan of configured servers with no lockfile fires MCPA014 at HIGH, so default `--fail-on high` fails the build. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
 | T-LOCK-TREE | A lockfile sitting in the scanned directory is the lockfile, even when cwd is somewhere else. | `tests/test_mcp_pin.py` |
-| T-ARTIFACT | If the lock recorded local-script digests, `guard` and `gateway` refuse to start the child when those bytes have moved. A registry package has no local file; the version string is the pin. | `tests/test_artifacts.py`, `tests/test_guard.py`, `tests/test_mutation.py` |
+| T-ARTIFACT | If the lock recorded local-script digests, `guard` and `gateway` refuse to start the child when those bytes have moved. A registry package has no local file; T-INTEGRITY is the content pin. | `tests/test_artifacts.py`, `tests/test_guard.py`, `tests/test_mutation.py` |
 | T-LAUNCH | If the lock recorded a command line, `guard` and `gateway` refuse to start a different argv. | `tests/test_guard.py`, `tests/test_mutation.py` |
 | T-REVIEW | Re-approval of a lock that moved prints the word-level diff and does not write unless `--yes` or `--yes-tool` names every drifted tool. A digest or command change still needs `--yes`. | `tests/test_review.py`, `tests/test_mutation.py` |
 | T-SURFACE | If the lock recorded prompts or resources, `guard` filters `prompts/list` and `resources/list` and refuses `prompts/get` / `resources/read` the same way it does tools. A lock that never recorded that layer is not pretend-enforced. | `tests/test_guard.py`, `tests/test_mutation.py` |
+| T-YES-CRITICAL | `approve --yes` does not overwrite a critical-graded drift. That change must be named with `--yes-tool`. | `tests/test_review.py`, `tests/test_mutation.py` |
+| T-INTEGRITY | If the lock recorded a registry tarball hash, a different live hash fires MCPA036. A failed fetch is not a finding. | `tests/test_integrity.py`, `tests/test_mutation.py` |
 | T-LIST-CHANGED | `notifications/tools/list_changed` marks the backend stale; the next `tools/list` or call re-fetches and re-screens. | `tests/test_gateway_parity.py`, `tests/test_mutation.py` |
 | T-PROBE-GATE | A rule exception in the static pre-pass launches nothing. | `tests/test_probe_boundary.py`, `tests/test_mutation.py` |
 | T-DRIFT-ID | Two lock entries sharing a bare name are not compared against the first match. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
@@ -72,7 +74,7 @@ We do not claim these. Do not imply them in output.
 - Authenticating `--as`; it is a label the process claimed, not an identity
 - Sandboxing the child server (`--probe` runs it)
 - Proxying remote HTTP/SSE MCP (scan only; `guard` is stdio)
-- Hashing a registry tarball (`npx pkg@1.2.3` is pinned by version, not by bytes)
+- Hashing a registry tarball when the registry could not be reached at approval
 - Stopping a client that talks to the server *beside* the gateway (MCPA032 reports it)
 - Proving a regex matches "all prompt injection"
 
@@ -88,4 +90,4 @@ undemonstrated.
 1. Change the test first, watch it fail.
 2. Change the code.
 3. Update this file in the same commit.
-4. Do not add MCPA036 until T-GOLDEN, T-ATTACK, T-MUTATION, T-TRACE, T-TYPES, T-SIZE and T-POLICY-* are green.
+4. Do not add a new MCPA* id until T-GOLDEN, T-ATTACK, T-MUTATION, T-TRACE, T-TYPES, T-SIZE and T-POLICY-* are green.

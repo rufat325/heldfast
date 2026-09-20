@@ -394,3 +394,45 @@ def artifact_drift(ctx: AuditContext) -> Iterable[Finding]:
                 cwe=["CWE-494"],
                 tags=["drift", "supply-chain"],
             )
+
+
+@rule("MCPA036", "Registry artifact changed since approval", Severity.HIGH)
+def integrity_drift(ctx: AuditContext) -> Iterable[Finding]:
+    """The version string is unchanged; the tarball it names is not."""
+    from ..integrity import lookup
+
+    lock = _lock(ctx)
+    if not lock:
+        return
+    known = lock["servers"]
+    for s in ctx.servers:
+        entry = known.get(s.identity())
+        if not isinstance(entry, dict):
+            continue
+        recorded = entry.get("integrity")
+        if not isinstance(recorded, dict) or not recorded:
+            continue
+        current = lookup(s)
+        for key, approved in sorted(recorded.items()):
+            now = current.get(key)
+            if now == approved or now is None:
+                continue
+            yield Finding(
+                rule_id="MCPA036",
+                title="Registry artifact changed since approval",
+                severity=Severity.HIGH,
+                location=Location(path=s.source, line=s.line, snippet=str(key)),
+                evidence=(
+                    f"{s.identity()} fetches {key}, which now hashes to "
+                    f"{str(now)[:24]}, was {str(approved)[:24]}"
+                ),
+                remediation=(
+                    "The version in the launch command is the same; the bytes "
+                    "the registry serves for it are not. Confirm the publish, "
+                    "then `mcp-pin approve --probe --yes`."
+                ),
+                server=s.name,
+                atlas=["AML.T0010.001"],
+                cwe=["CWE-494"],
+                tags=["drift", "supply-chain"],
+            )

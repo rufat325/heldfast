@@ -526,6 +526,19 @@ DOCS: dict[str, RuleDoc] = {
                    "its target, so this has no occurrences in the corpus. Matching is "
                    "on whole words -- MONKEY is not a KEY.",
     ),
+    "MCPA036": RuleDoc(
+        what="A registry package whose published artifact hash changed since approval, "
+             "while the version in the launch command is byte-identical.",
+        why="`npx pkg@1.2.3` pins a name. The registry can serve different bytes for "
+            "that name. npm and PyPI publish an integrity hash with each tarball; "
+            "approval records it, and a later scan compares. A version string is a "
+            "lookup, not a content pin.",
+        example='"args": ["-y", "@scope/server@1.2.3"]   # unchanged; the tarball is not',
+        fix="Confirm the publish is yours, then `mcp-pin approve --probe --yes`. "
+            "If you did not expect a new artifact at this version, stop.",
+        wrong_when="A fetch that fails is not a finding. The recorded hash still "
+                   "stands; the scan could not see. Unpinned launches are MCPA003.",
+    ),
 }
 
 

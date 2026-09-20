@@ -5,7 +5,7 @@ open endpoint from one that negotiates OAuth at connect time, and telling
 someone to live with a permanent false positive is how a scanner gets removed
 from CI. So the advice to "suppress this" has to be backed by a mechanism.
 
-Lockfile theorems (MCPA014-017, 019, 020, 031) cannot be suppressed. A pin
+Lockfile theorems (MCPA014-017, 019, 020, 031, 036) cannot be suppressed. A pin
 that a committed one-line file can switch off is not a pin.
 
 Format (`.mcp-pin-ignore`), one rule per line:
@@ -34,6 +34,7 @@ LEGACY_IGNORE_NAME = ".mcp-audit-ignore"
 # (MCPA008). A pin that a committed one-line file can switch off is not a pin.
 PINNED = frozenset({
     "MCPA014", "MCPA015", "MCPA016", "MCPA017", "MCPA019", "MCPA020", "MCPA031",
+    "MCPA036",
 })
 
 

@@ -101,13 +101,14 @@ def _register_approve(sub: argparse._SubParsersAction) -> None:
     _add_scan_arguments(approve)
     approve.add_argument(
         "--yes", action="store_true",
-        help="write the lock even when something moved since the last pin; "
-             "the diff is still printed",
+        help="write the lock for cosmetic drift; a critical-graded change "
+             "still needs --yes-tool; the diff is still printed",
     )
     approve.add_argument(
         "--yes-tool", metavar="NAME", action="append", default=[],
-        help="acknowledge this drifted tool (repeatable); a digest or command "
-             "change still needs --yes",
+        help="acknowledge this drifted tool (repeatable); required for a "
+             "critical-graded change, where --yes is not enough; a digest or "
+             "command change still needs --yes",
     )
 
 

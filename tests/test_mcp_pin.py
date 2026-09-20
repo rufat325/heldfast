@@ -371,6 +371,13 @@ class TestSuppressions(unittest.TestCase):
         self.assertEqual(1, len(kept))
         self.assertEqual([], dropped)
 
+    def test_a_registry_pin_cannot_be_ignored(self) -> None:
+        rules = [suppressions.Suppression("MCPA036", "*", "", 1)]
+        kept, dropped = suppressions.apply(
+            [self._finding("MCPA036", "invoices")], rules)
+        self.assertEqual(1, len(kept))
+        self.assertEqual([], dropped)
+
     def test_parse_rejects_a_pinned_rule(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / ".mcp-pin-ignore"

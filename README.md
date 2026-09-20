@@ -1,6 +1,7 @@
 # mcp-pin
 
 [![ci](https://github.com/rufat325/mcp-pin/actions/workflows/ci.yml/badge.svg)](https://github.com/rufat325/mcp-pin/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/mcp-pin.svg)](https://pypi.org/project/mcp-pin/)
 
 You approve an MCP server. mcp-pin records what you approved. Later it tells
 you what moved, and `guard` refuses the rest.
@@ -26,8 +27,8 @@ mcp-pin guard -- npx -y @scope/server@1.0.0
 ## Install
 
 ```bash
-uvx mcp-pin                    # no install
-pipx install mcp-pin           # or keep it
+uvx mcp-pin
+pipx install mcp-pin
 pip install mcp-pin
 ```
 
@@ -39,28 +40,12 @@ dependency tree is asking you to trust the thing it's auditing.
 ```bash
 mcp-pin                              # scan discovered configs + skills
 mcp-pin scan ./my-project            # scan one project
-mcp-pin scan --no-user-configs .     # project only, skip ~/ configs
-mcp-pin scan --exclude tests .       # skip a path (attack corpora, generated trees)
-mcp-pin scan --probe                 # also read live tool descriptions
-mcp-pin scan --safe                  # never execute, never connect
-mcp-pin scan --no-source             # skip reading server source
-mcp-pin approve --probe              # write .mcp-pin.lock ( --yes if it moved )
-mcp-pin inspect                      # what is configured, no judgement
-mcp-pin rules                        # list rules
-mcp-pin explain MCPA015              # describe one rule in full
-mcp-pin guard -- npx -y pkg@1.0.0    # proxy a server, enforce the lockfile
-mcp-pin guard --log trail.jsonl -- npx pkg   # proxy and record the session
-mcp-pin verify-log trail.jsonl       # check the record was not altered
-mcp-pin report trail.jsonl           # what the agent did: sessions, calls, refusals
-mcp-pin guard --dry-run -- npx pkg   # what would the policy block?
-mcp-pin policy --probe               # propose argument limits to review
-mcp-pin gateway                      # one endpoint in front of every approved server
-mcp-pin gateway --as finance         # ...restricted to one declared identity
-mcp-pin gateway --share-env CI       # ...also passing one env var to every backend
-mcp-pin status                       # what is approved, what moved, what happened
-mcp-pin coverage                     # which guarantees are in force, and why not
-mcp-pin serve                        # run as an MCP server
+mcp-pin approve --probe              # pin; --yes-tool NAME for critical drift
+mcp-pin guard -- npx -y pkg@1.0.0    # refuse the rest
 ```
+
+The rest of the commands, flags, gateway, policy and logs are in
+[docs/MANUAL.md](docs/MANUAL.md). `mcp-pin --help` lists them.
 
 Finds configs for 17 clients - Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed,
 Cline, Roo, Kilo, Continue, LM Studio, opencode, Gemini CLI, Amp, Witsy, and more - on
@@ -87,26 +72,28 @@ CRITICAL MCPA015  Tool definition changed since approval (possible rug pull)
 
 The config file was byte-identical across those two scans.
 
-That shape was published, not invented: [Invariant Labs, April 2025](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks)
-showed a WhatsApp MCP helper that looked like "fact of the day" and later
-rewrote its tools to exfiltrate chats. Approval records what you reviewed. It
-does not prove the first version was honest.
+That shape was published, not invented. [Invariant Labs, 6 April 2025](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks)
+showed tool poisoning: hidden instructions in a tool description. A day later they showed
+[a second, untrusted MCP server sitting beside a trusted WhatsApp MCP instance](https://invariantlabs.ai/blog/whatsapp-mcp-exploited),
+shadowing its tools to exfiltrate chats. The WhatsApp helper did not rewrite itself.
+Cross-server shadowing is what MCPA027 and MCPA028 are for. Approval records what you
+reviewed. It does not prove the first version was honest.
 
 ## Pin, then refuse
 
 `scan` tells you. `guard` sits on stdio and will not pass the change through.
-Remote HTTP/SSE servers can be scanned; they cannot be wrapped. That is a
-limit of the runtime, not of the scanner.
+Remote HTTP/SSE servers can be scanned; they cannot be wrapped.
 
 If the lock recorded a digest of a local script, `guard` and `gateway` will
 not start the child when those bytes have moved. They will also not start a
 different command than the one you pinned. A registry package
-(`npx pkg@1.2.3`) has no local file: the version string is the pin.
+(`npx pkg@1.2.3`) records the tarball integrity hash at approval when the
+registry answers; a later scan fires MCPA036 if those bytes moved. The version
+string alone is a name lookup.
 
-`approve --probe` on a lock that moved prints the words that changed and
-refuses to write until `--yes`, or `--yes-tool NAME` for each drifted tool.
-A credential path in the new text is graded critical; a wording tweak is
-not the same event. A digest or launch-command change still needs `--yes`.
+`approve --probe` on a lock that moved prints the words that changed.
+`--yes` covers cosmetic drift. A critical-graded change (a credential path in
+new text) must be named with `--yes-tool NAME`; `--yes` is not enough.
 
 `guard` pins tools, instructions, prompts and resources — whatever the lock
 recorded. A lock that never recorded prompts is not pretend-enforced.
@@ -146,48 +133,7 @@ following scan was clean.
 ```
 
 Inputs are in [action.yml](action.yml). Private reports: [SECURITY.md](SECURITY.md).
-
-## Rules
-
-Full catalog: [docs/rules.md](docs/rules.md). `mcp-pin explain MCPA015` prints one rule.
-
-| Rule | Severity | What |
-|---|---|---|
-| MCPA001 | high | Server launched through a shell |
-| MCPA002 | critical | Startup pipes a network fetch into an interpreter |
-| MCPA003 | low | Package run with no pinned version |
-| MCPA004 | high | Package name is a near-miss of an official MCP server |
-| MCPA005 | high | Credential sitting in plaintext in config |
-| MCPA006 | medium | Config with credentials is group/world readable (POSIX) |
-| MCPA007 | high | Remote server over cleartext HTTP |
-| MCPA008 | medium | Remote endpoint with no auth configured |
-| MCPA009 | high | Server bound to 0.0.0.0 |
-| MCPA010 | critical | Agent-directed instruction in a tool description or skill |
-| MCPA011 | high | Invisible characters in agent-facing text |
-| MCPA012 | high | Credential path referenced in agent-facing text |
-| MCPA013 | medium | Skill asks for broad or dangerous tool permissions |
-| MCPA014 | high | Server not in the approval lockfile |
-| MCPA015 | critical | Tool definition changed since approval |
-| MCPA016 | high | Server launch command changed since approval |
-| MCPA017 | high | Skill content changed since approval |
-| MCPA018 | high | LLM classifier flagged agent-facing text (opt-in) |
-| MCPA019 | critical | Server instructions changed since approval |
-| MCPA020 | high | Prompt or resource changed since approval |
-| MCPA021 | high | Tool claims to be read-only but looks like it mutates |
-| MCPA022 | medium | Tool schema accepts a destination its description omits |
-| MCPA023 | critical | Server URL uses a dangerous scheme (javascript:, file:, data:) |
-| MCPA024 | critical | Server URL targets cloud metadata or a link-local address |
-| MCPA025 | medium | Server requests an over-broad OAuth scope |
-| MCPA026 | high | Display title misrepresents what the tool does |
-| MCPA027 | medium | Two servers in one client expose the same tool name |
-| MCPA028 | high | One server reads the home directory while another can post anywhere |
-| MCPA029 | high | Command allowlist includes a binary that runs arbitrary commands |
-| MCPA030 | critical | Tool parameter reaches a shell in the server's own source |
-| MCPA031 | high | Server script changed since approval |
-| MCPA032 | high | Approved server is also reachable without the gateway |
-| MCPA033 | high | Icon source is unsafe for a client to fetch or render |
-| MCPA034 | critical | Environment variable in the config runs code or reads traffic |
-| MCPA035 | high | Environment declaration collects a credential under another name |
+Rules: [docs/rules.md](docs/rules.md). `mcp-pin explain MCPA015` prints one.
 
 ## What it doesn't do
 
@@ -195,7 +141,6 @@ Full catalog: [docs/rules.md](docs/rules.md). `mcp-pin explain MCPA015` prints o
 - It does not call tools during a scan, only `initialize` / `tools/list` (and
   whatever `guard` is proxying).
 - Heuristics below 100% confidence say so. They are not proof.
-- `guard` is stdio only. Remote HTTP/SSE servers can be scanned, not wrapped.
 
 The longer argument — isolation, gateway, policy, logs, protocol surface —
 is in [docs/MANUAL.md](docs/MANUAL.md). Theorems live in
@@ -209,7 +154,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-929 tests, stdlib unittest, nothing to install.
+943 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable
@@ -220,8 +165,6 @@ cd tests/fixtures/rugpull
 MCP_PIN_FIXTURE_MODE=benign   mcp-pin approve . --probe --no-user-configs --no-skills
 MCP_PIN_FIXTURE_MODE=poisoned mcp-pin scan    . --probe --no-user-configs --no-skills
 ```
-
-Continue work from [docs/HANDOFF.md](docs/HANDOFF.md).
 
 ## License
 

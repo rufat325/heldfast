@@ -219,6 +219,13 @@ class TestTheUsageBlockIsTrue(unittest.TestCase):
         body = readme[start:]
         return body[body.index("```bash") + 7: body.index("```", body.index("```bash") + 7)]
 
+    @staticmethod
+    def _manual_usage() -> str:
+        manual = (ROOT / "docs" / "MANUAL.md").read_text(encoding="utf-8")
+        start = manual.index("## Usage")
+        body = manual[start:]
+        return body[body.index("```bash") + 7: body.index("```", body.index("```bash") + 7)]
+
     def _parser(self):
         sys.path.insert(0, str(ROOT / "src"))
         from mcp_pin.cli import build_parser
@@ -261,13 +268,12 @@ class TestTheUsageBlockIsTrue(unittest.TestCase):
                     self.fail(f"`{line}`: {exc}")
 
     def test_every_command_appears_in_the_usage_block(self) -> None:
-        """The other direction. A command nobody documents is one nobody
-        finds, which is the same as not having built it."""
-        block = self._usage_block()
+        """The README names the pin. The manual names the rest."""
+        block = self._manual_usage()
         for command in sorted(self._parser().mcp_commands):
             with self.subTest(command=command):
                 self.assertIn(f"mcp-pin {command}", block,
-                              f"`{command}` is not in the README usage block")
+                              f"`{command}` is not in the MANUAL usage block")
 
 
 class TestNewCommands(unittest.TestCase):
@@ -321,8 +327,11 @@ class TestTheReadmeMatchesTheCode(unittest.TestCase):
     def _readme(self) -> str:
         return (ROOT / "README.md").read_text(encoding="utf-8")
 
+    def _catalog(self) -> str:
+        return (ROOT / "docs" / "rules.md").read_text(encoding="utf-8")
+
     def test_every_rule_is_in_the_table_and_nothing_else_is(self) -> None:
-        listed = set(re.findall(r"^\| (MCPA\d+) \|", self._readme(), re.M))
+        listed = set(re.findall(r"^\| \[?(MCPA\d+)\]?", self._catalog(), re.M))
         known = {r.id for r in all_rules()}
         self.assertEqual(known, listed,
                          "missing: %s   extra: %s"
@@ -330,8 +339,8 @@ class TestTheReadmeMatchesTheCode(unittest.TestCase):
 
     def test_the_table_severities_match_the_registry(self) -> None:
         by_id = {r.id: r.default_severity.label.lower() for r in all_rules()}
-        for line in self._readme().splitlines():
-            match = re.match(r"^\| (MCPA\d+) \| (\w+) \|", line)
+        for line in self._catalog().splitlines():
+            match = re.match(r"^\| \[?(MCPA\d+)\]?\S* \| (\w+) \|", line)
             if not match:
                 continue
             rule_id, stated = match.group(1), match.group(2).lower()
