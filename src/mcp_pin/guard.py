@@ -46,7 +46,7 @@ from typing import Any
 
 from .findings import Severity
 from .artifacts import mismatch
-from .auditlog import AuditLog
+from .auditlog import AuditLog, Signer
 from .lifetime import bind_child, posix_preexec
 from .lockfile import DEFAULT_LOCK_NAME, Lock, launch_mismatch
 from .policy import Policy
@@ -857,10 +857,12 @@ def _load_lock(lock_path: Path, strict: bool) -> Lock:
 
 
 def _open_trail(log_path: Path | None, name: str, policy: str,
-                result_policy: str, guard: Guard) -> AuditLog | None:
+                result_policy: str, guard: Guard,
+                sign_command: str | None = None) -> AuditLog | None:
     if log_path is None:
         return None
-    trail = AuditLog(log_path, name)
+    signer = Signer(sign_command, name=f"guard:{name}") if sign_command else None
+    trail = AuditLog(log_path, name, signer=signer)
     if trail.failed:
         guard.log(f"audit log unavailable: {trail.failed}")
         return None
@@ -1028,6 +1030,11 @@ def _shutdown(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None) -> N
                     f"tools_blocked={len(guard.stats.tools_blocked)} "
                     f"results_flagged={guard.stats.results_flagged}"),
         )
+        # Seal what just happened. A signed prefix cannot be rewritten later,
+        # which is the one thing a hash chain an attacker can recompute does
+        # not give you.
+        if trail.signer is not None and not trail.close_segment():
+            guard.log(f"audit trail not signed: {trail.signer.failed}")
     for stream in (proc.stdin, proc.stdout):
         if stream is not None:
             try:
@@ -1078,7 +1085,8 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         deny_sampling: bool = False, deny_elicitation: bool = False,
         deny_roots: bool = False, result_policy: str = "annotate",
         log_path: Path | None = None, allow_unapproved: bool = False,
-        dry_run: bool = False, require_integrity: bool = False) -> int:
+        dry_run: bool = False, require_integrity: bool = False,
+        sign_command: str | None = None) -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("mcp-pin guard: no server command given", file=sys.stderr)
@@ -1095,7 +1103,8 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
                   deny_sampling=deny_sampling, deny_elicitation=deny_elicitation,
                   deny_roots=deny_roots, result_policy=result_policy,
                   allow_unapproved=allow_unapproved, dry_run=dry_run)
-    trail = _open_trail(log_path, name, policy, result_policy, guard)
+    trail = _open_trail(log_path, name, policy, result_policy, guard,
+                        sign_command)
     _announce_posture(guard, name, lock_path, allow_unapproved, policy)
 
     reason = _pin_still_holds(guard, argv, require_integrity=require_integrity)

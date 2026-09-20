@@ -535,6 +535,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
         allow_unapproved=args.allow_unapproved,
         dry_run=args.dry_run,
         require_integrity=bool(getattr(args, "require_integrity", False)),
+        sign_command=getattr(args, "sign_command", None),
     )
 
 
@@ -687,11 +688,18 @@ def cmd_verify_log(args: argparse.Namespace) -> int:
 
     result = verify(args.path,
                     expect_head=getattr(args, "expect_head", None),
-                    expect_count=getattr(args, "expect_count", None))
+                    expect_count=getattr(args, "expect_count", None),
+                    verify_command=getattr(args, "verify_command", None))
     print(f"mcp-pin: {result.summary()}")
     for problem in result.problems[1:]:
         where = f" line {problem.line}" if problem.line else ""
         print(f"           also{where}: {problem.reason}")
+    if result.ok and result.signatures_checked:
+        # A verified segment is the one claim here that an attacker with write
+        # access cannot manufacture, so it is worth saying separately from the
+        # chain being internally consistent.
+        print(f"           {result.signatures_checked} signed segment(s) verified; "
+              f"the prefixes they cover cannot have been rewritten.")
     if result.ok and not result.keyed:
         # The command used to stop at "chain intact", which reads as a stronger
         # statement than an unkeyed chain can make: whoever can write the log

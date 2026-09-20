@@ -75,6 +75,10 @@ def _canonical(body: dict[str, Any]) -> bytes:
     # unconditionally would invalidate every log already on disk.
     if body.get("alg"):
         fields["alg"] = body["alg"]
+    # Same conditional treatment as `alg`, for the same reason: an entry
+    # without a signature must hash as it always did.
+    if body.get("sig"):
+        fields["sig"] = body["sig"]
     return json.dumps(fields, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=True).encode("utf-8")
 
@@ -102,6 +106,135 @@ def read_head(path: str | "os.PathLike[str]") -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+SEGMENT_EVENT = "segment"
+SEGMENT_PREFIX = "mcp-pin-segment"
+
+
+def segment_payload(seq: int, head: str) -> bytes:
+    """Exactly what a signer signs: the chain's length and where it ended.
+
+    Short and unambiguous on purpose. A signature over "the file" would be a
+    signature over whatever the reader happens to have; this commits to a
+    specific prefix of a specific chain, which is the claim worth making.
+    """
+    return f"{SEGMENT_PREFIX}:{int(seq)}:{head}".encode("utf-8")
+
+
+def split_command(command: str) -> list[str]:
+    """Split a command line the way the platform means it.
+
+    `shlex` has no good setting for Windows. With `posix=True` it eats the
+    backslashes out of `C:\Python\python.exe`; with `posix=False` it leaves
+    the quotes attached to the token, so the quoted path is looked up
+    literally, quotes and all. Neither finds the program. So: split without
+    posix rules, then strip the quotes that splitting was supposed to consume.
+    """
+    import shlex
+
+    if os.name != "nt":
+        return shlex.split(command)
+    out = []
+    for token in shlex.split(command, posix=False):
+        if len(token) >= 2 and token[0] == token[-1] and token[0] in "\"'":
+            token = token[1:-1]
+        out.append(token)
+    return out
+
+
+class Signer:
+    """Signing delegated to a command, because the key must not live here.
+
+    The roadmap entry this closes said "needs a key, which needs somewhere to
+    live". The answer is that it should not live in this process at all. An
+    operator already has somewhere: ssh-agent, a smartcard, a KMS CLI, a
+    password manager's agent. So the guard hands a short payload to a command
+    on stdin and keeps whatever comes back on stdout.
+
+        mcp-pin guard --log trail.jsonl \\
+          --sign-command "ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n mcp-pin -q"
+
+    With `ssh-keygen -Y sign -U` the private key stays in the agent and this
+    process never sees it. That is the strongest form available without
+    inventing key management, and it is why there is no `--signing-key` flag:
+    a key passed to this process is a key this process can leak.
+
+    What it does *not* do, stated because the vocabulary of signing invites
+    more credit than it earns: on a machine where the attacker already runs as
+    you -- the threat model for a malicious MCP server -- it can ask the same
+    agent to sign the same payloads. Signing raises tampering from "edit a
+    file" to "be present while the guard is running and hold the agent", and
+    it makes offline, after-the-fact rewriting of a closed segment impossible.
+    It is not proof against a live same-user adversary, and nothing on the same
+    host is.
+    """
+
+    def __init__(self, command: str, name: str = "", timeout: float = 20.0) -> None:
+        self.command = command
+        self.name = name or "external-signer"
+        self.timeout = timeout
+        self.failed: str | None = None
+
+    def sign(self, payload: bytes) -> str | None:
+        """The signature, base64 of whatever the command returned, or None."""
+        import base64
+        import subprocess
+
+        try:
+            argv = split_command(self.command)
+            proc = subprocess.run(argv, input=payload, capture_output=True,
+                                  timeout=self.timeout, check=False)
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            self.failed = f"signer failed: {exc}"
+            return None
+        if proc.returncode != 0:
+            tail = proc.stderr.decode("utf-8", errors="replace").strip()[:120]
+            self.failed = f"signer exited {proc.returncode}: {tail}"
+            return None
+        if not proc.stdout.strip():
+            self.failed = "signer produced no signature"
+            return None
+        return base64.b64encode(proc.stdout).decode("ascii")
+
+
+def verify_segment(command: str, payload: bytes, signature: str,
+                   timeout: float = 20.0) -> tuple[bool, str]:
+    """Check one segment by handing payload and signature to a command.
+
+    Symmetrical with `Signer`: the public key, the allowed-signers file and the
+    policy about which identities count all live wherever the operator keeps
+    them, not here.
+    """
+    import base64
+    import binascii
+    import subprocess
+    import tempfile
+
+    try:
+        raw = base64.b64decode(signature, validate=True)
+    except (ValueError, binascii.Error):
+        return False, "signature is not valid base64"
+    handle = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".sig") as fh:
+            fh.write(raw)
+            handle = fh.name
+        argv = [a.replace("{sig}", handle) for a in split_command(command)]
+        proc = subprocess.run(argv, input=payload, capture_output=True,
+                              timeout=timeout, check=False)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return False, f"verifier failed: {exc}"
+    finally:
+        if handle:
+            try:
+                os.unlink(handle)
+            except OSError:
+                pass
+    if proc.returncode != 0:
+        tail = proc.stderr.decode("utf-8", errors="replace").strip()[:120]
+        return False, f"verifier rejected it: {tail or 'exit %d' % proc.returncode}"
+    return True, "signature accepted"
+
+
 @dataclass
 class Broken:
     line: int
@@ -117,6 +250,9 @@ class VerifyResult:
     # difference decides whether this is evidence or something an attacker
     # with write access can simply regenerate, so the summary says which.
     mode: str = "sha256"
+    # (through_seq, head_hash, signature, signer) for each signed segment.
+    segments: list[tuple[int, str, str, str]] = field(default_factory=list)
+    signatures_checked: int = 0
 
     @property
     def keyed(self) -> bool:
@@ -125,7 +261,13 @@ class VerifyResult:
     def summary(self) -> str:
         how = "keyed" if self.keyed else "unkeyed"
         if self.ok:
-            return f"{self.entries} entries, chain intact ({how})"
+            sealed = ""
+            if self.signatures_checked:
+                sealed = f", {self.signatures_checked} signed segment(s) verified"
+            elif self.segments:
+                sealed = (f", {len(self.segments)} signed segment(s) not checked "
+                          f"(pass --verify-command)")
+            return f"{self.entries} entries, chain intact ({how}){sealed}"
         first = self.problems[0]
         where = f" at line {first.line}" if first.line else ""
         return (f"{self.entries} entries, chain broken{where}: "
@@ -136,10 +278,11 @@ class AuditLog:
     """Append-only, hash-chained JSON lines."""
 
     def __init__(self, path: str | "os.PathLike[str]", server: str,
-                 key: bytes | None = None) -> None:
+                 key: bytes | None = None, signer: "Signer | None" = None) -> None:
         self.path = Path(path)
         self.server = server
         self.key = log_key() if key is None else key
+        self.signer = signer
         self.seq = 0
         self.prev = GENESIS
         self.failed: str | None = None
@@ -172,7 +315,7 @@ class AuditLog:
             self.failed = f"could not resume {self.path}: {exc}"
 
     def record(self, event: str, *, subject: str = "", decision: str = "",
-               detail: str = "") -> None:
+               detail: str = "", signature: str = "") -> None:
         if self.failed:
             return
         self.seq += 1
@@ -188,6 +331,8 @@ class AuditLog:
         }
         if self.key:
             body["alg"] = HMAC_ALG
+        if signature:
+            body["sig"] = signature
         body["hash"] = _digest(body, self.key)
         try:
             with self.path.open("a", encoding="utf-8") as handle:
@@ -199,6 +344,23 @@ class AuditLog:
             return
         self.prev = str(body["hash"])
         self._write_head()
+
+    def close_segment(self) -> bool:
+        """Sign where the chain has reached and record it as an entry.
+
+        A signature over a prefix is what stops that prefix being rewritten
+        later: an attacker who recomputes an unkeyed chain can produce every
+        hash and cannot produce this. Called at session end, and callable
+        periodically by anything that wants shorter windows.
+        """
+        if self.failed or self.signer is None:
+            return False
+        signature = self.signer.sign(segment_payload(self.seq, self.prev))
+        if signature is None:
+            return False
+        self.record(SEGMENT_EVENT, subject=self.signer.name,
+                    detail=f"through={self.seq}", signature=signature)
+        return True
 
     def _write_head(self) -> None:
         """Record where the chain has got to, beside the log.
@@ -225,7 +387,8 @@ class AuditLog:
 
 def verify(path: str | "os.PathLike[str]", key: bytes | None = None, *,
            expect_head: str | None = None,
-           expect_count: int | None = None) -> VerifyResult:
+           expect_count: int | None = None,
+           verify_command: str | None = None) -> VerifyResult:
     """Walk the chain, then check it is the *whole* chain.
 
     Walking alone only proves internal consistency, and a prefix of a valid
@@ -282,14 +445,40 @@ def verify(path: str | "os.PathLike[str]", key: bytes | None = None, *,
                     Broken(number, f"sequence jumped to {entry.get('seq')}, "
                                    f"expected {expected_seq}"))
                 break
+            # A segment signs the head as it stood *before* this entry, so
+            # capture that rather than the running value after it.
+            if entry.get("event") == SEGMENT_EVENT and entry.get("sig"):
+                result.segments.append((int(entry.get("seq") or 0) - 1,
+                                        str(expected_prev),
+                                        str(entry.get("sig")),
+                                        str(entry.get("subject") or "")))
             expected_prev = str(recorded)
             expected_seq += 1
 
+    if not result.problems and verify_command:
+        _check_segments(result, verify_command)
     if not result.problems:
         _check_completeness(result, path, expected_prev, expect_head, expect_count)
 
     result.ok = not result.problems
     return result
+
+
+def _check_segments(result: VerifyResult, command: str) -> None:
+    """Verify every signed segment, or say which one failed.
+
+    A segment commits to a prefix of the chain, so a verified one means that
+    prefix cannot have been rewritten -- which is the part an unkeyed hash
+    chain cannot give you at all.
+    """
+    for through, head, signature, signer in result.segments:
+        ok, detail = verify_segment(command, segment_payload(through, head), signature)
+        if not ok:
+            result.problems.append(Broken(
+                0, f"segment through entry {through} signed by {signer or 'unknown'} "
+                   f"did not verify: {detail}"))
+            return
+        result.signatures_checked += 1
 
 
 def _check_completeness(result: VerifyResult, path: str | "os.PathLike[str]",

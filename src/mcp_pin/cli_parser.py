@@ -299,6 +299,12 @@ def _register_verify_log(sub: argparse._SubParsersAction) -> None:
         ),
     )
     verify_p.add_argument("path", metavar="PATH", help="the log file to check")
+    verify_p.add_argument("--verify-command", metavar="CMD", default=None,
+                          help="check signed segments with this command; {sig} is "
+                               "replaced by a file holding the signature and the "
+                               "payload arrives on stdin. Without it, segments are "
+                               "reported as present and unchecked rather than "
+                               "assumed good")
     verify_p.add_argument("--expect-head", metavar="HASH", default=None,
                           help="the hash the chain should end on, from a record "
                                "kept outside the log")
@@ -355,6 +361,13 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
     guard_p.add_argument("--strict", action="store_true",
                          help="fail closed on internal errors (the default; "
                               "--fail-open inverts this)")
+    guard_p.add_argument("--sign-command", metavar="CMD", default=None,
+                         help="close the audit trail with a signature from this "
+                              "command, which receives the payload on stdin. The "
+                              "key stays wherever it already lives -- e.g. "
+                              "\"ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n mcp-pin -q\". "
+                              "A prefix that has been signed cannot be rewritten "
+                              "afterwards, which an unkeyed chain cannot promise")
     guard_p.add_argument("--require-integrity", action="store_true",
                          help="refuse to start when a recorded registry artifact "
                               "cannot be verified against the local package cache")
