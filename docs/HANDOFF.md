@@ -73,6 +73,9 @@ Read this file and `docs/GUARANTEES.md` instead.
     no longer files MCPA014 because the runner's cwd is the repo root.
 21. ~~Self-scan uploaded the attack corpus to GitHub code scanning.~~ Done:
     `--exclude tests`. The 33 Security-tab alerts were fixture findings.
+22. ~~Guard did not enforce recorded script digests at spawn.~~ Done:
+    T-ARTIFACT. Scan-time MCPA031 is no longer the only place the hash is
+    checked.
 
 ## How to run
 

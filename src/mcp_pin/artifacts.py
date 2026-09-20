@@ -140,3 +140,22 @@ def artifact_digests(server: Any) -> dict[str, str]:
         if digest:
             out[key] = digest
     return out
+
+
+def mismatch(recorded: dict[str, str] | None) -> str | None:
+    """None if every recorded digest still matches, or nothing was recorded.
+
+    An empty pin is not a pass -- it is 'there was no local file to hash',
+    which `coverage` already says. This only refuses a digest that moved.
+    Scan reports that as MCPA031. Guard and gateway must not start the
+    child in the same situation, or the pin is a scan-time opinion.
+    """
+    if not recorded:
+        return None
+    for path, approved in recorded.items():
+        now = digest_file(Path(path))
+        if now is None:
+            return f"approved script {path} is no longer readable"
+        if now != approved:
+            return f"approved script {path} has changed since approval"
+    return None

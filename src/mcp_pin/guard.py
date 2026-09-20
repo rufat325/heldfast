@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any
 
 from .findings import Severity
+from .artifacts import mismatch
 from .auditlog import AuditLog
 from .lifetime import bind_child, posix_preexec
 from .lockfile import DEFAULT_LOCK_NAME, Lock
@@ -924,6 +925,17 @@ def _shutdown(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None) -> N
     guard.log(guard.summary())
 
 
+def _code_still_matches(guard: Guard) -> str | None:
+    """Refuse to spawn if a recorded script digest has moved.
+
+    MCPA031 reports this on a later scan. Starting the child anyway would
+    make the pin a scan-time opinion.
+    """
+    entry = guard._resolve_entry() or {}
+    recorded = entry.get("artifacts")
+    return mismatch(recorded if isinstance(recorded, dict) else None)
+
+
 def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         server_name: str | None = None, strict: bool = True,
         block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
@@ -949,6 +961,11 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
                   allow_unapproved=allow_unapproved, dry_run=dry_run)
     trail = _open_trail(log_path, name, policy, result_policy, guard)
     _announce_posture(guard, name, lock_path, allow_unapproved, policy)
+
+    reason = _code_still_matches(guard)
+    if reason:
+        print(f"mcp-pin guard: {reason}", file=sys.stderr)
+        return 2
 
     proc = _launch(argv)
     if proc is None:

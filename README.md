@@ -87,9 +87,20 @@ CRITICAL MCPA015  Tool definition changed since approval (possible rug pull)
 
 The config file was byte-identical across those two scans.
 
+That shape was published, not invented: [Invariant Labs, April 2025](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks)
+showed a WhatsApp MCP helper that looked like "fact of the day" and later
+rewrote its tools to exfiltrate chats. Approval records what you reviewed. It
+does not prove the first version was honest.
+
 ## Pin, then refuse
 
 `scan` tells you. `guard` sits on stdio and will not pass the change through.
+Remote HTTP/SSE servers can be scanned; they cannot be wrapped. That is a
+limit of the runtime, not of the scanner.
+
+If the lock recorded a digest of a local script, `guard` and `gateway` will
+not start the child when those bytes have moved. A registry package
+(`npx pkg@1.2.3`) has no local file: the version string is the pin.
 
 ```json
 {
@@ -189,7 +200,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-904 tests, stdlib unittest, nothing to install.
+909 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

@@ -568,6 +568,40 @@ FAIL_OPEN = "cursor:github" not in ids
 """,
     ),
     Mutant(
+        id="guard-starts-rewritten-script",
+        theorem="T-ARTIFACT",
+        path="guard.py",
+        original="""    reason = _code_still_matches(guard)
+    if reason:
+        print(f"mcp-pin guard: {reason}", file=sys.stderr)
+        return 2
+""",
+        replacement="",
+        harm="A rewritten local script still starts. MCPA031 is only a later scan.",
+        probe="""
+import inspect
+from mcp_pin import guard as g
+FAIL_OPEN = "_code_still_matches" not in inspect.getsource(g.run)
+""",
+    ),
+    Mutant(
+        id="gateway-starts-rewritten-script",
+        theorem="T-ARTIFACT",
+        path="gateway.py",
+        original="""        reason = mismatch(self.recorded_artifacts)
+        if reason:
+            self.error = reason
+            return False
+""",
+        replacement="",
+        harm="The gateway starts a backend whose recorded script has moved.",
+        probe="""
+import inspect
+from mcp_pin.gateway import Backend
+FAIL_OPEN = "recorded_artifacts" not in inspect.getsource(Backend.start)
+""",
+    ),
+    Mutant(
         id="probe-unbound-child",
         theorem="T-PROBE-LIFE",
         path="probe.py",

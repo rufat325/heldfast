@@ -263,6 +263,35 @@ class TestEndToEnd(unittest.TestCase):
             self.assertNotIn("BLOCKED", by_name["list_invoices"].description)
             self.assertIn("List invoice identifiers", by_name["list_invoices"].description)
 
+    def test_a_rewritten_script_is_not_started(self) -> None:
+        """MCPA031 is a later scan. Starting the child is the hole ChatGPT named."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            script = root / "server.py"
+            script.write_text("print('should not run')\n", encoding="utf-8")
+            spec = ServerSpec(
+                name="notes", source=str(root / ".mcp.json"), client="test",
+                transport="stdio", command=sys.executable, args=[str(script)],
+            )
+            lock = Lock()
+            lock.record([spec], [], [])
+            self.assertTrue(lock.servers[spec.identity()].get("artifacts"))
+            lock.save(root / ".mcp-pin.lock")
+            script.write_text("print('rewritten')\n", encoding="utf-8")
+            from contextlib import redirect_stderr
+            from io import StringIO
+            from mcp_pin.guard import run
+            buf = StringIO()
+            with redirect_stderr(buf):
+                code = run(
+                    [sys.executable, str(script)],
+                    lock_path=root / ".mcp-pin.lock",
+                    server_name="notes",
+                    quiet=True,
+                )
+            self.assertEqual(2, code)
+            self.assertIn("changed since approval", buf.getvalue())
+
     def test_guard_is_transparent_when_nothing_changed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             lock_dir = Path(tmp)

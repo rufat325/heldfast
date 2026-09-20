@@ -41,6 +41,7 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-PROBE-LIFE | `--probe` binds the child the same way `guard` does (`posix_preexec` / job object). | `tests/test_hostile.py`, `tests/test_mutation.py` |
 | T-UNPINNED | A scan of configured servers with no lockfile fires MCPA014 at HIGH, so default `--fail-on high` fails the build. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
 | T-LOCK-TREE | A lockfile sitting in the scanned directory is the lockfile, even when cwd is somewhere else. | `tests/test_mcp_pin.py` |
+| T-ARTIFACT | If the lock recorded local-script digests, `guard` and `gateway` refuse to start the child when those bytes have moved. A registry package has no local file; the version string is the pin. | `tests/test_artifacts.py`, `tests/test_guard.py`, `tests/test_mutation.py` |
 | T-LIST-CHANGED | `notifications/tools/list_changed` marks the backend stale; the next `tools/list` or call re-fetches and re-screens. | `tests/test_gateway_parity.py`, `tests/test_mutation.py` |
 | T-PROBE-GATE | A rule exception in the static pre-pass launches nothing. | `tests/test_probe_boundary.py`, `tests/test_mutation.py` |
 | T-DRIFT-ID | Two lock entries sharing a bare name are not compared against the first match. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
@@ -68,6 +69,7 @@ We do not claim these. Do not imply them in output.
 - Authenticating `--as`; it is a label the process claimed, not an identity
 - Sandboxing the child server (`--probe` runs it)
 - Proxying remote HTTP/SSE MCP (scan only; `guard` is stdio)
+- Hashing a registry tarball (`npx pkg@1.2.3` is pinned by version, not by bytes)
 - Stopping a client that talks to the server *beside* the gateway (MCPA032 reports it)
 - Proving a regex matches "all prompt injection"
 

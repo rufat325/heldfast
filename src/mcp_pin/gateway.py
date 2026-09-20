@@ -101,6 +101,7 @@ class Backend:
         # Called with (server_name, message) for anything that is not the
         # reply being waited on. Returns a message to send back, or None.
         self.on_unsolicited: Any = None
+        self.recorded_artifacts: dict[str, str] = {}
         self._id = 0
         self._lock = threading.Lock()
         self.needs_refresh = False
@@ -112,6 +113,13 @@ class Backend:
     def start(self) -> bool:
         import os
         import shutil
+
+        from .artifacts import mismatch
+
+        reason = mismatch(self.recorded_artifacts)
+        if reason:
+            self.error = reason
+            return False
 
         if not self.spec.command:
             self.error = "no command configured"
@@ -300,6 +308,9 @@ class Gateway:
             backend = Backend(spec, timeout=timeout,
                               isolate_env=isolate_env,
                               share_env=share_env)
+            entry = guard._resolve_entry() or {}
+            recorded = entry.get("artifacts")
+            backend.recorded_artifacts = recorded if isinstance(recorded, dict) else {}
             backend.on_unsolicited = self.screen_server_message
             if spec.name in self.backends:
                 other = self.backends[spec.name].spec.identity()

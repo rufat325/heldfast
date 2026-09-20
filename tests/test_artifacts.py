@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.artifacts import MAX_BYTES, artifact_digests, digest_file  # noqa: E402
+from mcp_pin.artifacts import MAX_BYTES, artifact_digests, digest_file, mismatch  # noqa: E402
 from mcp_pin.lockfile import Lock  # noqa: E402
 from mcp_pin.model import ServerSpec  # noqa: E402
 from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
@@ -164,6 +164,33 @@ class TestDriftIsReported(unittest.TestCase):
                     "skills": {}}
             self.assertEqual([], [f for f in run_rules(AuditContext(servers=[spec], lock=lock))
                                   if f.rule_id == "MCPA031"])
+
+
+class TestMismatch(unittest.TestCase):
+    """Scan-time MCPA031 is not a runtime boundary. This is."""
+
+    def test_unchanged_bytes_are_silent(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "server.js"
+            path.write_text("v1", encoding="utf-8")
+            recorded = {str(path): digest_file(path)}
+            self.assertIsNone(mismatch(recorded))
+
+    def test_rewritten_bytes_are_a_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "server.js"
+            path.write_text("v1", encoding="utf-8")
+            recorded = {str(path): digest_file(path)}
+            path.write_text("v2", encoding="utf-8")
+            self.assertIn("changed since approval", mismatch(recorded) or "")
+
+    def test_a_missing_file_is_a_reason(self) -> None:
+        recorded = {"/no/such/server.js": "abc"}
+        self.assertIn("no longer readable", mismatch(recorded) or "")
+
+    def test_nothing_recorded_is_not_a_pass_it_is_n_a(self) -> None:
+        self.assertIsNone(mismatch(None))
+        self.assertIsNone(mismatch({}))
 
 
 if __name__ == "__main__":
