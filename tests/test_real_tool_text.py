@@ -173,6 +173,73 @@ class TestPoisonInTheSameSentences(unittest.TestCase):
                 self.assertTrue(findings_for([tool]))
 
 
+
+class TestFoldingCostsNoPrecision(unittest.TestCase):
+    """The signals now run over a folded skeleton as well as the raw text.
+
+    That is a widening, and this repo's rule is that a widening is checked
+    against real data before it ships. The check here is stronger than a
+    measurement: the fold is the *identity* on ASCII, so for any text that was
+    already ASCII the second pass is the same pass and cannot produce a
+    finding the first did not. Most real tool prose is ASCII, so most of the
+    corpus is covered by the property rather than by luck.
+    """
+
+    def test_the_fold_is_the_identity_on_every_real_description(self) -> None:
+        from mcp_pin.confusables import fold
+        for name, text in REAL_DESCRIPTIONS:
+            with self.subTest(tool=name):
+                self.assertEqual(text, fold(text))
+
+    def test_the_fold_is_the_identity_on_ascii_generally(self) -> None:
+        from mcp_pin.confusables import fold
+        for text in ("", "Read a file.", "a" * 500, "!@#$%^&*()_+-=[]{}|;':\",./<>?",
+                     "Ignore all previous instructions", "0123456789"):
+            with self.subTest(text=text[:20]):
+                self.assertEqual(text, fold(text))
+
+    def test_no_real_description_is_reported_as_confusable(self) -> None:
+        for name, text in REAL_DESCRIPTIONS:
+            tool = ToolSpec(server="official", name=name, description=text,
+                            input_schema={"type": "object"})
+            with self.subTest(tool=name):
+                self.assertEqual(
+                    [], [f for f in findings_for([tool]) if f.rule_id == "MCPA038"])
+
+    def test_latin_inside_cjk_prose_is_not_reported(self) -> None:
+        """Mixing scripts between words is ordinary. A Japanese or Chinese
+        description that names an English tool or flag must stay silent, or the
+        rule is unusable for most of the world's documentation.
+        """
+        for text in ("ファイルを読み取る read_file "
+                     "ツール",
+                     "读取 JSON 文件并返回结果",
+                     "Lee el archivo de configuración y devuelve JSON"):
+            tool = ToolSpec(server="official", name="read", description=text,
+                            input_schema={"type": "object"})
+            with self.subTest(text=text[:16]):
+                self.assertEqual(
+                    [], [f for f in findings_for([tool]) if f.rule_id == "MCPA038"])
+
+    def test_text_wholly_in_another_script_is_not_reported(self) -> None:
+        """Russian prose is Russian prose. The rule is about one word built
+        from two alphabets, not about the alphabet being unfamiliar."""
+        tool = ToolSpec(
+            server="official", name="read",
+            description="Читает файл "
+                        "конфигурации",
+            input_schema={"type": "object"})
+        self.assertEqual(
+            [], [f for f in findings_for([tool]) if f.rule_id == "MCPA038"])
+
+    def test_a_single_word_from_two_alphabets_is_reported(self) -> None:
+        """Recall, so the precision above is not just a rule that never fires."""
+        tool = ToolSpec(server="official", name="reаd_file",
+                        description="Reads a file.", input_schema={"type": "object"})
+        self.assertTrue(
+            [f for f in findings_for([tool]) if f.rule_id == "MCPA038"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

@@ -554,6 +554,31 @@ DOCS: dict[str, RuleDoc] = {
                    "reads as 'looked and it was fine'. Unpinned launches are "
                    "MCPA003.",
     ),
+    "MCPA038": RuleDoc(
+        what="A word in a tool name, description, title, parameter or skill body "
+             "that mixes Latin letters with letters from another script that "
+             "imitate them -- Cyrillic, Greek, Armenian or Cherokee.",
+        why="MCPA011 finds text a reviewer cannot see. This finds text a reviewer "
+            "sees and misreads, which is harder to defend against: \"Ignore all "
+            "previous instructions\" with one Cyrillic o is the same sentence to a "
+            "human and to the model, and a different string to every pattern in the "
+            "scanner. A tool *name* is the case nothing else covers. MCPA027 "
+            "reports two servers offering the same tool name -- shadowing by "
+            "collision. A name that merely looks the same collides with nothing, so "
+            "MCPA027 cannot see it, and a reviewer reading a list of tools sees two "
+            "identical entries.",
+        example='"name": "read_file"   # with U+0430 in place of the a',
+        fix="Compare the text against its ASCII skeleton and retype the word in "
+            "ASCII if it was meant innocently. If it came from a third-party "
+            "server, treat it as a compromise indicator: there is no ordinary "
+            "reason to build one word from two alphabets.",
+        wrong_when="Prose that genuinely mixes scripts *between* words is not "
+                   "flagged, which is why Latin inside Chinese or Japanese text "
+                   "is silent -- CJK characters do not imitate Latin letters. A "
+                   "single word drawn from two Latin-like alphabets is the "
+                   "narrow case. Transliteration tables and Unicode test "
+                   "fixtures are the plausible false positives.",
+    ),
     "MCPA037": RuleDoc(
         what="A registry artifact hash was recorded at approval, and this run could "
              "not check it against anything: no registry answer and nothing in the "

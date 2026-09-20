@@ -24,6 +24,7 @@ import re
 import unicodedata
 from typing import Iterable, NamedTuple
 
+from ..confusables import mixed_script_words
 from ..findings import Finding, Location, Severity
 from .base import AuditContext, rule
 
@@ -189,11 +190,31 @@ def _excerpt(text: str, match: re.Match[str], width: int = 90) -> str:
 
 
 def _scan_text(text: str, strict: bool) -> Iterable[tuple[Signal, re.Match[str]]]:
-    for sig in SIGNALS:
-        if strict and not sig.universal:
-            continue
-        for m in sig.pattern.finditer(text):
-            yield sig, m
+    """Every signal that fires, over the text and over its folded skeleton.
+
+    The skeleton catches the spelling where the sentence is still English and
+    the regex still misses it: a Cyrillic o in place of the Latin one reads
+    identically to a human and to the model. `confusables.fold` is the identity
+    on ASCII, so for the overwhelming majority of real descriptions the second
+    pass is the same pass and cannot add anything.
+    """
+    from ..confusables import fold
+
+    seen: set[tuple[str, int, str]] = set()
+    folded = fold(text)
+    for source in (text, folded) if folded != text else (text,):
+        for sig in SIGNALS:
+            if strict and not sig.universal:
+                continue
+            for m in sig.pattern.finditer(source):
+                # The same phrase found in both passes is one finding. Keyed on
+                # the matched text rather than the offset, because folding can
+                # move offsets when NFKC changes a character's width.
+                key = (sig.category, m.start(), m.group(0))
+                if key in seen:
+                    continue
+                seen.add(key)
+                yield sig, m
 
 
 class Target(NamedTuple):
@@ -504,3 +525,64 @@ def scan_untrusted_text(text: str) -> list[tuple[str, str, float]]:
     for sig, m in _scan_text(text or "", strict=True):
         out.append((sig.category, m.group(0)[:80], sig.confidence))
     return out
+
+
+def _confusable_sites(ctx: AuditContext):
+    """(label, server, path, line, text, words) for everything worth checking.
+
+    Tool *names* are here as well as the prose, and they are the case nothing
+    else in this file covers: `_targets` carries descriptions, titles and
+    parameters, and a name is none of those.
+    """
+    for tool in ctx.tools:
+        words = mixed_script_words(tool.name or "")
+        if words:
+            yield (f"{tool.server}/{tool.name}", tool.server,
+                   getattr(tool, "source", "") or "", 0, tool.name, words)
+    for tgt in _targets(ctx):
+        words = mixed_script_words(tgt.text)
+        if words:
+            yield (tgt.label, tgt.server, tgt.path, tgt.anchor, tgt.text, words)
+
+
+@rule("MCPA038", "Confusable characters in agent-facing text", Severity.HIGH)
+def confusable_characters(ctx: AuditContext) -> Iterable[Finding]:
+    """A word built from Latin letters and letters that imitate them.
+
+    MCPA011 catches text a reviewer cannot see. This catches text a reviewer
+    sees and misreads, which is the harder problem: "Ignore all previous
+    instructions" with one Cyrillic letter is the same sentence to a human and
+    to the model, and a different string to every pattern in this file. Folding
+    fixes the matching (see `confusables.fold`); this reports the substitution
+    itself, because it is evidence on its own.
+
+    A tool *name* is the case nothing else here covers. MCPA027 reports two
+    servers offering the same tool name, which is shadowing by collision. A
+    name that only looks the same collides with nothing, so MCPA027 cannot see
+    it -- `read_file` with one Cyrillic letter sits beside the real one and a
+    reviewer scanning a list sees two identical entries.
+    """
+    for label, server, path, line, text, words in _confusable_sites(ctx):
+        first = words[0]
+        yield Finding(
+            rule_id="MCPA038",
+            title="Confusable characters in agent-facing text",
+            severity=Severity.HIGH,
+            location=Location(path=path, line=line, snippet=first),
+            evidence=(
+                f"{label}: {len(words)} word(s) mix Latin with letters that "
+                f"imitate it -- {', '.join(repr(w) for w in words[:3])}"
+            ),
+            remediation=(
+                "Compare the text against its ASCII skeleton. A word combining "
+                "Latin with Cyrillic, Greek, Armenian or Cherokee letters reads "
+                "as ordinary English and matches nothing, which is the only "
+                "reason to write one. Check tool names especially: a name that "
+                "merely looks like an approved one shadows it without colliding "
+                "with it, so nothing reports a duplicate."
+            ),
+            server=server,
+            atlas=["AML.T0051.001"],
+            cwe=["CWE-1007"],
+            tags=["poisoning", "obfuscation"],
+        )

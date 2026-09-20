@@ -42,6 +42,7 @@ Do not edit by hand.
 | [MCPA035](#mcpa035) | high | Environment declaration collects a credential under another name |
 | [MCPA036](#mcpa036) | high | Registry artifact changed since approval |
 | [MCPA037](#mcpa037) | low | Registry artifact could not be verified |
+| [MCPA038](#mcpa038) | high | Confusable characters in agent-facing text |
 
 ## MCPA001
 
@@ -623,4 +624,20 @@ def count(path: str):
 **How to fix it.** Re-run where the registry is reachable, or on a machine whose package cache holds the artifact. A build that must not pass on 'could not see' should pass `--require-integrity`. All three commands honour it and it changes more than a severity: on `scan` it raises this to high so the default `--fail-on high` fails, and on `guard` and `gateway` it changes the launch path, refusing to start rather than running something unverified. Gating CI on integrity while developer machines still launched unverified servers would leave the loop open at the end that matters.
 
 **When it is wrong.** This is not a report that anything changed. The recorded hash still stands and the approval is still the approval. The commonest way to reach it is an empty cache -- a fresh machine or a clean CI runner has nothing to compare, and `npx -y` fetches at spawn -- which is why it is low by default rather than a refusal. On a deliberately offline runner it is expected. `--safe` guarantees no connection is made, so under it this fires for every pinned registry launch.
+
+## MCPA038
+
+**Confusable characters in agent-facing text** - severity `high`
+
+**What it looks for.** A word in a tool name, description, title, parameter or skill body that mixes Latin letters with letters from another script that imitate them -- Cyrillic, Greek, Armenian or Cherokee.
+
+**Why it matters.** MCPA011 finds text a reviewer cannot see. This finds text a reviewer sees and misreads, which is harder to defend against: "Ignore all previous instructions" with one Cyrillic o is the same sentence to a human and to the model, and a different string to every pattern in the scanner. A tool *name* is the case nothing else covers. MCPA027 reports two servers offering the same tool name -- shadowing by collision. A name that merely looks the same collides with nothing, so MCPA027 cannot see it, and a reviewer reading a list of tools sees two identical entries.
+
+```
+"name": "read_file"   # with U+0430 in place of the a
+```
+
+**How to fix it.** Compare the text against its ASCII skeleton and retype the word in ASCII if it was meant innocently. If it came from a third-party server, treat it as a compromise indicator: there is no ordinary reason to build one word from two alphabets.
+
+**When it is wrong.** Prose that genuinely mixes scripts *between* words is not flagged, which is why Latin inside Chinese or Japanese text is silent -- CJK characters do not imitate Latin letters. A single word drawn from two Latin-like alphabets is the narrow case. Transliteration tables and Unicode test fixtures are the plausible false positives.
 
