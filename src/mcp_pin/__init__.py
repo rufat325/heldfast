@@ -1,6 +1,6 @@
 """mcp-pin -- a zero-dependency security scanner for MCP servers and agent skills."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .findings import Finding, Location, Severity
 
