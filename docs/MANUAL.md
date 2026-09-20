@@ -4,6 +4,31 @@ The first screen is [the README](../README.md). This page is the rest of
 the explanation: probing, isolation, gateway, policy, logs, protocol
 surface, and the measurements behind the rules.
 
+## Contents
+
+- [Why](#why)
+- [Install](#install)
+- [Usage](#usage)
+- [Where things stand (`status`)](#where-things-stand-status)
+- [Rules](#rules)
+- [When a server changes its mind mid-session](#when-a-server-changes-its-mind-mid-session)
+- [Pinning the code, not just the command](#pinning-the-code-not-just-the-command)
+- [Constraining what a tool may be asked to do](#constraining-what-a-tool-may-be-asked-to-do)
+- [Proving what the guard did](#proving-what-the-guard-did)
+- [Reading the server's own source](#reading-the-servers-own-source)
+- [Protocol versions](#protocol-versions)
+- [What a server actually controls](#what-a-server-actually-controls)
+- [Using it from an agent](#using-it-from-an-agent)
+- [Enforcing it at runtime (`guard`)](#enforcing-it-at-runtime-guard)
+- [The LLM tier (`--llm`)](#the-llm-tier---llm)
+- [About probing](#about-probing)
+- [What it doesn't do](#what-it-doesnt-do)
+- [Tuning](#tuning)
+- [Development](#development)
+- [License](#license)
+
+Two pages carry the load rather than this one: [GUARANTEES.md](GUARANTEES.md) is what is claimed and what is not, and [rules.md](rules.md) is the generated rule catalogue. This page is the reasoning in between, and it is long because the reasoning is the product -- read the section you need.
+
 ## Why
 
 I wanted to know what MCP servers were actually configured on my machine, and whether any
@@ -1111,6 +1136,15 @@ two pipes, so a remote server configured with a `url` has nothing for it to wrap
 what you do not get is refusal at the call site. Said plainly because the alternative is
 someone assuming they are covered.
 
+If most of your servers are hosted, that is worth being blunt about: today you get the
+scan, the pin and the CI gate, and not the call-site refusal. The gateway is the component
+that closes it — it already fronts a fleet, holds one audit trail and makes the approval
+decision per call, and nothing about that design is tied to the child being local; what is
+missing is an HTTP/SSE backend transport beside the stdio one. That is the intended path
+rather than a second tool, and it is not built yet. Until it is, a remote server is
+reviewed and pinned but not enforced at the call site, and `coverage` says so per server
+rather than leaving you to work it out.
+
 `guard` also ties the server's lifetime to its own - a Job Object on Windows,
 `PR_SET_PDEATHSIG` on Linux. Its cleanup handles a normal exit, but if the guard is killed
 outright that never runs, and a server which ignores stdin close would otherwise outlive it
@@ -1225,7 +1259,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-994 tests, stdlib unittest, nothing to install.
+1022 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

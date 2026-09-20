@@ -82,7 +82,12 @@ reviewed. It does not prove the first version was honest.
 ## Pin, then refuse
 
 `scan` tells you. `guard` sits on stdio and will not pass the change through.
-Remote HTTP/SSE servers can be scanned; they cannot be wrapped.
+
+Remote HTTP/SSE servers can be scanned and pinned; they cannot be wrapped, so
+you get the CI gate and not the call-site refusal. Closing that is the
+gateway's job — it already makes the decision per call for a whole fleet and
+needs an HTTP backend transport beside the stdio one. Not built yet; `coverage`
+says so per server rather than letting you assume otherwise.
 
 If the lock recorded a digest of a local script, `guard` and `gateway` will
 not start the child when those bytes have moved. They will also not start a
@@ -180,7 +185,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-994 tests, stdlib unittest, nothing to install.
+1022 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable
