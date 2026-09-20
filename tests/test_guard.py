@@ -181,6 +181,48 @@ class TestPolicies(unittest.TestCase):
         from mcp_pin.guard import DEFAULT_POLICY
         self.assertEqual("block", DEFAULT_POLICY)
 
+    def _call(self, policy: str, **kw):
+        g = Guard("svc", make_lock({"read": BENIGN}), policy=policy, quiet=True, **kw)
+        g.filter_tools([raw_tool("read", POISONED)])
+        return g, g.check_call({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                "params": {"name": "read", "arguments": {}}})
+
+    def test_warn_forwards_the_call_it_advertised(self) -> None:
+        """The documented contract is "lets it through and logs", and only
+        half of it was true: the drifted description was forwarded and then
+        the call was hard-refused. That leaves the agent a tool it can see and
+        can never use -- the "broken server, hunting the wrong problem"
+        failure that choosing between block and strip exists to avoid. The
+        injection has already reached the model by then, so refusing the call
+        bought very little and cost the contract."""
+        g, refusal = self._call("warn")
+        self.assertIsNone(refusal)
+        self.assertEqual(["read: identity"], g.stats.calls_would_deny)
+        self.assertEqual([], g.stats.calls_denied)
+
+    def test_block_and_strip_still_refuse_the_call(self) -> None:
+        for policy in ("block", "strip"):
+            with self.subTest(policy=policy):
+                g, refusal = self._call(policy)
+                self.assertIsNotNone(refusal)
+                self.assertTrue(g.stats.calls_denied)
+
+    def test_warn_does_not_loosen_the_argument_policy(self) -> None:
+        """`--policy` is what happens to a rejected tool. Limits on what an
+        approved tool may be asked to do are a different layer with its own
+        --dry-run, and observe mode for one is not observe mode for the other.
+        """
+        from mcp_pin.policy import Policy
+        lock = make_lock({"read": BENIGN})
+        g = Guard("svc", lock, policy="warn", quiet=True)
+        g.call_policy = Policy({"read": {"paths": ["/workspace/**"]}})
+        g.filter_tools([raw_tool("read", BENIGN)])
+        refusal = g.check_call({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "read", "arguments": {"path": "/etc/passwd"}}})
+        self.assertIsNotNone(refusal)
+        self.assertTrue(g.stats.calls_denied)
+
 
 class TestFailurePosture(unittest.TestCase):
     def test_internal_error_fails_open_by_default(self) -> None:

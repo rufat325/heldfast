@@ -331,6 +331,24 @@ class Guard:
         self.log(f"DENIED {name}: {decision.reason}")
         return self._refusal_result(message, name, decision.reason)
 
+    @property
+    def _observe_only(self) -> bool:
+        """Should an identity refusal be logged and forwarded rather than made?
+
+        `--dry-run` says so explicitly. `--policy warn` says the same thing in
+        the only reading of the word that is useful: it already hands the
+        model the drifted description unchanged, so refusing the call as well
+        left the agent a tool it could see and could never use -- the "broken
+        server, hunting the wrong problem" failure that the choice between
+        block and strip exists to avoid. The documented contract was "lets it
+        through and logs"; this is the half that was missing.
+
+        Deliberately not applied to the argument policy. `--policy` is what
+        happens to a rejected *tool*; limits on what an approved tool may be
+        asked to do are a separate layer with its own `--dry-run`.
+        """
+        return self.dry_run or self.policy == "warn"
+
     def _identity_refusal(self, message: dict[str, Any], name: str
                           ) -> dict[str, Any] | None:
         tool = self._listed.get(name)
@@ -348,7 +366,7 @@ class Guard:
             return None
         if verdict == "allow":
             return None
-        if self.dry_run:
+        if self._observe_only:
             self.stats.calls_would_deny.append(f"{name}: identity")
             self.log(f"WOULD DENY {name}: {reason}")
             return None
@@ -374,7 +392,7 @@ class Guard:
                 return None
         if verdict == "allow":
             return None
-        if self.dry_run:
+        if self._observe_only:
             self.stats.calls_would_deny.append(f"{key}: identity")
             self.log(f"WOULD DENY {key}: {reason}")
             return None
