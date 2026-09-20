@@ -61,11 +61,17 @@ from __future__ import annotations
 
 import base64
 import binascii
+import gzip
 import hashlib
+import io
 import json
 import os
+import re
+import tarfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 # Hashing a body to compare it is cheap; hashing an arbitrarily large file
 # found in a cache directory is not the job. A wheel above this is not the
@@ -371,4 +377,156 @@ def refusal(recorded: dict[str, str] | None,
         first = unverified[0]
         return (f"--require-integrity was given and {first.key} could not be "
                 f"verified: {first.detail}")
+    return None
+
+
+# A dependency spec that names one version and no range. npm writes `1.2.3`;
+# PEP 508 writes `==1.2.3`. Everything else -- `^1.2`, `~1.2`, `>=1`, `*`, a
+# git url, a tag -- resolves to whatever is newest when the tree is installed.
+_EXACT_NPM = re.compile(r"^\s*=?\d+\.\d+\.\d+[\w.+-]*\s*$")
+_EXACT_PEP508 = re.compile(r"==\s*\d+\.\d+")
+
+
+@dataclass(frozen=True)
+class Reach:
+    """How far the pin on one artifact actually extends.
+
+    MCPA036 pins the tarball. The tree that tarball installs beneath itself is
+    not pinned and cannot be from here: resolving it needs the package manager
+    and the network, and the answer would be a different tree tomorrow. What
+    *is* answerable offline, from the bytes already in the cache, is how much
+    of that tree floats -- which is the honest size of what the pin does not
+    cover.
+
+    Measured on 60 real cached packages: 115 floating specs against 17 exact.
+    That ratio is why this is a fact reported beside the pin and not a rule.
+    A finding that fires on seven specs out of eight, everywhere, forever, is
+    a finding people switch off -- and MCPA003 already taught this project that
+    lesson at 69%.
+    """
+
+    total: int = 0
+    floating: int = 0
+    examples: tuple[str, ...] = ()
+    read: bool = False
+
+    @property
+    def pinned(self) -> int:
+        return max(self.total - self.floating, 0)
+
+    def describe(self) -> str:
+        if not self.read:
+            return ""
+        if not self.total:
+            return "declares no dependencies, so the pin covers everything it runs"
+        if not self.floating:
+            return f"all {self.total} declared dependencies are pinned exactly"
+        return (f"{self.floating} of {self.total} declared dependencies float, "
+                f"so the pin covers this artifact and not them")
+
+
+def _npm_manifest(blob: Path) -> dict[str, Any] | None:
+    """`package.json` out of a cached tarball, without unpacking it to disk."""
+    try:
+        with gzip.open(blob, "rb") as gz:
+            raw = gz.read(MAX_BODY)
+        with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
+            member = next((m for m in archive.getmembers()
+                           if m.isfile() and m.name.count("/") == 1
+                           and m.name.endswith("package.json")), None)
+            if member is None:
+                return None
+            handle = archive.extractfile(member)
+            if handle is None:
+                return None
+            parsed = json.loads(handle.read().decode("utf-8", errors="replace"))
+    except (OSError, ValueError, tarfile.TarError, EOFError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _wheel_requires(blob: Path) -> list[str] | None:
+    """`Requires-Dist` lines out of a cached wheel."""
+    try:
+        with zipfile.ZipFile(blob) as archive:
+            name = next((n for n in archive.namelist()
+                         if n.endswith(".dist-info/METADATA")), None)
+            if name is None:
+                return None
+            text = archive.read(name).decode("utf-8", errors="replace")
+    except (OSError, ValueError, zipfile.BadZipFile):
+        return None
+    return [line.split(":", 1)[1].strip() for line in text.splitlines()
+            if line.lower().startswith("requires-dist:")]
+
+
+def dependency_reach(recorded: dict[str, str] | None,
+                     urls: dict[str, str] | None = None) -> Reach:
+    """Read the cached artifact's own manifest and count what floats.
+
+    Offline and read-only, like the rest of this module. Returns a `Reach` with
+    `read=False` when there is nothing on disk to look at, which is a different
+    answer from "no dependencies" and is kept distinct for the same reason
+    `absent` is kept apart from `verified`.
+    """
+    if not isinstance(recorded, dict):
+        return Reach()
+    known = urls if isinstance(urls, dict) else {}
+    for key in sorted(recorded, key=str):
+        if not isinstance(key, str):
+            continue
+        ecosystem, _, token = key.partition(":")
+        approved = recorded.get(key)
+        if not isinstance(approved, str):
+            continue
+        try:
+            if ecosystem == "npm":
+                blob = _npm_blob(approved)
+                manifest = _npm_manifest(blob) if blob else None
+                if manifest is None:
+                    continue
+                deps = manifest.get("dependencies")
+                if not isinstance(deps, dict):
+                    deps = {}
+                specs = [(str(n), str(v)) for n, v in deps.items()]
+                floating = [f"{n}@{v}" for n, v in specs
+                            if not _EXACT_NPM.match(v)]
+                return Reach(len(specs), len(floating),
+                             tuple(floating[:3]), read=True)
+            if ecosystem == "pypi":
+                url = known.get(key)
+                blob = _pypi_blob(url) if isinstance(url, str) else None
+                requires = _wheel_requires(blob) if blob else None
+                if requires is None:
+                    continue
+                # An extra is not installed unless it is asked for, so a
+                # conditional requirement is not part of what this runs.
+                plain = [r for r in requires if "extra ==" not in r]
+                floating = [r for r in plain if not _EXACT_PEP508.search(r)]
+                return Reach(len(plain), len(floating),
+                             tuple(f.split(";")[0].strip() for f in floating[:3]),
+                             read=True)
+        except (OSError, ValueError):
+            continue
+    return Reach()
+
+
+def _npm_blob(integrity: str) -> Path | None:
+    for root in _npm_roots():
+        if not root.is_dir():
+            continue
+        candidate = content_path(root, integrity)
+        if candidate is not None and candidate.is_file():
+            return candidate
+    return None
+
+
+def _pypi_blob(url: str) -> Path | None:
+    digest = hashlib.sha224(url.encode("utf-8")).hexdigest()
+    parts = list(digest[:5]) + [digest]
+    for root in _pip_roots():
+        for flavour in ("http-v2", "http"):
+            body = root.joinpath(flavour, *parts).with_suffix(".body")
+            if body.is_file():
+                return body
     return None

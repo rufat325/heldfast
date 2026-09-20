@@ -14,6 +14,7 @@ anyone able to empty a cache.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import sys
@@ -270,6 +271,118 @@ class TestRefusal(unittest.TestCase):
     def test_nothing_recorded_never_refuses(self) -> None:
         self.assertIsNone(pkgcache.refusal(None))
         self.assertIsNone(pkgcache.refusal({}, require=True))
+
+
+class TestHowFarThePinReaches(unittest.TestCase):
+    """MCPA036 pins the tarball. It does not pin the tree underneath.
+
+    Pinning that tree is not possible from here -- resolving it needs the
+    package manager and the network, and the answer changes tomorrow. What is
+    answerable offline, from the bytes already in the cache, is how much of it
+    floats. Measured on 60 real cached packages: 115 floating specs against 17
+    exact, which is why this is reported beside the pin rather than as a
+    finding. A rule that fires on seven specs in eight, everywhere, forever,
+    is a rule people switch off.
+    """
+
+    def _npm_cache(self, tmp: str, name: str, version: str,
+                   manifest: dict) -> str:
+        """A cache entry whose tarball carries this package.json."""
+        import gzip
+        import io
+        import tarfile
+
+        body = json.dumps(manifest).encode("utf-8")
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w") as archive:
+            info = tarfile.TarInfo("package/package.json")
+            info.size = len(body)
+            archive.addfile(info, io.BytesIO(body))
+        tarball = gzip.compress(buffer.getvalue())
+        write_entry(Path(tmp), name, version, content=tarball)
+        return sri_for(tarball)
+
+    def test_a_package_with_floating_dependencies_says_so(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sri = self._npm_cache(tmp, "@scope/srv", "1.2.3", {
+                "name": "@scope/srv", "version": "1.2.3",
+                "dependencies": {"left-pad": "^1.0.0", "chalk": "~2.0",
+                                 "exact-dep": "3.1.4"}})
+            with npm_cache_at(tmp):
+                reach = pkgcache.dependency_reach(
+                    {"npm:@scope/srv@1.2.3": sri})
+        self.assertTrue(reach.read)
+        self.assertEqual(3, reach.total)
+        self.assertEqual(2, reach.floating)
+        self.assertEqual(1, reach.pinned)
+        self.assertIn("2 of 3 declared dependencies float", reach.describe())
+
+    def test_a_package_with_no_dependencies_is_fully_covered(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sri = self._npm_cache(tmp, "@scope/srv", "1.2.3",
+                                  {"name": "@scope/srv", "version": "1.2.3"})
+            with npm_cache_at(tmp):
+                reach = pkgcache.dependency_reach({"npm:@scope/srv@1.2.3": sri})
+        self.assertTrue(reach.read)
+        self.assertEqual(0, reach.total)
+        self.assertIn("covers everything it runs", reach.describe())
+
+    def test_nothing_on_disk_is_not_the_same_as_no_dependencies(self) -> None:
+        """The distinction this module keeps making. "I looked and there are
+        none" and "I could not look" are different answers."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with npm_cache_at(str(Path(tmp) / "empty")):
+                reach = pkgcache.dependency_reach(
+                    {"npm:@scope/srv@1.2.3": "sha512-" + "a" * 86})
+        self.assertFalse(reach.read)
+        self.assertEqual("", reach.describe())
+
+    def test_a_corrupt_tarball_does_not_raise(self) -> None:
+        """This is read on the coverage path, not the launch path, but the
+        rule is the same: a cache is not a trusted input."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write_entry(Path(tmp), "@scope/srv", "1.2.3",
+                        content=b"not a gzip stream at all")
+            with npm_cache_at(tmp):
+                reach = pkgcache.dependency_reach(
+                    {"npm:@scope/srv@1.2.3": sri_for(b"not a gzip stream at all")})
+        self.assertFalse(reach.read)
+
+    def test_a_wheel_reports_its_requires_dist(self) -> None:
+        import zipfile
+
+        url = "https://files.pythonhosted.org/packages/ab/cd/pkg-1.2.3.whl"
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("pkg-1.2.3.dist-info/METADATA",
+                             "Metadata-Version: 2.1\n"
+                             "Name: pkg\n"
+                             "Requires-Dist: httpx (>=0.23)\n"
+                             "Requires-Dist: anyio ==4.2.0\n"
+                             "Requires-Dist: pytest ; extra == 'dev'\n")
+        payload = buffer.getvalue()
+        with tempfile.TemporaryDirectory() as tmp:
+            digest = hashlib.sha224(url.encode()).hexdigest()
+            parts = list(digest[:5]) + [digest]
+            body = Path(tmp).joinpath("http-v2", *parts).with_suffix(".body")
+            body.parent.mkdir(parents=True, exist_ok=True)
+            body.write_bytes(payload)
+            previous = os.environ.get("PIP_CACHE_DIR")
+            os.environ["PIP_CACHE_DIR"] = tmp
+            try:
+                reach = pkgcache.dependency_reach(
+                    {"pypi:pkg==1.2.3": "sha256-" + hashlib.sha256(payload).hexdigest()},
+                    {"pypi:pkg==1.2.3": url})
+            finally:
+                if previous is None:
+                    os.environ.pop("PIP_CACHE_DIR", None)
+                else:
+                    os.environ["PIP_CACHE_DIR"] = previous
+        self.assertTrue(reach.read)
+        # The `extra == 'dev'` requirement is not installed unless asked for,
+        # so it is not part of what this server runs.
+        self.assertEqual(2, reach.total)
+        self.assertEqual(1, reach.floating)
 
 
 if __name__ == "__main__":
