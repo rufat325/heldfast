@@ -37,6 +37,58 @@ REQUIRED_HEADINGS = (
 )
 
 
+class TestTheGateNamesRealTheorems(unittest.TestCase):
+    """The gate on adding a rule is itself an invariant, so it can go stale.
+
+    It once named a specific rule id -- "do not add MCPA036 until ..." -- which
+    an outside reader found still sitting there after MCPA036 shipped. It is
+    phrased generically now, so it cannot rot that way again. What it can
+    still do is name a theorem that has been renamed or removed, which would
+    make the gate unenforceable while continuing to read like a rule. This is
+    the one file where drift is least affordable.
+    """
+
+    @staticmethod
+    def _gate() -> str:
+        """The numbered step that gates adding a rule.
+
+        Located by its position in "Changing a theorem" rather than by its
+        wording. Keying on the wording meant a gate that had gone stale in
+        the very way this class is about reported "the gate moved" instead,
+        which is a report guessing at a cause and guessing wrong.
+        """
+        text = GUARANTEES.read_text(encoding="utf-8")
+        section = text[text.index("## Changing a theorem"):]
+        steps = [line for line in section.splitlines()
+                 if re.match(r"^\d+\. ", line)]
+        gate = [line for line in steps if "Do not add" in line]
+        assert len(gate) == 1, f"expected one gate step, found {len(gate)}"
+        return gate[0]
+
+    def test_every_theorem_the_gate_names_is_declared_above_it(self) -> None:
+        text = GUARANTEES.read_text(encoding="utf-8")
+        named = set(re.findall(r"T-[A-Z-]+\*?", self._gate()))
+        self.assertTrue(named, "the gate names no theorems")
+        declared = set(re.findall(r"^\| (T-[A-Z-]+) \|", text, re.M))
+        for theorem in sorted(named):
+            with self.subTest(theorem=theorem):
+                if theorem.endswith("*"):
+                    stem = theorem[:-1]
+                    self.assertTrue(
+                        any(d.startswith(stem) for d in declared),
+                        f"the gate requires {theorem} and no theorem matches it")
+                else:
+                    self.assertIn(theorem, declared,
+                                  f"the gate requires {theorem}, which is not "
+                                  f"a theorem in this file")
+
+    def test_the_gate_does_not_name_a_single_rule_id(self) -> None:
+        """Naming one id is what went stale. A generic gate cannot."""
+        self.assertEqual([], re.findall(r"MCPA\d+", self._gate()),
+                         "the gate names a specific rule id, which goes stale "
+                         "the moment that rule ships")
+
+
 class TestGuaranteesDocument(unittest.TestCase):
     def test_the_file_exists_and_has_the_three_buckets(self) -> None:
         text = GUARANTEES.read_text(encoding="utf-8")
