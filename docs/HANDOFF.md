@@ -124,6 +124,37 @@ Read this file and `docs/GUARANTEES.md` instead.
     *key* instead of its value and reported `absent` for all 777 -- which is
     why that validation exists and runs before the feature is believed.
 
+29. ~~The npm half trusted the cache's index instead of hashing its bytes.~~
+    Done: T-CACHE now reads `content-v2`. Second review round, and the point
+    was one I should have written myself: the index entry is a *claim about*
+    the content, and the cache is writable by the same user who owns the
+    server's files, so an entry naming the approved SRI beside a different
+    blob read as verified. npm fails that on read, so it was never silent
+    execution -- but a verdict that can be wrong is not a pin. The blob path
+    is derivable (`content-v2/<algo>/<hex[0:2]>/<hex[2:4]>/<hex[4:]>`, the
+    base64 digest decoded), and hashing it costs 2.7ms. All 777 real entries
+    verified down to their content.
+
+    Two answers that were inferable and are now stated: `--require-integrity`
+    changes the launch path, not just a severity, on `guard` and `gateway` as
+    well as `scan` -- gating CI while developer machines launch unverified
+    servers leaves the loop open at the end that matters -- and an empty cache
+    is the commonest route to "could not verify", which is why it is a flag
+    rather than the default.
+
+    Still not claimed, and written down in three places: this proves the cache
+    agrees with the approval at the moment of the check, not that the bytes
+    finally executed are those bytes.
+
+    Two documentation bugs in the same pass, both the same shape as the
+    duplicated rule table. Five links in `MANUAL.md` were written as if from
+    the repo root while the file lives in `docs/` -- and a test I had added
+    asserted one of the broken paths, which is how a test holds a bug in
+    place. `MANUAL.md` said 902 tests while `README.md` said 988, because the
+    count was asserted in one file and typed into the other. Every relative
+    link now resolves against the filesystem and every stated count is
+    checked, in every document, with no file excluded from either test.
+
 ## How to run
 
 ```bash
