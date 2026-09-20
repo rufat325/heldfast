@@ -264,6 +264,19 @@ def _in_path(key: str, entry: dict | None, spec: Any, fronting: set) -> Layer:
             "enforced", "no",
             "a gateway is configured and this server is reachable around it (MCPA032)",
             "remove the direct entry; the gateway already exposes its tools")
+    if spec is not None and spec.is_remote:
+        # Both remedies below are stdio-only, so offering them here would send
+        # the operator to fetch two commands that cannot wrap a `url`. A
+        # remedy that cannot be carried out is worse than none: it reads as
+        # "you forgot something" when the honest answer is "this tool does not
+        # do it yet".
+        return Layer(
+            "enforced", "no",
+            "hosted transport; `guard` and `gateway` are stdio only, so nothing "
+            "checks the lockfile at the call site",
+            "no fix available today -- this server is reviewed and pinned but "
+            "not enforced at runtime. An HTTP backend for the gateway is the "
+            "intended path")
     return Layer(
         "enforced", "no",
         "the client talks to this server directly; nothing checks the lockfile at runtime",

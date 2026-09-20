@@ -337,5 +337,34 @@ class TestTheWholeReport(unittest.TestCase):
         self.assertIn("@scope/srv@", text)
 
 
+class TestARemedyMustBePossible(unittest.TestCase):
+    """A fix the reader cannot carry out is worse than admitting there isn't one.
+
+    `coverage` told the operator of a hosted server to "point the client at
+    `mcp-pin gateway`, or wrap it with `mcp-pin guard`". Both are stdio only,
+    so neither can wrap a `url`: the row read as "you forgot something" when
+    the honest answer is "this tool does not do that yet". Whoever ran the
+    commands would have found out the slow way.
+    """
+
+    def _enforced(self, spec: ServerSpec) -> coverage.Layer:
+        lock = Lock()
+        lock.record([spec], [], [])
+        return layers(lock, [spec])[spec.identity()]["enforced"]
+
+    def test_a_hosted_server_is_not_told_to_run_a_stdio_command(self) -> None:
+        layer = self._enforced(spec("hosted", "", [], url="https://x.example/sse",
+                                    transport="sse"))
+        self.assertEqual("no", layer.state)
+        self.assertNotIn("mcp-pin guard", layer.remedy)
+        self.assertNotIn("mcp-pin gateway`", layer.remedy)
+        self.assertIn("stdio only", layer.detail)
+
+    def test_a_local_server_still_gets_the_real_remedy(self) -> None:
+        layer = self._enforced(spec("local", "node", ["s.js"]))
+        self.assertEqual("no", layer.state)
+        self.assertIn("mcp-pin guard", layer.remedy)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
