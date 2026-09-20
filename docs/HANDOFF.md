@@ -115,9 +115,11 @@ Read this file and `docs/GUARANTEES.md` instead.
       either document grows one again.
 
     Both cache layouts were derived from the real caches on the dev machine,
-    not from documentation: 777 npm tarball entries all verified, 25/25
-    tampered digests caught, three pip wheels matched the sha256 PyPI
-    publishes. Validated against live metadata for a real MCP server package
+    not from documentation: all 777 npm tarball entries verified, all 777
+    caught when the digest was tampered with, three pip wheels matched the
+    sha256 PyPI publishes. 1,554 lookups took 1.2s, which is what makes the
+    check affordable on the launch path -- the index shard is derived from
+    the URL, so nothing is searched. Validated against live metadata for a real MCP server package
     too. The first version of `check` read the approved digest out of the dict
     *key* instead of its value and reported `absent` for all 777 -- which is
     why that validation exists and runs before the feature is believed.
