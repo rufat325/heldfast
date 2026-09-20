@@ -79,6 +79,9 @@ shadowing its tools to exfiltrate chats. The WhatsApp helper did not rewrite its
 Cross-server shadowing is what MCPA027 and MCPA028 are for. Approval records what you
 reviewed. It does not prove the first version was honest.
 
+Both attacks reproduced end to end, with the real output and the four gaps this does not
+close: [docs/TOOL-POISONING.md](docs/TOOL-POISONING.md).
+
 ## Pin, then refuse
 
 `scan` tells you. `guard` sits on stdio and will not pass the change through.
