@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import sessions  # noqa: E402
+from mcp_pin import auditlog, sessions  # noqa: E402
 from mcp_pin.auditlog import AuditLog  # noqa: E402
 
 
@@ -185,12 +185,43 @@ class TestIntegrityComesFirst(TrailCase):
         text = sessions.render(self.build(), color=False).strip()
         self.assertTrue(text.startswith("CHAIN BROKEN"), text[:80])
 
-    def test_a_truncated_trail_is_still_a_valid_prefix(self) -> None:
+    def test_a_crash_mid_write_is_not_reported_as_tampering(self) -> None:
         """Losing the tail is not evidence of tampering -- a killed process
-        does it -- so it must not be reported as a broken chain."""
+        does it -- so it must not be reported as a broken chain.
+
+        Originally this truncated the log and asserted the chain was intact,
+        because nothing could tell a crash from a deletion. The head file can:
+        it is written *after* the entry it describes, so a killed process
+        leaves it behind the log and never ahead. This test now stages the
+        crash properly -- the head lagging one entry -- and the one below
+        stages the deletion.
+        """
+        self.write(SESSION)
+        lines = self.path.read_text(encoding="utf-8").splitlines()
+        head = json.loads(auditlog.head_path(self.path).read_text(encoding="utf-8"))
+        # The guard appended the last entry and died before recording the head.
+        head["seq"] = len(lines) - 1
+        auditlog.head_path(self.path).write_text(json.dumps(head), encoding="utf-8")
+        data = self.build()
+        self.assertTrue(data["integrity"]["intact"])
+
+    def test_a_truncated_trail_is_reported_when_the_head_knows_better(self) -> None:
+        """A prefix of a valid chain is a valid chain, which is why cutting the
+        tail off used to verify clean and take the denial with it."""
         self.write(SESSION)
         lines = self.path.read_text(encoding="utf-8").splitlines()
         self.path.write_text("\n".join(lines[:3]) + "\n", encoding="utf-8")
+        data = self.build()
+        self.assertFalse(data["integrity"]["intact"])
+        self.assertIn("removed", data["integrity"]["summary"])
+
+    def test_a_trail_with_no_head_file_still_reads_as_a_prefix(self) -> None:
+        """Logs written before the head file existed, and logs whose sidecar
+        was lost, must still be readable rather than reported as tampered."""
+        self.write(SESSION)
+        lines = self.path.read_text(encoding="utf-8").splitlines()
+        self.path.write_text("\n".join(lines[:3]) + "\n", encoding="utf-8")
+        auditlog.head_path(self.path).unlink()
         data = self.build()
         self.assertTrue(data["integrity"]["intact"])
         self.assertTrue(data["sessions"][0]["unterminated"])

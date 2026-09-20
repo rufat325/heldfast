@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from mcp_pin import auditlog  # noqa: E402
 from mcp_pin.auditlog import GENESIS, AuditLog, verify  # noqa: E402
 
 HOSTILE = ROOT / "tests" / "fixtures" / "hostile_server.py"
@@ -154,6 +156,199 @@ class TestArgumentsAreNeverWritten(unittest.TestCase):
             self.assertIn("read_note", body)
             self.assertIn("argument_bytes", body)
             self.assertTrue(verify(path).ok)
+
+
+
+class TestTheChainIsWhole(unittest.TestCase):
+    """Walking the chain proves it is internally consistent. It does not prove
+    it is all there, and an outside reader demonstrated both ways round:
+
+        full chain:      4 entries, chain intact
+        truncate tail:   2 entries, chain intact   # the denial is gone
+        re-chain whole:  3 entries, chain intact   # drop it, recompute
+
+    Any prefix of a valid chain is a valid chain, so nothing inside the file
+    can catch the first. The head file the writer keeps is outside it.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self._tmp.name) / "trail.jsonl"
+        os.environ.pop(auditlog.KEY_VAR, None)
+
+    def tearDown(self) -> None:
+        os.environ.pop(auditlog.KEY_VAR, None)
+        self._tmp.cleanup()
+
+    def _write(self, key: bytes | None = None) -> None:
+        log = auditlog.AuditLog(self.path, "svc", key=key)
+        log.record("session_start", detail="policy=block")
+        log.record("tool_call", subject="read_invoice", decision="allow")
+        log.record("tool_call", subject="wipe_disk", decision="DENY",
+                   detail="tool was not present at approval")
+        log.record("session_end", detail="1 denied")
+
+    def _lines(self) -> list[str]:
+        return self.path.read_text(encoding="utf-8").splitlines()
+
+    def _rechain(self, drop: str, key: bytes | None = None) -> tuple[str, int]:
+        """Remove the entry naming `drop` and recompute every hash after it."""
+        kept = [json.loads(x) for x in self._lines()
+                if json.loads(x).get("subject") != drop]
+        prev, seq = auditlog.GENESIS, 1
+        for entry in kept:
+            entry["seq"], entry["prev"] = seq, prev
+            entry.pop("hash", None)
+            entry["hash"] = auditlog._digest(entry, key)
+            prev, seq = entry["hash"], seq + 1
+        self.path.write_text(
+            "\n".join(json.dumps(e, sort_keys=True) for e in kept) + "\n",
+            encoding="utf-8")
+        return prev, len(kept)
+
+    def test_a_full_chain_verifies(self) -> None:
+        self._write()
+        result = auditlog.verify(self.path)
+        self.assertTrue(result.ok)
+        self.assertEqual(4, result.entries)
+
+    def test_a_truncated_tail_no_longer_verifies(self) -> None:
+        self._write()
+        self.path.write_text("\n".join(self._lines()[:2]) + "\n", encoding="utf-8")
+        result = auditlog.verify(self.path)
+        self.assertFalse(result.ok)
+        self.assertIn("removed", result.problems[0].reason)
+
+    def test_a_rechained_log_no_longer_verifies(self) -> None:
+        self._write()
+        self._rechain("wipe_disk")
+        result = auditlog.verify(self.path)
+        self.assertFalse(result.ok)
+
+    def test_rewriting_the_head_too_is_the_documented_limit(self) -> None:
+        """An attacker who can write the log can usually write the sidecar
+        beside it. This is not claimed to stop that -- which is exactly why
+        --expect-head exists, and why a key is the real answer."""
+        self._write()
+        head, count = self._rechain("wipe_disk")
+        auditlog.head_path(self.path).write_text(
+            json.dumps({"seq": count, "hash": head, "alg": "sha256"}),
+            encoding="utf-8")
+        self.assertTrue(auditlog.verify(self.path).ok)
+
+    def test_an_out_of_band_count_catches_it_anyway(self) -> None:
+        self._write()
+        head, count = self._rechain("wipe_disk")
+        auditlog.head_path(self.path).write_text(
+            json.dumps({"seq": count, "hash": head}), encoding="utf-8")
+        result = auditlog.verify(self.path, expect_count=4)
+        self.assertFalse(result.ok)
+        self.assertIn("expected 4 entries", result.problems[0].reason)
+
+    def test_an_out_of_band_head_catches_it_anyway(self) -> None:
+        self._write()
+        real = json.loads(
+            auditlog.head_path(self.path).read_text(encoding="utf-8"))["hash"]
+        head, count = self._rechain("wipe_disk")
+        auditlog.head_path(self.path).write_text(
+            json.dumps({"seq": count, "hash": head}), encoding="utf-8")
+        result = auditlog.verify(self.path, expect_head=real)
+        self.assertFalse(result.ok)
+
+    def test_a_head_behind_the_log_is_a_crash_and_not_tampering(self) -> None:
+        """The head is written after the entry it describes, so a killed
+        process leaves it behind. Direction is the whole discriminator."""
+        self._write()
+        head = json.loads(
+            auditlog.head_path(self.path).read_text(encoding="utf-8"))
+        head["seq"] = 3
+        auditlog.head_path(self.path).write_text(json.dumps(head), encoding="utf-8")
+        self.assertTrue(auditlog.verify(self.path).ok)
+
+    def test_a_missing_head_file_is_not_an_accusation(self) -> None:
+        """Logs written before the sidecar existed must still verify."""
+        self._write()
+        auditlog.head_path(self.path).unlink()
+        self.assertTrue(auditlog.verify(self.path).ok)
+
+
+class TestKeyedChains(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self._tmp.name) / "trail.jsonl"
+        os.environ.pop(auditlog.KEY_VAR, None)
+
+    def tearDown(self) -> None:
+        os.environ.pop(auditlog.KEY_VAR, None)
+        self._tmp.cleanup()
+
+    def _write(self) -> None:
+        log = auditlog.AuditLog(self.path, "svc")
+        log.record("session_start")
+        log.record("tool_call", subject="wipe_disk", decision="DENY")
+        log.record("session_end")
+
+    def test_the_key_comes_from_the_environment(self) -> None:
+        os.environ[auditlog.KEY_VAR] = "a-secret"
+        self._write()
+        result = auditlog.verify(self.path)
+        self.assertTrue(result.ok)
+        self.assertTrue(result.keyed)
+        self.assertIn("keyed", result.summary())
+
+    def test_a_keyed_chain_cannot_be_recomputed_without_the_key(self) -> None:
+        """The attack an unkeyed chain cannot survive: drop the denial, redo
+        the hashes. With a MAC the loop produces nothing that verifies."""
+        os.environ[auditlog.KEY_VAR] = "a-secret"
+        self._write()
+        kept = [json.loads(x) for x in
+                self.path.read_text(encoding="utf-8").splitlines()
+                if json.loads(x).get("subject") != "wipe_disk"]
+        prev, seq = auditlog.GENESIS, 1
+        for entry in kept:
+            entry["seq"], entry["prev"] = seq, prev
+            entry.pop("hash", None)
+            entry["hash"] = auditlog._digest(entry)  # no key: the attacker's best
+            prev, seq = entry["hash"], seq + 1
+        self.path.write_text(
+            "\n".join(json.dumps(e, sort_keys=True) for e in kept) + "\n",
+            encoding="utf-8")
+        self.assertFalse(auditlog.verify(self.path).ok)
+
+    def test_a_keyed_chain_read_without_the_key_says_so(self) -> None:
+        """Silently falling back to sha256 would report a keyed chain as
+        broken contents, which sends the reader after the wrong problem."""
+        os.environ[auditlog.KEY_VAR] = "a-secret"
+        self._write()
+        os.environ.pop(auditlog.KEY_VAR)
+        result = auditlog.verify(self.path)
+        self.assertFalse(result.ok)
+        self.assertIn(auditlog.KEY_VAR, result.problems[0].reason)
+
+    def test_an_unkeyed_chain_read_with_a_key_says_so(self) -> None:
+        self._write()
+        os.environ[auditlog.KEY_VAR] = "a-secret"
+        result = auditlog.verify(self.path)
+        self.assertFalse(result.ok)
+        self.assertIn("not keyed", result.problems[0].reason)
+
+    def test_the_unkeyed_digest_did_not_move(self) -> None:
+        """Every log already on disk has to keep verifying.
+
+        `alg` is written into the hashed body only when the chain is keyed. Had
+        it gone in unconditionally, every existing entry's hash would change
+        and every existing log would read as tampered on upgrade -- the same
+        mistake that nearly shipped when `output_schema` joined the tool
+        fingerprint.
+        """
+        body = {"seq": 1, "time": "2026-01-01T00:00:00Z", "server": "svc",
+                "event": "session_start", "subject": "svc", "decision": "",
+                "detail": "policy=block", "prev": "0" * 64}
+        self.assertEqual(
+            "52a77f6f23f308a2cb64d7c6d17bed84ba6fc29e5f6825349fef5290cab6b420",
+            auditlog._digest(body))
+        self.assertNotEqual(auditlog._digest(body),
+                            auditlog._digest(dict(body, alg="hmac-sha256"), b"k"))
 
 
 if __name__ == "__main__":

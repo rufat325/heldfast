@@ -231,8 +231,14 @@ class TestTheAuditTrail(unittest.TestCase):
             path.write_text(lines[0] + "\n", encoding="utf-8")   # a deletion
 
             data = status_mod.build(approved(["alpha"]), [spec("alpha")], [], path)
-            self.assertTrue(data["trail"]["intact"],
-                            "one truncated entry is still a valid prefix")
+            # This asserted "intact" with the note that a truncated entry is
+            # still a valid prefix. It is -- which is exactly the hole an
+            # outside reader demonstrated: cut the tail off and the denial you
+            # wanted hidden goes with it, and nothing inside the file can tell.
+            # The head file the writer keeps is outside it and records two
+            # entries, so a log with one is now reported.
+            self.assertFalse(data["trail"]["intact"],
+                             "a deletion the head file knows about must be seen")
 
             rewritten = [l.replace("alpha__read", "something_else") for l in lines]
             path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")

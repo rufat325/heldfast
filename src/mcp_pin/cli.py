@@ -683,12 +683,21 @@ def cmd_gateway(args: argparse.Namespace) -> int:
 
 
 def cmd_verify_log(args: argparse.Namespace) -> int:
-    from .auditlog import verify
+    from .auditlog import KEY_VAR, verify
 
-    result = verify(args.path)
+    result = verify(args.path,
+                    expect_head=getattr(args, "expect_head", None),
+                    expect_count=getattr(args, "expect_count", None))
     print(f"mcp-pin: {result.summary()}")
     for problem in result.problems[1:]:
-        print(f"           also line {problem.line}: {problem.reason}")
+        where = f" line {problem.line}" if problem.line else ""
+        print(f"           also{where}: {problem.reason}")
+    if result.ok and not result.keyed:
+        # The command used to stop at "chain intact", which reads as a stronger
+        # statement than an unkeyed chain can make: whoever can write the log
+        # can recompute it.
+        print(f"           unkeyed, so this is tamper-evidence and not proof. "
+              f"Set {KEY_VAR} to chain with HMAC-SHA256.")
     return EXIT_OK if result.ok else EXIT_FINDINGS
 
 
