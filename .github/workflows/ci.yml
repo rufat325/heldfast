@@ -20,8 +20,32 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Generate fixtures
         run: python tests/fixtures/make_fixtures.py
+      # Failing test names are emitted as annotations, not just logged. Reading
+      # a job's log needs a signed-in session with rights on the repository;
+      # annotations are readable from the public API. So a red run on an OS
+      # nobody has to hand was diagnosable only by guessing, which cost a
+      # round of exactly that.
+      #
+      # The exit status is captured in a variable rather than piped: a pipeline
+      # takes the status of its last command, and letting the suite's status
+      # through a pipe once put a red commit on main.
       - name: Test
-        run: python -m unittest discover -s tests -v
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > test-output.txt 2>&1
+          status=$?
+          tail -n 60 test-output.txt
+          if [ "$status" -ne 0 ]; then
+            grep -E '^(FAIL|ERROR):' test-output.txt | while read -r line; do
+              echo "::error::$line"
+            done
+            grep -E '^(AssertionError|[A-Za-z]*Error):' test-output.txt \
+              | head -n 5 | while read -r line; do
+              echo "::error::$line"
+            done
+          fi
+          exit "$status"
 
   # Types on the four kernels only. The rest of the tree is not blocked
   # on day one: a lie about Policy.check's return value is the failure
