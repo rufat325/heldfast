@@ -53,21 +53,43 @@ def _probe(mutant: Mutant, dest: Path) -> dict:
     """)
     env = dict(os.environ)
     env["PYTHONPATH"] = str(dest)
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=str(ROOT),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=str(ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # A probe is meant to be a few lines of in-process logic. One that
+        # stood up an HTTP server hit this on the slowest runners and nowhere
+        # else, and the bare TimeoutExpired said nothing about which probe or
+        # why -- so the diagnosis was "it fails on macOS", which is not one.
+        raise AssertionError(
+            f"{mutant.id}: probe did not finish in 20s. A probe should be "
+            f"in-process logic, not something that opens a socket or waits on "
+            f"a server.\nstdout:\n{exc.stdout}\nstderr:\n{exc.stderr}"
+        ) from None
     if result.returncode != 0:
         raise AssertionError(
             f"{mutant.id}: probe crashed rather than failing open\n"
             f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
-    line = result.stdout.strip().splitlines()[-1]
-    return json.loads(line)
+    lines = result.stdout.strip().splitlines()
+    if not lines:
+        raise AssertionError(
+            f"{mutant.id}: probe exited 0 and printed nothing, so there is no "
+            f"verdict to read.\nstderr:\n{result.stderr}"
+        )
+    try:
+        return json.loads(lines[-1])
+    except ValueError:
+        raise AssertionError(
+            f"{mutant.id}: probe's last stdout line is not the verdict JSON. "
+            f"Something else printed after it.\nstdout:\n{result.stdout}"
+        ) from None
 
 
 def _kill(mutant: Mutant) -> bool:

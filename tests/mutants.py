@@ -1087,21 +1087,20 @@ FAIL_OPEN = not found
               "command to run, so it never starts and its tools silently "
               "disappear instead of being enforced."),
         probe="""
-import os, sys
-sys.path.insert(0, os.path.join(os.getcwd(), "tests", "fixtures"))
-import http_server
-from mcp_pin.gateway import Gateway
+from mcp_pin.gateway import Gateway, HttpBackend
 from mcp_pin.lockfile import Lock
 from mcp_pin.model import ServerSpec
-with http_server.serve("benign") as url:
-    spec = ServerSpec(name="invoices", source="/x/.mcp.json", client="c",
-                      transport="http", url=url)
-    lock = Lock()
-    lock.record([spec], [], [])
-    g = Gateway([spec], lock, quiet=True, allow_unapproved=True)
-    g.start()
-    FAIL_OPEN = "invoices" not in g.backends
-    g.close()
+# Gateway.__init__ chooses the transport and starts nothing, so this needs no
+# server, no socket and no fixture on the path. The first version of this probe
+# stood up a real HTTP server, which made it the only probe in the catalogue
+# doing I/O -- and it timed out against the harness's 20s budget on the slowest
+# runners while passing everywhere else.
+spec = ServerSpec(name="invoices", source="/x/.mcp.json", client="c",
+                  transport="http", url="https://hosted.example/mcp")
+lock = Lock()
+lock.record([spec], [], [])
+g = Gateway([spec], lock, quiet=True, allow_unapproved=True)
+FAIL_OPEN = not isinstance(g.backends.get("invoices"), HttpBackend)
 """,
     ),
     Mutant(
