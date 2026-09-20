@@ -155,6 +155,50 @@ Read this file and `docs/GUARANTEES.md` instead.
     link now resolves against the filesystem and every stated count is
     checked, in every document, with no file excluded from either test.
 
+30. ~~A reviewer cloned it, ran the suite, and found three real things.~~ Done.
+    Best source so far, again: reading the code beats reading the README, and
+    running it beats both.
+    - *The audit log claimed more than it did.* Truncating the tail and
+      re-chaining the file both verified clean. Any prefix of a valid chain is
+      a valid chain, so the fix cannot live inside the file -- there is a
+      `.head` sidecar now, plus `--expect-head`/`--expect-count`, and
+      `MCP_PIN_LOG_KEY` for HMAC. Direction is what makes truncation
+      reportable without false alarms: the head is written after the entry it
+      describes, so a crash leaves it behind the log and never ahead.
+      T-LOG-WHOLE, T-LOG-KEYED.
+    - *`--policy warn` did half of what the manual said.* It forwarded the
+      drifted description and then refused the call, leaving the agent a tool
+      it could see and never use. Now observe mode at both layers, and
+      explicitly *not* extended to the argument policy. T-POLICY-CONSISTENT.
+    - *MCPA010 missed an injection that was still English.* A Cyrillic o in
+      "Ignore all previous instructions" defeated every pattern. Text is now
+      folded to an ASCII skeleton before matching, and MCPA038 reports the
+      substitution. The precision argument is a property, not a measurement:
+      the fold is the identity on ASCII, so it cannot change any ASCII
+      corpus. MCPA038 also covers the one case MCPA027 structurally cannot --
+      a tool *name* that looks like an approved one collides with nothing.
+    - Two acknowledged limits are now named in the best-effort bucket instead
+      of being left to be discovered: the phrases are English, and encoded
+      payloads are not decoded.
+
+    Writing the hosted-MCP position down found a bug of its own. The README
+    claimed `coverage` states the limitation per server; it did not, and worse,
+    it told a remote server's operator to run `guard` or `gateway`, both of
+    which are stdio only. A remedy that cannot be carried out reads as "you
+    forgot something" when the answer is "this tool does not do that yet".
+    Check a claim before writing it down, then make it true rather than
+    softening it.
+
+    Still not done and worth saying out loud: `guard` and `gateway` are stdio
+    only, and hosted MCP is where the ecosystem is going. The gateway already
+    decides per call for a fleet; it needs an HTTP/SSE backend transport beside
+    the stdio one. That is the next real feature, not a second tool.
+
+    Account-side, and untouched here because it needs a signed-in human: the
+    GitHub repo has no description and no topics, there is no releases page,
+    and there is no writeup of the Invariant Labs attack reproduced end to end.
+    See NOTES.local.md.
+
 ## How to run
 
 ```bash
