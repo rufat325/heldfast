@@ -343,6 +343,37 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return EXIT_FINDINGS if any(f.severity >= Severity.parse(args.fail_on) for f in findings) else EXIT_OK
 
 
+def _approval_summary(lock: Lock) -> str:
+    tool_total = sum(len(e.get("tools") or {}) for e in lock.servers.values())
+    prompt_total = sum(len(e.get("prompts") or {}) for e in lock.servers.values())
+    res_total = sum(len(e.get("resources") or {}) for e in lock.servers.values())
+    instr_total = sum(1 for e in lock.servers.values() if e.get("instructions"))
+    parts = [f"{len(lock.servers)} server(s)", f"{tool_total} tool(s)"]
+    if instr_total:
+        parts.append(f"{instr_total} instruction block(s)")
+    if prompt_total:
+        parts.append(f"{prompt_total} prompt(s)")
+    if res_total:
+        parts.append(f"{res_total} resource(s)")
+    parts.append(f"{len(lock.skills)} skill(s)")
+    return ", ".join(parts)
+
+
+def _commit_lock(lock: Lock, previous: Lock, *, yes: bool) -> int:
+    """Write the pin, or refuse if something moved and nobody said --yes."""
+    from .review import changes, render
+    moved = [] if previous.is_empty else changes(previous, lock)
+    if moved:
+        print(render(moved), end="", file=sys.stderr)
+        if not yes:
+            print("mcp-pin: lock not written. Pass --yes after you have read the diff.",
+                  file=sys.stderr)
+            return EXIT_ERROR
+    written = lock.save()
+    print(f"mcp-pin: approved {_approval_summary(lock)} -> {written}")
+    return EXIT_OK
+
+
 def cmd_approve(args: argparse.Namespace) -> int:
     lock_path = _resolve_lock_path(args)
     try:
@@ -371,22 +402,7 @@ def cmd_approve(args: argparse.Namespace) -> int:
                 instructions=data.instructions, previous=previous,
                 probe_status=data.probe_status)
     lock.merge_unprobed(previous)
-    written = lock.save()
-
-    tool_total = sum(len(e.get("tools") or {}) for e in lock.servers.values())
-    prompt_total = sum(len(e.get("prompts") or {}) for e in lock.servers.values())
-    res_total = sum(len(e.get("resources") or {}) for e in lock.servers.values())
-    instr_total = sum(1 for e in lock.servers.values() if e.get("instructions"))
-    parts = [f"{len(lock.servers)} server(s)", f"{tool_total} tool(s)"]
-    if instr_total:
-        parts.append(f"{instr_total} instruction block(s)")
-    if prompt_total:
-        parts.append(f"{prompt_total} prompt(s)")
-    if res_total:
-        parts.append(f"{res_total} resource(s)")
-    parts.append(f"{len(lock.skills)} skill(s)")
-    print(f"mcp-pin: approved " + ", ".join(parts) + f" -> {written}")
-    return EXIT_OK
+    return _commit_lock(lock, previous, yes=bool(getattr(args, "yes", False)))
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:

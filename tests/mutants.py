@@ -571,7 +571,7 @@ FAIL_OPEN = "cursor:github" not in ids
         id="guard-starts-rewritten-script",
         theorem="T-ARTIFACT",
         path="guard.py",
-        original="""    reason = _code_still_matches(guard)
+        original="""    reason = _pin_still_holds(guard, argv)
     if reason:
         print(f"mcp-pin guard: {reason}", file=sys.stderr)
         return 2
@@ -581,14 +581,48 @@ FAIL_OPEN = "cursor:github" not in ids
         probe="""
 import inspect
 from mcp_pin import guard as g
-FAIL_OPEN = "_code_still_matches" not in inspect.getsource(g.run)
+FAIL_OPEN = "_pin_still_holds" not in inspect.getsource(g.run)
+""",
+    ),
+    Mutant(
+        id="guard-starts-swapped-binary",
+        theorem="T-LAUNCH",
+        path="lockfile.py",
+        original="""    if current == approved:
+        return None
+    return "launch command changed since approval"
+""",
+        replacement="""    return None
+""",
+        harm="Guard starts a different command than the one that was pinned.",
+        probe="""
+from mcp_pin.lockfile import launch_mismatch
+FAIL_OPEN = launch_mismatch("python server.py", ["python", "evil.py"]) is None
+""",
+    ),
+    Mutant(
+        id="approve-overwrites-drift",
+        theorem="T-REVIEW",
+        path="cli.py",
+        original="""        if not yes:
+            print("mcp-pin: lock not written. Pass --yes after you have read the diff.",
+                  file=sys.stderr)
+            return EXIT_ERROR
+""",
+        replacement="",
+        harm="Re-approval silently overwrites a poisoned description.",
+        probe="""
+import inspect
+from mcp_pin import cli
+FAIL_OPEN = "lock not written" not in inspect.getsource(cli._commit_lock)
 """,
     ),
     Mutant(
         id="gateway-starts-rewritten-script",
         theorem="T-ARTIFACT",
         path="gateway.py",
-        original="""        reason = mismatch(self.recorded_artifacts)
+        original="""        reason = (mismatch(self.recorded_artifacts)
+                  or launch_mismatch(self.approved_launch, self.spec.argv))
         if reason:
             self.error = reason
             return False
@@ -598,7 +632,8 @@ FAIL_OPEN = "_code_still_matches" not in inspect.getsource(g.run)
         probe="""
 import inspect
 from mcp_pin.gateway import Backend
-FAIL_OPEN = "recorded_artifacts" not in inspect.getsource(Backend.start)
+src = inspect.getsource(Backend.start)
+FAIL_OPEN = "recorded_artifacts" not in src or "approved_launch" not in src
 """,
     ),
     Mutant(

@@ -99,6 +99,11 @@ def _register_approve(sub: argparse._SubParsersAction) -> None:
         description="Write the lockfile that later scans compare against.",
     )
     _add_scan_arguments(approve)
+    approve.add_argument(
+        "--yes", action="store_true",
+        help="write the lock even when something moved since the last pin; "
+             "the diff is still printed",
+    )
 
 
 def _register_inspect(sub: argparse._SubParsersAction) -> None:

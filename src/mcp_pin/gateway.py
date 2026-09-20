@@ -102,6 +102,7 @@ class Backend:
         # reply being waited on. Returns a message to send back, or None.
         self.on_unsolicited: Any = None
         self.recorded_artifacts: dict[str, str] = {}
+        self.approved_launch: str = ""
         self._id = 0
         self._lock = threading.Lock()
         self.needs_refresh = False
@@ -115,8 +116,10 @@ class Backend:
         import shutil
 
         from .artifacts import mismatch
+        from .lockfile import launch_mismatch
 
-        reason = mismatch(self.recorded_artifacts)
+        reason = (mismatch(self.recorded_artifacts)
+                  or launch_mismatch(self.approved_launch, self.spec.argv))
         if reason:
             self.error = reason
             return False
@@ -311,6 +314,7 @@ class Gateway:
             entry = guard._resolve_entry() or {}
             recorded = entry.get("artifacts")
             backend.recorded_artifacts = recorded if isinstance(recorded, dict) else {}
+            backend.approved_launch = str(entry.get("command_line") or "")
             backend.on_unsolicited = self.screen_server_message
             if spec.name in self.backends:
                 other = self.backends[spec.name].spec.identity()

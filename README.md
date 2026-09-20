@@ -44,7 +44,7 @@ mcp-pin scan --exclude tests .       # skip a path (attack corpora, generated tr
 mcp-pin scan --probe                 # also read live tool descriptions
 mcp-pin scan --safe                  # never execute, never connect
 mcp-pin scan --no-source             # skip reading server source
-mcp-pin approve --probe              # write .mcp-pin.lock
+mcp-pin approve --probe              # write .mcp-pin.lock ( --yes if it moved )
 mcp-pin inspect                      # what is configured, no judgement
 mcp-pin rules                        # list rules
 mcp-pin explain MCPA015              # describe one rule in full
@@ -99,8 +99,13 @@ Remote HTTP/SSE servers can be scanned; they cannot be wrapped. That is a
 limit of the runtime, not of the scanner.
 
 If the lock recorded a digest of a local script, `guard` and `gateway` will
-not start the child when those bytes have moved. A registry package
+not start the child when those bytes have moved. They will also not start a
+different command than the one you pinned. A registry package
 (`npx pkg@1.2.3`) has no local file: the version string is the pin.
+
+`approve --probe` on a lock that moved prints the words that changed and
+refuses to write until `--yes`. A credential path in the new text is graded
+critical; a wording tweak is not the same event.
 
 ```json
 {
@@ -200,7 +205,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-909 tests, stdlib unittest, nothing to install.
+921 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

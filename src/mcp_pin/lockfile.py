@@ -15,6 +15,7 @@ schema -- rather than a package version.
 from __future__ import annotations
 
 import json
+import shlex
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +30,20 @@ DEFAULT_LOCK_NAME = ".mcp-pin.lock"
 # Previous product name. Loaded only when the current file is absent, so a
 # rename does not quietly drop enforcement.
 LEGACY_LOCK_NAME = ".mcp-audit.lock"
+
+
+def launch_mismatch(approved: str | None, argv: list[str] | None) -> str | None:
+    """None if the tokens about to run are the ones that were pinned.
+
+    Empty approved is an old lock, not a pass: there was no command to pin.
+    Guard and gateway must not start a different binary than the one reviewed.
+    """
+    if not approved or not argv:
+        return None
+    current = " ".join(shlex.quote(tok) for tok in argv)
+    if current == approved:
+        return None
+    return "launch command changed since approval"
 
 
 def _lock_in(base: Path) -> Path | None:
