@@ -1087,8 +1087,8 @@ FAIL_OPEN = not found
               "command to run, so it never starts and its tools silently "
               "disappear instead of being enforced."),
         probe="""
-import sys
-sys.path.insert(0, r"C:/Users/Administrator/Desktop/mcp-audit/tests/fixtures")
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "tests", "fixtures"))
 import http_server
 from mcp_pin.gateway import Gateway
 from mcp_pin.lockfile import Lock
@@ -1118,8 +1118,7 @@ with http_server.serve("benign") as url:
         probe="""
 import json, os, subprocess, sys, tempfile
 from mcp_pin import auditlog
-root = r"C:/Users/Administrator/Desktop/mcp-audit"
-stub = root + "/tests/fixtures/stub_signer.py"
+stub = os.path.join(os.getcwd(), "tests", "fixtures", "stub_signer.py")
 sign = '"' + sys.executable + '" "' + stub + '" sign'
 verify = '"' + sys.executable + '" "' + stub + '" verify {sig}'
 tmp = tempfile.mkdtemp()

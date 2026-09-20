@@ -321,6 +321,114 @@ class TestNewCommands(unittest.TestCase):
         self.assertIn("# Rules", r.stdout)
 
 
+class TestNothingCarriesThisMachinesPaths(unittest.TestCase):
+    """A path that exists on one laptop and nowhere else.
+
+    Two mutant probes shipped with a developer's own home directory baked in.
+    The local suite was green and all nine CI test jobs were red, which is the
+    "a green local suite is not a green CI" lesson arriving by a new route: the
+    product was fine and the test harness was unportable. The repo already had
+    a commit about a personal path sitting in a public tree, and no check.
+
+    Absolute paths are legitimate in a few places -- documentation showing what
+    a Windows config looks like, a rule's example -- so this looks only at
+    Python under `tests/` and `src/`, and only at the account name.
+
+    The shapes are described in words here and assembled from pieces in the
+    self-test below, because a test that has to exempt its own file has a hole
+    shaped like itself. The first version did exactly that, and so did the
+    second: `home` sat in the placeholder list, which quietly exempted every
+    `/home/<anyone>` path there is.
+    """
+
+    # The account name is captured, so the decision is made about *that* and
+    # not about the whole matched path. Filtering on the whole match is what
+    # made `/home/...` self-exempting.
+    HOME_SHAPED = re.compile(
+        r"(?:[A-Za-z]:[/\\]+Users[/\\]+|/home/|/Users/)([A-Za-z0-9._-]+)")
+
+    # Names that stand for an account rather than being one. Deliberately
+    # short, and deliberately excluding `administrator` and `root`: those are
+    # real accounts on real machines, and the path that actually shipped was
+    # under `Administrator`. A placeholder list containing the name from the
+    # bug it was written for is a list that exempts the bug.
+    PLACEHOLDERS = frozenset({
+        "me", "you", "user", "username", "youruser", "your-user", "someone",
+        "runner", "ci", "example", "name", "account",
+        # Fixture accounts: synthetic data in a test, not a path that has to
+        # exist. `/home/dev/.ssh` is an argument to a fake server, not a file.
+        "dev", "alice", "bob",
+    })
+
+    @classmethod
+    def flags(cls, line: str) -> bool:
+        """Does this line name somebody's actual home directory?
+
+        The placeholder filter lives here rather than in the caller so the
+        self-test exercises the same decision the sweep makes. Asserting on the
+        bare regex would test something no caller relies on.
+        """
+        for match in cls.HOME_SHAPED.finditer(line):
+            account = match.group(1)
+            # `/home/...` in prose is prose. A real account name has at least
+            # one alphanumeric character in it.
+            if not any(c.isalnum() for c in account):
+                continue
+            if account.lower() not in cls.PLACEHOLDERS:
+                return True
+        return False
+
+    def _offenders(self, path: Path) -> list[str]:
+        out = []
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if self.flags(line):
+                out.append(f"{path.name}:{number}: {line.strip()[:70]}")
+        return out
+
+    def test_no_test_or_source_file_names_a_real_home_directory(self) -> None:
+        roots = list((ROOT / "tests").rglob("*.py")) + list((ROOT / "src").rglob("*.py"))
+        offenders = []
+        for path in roots:
+            if "__pycache__" in path.parts:
+                continue
+            offenders.extend(self._offenders(path))
+        self.assertEqual(
+            [], offenders,
+            "paths that only exist on one machine:\n  "
+            + "\n  ".join(offenders))
+
+    def test_the_check_would_have_caught_the_one_that_shipped(self) -> None:
+        """Without this, the sweep above could be vacuously true."""
+        win = "C:" + "/Users/"
+        nix = "/" + "home/"
+        mac = "/" + "Users/"
+        # The account the shipped bug actually used. If this list ever exempts
+        # it again, this assertion is what says so.
+        shipped = "Admin" + "istrator"
+        other = "rm" + "ahmudov"
+        self.assertTrue(self.flags(f'stub = r"{win}{shipped}/Desktop/x/y.py"'))
+        self.assertTrue(self.flags(f'p = "{nix}{other}/project/x.py"'))
+        self.assertTrue(self.flags(f'p = "{mac}{other}/project/x.py"'))
+        self.assertTrue(self.flags('p = r"C:' + chr(92) + "Users" + chr(92)
+                                   + shipped + chr(92) + 'x"'))
+
+    def test_documentation_shapes_are_not_flagged(self) -> None:
+        """Otherwise the rule is unusable: the client registry and the rule
+        examples both have to show what a real config path looks like."""
+        win = "C:" + "/Users/"
+        nix = "/" + "home/"
+        for text in (f'"{win}<you>/AppData/Roaming/Claude"',
+                     f'"{nix}me/project/server.js"',
+                     f'"{nix}runner/work/mcp-pin"',
+                     f'"{win}username/AppData/Local"',
+                     'argv = ["node", "server.js"]',
+                     'path = Path.home() / ".npm"',
+                     '# made `/home/...` self-exempting.',
+                     'args=["--root", "/home/dev/.ssh"]'):
+            with self.subTest(text=text):
+                self.assertFalse(self.flags(text))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
