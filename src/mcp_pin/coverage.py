@@ -153,12 +153,42 @@ def _code(entry: dict | None, spec: Any) -> Layer:
                  "the launch command names no script")
 
 
-def _registry(entry: dict | None, spec: Any) -> Layer:
-    """The tarball hash, when the launch is a registry fetch."""
+def _registry(entry: dict | None, spec: Any, offline: bool = False) -> Layer:
+    """The tarball hash, when the launch is a registry fetch.
+
+    A recorded hash and a verified one are different claims, and this used to
+    print "yes" for both. Recording happens once, at approval; verifying is
+    something a particular run either did or could not do. Reporting them as
+    one guarantee means an operator on a machine that cannot reach the
+    registry -- or whose package cache has never held the artifact -- reads
+    the same green row as one where the bytes were just checked.
+    """
     recorded = (entry or {}).get("integrity") or {}
     if recorded:
+        from .pkgcache import check as cache_check
+        urls = (entry or {}).get("artifact_urls")
+        checks = cache_check(recorded, urls if isinstance(urls, dict) else None)
         key = next(iter(recorded))
-        return Layer("registry pin", "yes", f"{key}")
+        bad = next((c for c in checks if c.state == "changed"), None)
+        if bad is not None:
+            return Layer("registry pin", "no", f"{bad.key}: {bad.detail}",
+                         "the bytes on this machine are not the approved ones; "
+                         "do not start this server until you know why")
+        good = [c for c in checks if c.state == "verified"]
+        if good and len(good) == len(checks):
+            return Layer("registry pin", "yes",
+                         f"{key} verified against the local package cache")
+        why = next((c.detail for c in checks if c.state != "verified"), "")
+        if offline:
+            why = f"{why}; --safe was given, so no registry was contacted"
+        # This page reads the local package cache and nothing else, so the
+        # remedy has to name the thing that does ask the registry rather than
+        # implying this command would have.
+        return Layer("registry pin", "?",
+                     f"{key} recorded at approval, not verified here -- {why}",
+                     "mcp-pin scan compares it against the registry; a launch "
+                     "compares it against the package cache. --require-integrity "
+                     "makes 'could not verify' a failure in both")
 
     if spec is None or spec.is_remote:
         return Layer("registry pin", "n/a", "not fetched from a registry")
@@ -241,7 +271,7 @@ def _in_path(key: str, entry: dict | None, spec: Any, fronting: set) -> Layer:
 
 
 def for_server(lock: Lock, key: str, spec: Any,
-               fronting: set | None = None) -> list[Layer]:
+               fronting: set | None = None, offline: bool = False) -> list[Layer]:
     entry = lock.servers.get(key)
     if not isinstance(entry, dict):
         entry = None
@@ -250,14 +280,14 @@ def for_server(lock: Lock, key: str, spec: Any,
         _approval(entry),
         _tools(entry),
         _code(entry, spec),
-        _registry(entry, spec),
+        _registry(entry, spec, offline),
         _policy(entry),
         _in_path(key, entry, spec, fronting or set()),
         _reachable_by(lock, name),
     ]
 
 
-def build(lock: Lock, servers: list) -> dict[str, Any]:
+def build(lock: Lock, servers: list, offline: bool = False) -> dict[str, Any]:
     # The gateway's own entry is not a server to report on: it is the thing
     # doing the reporting's work, and it has no approval by design.
     configured = {s.identity(): s for s in servers if not is_gateway(s)}
@@ -269,7 +299,7 @@ def build(lock: Lock, servers: list) -> dict[str, Any]:
         entry = lock.servers.get(key)
         if key in lock.servers and not isinstance(entry, dict):
             continue
-        layers = for_server(lock, key, configured.get(key), fronting)
+        layers = for_server(lock, key, configured.get(key), fronting, offline)
         rows.append({
             "identity": safe_name(key),
             "configured": key in configured,
@@ -278,6 +308,7 @@ def build(lock: Lock, servers: list) -> dict[str, Any]:
             # operator the recommended setup had lost their servers.
             "reachable": key in configured or behind_gateway(key, entry, fronting),
             "gaps": sum(1 for layer in layers if layer.gap),
+            "unverified": sum(1 for layer in layers if layer.state == "?"),
             "layers": [
                 {"name": l.name, "state": l.state,
                  "detail": safe_name(l.detail), "remedy": safe_name(l.remedy)}
@@ -287,12 +318,17 @@ def build(lock: Lock, servers: list) -> dict[str, Any]:
 
     return {
         "servers": rows,
-        "fully_covered": sum(1 for r in rows if r["gaps"] == 0),
+        # A layer nothing checked cannot count towards "covered". That is
+        # the whole lesson of this module applied to itself.
+        "fully_covered": sum(1 for r in rows
+                             if r["gaps"] == 0 and r["unverified"] == 0),
+        "unverified": sum(r["unverified"] for r in rows),
         "total": len(rows),
     }
 
 
-_STATE_COLOR = {"yes": "\033[32m", "no": "\033[33m", "n/a": "\033[90m"}
+_STATE_COLOR = {"yes": "\033[32m", "no": "\033[33m", "n/a": "\033[90m",
+                "?": "\033[36m"}
 
 
 def render(data: dict[str, Any], color: bool = True, verbose: bool = False) -> str:

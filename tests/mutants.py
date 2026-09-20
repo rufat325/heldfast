@@ -571,7 +571,7 @@ FAIL_OPEN = "cursor:github" not in ids
         id="guard-starts-rewritten-script",
         theorem="T-ARTIFACT",
         path="guard.py",
-        original="""    reason = _pin_still_holds(guard, argv)
+        original="""    reason = _pin_still_holds(guard, argv, require_integrity=require_integrity)
     if reason:
         print(f"mcp-pin guard: {reason}", file=sys.stderr)
         return 2
@@ -658,7 +658,9 @@ FAIL_OPEN = 'result["resources"]' not in inspect.getsource(Guard.handle_server_m
         theorem="T-ARTIFACT",
         path="gateway.py",
         original="""        reason = (mismatch(self.recorded_artifacts)
-                  or launch_mismatch(self.approved_launch, self.spec.argv))
+                  or launch_mismatch(self.approved_launch, self.spec.argv)
+                  or refusal(self.recorded_integrity, self.artifact_urls,
+                             require=self.require_integrity))
         if reason:
             self.error = reason
             return False
@@ -800,8 +802,12 @@ FAIL_OPEN = acknowledged([item], yes=True, yes_tools=[])
         id="integrity-drift-silent",
         theorem="T-INTEGRITY",
         path="rules/drift.py",
-        original="            if now == approved or now is None:\n                continue\n",
-        replacement="            continue\n",
+        original="""            now = answer.hashes.get(key)
+            if now is None or now == approved:
+                continue
+""",
+        replacement="""            continue
+""",
         harm="A rewritten tarball at the same version string is not reported.",
         probe="""
 from mcp_pin import integrity as integ
@@ -820,6 +826,156 @@ found = [f for f in run_rules(AuditContext(
     servers=[spec], lock={"servers": lock.servers, "skills": {}}))
     if f.rule_id == "MCPA036"]
 FAIL_OPEN = found == []
+""",
+    ),
+    Mutant(
+        id="guard-starts-swapped-tarball",
+        theorem="T-CACHE",
+        path="guard.py",
+        original="""    return refusal(integrity if isinstance(integrity, dict) else None,
+                   urls if isinstance(urls, dict) else None,
+                   require=require_integrity)""",
+        replacement="""    return None""",
+        harm=("The package cache holds bytes that are not the approved ones and "
+              "the child starts anyway. MCPA036 is only a later scan, and `npx` "
+              "fetches for itself at spawn time."),
+        probe="""
+import hashlib, json, os, tempfile
+tmp = tempfile.mkdtemp()
+url = "https://registry.npmjs.org/@scope/pkg/-/pkg-1.2.3.tgz"
+key = "make-fetch-happen:request-cache:" + url
+h = hashlib.sha256(key.encode()).hexdigest()
+path = os.path.join(tmp, "_cacache", "index-v5", h[0:2], h[2:4], h[4:])
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write("x" + chr(9) + json.dumps({"key": key,
+             "integrity": "sha512-swapped"}) + chr(10))
+os.environ["npm_config_cache"] = tmp
+from mcp_pin.guard import Guard, _pin_still_holds
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec
+spec = ServerSpec(name="svc", source="/x/.mcp.json", client="test",
+                  transport="stdio", command="npx", args=["-y", "@scope/pkg@1.2.3"])
+lock = Lock()
+lock.record([spec], [], [])
+lock.servers[spec.identity()]["integrity"] = {"npm:@scope/pkg@1.2.3": "sha512-approved"}
+guard = Guard("svc", lock, quiet=True)
+FAIL_OPEN = _pin_still_holds(guard, ["npx", "-y", "@scope/pkg@1.2.3"]) is None
+""",
+    ),
+    Mutant(
+        id="gateway-starts-swapped-tarball",
+        theorem="T-CACHE",
+        path="gateway.py",
+        original="""                  or refusal(self.recorded_integrity, self.artifact_urls,
+                             require=self.require_integrity))""",
+        replacement="""                  )""",
+        harm=("The gateway starts a backend whose cached artifact was swapped. "
+              "The README recommends the gateway, so this is the downgrade that "
+              "matters most."),
+        probe="""
+import hashlib, json, os, tempfile
+tmp = tempfile.mkdtemp()
+url = "https://registry.npmjs.org/@scope/pkg/-/pkg-1.2.3.tgz"
+key = "make-fetch-happen:request-cache:" + url
+h = hashlib.sha256(key.encode()).hexdigest()
+path = os.path.join(tmp, "_cacache", "index-v5", h[0:2], h[2:4], h[4:])
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write("x" + chr(9) + json.dumps({"key": key,
+             "integrity": "sha512-swapped"}) + chr(10))
+os.environ["npm_config_cache"] = tmp
+from mcp_pin.gateway import Backend
+from mcp_pin.model import ServerSpec
+# A command that cannot exist, so a mutant that gets past the artifact check
+# fails at spawn instead of running anything. The two errors are different
+# words, which is what the probe reads.
+spec = ServerSpec(name="svc", source="/x/.mcp.json", client="test",
+                  transport="stdio", command="mcp-pin-no-such-binary",
+                  args=["-y", "@scope/pkg@1.2.3"])
+backend = Backend(spec)
+backend.recorded_integrity = {"npm:@scope/pkg@1.2.3": "sha512-approved"}
+backend.start()
+FAIL_OPEN = "has changed" not in str(backend.error)
+""",
+    ),
+    Mutant(
+        id="cache-absent-reads-as-verified",
+        theorem="T-CACHE",
+        path="pkgcache.py",
+        original="""    return CacheCheck(key, "absent",
+                      "no npm cache entry for this tarball; the next launch "
+                      "fetches it")""",
+        replacement="""    return CacheCheck(key, "verified", "nothing on disk contradicts it")""",
+        harm=("Nothing on disk becomes a pass, so emptying a cache buys a clean "
+              "verdict -- the exact silence this layer exists to remove."),
+        probe="""
+import os, tempfile
+from mcp_pin import pkgcache
+tmp = tempfile.mkdtemp()
+os.environ["npm_config_cache"] = os.path.join(tmp, "nothing")
+got = pkgcache.check({"npm:@scope/pkg@1.2.3": "sha512-abc"})
+FAIL_OPEN = bool(got) and got[0].state == "verified"
+""",
+    ),
+    Mutant(
+        id="unverifiable-artifact-goes-quiet",
+        theorem="T-UNVERIFIED",
+        path="rules/drift.py",
+        original="""            yield Finding(
+                rule_id="MCPA037",""",
+        replacement="""            if True:
+                continue
+            yield Finding(
+                rule_id="MCPA037",""",
+        harm=("An artifact nothing could check reports exactly like one that was "
+              "verified. Anyone who can break the lookup buys silence, and an "
+              "offline runner buys it by accident."),
+        probe="""
+import os, tempfile
+from mcp_pin import integrity as integ
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec
+from mcp_pin.rules import AuditContext, run_rules
+tmp = tempfile.mkdtemp()
+os.environ["npm_config_cache"] = os.path.join(tmp, "nothing")
+spec = ServerSpec(name="svc", source="/x/.mcp.json", client="test",
+                  transport="stdio", command="npx", args=["-y", "@scope/pkg@1.2.3"])
+lock = Lock()
+lock.record([spec], [], [])
+lock.servers[spec.identity()]["integrity"] = {"npm:@scope/pkg@1.2.3": "sha512-a"}
+integ.get_json = lambda url: None
+found = [f for f in run_rules(AuditContext(
+    servers=[spec], lock={"servers": lock.servers, "skills": {}}))
+    if f.rule_id == "MCPA037"]
+FAIL_OPEN = not found
+""",
+    ),
+    Mutant(
+        id="safe-scan-still-calls-the-registry",
+        theorem="T-SAFE-OFFLINE",
+        path="rules/drift.py",
+        original="""    if ctx.options.get("offline"):""",
+        replacement="""    if False:""",
+        harm=("`--safe` promises to connect to nothing, and a scan under it "
+              "reaches out to npm and PyPI -- telling them which packages you "
+              "run, from a flag whose whole purpose is that it does not."),
+        probe="""
+from mcp_pin import integrity as integ
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec
+from mcp_pin.rules import AuditContext, run_rules
+calls = []
+integ.get_json = lambda url: calls.append(url) or None
+spec = ServerSpec(name="svc", source="/x/.mcp.json", client="test",
+                  transport="stdio", command="npx", args=["-y", "@scope/pkg@1.2.3"])
+lock = Lock()
+lock.record([spec], [], [])
+lock.servers[spec.identity()]["integrity"] = {"npm:@scope/pkg@1.2.3": "sha512-a"}
+run_rules(AuditContext(servers=[spec],
+                       lock={"servers": lock.servers, "skills": {}},
+                       options={"offline": True}))
+FAIL_OPEN = bool(calls)
 """,
     ),
 )

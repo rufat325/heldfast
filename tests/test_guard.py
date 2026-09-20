@@ -16,12 +16,14 @@ import sys
 import tempfile
 import threading
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from fake_npm_cache import empty_npm_cache, fake_npm_cache  # noqa: E402
 from mcp_pin.findings import Severity  # noqa: E402
 from mcp_pin.guard import Guard, _client_to_server, _screen_outbound  # noqa: E402
 from mcp_pin.lockfile import Lock  # noqa: E402
@@ -372,6 +374,111 @@ class TestCallSiteIsTheBoundary(unittest.TestCase):
             forwarded = _client_to_server(g, None, line, threading.Lock())
         self.assertIsNone(forwarded)
         self.assertIn("BLOCKED BY mcp-pin", buf.getvalue())
+
+
+
+class TestRegistryArtifactIsCheckedBeforeSpawn(unittest.TestCase):
+    """A scan finding is not a pin.
+
+    MCPA036 reports that a registry artifact moved, at scan time, by asking
+    the registry. `npx -y pkg@1.2.3` resolves and fetches for itself when it
+    is spawned, so the report describes a remote fact and the launch runs
+    whatever is on disk. These tests hold the part that closes: before the
+    child starts, the bytes the package manager is holding are compared to
+    the ones that were approved, with no network involved.
+    """
+
+    def _guard(self, integrity: dict, urls: dict | None = None) -> tuple:
+        spec = ServerSpec(name="svc", source="/tmp/.mcp.json", client="test",
+                          transport="stdio", command="npx",
+                          args=["-y", "@scope/pkg@1.2.3"])
+        lock = Lock()
+        lock.record([spec], [], [])
+        entry = lock.servers[spec.identity()]
+        entry["integrity"] = integrity
+        if urls:
+            entry["artifact_urls"] = urls
+        guard = Guard("svc", lock, quiet=True)
+        return guard, ["npx", "-y", "@scope/pkg@1.2.3"]
+
+    def test_a_swapped_cached_tarball_refuses_the_spawn(self) -> None:
+        from mcp_pin.guard import _pin_still_holds
+
+        guard, argv = self._guard({"npm:@scope/pkg@1.2.3": "sha512-approved"})
+        with tempfile.TemporaryDirectory() as tmp:
+            with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", "sha512-swapped"):
+                reason = _pin_still_holds(guard, argv)
+        self.assertIsNotNone(reason)
+        self.assertIn("has changed", str(reason))
+
+    def test_a_matching_cached_tarball_starts(self) -> None:
+        from mcp_pin.guard import _pin_still_holds
+
+        guard, argv = self._guard({"npm:@scope/pkg@1.2.3": "sha512-approved"})
+        with tempfile.TemporaryDirectory() as tmp:
+            with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", "sha512-approved"):
+                self.assertIsNone(_pin_still_holds(guard, argv))
+
+    def test_a_cold_cache_starts_unless_the_operator_asked_otherwise(self) -> None:
+        """Refusing every launch on a machine that has not fetched the package
+        yet would make the pin unusable, and an unusable pin gets removed."""
+        from mcp_pin.guard import _pin_still_holds
+
+        guard, argv = self._guard({"npm:@scope/pkg@1.2.3": "sha512-approved"})
+        with tempfile.TemporaryDirectory() as tmp:
+            with empty_npm_cache(tmp):
+                self.assertIsNone(_pin_still_holds(guard, argv))
+                strict = _pin_still_holds(guard, argv, require_integrity=True)
+        self.assertIsNotNone(strict)
+        self.assertIn("could not be verified", str(strict))
+
+    def test_the_check_opens_no_socket(self) -> None:
+        """This runs on the launch path. A registry lookup here would put a
+        DNS timeout between the user and their agent starting, and would tell
+        a registry every time a server is launched."""
+        import socket
+        from mcp_pin.guard import _pin_still_holds
+
+        guard, argv = self._guard({"npm:@scope/pkg@1.2.3": "sha512-approved"})
+        real = socket.socket
+
+        def forbidden(*args, **kwargs):
+            raise AssertionError("the pre-spawn check opened a socket")
+
+        socket.socket = forbidden
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", "sha512-approved"):
+                    self.assertIsNone(_pin_still_holds(guard, argv))
+        finally:
+            socket.socket = real
+
+    def test_the_real_command_exits_two_rather_than_starting(self) -> None:
+        """End to end, because a unit test cannot see whether run() calls it."""
+        from mcp_pin import guard as guard_mod
+
+        spec = ServerSpec(name="svc", source="/tmp/.mcp.json", client="test",
+                          transport="stdio", command="npx",
+                          args=["-y", "@scope/pkg@1.2.3"])
+        with tempfile.TemporaryDirectory() as tmp:
+            lock = Lock(path=Path(tmp) / ".mcp-pin.lock")
+            lock.record([spec], [], [])
+            lock.servers[spec.identity()]["integrity"] = {
+                "npm:@scope/pkg@1.2.3": "sha512-approved"}
+            lock.save()
+            with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", "sha512-swapped"):
+                err = io.StringIO()
+                with redirect_stderr(err):
+                    # The approved argv, so the command-line check passes and
+                    # the artifact check is what refuses. npx is never run:
+                    # the refusal happens before anything is spawned, which
+                    # is the whole claim being tested.
+                    code = guard_mod.run(
+                        ["npx", "-y", "@scope/pkg@1.2.3"],
+                        lock_path=Path(tmp) / ".mcp-pin.lock",
+                        server_name="svc", quiet=True)
+        self.assertEqual(2, code)
+        self.assertIn("has changed", err.getvalue())
 
 
 if __name__ == "__main__":

@@ -103,6 +103,9 @@ class Backend:
         self.on_unsolicited: Any = None
         self.recorded_artifacts: dict[str, str] = {}
         self.approved_launch: str = ""
+        self.recorded_integrity: dict[str, str] = {}
+        self.artifact_urls: dict[str, str] = {}
+        self.require_integrity: bool = False
         self._id = 0
         self._lock = threading.Lock()
         self.needs_refresh = False
@@ -117,9 +120,15 @@ class Backend:
 
         from .artifacts import mismatch
         from .lockfile import launch_mismatch
+        from .pkgcache import refusal
 
+        # Offline, and on the launch path on purpose: the registry answer is
+        # a scan-time opinion, while the package cache holds the bytes this
+        # spawn is about to run.
         reason = (mismatch(self.recorded_artifacts)
-                  or launch_mismatch(self.approved_launch, self.spec.argv))
+                  or launch_mismatch(self.approved_launch, self.spec.argv)
+                  or refusal(self.recorded_integrity, self.artifact_urls,
+                             require=self.require_integrity))
         if reason:
             self.error = reason
             return False
@@ -273,7 +282,8 @@ class Gateway:
                  deny_sampling: bool = False,
                  deny_elicitation: bool = False,
                  isolate_env: bool = True,
-                 share_env: set | None = None) -> None:
+                 share_env: set | None = None,
+                 require_integrity: bool = False) -> None:
         self.lock = lock
         self.quiet = quiet
         self.trail = trail
@@ -315,6 +325,11 @@ class Gateway:
             recorded = entry.get("artifacts")
             backend.recorded_artifacts = recorded if isinstance(recorded, dict) else {}
             backend.approved_launch = str(entry.get("command_line") or "")
+            integrity = entry.get("integrity")
+            backend.recorded_integrity = integrity if isinstance(integrity, dict) else {}
+            urls = entry.get("artifact_urls")
+            backend.artifact_urls = urls if isinstance(urls, dict) else {}
+            backend.require_integrity = require_integrity
             backend.on_unsolicited = self.screen_server_message
             if spec.name in self.backends:
                 other = self.backends[spec.name].spec.identity()
@@ -672,7 +687,8 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
         timeout: float = 30.0, log_path: Path | None = None,
         act_as: str | None = None, max_calls: int = 0,
         deny_sampling: bool = False, deny_elicitation: bool = False,
-        isolate_env: bool = True, share_env: set | None = None) -> int:
+        isolate_env: bool = True, share_env: set | None = None,
+        require_integrity: bool = False) -> int:
     """Serve the gateway on stdio until the client goes away."""
     try:
         lock = Lock.load(lock_path)
@@ -704,7 +720,8 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
                       identity=identity, max_calls=max_calls,
                       deny_sampling=deny_sampling,
                       deny_elicitation=deny_elicitation,
-                      isolate_env=isolate_env, share_env=share_env)
+                      isolate_env=isolate_env, share_env=share_env,
+                      require_integrity=require_integrity)
     if not gateway.backends:
         print("mcp-pin gateway: nothing approved to serve. Run "
               "`mcp-pin approve --probe` first, or pass --allow-unapproved.",

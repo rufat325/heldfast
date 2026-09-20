@@ -1027,15 +1027,31 @@ def _shutdown(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None) -> N
     guard.log(guard.summary())
 
 
-def _pin_still_holds(guard: Guard, argv: list[str]) -> str | None:
-    """Refuse to spawn if a recorded digest or launch command has moved."""
+def _pin_still_holds(guard: Guard, argv: list[str], *,
+                     require_integrity: bool = False) -> str | None:
+    """Refuse to spawn if a recorded digest, command or artifact has moved.
+
+    The registry check reads the local package cache, never the network: this
+    runs on the launch path, where a hung DNS lookup is an agent that will
+    not start. A tarball whose cached bytes contradict the approved hash
+    refuses unconditionally -- those are the bytes about to run.
+    """
+    from .pkgcache import refusal
+
     entry = guard._resolve_entry() or {}
     recorded = entry.get("artifacts")
     reason = mismatch(recorded if isinstance(recorded, dict) else None)
     if reason:
         return reason
     approved = entry.get("command_line")
-    return launch_mismatch(approved if isinstance(approved, str) else None, argv)
+    reason = launch_mismatch(approved if isinstance(approved, str) else None, argv)
+    if reason:
+        return reason
+    integrity = entry.get("integrity")
+    urls = entry.get("artifact_urls")
+    return refusal(integrity if isinstance(integrity, dict) else None,
+                   urls if isinstance(urls, dict) else None,
+                   require=require_integrity)
 
 
 def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
@@ -1044,7 +1060,7 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         deny_sampling: bool = False, deny_elicitation: bool = False,
         deny_roots: bool = False, result_policy: str = "annotate",
         log_path: Path | None = None, allow_unapproved: bool = False,
-        dry_run: bool = False) -> int:
+        dry_run: bool = False, require_integrity: bool = False) -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("mcp-pin guard: no server command given", file=sys.stderr)
@@ -1064,7 +1080,7 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
     trail = _open_trail(log_path, name, policy, result_policy, guard)
     _announce_posture(guard, name, lock_path, allow_unapproved, policy)
 
-    reason = _pin_still_holds(guard, argv)
+    reason = _pin_still_holds(guard, argv, require_integrity=require_integrity)
     if reason:
         print(f"mcp-pin guard: {reason}", file=sys.stderr)
         return 2

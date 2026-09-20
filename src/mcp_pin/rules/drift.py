@@ -12,7 +12,7 @@ ran `approve` would otherwise report as clean.
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable, Iterator
 
 from ..findings import Finding, Location, Severity
 from ..model import instructions_fingerprint
@@ -396,11 +396,8 @@ def artifact_drift(ctx: AuditContext) -> Iterable[Finding]:
             )
 
 
-@rule("MCPA036", "Registry artifact changed since approval", Severity.HIGH)
-def integrity_drift(ctx: AuditContext) -> Iterable[Finding]:
-    """The version string is unchanged; the tarball it names is not."""
-    from ..integrity import lookup
-
+def _recorded_integrity(ctx: AuditContext) -> Iterator[tuple]:
+    """(server, recorded hashes, recorded urls) for every pinned registry launch."""
     lock = _lock(ctx)
     if not lock:
         return
@@ -412,27 +409,129 @@ def integrity_drift(ctx: AuditContext) -> Iterable[Finding]:
         recorded = entry.get("integrity")
         if not isinstance(recorded, dict) or not recorded:
             continue
-        current = lookup(s)
-        for key, approved in sorted(recorded.items()):
-            now = current.get(key)
-            if now == approved or now is None:
+        urls = entry.get("artifact_urls")
+        yield s, recorded, urls if isinstance(urls, dict) else {}
+
+
+def _ask_registry(ctx: AuditContext, server: Any) -> Any:
+    """What the registry publishes now, fetched at most once per scan.
+
+    Two rules read the same answer. Without the memo, MCPA036 and MCPA037
+    would each open a socket for every server, which doubles both the
+    latency and the number of times a scan tells a registry what you run.
+    """
+    from ..integrity import Published, published
+
+    if ctx.options.get("offline"):
+        # `--safe` promises to execute nothing and connect to nothing. A
+        # registry lookup is a connection, so the promise wins and the scan
+        # reports that it could not see rather than pretending it looked.
+        return Published("unreachable",
+                         detail="--safe was given, so no registry was contacted")
+    seen = ctx.options.setdefault("_integrity_seen", {})
+    key = server.identity()
+    if key not in seen:
+        seen[key] = published(server)
+    return seen[key]
+
+
+@rule("MCPA036", "Registry artifact changed since approval", Severity.HIGH)
+def integrity_drift(ctx: AuditContext) -> Iterable[Finding]:
+    """The version string is unchanged; the tarball it names is not."""
+    from ..pkgcache import check as cache_check
+
+    for s, recorded, urls in _recorded_integrity(ctx):
+        # What the machine already holds is the stronger evidence: those are
+        # the bytes a launch would actually run, and reading them needs no
+        # network. The registry answer is the second opinion.
+        local = {c.key: c for c in cache_check(recorded, urls)}
+        answer = _ask_registry(ctx, s)
+        # By the string form: a lockfile is hand-edited, `run_rules` does not
+        # catch a rule exception, and a mixed-type mapping would take the
+        # whole scan down rather than report anything.
+        for key, approved in sorted(recorded.items(), key=lambda kv: str(kv[0])):
+            held = local.get(key)
+            if held is not None and held.state == "changed":
+                yield _integrity_finding(s, key, held.detail, local=True)
                 continue
+            now = answer.hashes.get(key)
+            if now is None or now == approved:
+                continue
+            yield _integrity_finding(
+                s, key,
+                f"the registry now serves {str(now)[:24]}, "
+                f"{str(approved)[:24]} was approved")
+
+
+def _integrity_finding(s: Any, key: str, detail: str, *,
+                       local: bool = False) -> Finding:
+    where = ("the copy on this machine" if local
+             else "the copy the registry serves")
+    return Finding(
+        rule_id="MCPA036",
+        title="Registry artifact changed since approval",
+        severity=Severity.HIGH,
+        location=Location(path=s.source, line=s.line, snippet=str(key)),
+        evidence=f"{s.identity()} fetches {key}; {where} is not the approved one -- {detail}",
+        remediation=(
+            "The version in the launch command is the same; the bytes behind "
+            "it are not. On npm and PyPI a published version cannot be "
+            "replaced, so this points at a private registry, a mirror or "
+            "caching proxy, a `--registry` override, or something "
+            "intercepting the fetch. Confirm the publish before you accept "
+            "it, then `mcp-pin approve --probe --yes`."
+        ),
+        server=s.name,
+        atlas=["AML.T0010.001"],
+        cwe=["CWE-494"],
+        tags=["drift", "supply-chain"],
+    )
+
+
+@rule("MCPA037", "Registry artifact could not be verified", Severity.LOW)
+def integrity_unverified(ctx: AuditContext) -> Iterable[Finding]:
+    """A hash was approved and this run could not check it against anything.
+
+    Separate from MCPA036 on purpose. "Verified unchanged" and "could not
+    look" are different facts, and reporting them as one hands silence to
+    anyone who can make the lookup fail -- and to an offline CI runner, which
+    produces the same silence by accident. `--require-integrity` raises this
+    to HIGH so a runner that must not guess can fail the build on it.
+    """
+    from ..pkgcache import check as cache_check
+
+    strict = bool(ctx.options.get("require_integrity"))
+    for s, recorded, urls in _recorded_integrity(ctx):
+        local = {c.key: c for c in cache_check(recorded, urls)}
+        answer = _ask_registry(ctx, s)
+        for key in sorted(recorded, key=str):
+            held = local.get(key)
+            if held is not None and held.state in ("verified", "changed"):
+                continue
+            if answer.hashes.get(key):
+                continue
+            reason = answer.detail or "the registry did not answer"
+            if held is not None:
+                reason = f"{reason}; locally, {held.detail}"
             yield Finding(
-                rule_id="MCPA036",
-                title="Registry artifact changed since approval",
-                severity=Severity.HIGH,
+                rule_id="MCPA037",
+                title="Registry artifact could not be verified",
+                severity=Severity.HIGH if strict else Severity.LOW,
                 location=Location(path=s.source, line=s.line, snippet=str(key)),
                 evidence=(
-                    f"{s.identity()} fetches {key}, which now hashes to "
-                    f"{str(now)[:24]}, was {str(approved)[:24]}"
+                    f"{s.identity()} pins {key}, and this run could not "
+                    f"confirm the bytes behind it: {reason}"
                 ),
                 remediation=(
-                    "The version in the launch command is the same; the bytes "
-                    "the registry serves for it are not. Confirm the publish, "
-                    "then `mcp-pin approve --probe --yes`."
+                    "This is not a report that something changed -- it is a "
+                    "report that nothing checked. The recorded hash still "
+                    "stands. Re-run where the registry is reachable, or on a "
+                    "machine whose package cache holds the artifact. A build "
+                    "that must not proceed unverified should pass "
+                    "`--require-integrity`, which makes this HIGH."
                 ),
                 server=s.name,
                 atlas=["AML.T0010.001"],
                 cwe=["CWE-494"],
-                tags=["drift", "supply-chain"],
+                tags=["drift", "supply-chain", "coverage"],
             )

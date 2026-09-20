@@ -301,6 +301,72 @@ class TestApprovalAttacks(unittest.TestCase):
         finally:
             integ.get_json = real
 
+    def test_the_tarball_swapped_in_the_cache_the_launch_will_use(self) -> None:
+        """The same attack, seen where it matters: on disk, before the spawn.
+
+        Asking the registry is a question about a remote fact. `npx` resolves
+        and fetches for itself, so the bytes that run are the ones in the
+        package cache -- and those can be wrong while the registry is
+        perfectly honest, which is what a mirror or an intercepting proxy
+        does. No network is involved in catching this.
+        """
+        import tempfile
+
+        from fake_npm_cache import fake_npm_cache
+
+        from mcp_pin import integrity as integ
+        spec = server("svc", command="npx", args=["-y", "@scope/pkg@1.2.3"])
+        lock = Lock()
+        lock.record([spec], [], [])
+        lock.servers[spec.identity()]["integrity"] = {
+            "npm:@scope/pkg@1.2.3": "sha512-approved",
+        }
+        real = integ.get_json
+        # The registry agrees with what was approved. Only the local copy
+        # disagrees, so this cannot be caught by asking upstream.
+        integ.get_json = lambda url: {"dist": {"integrity": "sha512-approved"}}
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", "sha512-swapped"):
+                    ctx = AuditContext(servers=[spec],
+                                       lock={"servers": lock.servers, "skills": {}})
+                    found = caught("MCPA036", ctx)
+        finally:
+            integ.get_json = real
+        self.assertTrue(found)
+        self.assertIn("the copy on this machine", found[0].evidence)
+
+    def test_an_artifact_nothing_could_check(self) -> None:
+        """A recorded hash, an unreachable registry, and a cold cache.
+
+        The point of the rule is that this does not look like a pass. Anyone
+        who can break the lookup would otherwise buy silence, and an offline
+        CI runner buys the same silence without trying.
+        """
+        import tempfile
+
+        from fake_npm_cache import empty_npm_cache
+
+        from mcp_pin import integrity as integ
+        spec = server("svc", command="npx", args=["-y", "@scope/pkg@1.2.3"])
+        lock = Lock()
+        lock.record([spec], [], [])
+        lock.servers[spec.identity()]["integrity"] = {
+            "npm:@scope/pkg@1.2.3": "sha512-approved",
+        }
+        real = integ.get_json
+        integ.get_json = lambda url: None
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                with empty_npm_cache(tmp):
+                    ctx = AuditContext(servers=[spec],
+                                       lock={"servers": lock.servers, "skills": {}})
+                    found = caught("MCPA037", ctx)
+        finally:
+            integ.get_json = real
+        self.assertTrue(found)
+        self.assertNotIn("MCPA036", [f.rule_id for f in found])
+
 
 class TestCompositionAttacks(unittest.TestCase):
     """Attacks that exist in the combination and in no single server."""

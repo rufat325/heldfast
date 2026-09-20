@@ -41,6 +41,7 @@ Do not edit by hand.
 | [MCPA034](#mcpa034) | critical | Environment variable in the config runs code or reads traffic |
 | [MCPA035](#mcpa035) | high | Environment declaration collects a credential under another name |
 | [MCPA036](#mcpa036) | high | Registry artifact changed since approval |
+| [MCPA037](#mcpa037) | low | Registry artifact could not be verified |
 
 ## MCPA001
 
@@ -595,15 +596,31 @@ def count(path: str):
 
 **Registry artifact changed since approval** - severity `high`
 
-**What it looks for.** A registry package whose published artifact hash changed since approval, while the version in the launch command is byte-identical.
+**What it looks for.** A registry package whose artifact hash changed since approval, while the version in the launch command is byte-identical. Checked against the local package cache first -- those are the bytes a launch would actually run -- and against what the registry publishes second.
 
-**Why it matters.** `npx pkg@1.2.3` pins a name. The registry can serve different bytes for that name. npm and PyPI publish an integrity hash with each tarball; approval records it, and a later scan compares. A version string is a lookup, not a content pin.
+**Why it matters.** `npx pkg@1.2.3` pins a name. A version string is a lookup, not a content pin. Be precise about where that bites: on the public registries it mostly cannot. npm refuses to reuse a name and version once published and requires a new version number to republish, and PyPI refuses to reuse a filename. The exposure is everywhere else in the path -- a private registry, a mirror or caching proxy (Artifactory, Nexus, Verdaccio), any `--registry` override, an internal index that shadows a public name, or a proxy intercepting the fetch. Those are the normal shape of an enterprise install, and none of them is bound by the public registries' immutability rules.
 
 ```
 "args": ["-y", "@scope/server@1.2.3"]   # unchanged; the tarball is not
 ```
 
-**How to fix it.** Confirm the publish is yours, then `mcp-pin approve --probe --yes`. If you did not expect a new artifact at this version, stop.
+**How to fix it.** Confirm the publish is yours, then `mcp-pin approve --probe --yes`. If you did not expect a new artifact at this version, stop -- on npm or PyPI that should be impossible, so something between you and them is answering.
 
-**When it is wrong.** A fetch that fails is not a finding. The recorded hash still stands; the scan could not see. Unpinned launches are MCPA003.
+**When it is wrong.** It pins the top-level artifact only. The dependency tree installed alongside it still floats, and a compromised transitive dependency is the more common real path; this rule does not see it. A fetch that fails is not reported here either -- that is MCPA037, so that 'could not look' never reads as 'looked and it was fine'. Unpinned launches are MCPA003.
+
+## MCPA037
+
+**Registry artifact could not be verified** - severity `low`
+
+**What it looks for.** A registry artifact hash was recorded at approval, and this run could not check it against anything: no registry answer and nothing in the local package cache to compare.
+
+**Why it matters.** Silence has to mean one thing. When an unverifiable artifact produced the same quiet output as a verified one, anyone who could make the lookup fail bought that silence -- and an offline or egress-restricted build runner bought it by accident, which is worse, because nobody was even trying to hide. A rule that goes quiet when it cannot see is the exact shape this project's own golden tests exist to catch.
+
+```
+"integrity": {"npm:@scope/server@1.2.3": "sha512-..."}  # recorded, unchecked
+```
+
+**How to fix it.** Re-run where the registry is reachable, or on a machine whose package cache holds the artifact. A build that must not pass on 'could not see' should pass `--require-integrity`, which makes this high and fails the default `--fail-on high`. `guard` and `gateway` take the same flag and refuse to start rather than run something unverified.
+
+**When it is wrong.** This is not a report that anything changed. The recorded hash still stands and the approval is still the approval. On a deliberately offline runner it is expected, and low by default for that reason. `--safe` guarantees no connection is made, so under it this fires for every pinned registry launch.
 

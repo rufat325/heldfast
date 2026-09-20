@@ -35,6 +35,13 @@ LEGACY_IGNORE_NAME = ".mcp-audit-ignore"
 PINNED = frozenset({
     "MCPA014", "MCPA015", "MCPA016", "MCPA017", "MCPA019", "MCPA020", "MCPA031",
     "MCPA036",
+    # MCPA037 is the "nothing verified this" report, and it is here for the
+    # same reason as the rest: `--require-integrity` exists so a build can
+    # refuse to pass on an unverified artifact, and a committed one-line
+    # ignore file would turn that flag back into the fail-open it replaced.
+    # An offline runner does not need to suppress it -- it is low by default
+    # and does not fail `--fail-on high` unless that flag was asked for.
+    "MCPA037",
 })
 
 

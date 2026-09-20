@@ -16,6 +16,9 @@ Read this file and `docs/GUARANTEES.md` instead.
   absent, so renaming the file is not a silent loss of enforcement.
 - Last public commit on `main` before this freeze work:
   `d54123c Stop a name in a config from rewriting the report about it`
+- `pkgcache.py` is on the launch path and is in the `mypy --strict` job for
+  that reason. It opens no socket; if it ever needs to, that is a design
+  change, not an implementation detail.
 
 ## Conventions (do not "modernize")
 
@@ -84,6 +87,40 @@ Read this file and `docs/GUARANTEES.md` instead.
     T-SURFACE.
 26. ~~`--yes` rubber-stamped a critical-graded change.~~ Done: T-YES-CRITICAL.
 27. ~~Registry pin was a version string.~~ Done: T-INTEGRITY / MCPA036.
+28. ~~MCPA036 was a scanner finding wearing the vocabulary of a pin.~~ Done:
+    T-CACHE / T-UNVERIFIED / T-SAFE-OFFLINE. An outside review made three
+    points and all three held.
+    - *Fail-open reporting.* "A failed fetch is not a finding" was right about
+      severity and wrong about reporting. Anyone who could break the lookup
+      bought silence, and an offline runner bought the same silence by
+      accident. Now MCPA037, `status` and `coverage` separate "verified" from
+      "could not verify", and `--require-integrity` makes unverifiable fail.
+    - *Scan time is not launch time.* `npx -y pkg@1.2.3` resolves and fetches
+      for itself at spawn, so registry metadata is adjacent to the bytes that
+      run, not identical to them. `pkgcache.py` reads the artifact the package
+      manager already holds -- npm's `_cacache` index, pip's `http-v2` body --
+      and `guard` / `gateway` refuse to spawn on a mismatch. Offline by
+      design: a registry lookup on the launch path is a DNS timeout between
+      the user and their agent starting.
+    - *Threat model.* npm will not let a name and version be reused and PyPI
+      refuses filename reuse, so on the public registries the swap largely
+      cannot happen. The rule's real scope -- private registries, mirrors and
+      caching proxies, `--registry` overrides, intercepting proxies -- is now
+      stated in the rule doc, so a knowledgeable reader does not dismiss it.
+      The transitive limit is stated too: the top-level artifact is pinned and
+      the dependency tree beneath it is not.
+    - Also: `--safe` contacts no registry (it never did promise to, and it
+      was), a scan's outbound lookups are disclosed, and `docs/MANUAL.md`
+      stopped carrying a third hand-copied rule table. A test now fails if
+      either document grows one again.
+
+    Both cache layouts were derived from the real caches on the dev machine,
+    not from documentation: 777 npm tarball entries all verified, 25/25
+    tampered digests caught, three pip wheels matched the sha256 PyPI
+    publishes. Validated against live metadata for a real MCP server package
+    too. The first version of `check` read the approved digest out of the dict
+    *key* instead of its value and reported `absent` for all 777 -- which is
+    why that validation exists and runs before the feature is believed.
 
 ## How to run
 

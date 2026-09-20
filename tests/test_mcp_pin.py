@@ -378,6 +378,19 @@ class TestSuppressions(unittest.TestCase):
         self.assertEqual(1, len(kept))
         self.assertEqual([], dropped)
 
+    def test_an_unverified_artifact_cannot_be_ignored_away(self) -> None:
+        """`--require-integrity` says a build must not pass on 'could not
+        verify'. A one-line committed ignore file would turn that straight
+        back into the fail-open it was added to replace, which is what the
+        pinned set exists to stop."""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / ".mcp-pin-ignore"
+            p.write_text("MCPA037\n", encoding="utf-8")
+            rules, errors = suppressions.parse_ignore_file(p)
+            self.assertEqual([], rules)
+            self.assertEqual(1, len(errors))
+            self.assertIn("cannot be suppressed", errors[0])
+
     def test_parse_rejects_a_pinned_rule(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / ".mcp-pin-ignore"

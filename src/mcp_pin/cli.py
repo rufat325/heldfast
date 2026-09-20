@@ -234,8 +234,22 @@ def _scan_context(args: argparse.Namespace, data: Collected, lock: Lock) -> Audi
         config_errors=data.errors,
         lock={"servers": lock.servers, "skills": lock.skills},
         source_flows=data.source_flows,
-        options={"probed": data.probed},
+        options=_rule_options(args, data),
     )
+
+
+def _rule_options(args: argparse.Namespace, data: "Collected") -> dict:
+    """What the rules need to know about how this run was invoked.
+
+    `offline` is the `--safe` promise reaching the two rules that would
+    otherwise open a socket. `require_integrity` decides whether "could not
+    verify" is a note or a failure.
+    """
+    return {
+        "probed": data.probed,
+        "offline": bool(getattr(args, "safe", False)),
+        "require_integrity": bool(getattr(args, "require_integrity", False)),
+    }
 
 
 def _apply_llm(args: argparse.Namespace, ctx: AuditContext, data: Collected) -> int | None:
@@ -359,16 +373,48 @@ def _approval_summary(lock: Lock) -> str:
     return ", ".join(parts)
 
 
-def _stamp_integrity(lock: Lock, servers: list) -> None:
-    """Record registry tarball hashes. A miss is not a finding."""
-    from .integrity import lookup
+def _pins_a_registry_package(spec) -> bool:
+    """Would this launch have a tarball to record? Answered without a socket."""
+    from .rules.execution import _FLOATING, extract_package, split_package
+    found = extract_package(spec)
+    if not found:
+        return False
+    name, version = split_package(found[1], found[0])
+    return bool(name and version and not _FLOATING.match(version))
+
+
+def _stamp_integrity(lock: Lock, servers: list, *, offline: bool = False) -> list[str]:
+    """Record registry tarball hashes and where they came from.
+
+    Returns the pinned registry launches whose hash could *not* be recorded,
+    so the caller can say so rather than leaving an approval that looks
+    complete. An approval that silently skipped this step produces a lockfile
+    which cannot tell "no tarball to pin" from "the registry was down".
+    """
+    from .integrity import ANSWERED, published
+    missed: list[str] = []
     for spec in servers:
         entry = lock.servers.get(spec.identity())
         if not isinstance(entry, dict):
             continue
-        got = lookup(spec)
-        if got:
-            entry["integrity"] = got
+        if offline:
+            # `--safe` promises no connections, and a registry lookup is one.
+            if _pins_a_registry_package(spec):
+                missed.append(f"{spec.identity()}: --safe was given, so no "
+                              f"registry was contacted")
+            continue
+        answer = published(spec)
+        if answer.state != ANSWERED:
+            if _pins_a_registry_package(spec):
+                missed.append(f"{spec.identity()}: {answer.detail}")
+            continue
+        entry["integrity"] = answer.hashes
+        if answer.urls:
+            # pkgcache needs the published URL to find the same artifact in
+            # the local package cache; a PyPI URL carries a hash path that
+            # cannot be derived from the package name.
+            entry["artifact_urls"] = answer.urls
+    return missed
 
 
 def _commit_lock(lock: Lock, previous: Lock, *, yes: bool,
@@ -421,7 +467,12 @@ def cmd_approve(args: argparse.Namespace) -> int:
                 instructions=data.instructions, previous=previous,
                 probe_status=data.probe_status)
     lock.merge_unprobed(previous)
-    _stamp_integrity(lock, data.servers)
+    for miss in _stamp_integrity(lock, data.servers,
+                                 offline=bool(getattr(args, "safe", False))):
+        # An approval that could not record the tarball hash is a weaker
+        # approval than one that did, and the operator has to be told at the
+        # moment they are deciding, not left to find it in `coverage`.
+        print(f"mcp-pin: no registry hash recorded for {miss}", file=sys.stderr)
     return _commit_lock(lock, previous, yes=bool(getattr(args, "yes", False)),
                         yes_tools=list(getattr(args, "yes_tool", None) or []))
 
@@ -483,6 +534,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
         log_path=Path(args.log) if getattr(args, "log", None) else None,
         allow_unapproved=args.allow_unapproved,
         dry_run=args.dry_run,
+        require_integrity=bool(getattr(args, "require_integrity", False)),
     )
 
 
@@ -564,7 +616,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         instructions=data.instructions, source_flows=data.source_flows,
         config_errors=data.errors,
         lock={"servers": lock.servers, "skills": lock.skills},
-        options={"probed": data.probed},
+        options=_rule_options(args, data),
     )
     findings = run_rules(ctx)
 
@@ -592,7 +644,8 @@ def cmd_coverage(args: argparse.Namespace) -> int:
     # No rules are run: this reports on the control plane, not on the servers.
     # It is also the reason it stays fast enough to put in a prompt.
     data = collect(args)
-    payload = coverage_mod.build(lock, data.servers)
+    payload = coverage_mod.build(lock, data.servers,
+                                 offline=bool(getattr(args, "safe", False)))
 
     if args.format == "json":
         print(json.dumps(payload, indent=2))
@@ -625,6 +678,7 @@ def cmd_gateway(args: argparse.Namespace) -> int:
         deny_elicitation=args.deny_elicitation,
         isolate_env=not args.no_isolate_env,
         share_env=set(args.share_env or []),
+        require_integrity=bool(getattr(args, "require_integrity", False)),
     )
 
 

@@ -43,6 +43,10 @@ class ServerStatus:
     fronted: bool = False
     probe: str = ""
     pins_nothing: bool = False
+    # "" (nothing recorded) | "verified" | "unverified" | "changed".
+    # Read from the local package cache, never the network: `status` does not
+    # probe and must not quietly start making outbound calls either.
+    integrity: str = ""
     findings: list[Finding] = field(default_factory=list)
 
     @property
@@ -89,6 +93,26 @@ class ServerStatus:
         return "ok"
 
 
+def _integrity_state(entry: dict) -> str:
+    """Whether this machine can still vouch for the recorded tarball.
+
+    Recorded and verified are two claims. `status` printed neither, so a
+    lockfile carrying a hash nobody had checked since the day it was written
+    looked exactly like one confirmed a second ago.
+    """
+    recorded = entry.get("integrity")
+    if not isinstance(recorded, dict) or not recorded:
+        return ""
+    from .pkgcache import check
+    urls = entry.get("artifact_urls")
+    checks = check(recorded, urls if isinstance(urls, dict) else None)
+    if any(c.state == "changed" for c in checks):
+        return "changed"
+    if checks and all(c.state == "verified" for c in checks):
+        return "verified"
+    return "unverified"
+
+
 def build(lock: Lock, servers: list, findings: list[Finding],
           log_path: Path | None = None, probed: bool = False) -> dict[str, Any]:
     """The whole picture as data, so the renderer stays dumb."""
@@ -116,6 +140,7 @@ def build(lock: Lock, servers: list, findings: list[Finding],
             approved=True,
             fronted=behind_gateway(key, entry, fronting),
             probe=str(entry.get("probe") or ""),
+            integrity=_integrity_state(entry),
             # Every channel a server controls, not just tools: one that offers
             # only prompts or resources has a real baseline pinned.
             pins_nothing=not any(entry.get(k) for k in
@@ -173,6 +198,7 @@ def build(lock: Lock, servers: list, findings: list[Finding],
                 "state": r.state,
                 "approved_at": r.approved_at, "tools": r.tools,
                 "policy": r.has_policy, "artifacts": r.has_artifacts,
+                "integrity": r.integrity,
                 "configured": r.configured,
                 # The state word alone is what made this wrong: "ok" next to a
                 # server that does not start read as a clean bill of health.
@@ -262,6 +288,19 @@ def render(data: dict[str, Any], color: bool = True) -> str:
             "  policy" if server["policy"] else "",
             "  pinned-code" if server["artifacts"] else "",
         ))
+        mark = server.get("integrity") or ""
+        if mark == "verified":
+            lines.append("              " + paint(
+                "registry artifact verified against the local package cache",
+                "\033[32m"))
+        elif mark == "unverified":
+            lines.append("              " + paint(
+                "registry hash recorded at approval; nothing here could verify "
+                "it (this page does not contact a registry)", "\033[36m"))
+        elif mark == "changed":
+            lines.append("              " + paint(
+                "the package cache holds different bytes than were approved "
+                "-- see MCPA036", "\033[31m"))
         if server.get("note"):
             lines.append("              %s" % server["note"])
         for finding in server["findings"]:

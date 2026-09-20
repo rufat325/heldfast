@@ -49,6 +49,10 @@ def _add_scan_arguments(p: argparse.ArgumentParser) -> None:
                         "servers being launched (repeatable). By default a probed "
                         "server gets what its config declares plus the infrastructure "
                         "it needs, and none of your other credentials")
+    p.add_argument("--require-integrity", action="store_true",
+                   help="treat a registry artifact that could not be verified "
+                        "as a failure rather than a note (MCPA037 becomes high). "
+                        "For build runners that must not pass on 'could not see'")
     p.add_argument("-v", "--verbose", action="store_true")
 
 
@@ -239,6 +243,9 @@ def _register_gateway(sub: argparse._SubParsersAction) -> None:
     gateway_p.add_argument("--lock", metavar="PATH", default=None)
     gateway_p.add_argument("--policy", choices=("block", "strip", "warn"),
                            default="block")
+    gateway_p.add_argument("--require-integrity", action="store_true",
+                           help="refuse to start a backend whose recorded registry "
+                                "artifact cannot be verified locally")
     gateway_p.add_argument("--allow-unapproved", action="store_true",
                            help="start servers that are not in the lockfile "
                                 "(they are refused by default)")
@@ -336,6 +343,9 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
     guard_p.add_argument("--strict", action="store_true",
                          help="fail closed on internal errors (the default; "
                               "--fail-open inverts this)")
+    guard_p.add_argument("--require-integrity", action="store_true",
+                         help="refuse to start when a recorded registry artifact "
+                              "cannot be verified against the local package cache")
     guard_p.add_argument("--quiet", action="store_true", help="suppress stderr diagnostics")
     guard_p.add_argument("--dry-run", action="store_true",
                          help="report what the argument policy would block, and "

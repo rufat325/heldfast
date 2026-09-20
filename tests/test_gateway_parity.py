@@ -36,6 +36,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from mcp_pin.gateway import Gateway  # noqa: E402
 from mcp_pin.lockfile import Lock  # noqa: E402
@@ -337,6 +338,68 @@ class TestTheParityItself(unittest.TestCase):
             with self.subTest(screen=screen):
                 self.assertIn(screen, source,
                               f"gateway.py never calls guard.{screen}")
+
+    def test_the_gateway_refuses_everything_the_guard_refuses_before_spawn(self) -> None:
+        """Parity on the launch path, not just on the message path.
+
+        Three checks stand between a lock entry and a running child: the
+        local script digest, the command line, and the registry artifact.
+        The guard grew the third one and the gateway has to have it for the
+        same reason it needed the other two."""
+        source = (ROOT / "src" / "mcp_pin" / "gateway.py").read_text(encoding="utf-8")
+        for check in ("mismatch", "launch_mismatch", "refusal"):
+            with self.subTest(check=check):
+                self.assertIn(check, source,
+                              f"gateway.py never calls {check} before spawning")
+
+
+
+class TestTheGatewayChecksTheArtifactToo(unittest.TestCase):
+    """The guard refuses to start a swapped registry artifact. So must this.
+
+    The gateway is the component the README recommends, which makes any
+    enforcement the guard has and it does not a silent downgrade for anyone
+    who takes that advice.
+    """
+
+    def _backend(self, integrity: dict, urls: dict | None = None):
+        from mcp_pin.gateway import Backend
+        from mcp_pin.model import ServerSpec
+
+        spec = ServerSpec(name="svc", source="/tmp/.mcp.json", client="test",
+                          transport="stdio", command="npx",
+                          args=["-y", "@scope/pkg@1.2.3"])
+        backend = Backend(spec)
+        backend.recorded_integrity = integrity
+        backend.artifact_urls = urls or {}
+        return backend
+
+    def test_a_swapped_cached_tarball_is_never_spawned(self) -> None:
+        import tempfile
+
+        from fake_npm_cache import fake_npm_cache
+
+        backend = self._backend({"npm:@scope/pkg@1.2.3": "sha512-approved"})
+        with tempfile.TemporaryDirectory() as tmp:
+            with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", "sha512-swapped"):
+                started = backend.start()
+        self.assertFalse(started)
+        self.assertIn("has changed", str(backend.error))
+        self.assertIsNone(backend.proc)
+
+    def test_a_cold_cache_refuses_only_when_required(self) -> None:
+        import tempfile
+
+        from fake_npm_cache import empty_npm_cache
+
+        backend = self._backend({"npm:@scope/pkg@1.2.3": "sha512-approved"})
+        backend.require_integrity = True
+        with tempfile.TemporaryDirectory() as tmp:
+            with empty_npm_cache(tmp):
+                started = backend.start()
+        self.assertFalse(started)
+        self.assertIn("could not be verified", str(backend.error))
+        self.assertIsNone(backend.proc)
 
 
 if __name__ == "__main__":

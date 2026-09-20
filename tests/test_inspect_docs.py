@@ -348,6 +348,27 @@ class TestTheReadmeMatchesTheCode(unittest.TestCase):
                 self.assertEqual(by_id.get(rule_id), stated,
                                  "%s: the table says %s" % (rule_id, stated))
 
+    def test_the_catalog_is_the_only_copy_of_the_rule_table(self) -> None:
+        """A second copy is a copy nothing checks.
+
+        `docs/rules.md` is generated from `rule_docs.py` and asserted against
+        the registry above. The README once carried a hand-maintained table
+        beside it and drifted -- a severity was wrong, and later the count
+        advertised one fewer rule than shipped. The manual carried the same
+        table for the same reason and went stale the same way. Both now point
+        at the catalog, and this fails if either grows a copy again.
+        """
+        for name in ("README.md", "docs/MANUAL.md"):
+            text = (ROOT / name).read_text(encoding="utf-8")
+            rows = re.findall(r"^\| \[?MCPA\d+", text, re.M)
+            with self.subTest(document=name):
+                self.assertEqual(
+                    [], rows,
+                    f"{name} lists {len(rows)} rules by hand; link to "
+                    f"docs/rules.md instead, which is generated")
+                self.assertIn("docs/rules.md", text,
+                              f"{name} does not point at the rule catalog")
+
     def test_the_client_count_is_true(self) -> None:
         match = re.search(r"Finds configs for (\d+) clients", self._readme())
         self.assertIsNotNone(match, "the README no longer states a client count")

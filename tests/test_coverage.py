@@ -21,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from mcp_pin import coverage  # noqa: E402
 from mcp_pin.lockfile import Lock  # noqa: E402
@@ -79,12 +80,36 @@ class TestTheCodeLayerKnowsWhyNot(unittest.TestCase):
         self.assertEqual("no", layer.state)
         self.assertIn("name lookup", layer.detail)
 
-    def test_a_recorded_tarball_hash_is_covered(self) -> None:
+    def test_a_recorded_tarball_hash_is_not_yet_a_verified_one(self) -> None:
+        """Recorded at approval is not the same claim as verified now.
+
+        This asserted "yes" for a hash nothing had checked since the day it
+        was written down. An operator whose registry is unreachable, or whose
+        package cache has never held the artifact, read the same green row as
+        one where the bytes were confirmed a second ago. The package is not in
+        any cache on this machine, so the honest answer is "could not verify".
+        """
         layer = self._registry(
             spec("github", "npx", ["-y", "@scope/srv@1.2.3"]),
             {"integrity": {"npm:@scope/srv@1.2.3": "sha512-abc"}},
         )
-        self.assertEqual("yes", layer.state)
+        self.assertEqual("?", layer.state)
+        self.assertIn("not verified here", layer.detail)
+
+    def test_a_recorded_hash_contradicted_locally_is_a_gap(self) -> None:
+        """The package cache holding different bytes is the refusal case."""
+        import tempfile
+
+        from fake_npm_cache import fake_npm_cache  # noqa: E402
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with fake_npm_cache(tmp, "@scope/srv", "1.2.3", "sha512-different"):
+                layer = self._registry(
+                    spec("github", "npx", ["-y", "@scope/srv@1.2.3"]),
+                    {"integrity": {"npm:@scope/srv@1.2.3": "sha512-abc"}},
+                )
+        self.assertEqual("no", layer.state)
+        self.assertIn("not the approved ones", layer.remedy)
 
     def test_the_pep508_spelling_counts_and_reads_properly(self) -> None:
         layer = self._code(spec("fetch", "uvx", ["mcp-server-fetch==0.6.2"]))

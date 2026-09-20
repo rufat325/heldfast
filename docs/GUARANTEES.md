@@ -35,7 +35,7 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-TRACE | Guard and gateway still emit the pinned JSON-RPC conversations (allow, deny, banner-before-frame, rewrite-after-N, sampling, elicitation, roots, result fence). | `tests/test_golden_traces.py` |
 | T-FAIL-CLOSED | A kernel exception in `guard` refuses the call or withholds the result. A tool withheld from `tools/list` cannot still be executed. Forwarding either requires `--fail-open`. | `tests/test_guard.py`, `tests/test_mutation.py`, `tests/test_malformed_input.py` |
 | T-BATCH | A JSON-RPC batch is inspected per frame. A `tools/list` stuffed into an array cannot skip `filter_tools`. | `tests/test_guard.py`, `tests/test_mutation.py` |
-| T-PINNED | A `.mcp-pin-ignore` line cannot hide a lockfile theorem (MCPA014–017, 019, 020, 031, 036). | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
+| T-PINNED | A `.mcp-pin-ignore` line cannot hide a lockfile theorem (MCPA014–017, 019, 020, 031, 036, 037). | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
 | T-ISOLATE-LOADER | `NODE_OPTIONS` and `PYTHONPATH` do not ride from the parent into a child unless the server declared them. | `tests/test_childenv.py`, `tests/test_mutation.py` |
 | T-MUX | Two servers with the same bare name from different clients are not silently overwritten; the second is refused. | `tests/test_gateway.py`, `tests/test_mutation.py` |
 | T-PROBE-LIFE | `--probe` binds the child the same way `guard` does (`posix_preexec` / job object). | `tests/test_hostile.py`, `tests/test_mutation.py` |
@@ -46,11 +46,14 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-REVIEW | Re-approval of a lock that moved prints the word-level diff and does not write unless `--yes` or `--yes-tool` names every drifted tool. A digest or command change still needs `--yes`. | `tests/test_review.py`, `tests/test_mutation.py` |
 | T-SURFACE | If the lock recorded prompts or resources, `guard` filters `prompts/list` and `resources/list` and refuses `prompts/get` / `resources/read` the same way it does tools. A lock that never recorded that layer is not pretend-enforced. | `tests/test_guard.py`, `tests/test_mutation.py` |
 | T-YES-CRITICAL | `approve --yes` does not overwrite a critical-graded drift. That change must be named with `--yes-tool`. | `tests/test_review.py`, `tests/test_mutation.py` |
-| T-INTEGRITY | If the lock recorded a registry tarball hash, a different live hash fires MCPA036. A failed fetch is not a finding. | `tests/test_integrity.py`, `tests/test_mutation.py` |
+| T-INTEGRITY | If the lock recorded a registry tarball hash, a different live hash fires MCPA036. | `tests/test_integrity.py`, `tests/test_mutation.py` |
+| T-CACHE | If the lock recorded a registry artifact hash, `guard` and `gateway` refuse to start the child when the local package cache holds different bytes for it. Checked offline, before the spawn. | `tests/test_pkgcache.py`, `tests/test_guard.py`, `tests/test_gateway_parity.py`, `tests/test_mutation.py` |
+| T-UNVERIFIED | An artifact that could not be checked is reported as MCPA037 and never as verified. `--require-integrity` makes it high, and makes `guard` and `gateway` refuse to start. | `tests/test_pkgcache.py`, `tests/test_attack_corpus.py`, `tests/test_mutation.py` |
+| T-SAFE-OFFLINE | `--safe` opens no socket. No registry is contacted by a scan or an approval under it, and what that costs is stated rather than silently skipped. | `tests/test_integrity.py`, `tests/test_mutation.py` |
 | T-LIST-CHANGED | `notifications/tools/list_changed` marks the backend stale; the next `tools/list` or call re-fetches and re-screens. | `tests/test_gateway_parity.py`, `tests/test_mutation.py` |
 | T-PROBE-GATE | A rule exception in the static pre-pass launches nothing. | `tests/test_probe_boundary.py`, `tests/test_mutation.py` |
 | T-DRIFT-ID | Two lock entries sharing a bare name are not compared against the first match. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
-| T-TYPES | `policy.py`, `lockfile.py`, `model.py` and `findings.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
+| T-TYPES | `policy.py`, `lockfile.py`, `model.py`, `findings.py` and `pkgcache.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
 | T-SIZE | Functions in `cli.py` and `guard.py` fit on one page (60 lines). | `tests/test_function_size.py` |
 | T-WHEEL | The published wheel has no runtime dependencies. | `.github/workflows/release.yml` |
 | T-REDACT | Findings cannot carry a live credential or a control character that rewrites the report. | `tests/test_output_integrity.py` |
@@ -74,7 +77,13 @@ We do not claim these. Do not imply them in output.
 - Authenticating `--as`; it is a label the process claimed, not an identity
 - Sandboxing the child server (`--probe` runs it)
 - Proxying remote HTTP/SSE MCP (scan only; `guard` is stdio)
-- Hashing a registry tarball when the registry could not be reached at approval
+- Hashing a registry tarball when the registry could not be reached at
+  approval. The approval says so at the time, `coverage` shows the layer as
+  unverified rather than covered, and a scan reports MCPA037
+- Pinning the dependency tree a registry package installs beneath itself.
+  MCPA036 pins the top-level artifact only
+- Verifying a registry artifact that no local package cache holds and no
+  registry will answer for. That is reported (MCPA037), not guessed
 - Stopping a client that talks to the server *beside* the gateway (MCPA032 reports it)
 - Proving a regex matches "all prompt injection"
 

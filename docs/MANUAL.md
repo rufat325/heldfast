@@ -444,44 +444,7 @@ excluded. `--no-ignore` turns it off.
 Full catalog with rationale, examples and known false positives: [docs/rules.md](docs/rules.md).
 `mcp-pin explain MCPA015` prints any single rule.
 
-| Rule | Severity | What |
-|---|---|---|
-| MCPA001 | high | Server launched through a shell |
-| MCPA002 | critical | Startup pipes a network fetch into an interpreter |
-| MCPA003 | low | Package run with no pinned version |
-| MCPA004 | high | Package name is a near-miss of an official MCP server |
-| MCPA005 | high | Credential sitting in plaintext in config |
-| MCPA006 | medium | Config with credentials is group/world readable (POSIX) |
-| MCPA007 | high | Remote server over cleartext HTTP |
-| MCPA008 | medium | Remote endpoint with no auth configured |
-| MCPA009 | high | Server bound to 0.0.0.0 |
-| MCPA010 | critical | Agent-directed instruction in a tool description or skill |
-| MCPA011 | high | Invisible characters in agent-facing text |
-| MCPA012 | high | Credential path referenced in agent-facing text |
-| MCPA013 | medium | Skill asks for broad or dangerous tool permissions |
-| MCPA014 | high | Server not in the approval lockfile |
-| MCPA015 | critical | Tool definition changed since approval |
-| MCPA016 | high | Server launch command changed since approval |
-| MCPA017 | high | Skill content changed since approval |
-| MCPA018 | high | LLM classifier flagged agent-facing text (opt-in) |
-| MCPA019 | critical | Server instructions changed since approval |
-| MCPA020 | high | Prompt or resource changed since approval |
-| MCPA021 | high | Tool claims to be read-only but looks like it mutates |
-| MCPA022 | medium | Tool schema accepts a destination its description omits |
-| MCPA023 | critical | Server URL uses a dangerous scheme (javascript:, file:, data:) |
-| MCPA024 | critical | Server URL targets cloud metadata or a link-local address |
-| MCPA025 | medium | Server requests an over-broad OAuth scope |
-| MCPA026 | high | Display title misrepresents what the tool does |
-| MCPA027 | medium | Two servers in one client expose the same tool name |
-| MCPA028 | high | One server reads the home directory while another can post anywhere |
-| MCPA029 | high | Command allowlist includes a binary that runs arbitrary commands |
-| MCPA030 | critical | Tool parameter reaches a shell in the server's own source |
-| MCPA031 | high | Server script changed since approval |
-| MCPA032 | high | Approved server is also reachable without the gateway |
-| MCPA033 | high | Icon source is unsafe for a client to fetch or render |
-| MCPA034 | critical | Environment variable in the config runs code or reads traffic |
-| MCPA035 | high | Environment declaration collects a credential under another name |
-| MCPA036 | high | Registry artifact changed since approval |
+The catalog is generated from the code, so it cannot drift from it. This page used to repeat it as a third copy of the same table, which is a copy nothing checks -- and a table nothing checks is a table describing an older version of the tool.
 
 ### One attack per rule
 
@@ -571,9 +534,54 @@ asserting exactly that pairing.
 What is hashed is deliberately narrow: arguments that name a file, and a command written as
 a path. A bare `node` or `python` off PATH is not — system interpreters update on the
 machine's schedule for reasons unrelated to this server, and a rule that fires on every Node
-patch is one people turn off. Nothing is fetched over the network either, so a published
-package's integrity stays the registry's problem; this watches the files already on your
-disk, which is the part nobody else is looking at.
+patch is one people turn off.
+
+### The package behind a version string
+
+`npx pkg@1.2.3` pins a name, not bytes. `approve` records the artifact hash the registry
+publishes for that version, and a later scan compares it (MCPA036).
+
+Be precise about when that matters. npm will not let a name and version be reused once
+published and requires a new version number to republish; PyPI refuses filename reuse. So on
+the public registries the swap MCPA036 describes largely cannot happen. Where it genuinely
+can: a private registry, a mirror or caching proxy (Artifactory, Nexus, Verdaccio), any
+`--registry` override, an internal index shadowing a public name, or a proxy intercepting the
+fetch. Those are the ordinary shape of an enterprise install and none of them is bound by the
+public registries' rules.
+
+A scan-time comparison is still only a report. `npx` resolves and fetches on its own when it
+is spawned, so what the registry publishes is adjacent to — not identical to — the bytes that
+run. So `guard` and `gateway` do a second check on the launch path, before the child starts:
+
+```
+mcp-pin guard: approved artifact npm:@scope/pkg@1.2.3 has changed: npm cache
+holds sha512-ZmFrZQ== for this version; sha512-cmVhbA== was approved
+```
+
+That one reads the artifact your package manager is already holding — npm's `_cacache` index,
+pip's `http-v2` body — and opens no socket. A registry lookup there would put a DNS timeout
+between you and your agent starting, and would tell a registry every time a server launches.
+
+Three answers, and they are kept apart on purpose:
+
+| | meaning | what happens |
+|---|---|---|
+| verified | the cache holds the approved bytes | starts |
+| changed | the cache holds different bytes | refuses, always |
+| could not verify | nothing on disk and no registry answer | starts, and says so; refuses under `--require-integrity` |
+
+The last row is the one that is easy to get wrong. If "could not verify" printed like
+"verified", anyone able to break the lookup would buy silence, and an air-gapped CI runner
+would buy the same silence by accident. So it is MCPA037, low by default so an offline runner
+is not broken, and `--require-integrity` makes it high — which `--fail-on high` then fails on.
+
+`--safe` promises to execute nothing and connect to nothing. It therefore skips the registry
+lookup entirely, and `coverage` reports the registry pin as unverified for that run rather
+than quietly skipping it.
+
+What this does not cover: the dependency tree the package installs beneath itself. Pinning the
+top-level tarball leaves those floating, and a compromised transitive dependency is the more
+common real path.
 
 ## Constraining what a tool may be asked to do
 
