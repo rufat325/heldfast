@@ -246,6 +246,88 @@ Read this file and `docs/GUARANTEES.md` instead.
     morning and false by the afternoon. A remedy line is a claim like any
     other.
 
+## Lessons that cost something
+
+Kept in the tracked file rather than in local notes, because every one of them
+was paid for by a red build or a wrong claim and the next person should not buy
+them again. The oldest ones live in the numbered list above; these came out of
+the stretch that closed items 29 to 31, where three of the defects were
+self-inflicted and two turned CI red.
+
+- **CI has to be diagnosable without a login.** Reading a job's log needs a
+  signed-in session with rights on the repository. Annotations do not -- they
+  are in the public API. When macOS went red and Linux and Windows stayed
+  green, two rounds were spent guessing before the test step was taught to emit
+  each failing test name as an annotation, and it named the cause on its first
+  run. This file already recorded that logs need a session; nobody had drawn
+  the conclusion from it.
+
+- **Verify portability by relocating the tree, not by running it in place.**
+  Two mutant probes shipped with a developer's home directory baked into them:
+  the local suite was green and all nine CI test jobs were red. `git archive`
+  into a temporary directory and run the suite from there -- that is what a
+  runner does, and running in the source tree cannot see the difference. A
+  green local suite is a claim about one machine; say which machine when
+  reporting it.
+
+- **An exemption list must not contain the name from the bug it was written
+  for.** The test written to catch that hardcoded path exempted the account
+  `administrator`, and the path that shipped was under `Administrator`. `root`
+  was in there too, and is equally real. The self-test now asserts that the
+  exact account from the shipped bug is still caught, so the list cannot
+  quietly grow back over it.
+
+- **A test that has to exempt its own file has a hole shaped like itself.** The
+  first version of that same guard flagged its own docstring, and the first fix
+  was an exemption for its own path. The shapes are described in prose now and
+  assembled from pieces inside the assertions, so the file stays clean under
+  its own rule.
+
+- **A mutant probe is in-process logic, not a program.** One probe stood up an
+  HTTP server to observe a fail-open. It was the only one of 51 doing any I/O,
+  and it exceeded the harness's 20-second budget on the slowest runners and
+  nowhere else. It never needed the server: `Gateway.__init__` chooses a
+  transport and starts nothing, so the hole was observable by asking which
+  class it picked. Every probe now finishes in under two seconds, measured.
+
+- **A harness that hides its own failure mode costs more than the bug in it.**
+  That timeout escaped as a bare `TimeoutExpired`, so the subtest errored
+  without naming the probe or the fact that time was the problem. An empty
+  stdout raised `IndexError` from `splitlines()[-1]`; a non-JSON last line
+  raised `JSONDecodeError`. This is the "a report that guesses a cause" lesson
+  pointed at the test infrastructure, and it is worth the same care: the
+  timeout message now names the assumption that was violated.
+
+- **The duplication a mutant catches is real duplication.** Copying the
+  pre-spawn pin gate into the second transport made the mutant's snippet occur
+  twice, so no single edit could be attributed to it and the catalogue check
+  failed. The fix was not a more specific mutant; it was removing the
+  duplication. `start()` is final and each transport implements `_start()`, so
+  a future transport cannot forget the gate -- which is the same failure the
+  gateway already had once, when it was missing three screens the guard had.
+
+- **A remedy line is a claim with a shelf life.** `coverage` told a hosted
+  server's operator there was "no fix available today". That was true when it
+  was written and false a few hours later, when the gateway learned HTTP.
+  Whenever a capability lands, grep the reporting surfaces for the sentence
+  that said it was impossible.
+
+- **Implementing a protocol a second time audits the first.** Giving the
+  gateway an HTTP transport found that `probe_http` had been taking the
+  `Mcp-Session-Id` from the initialize response and discarding it for as long
+  as it had existed -- so `scan --probe` worked against hosted servers that do
+  not enforce sessions and failed on every server that does, reporting it as
+  the endpoint's fault. That is very likely part of why only 4 of 15 real
+  endpoints were ever reachable. The stub that found it enforces the rule a
+  real server does.
+
+- **Name the limit rather than the feature.** Two of the three roadmap items
+  closed here cannot be closed completely: signing does not stop a live
+  same-user attacker who can reach the same agent, and a dependency tree cannot
+  be pinned from here at all. Both are shipped with the boundary written into
+  the module, the manual and the out-of-scope list. A capability described
+  without its edge is a capability someone will lean on where it does not hold.
+
 ## How to run
 
 ```bash
