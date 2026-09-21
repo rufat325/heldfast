@@ -13,7 +13,7 @@ Four jobs. They are not the same product.
 
 Snyk and Cisco own "does this text look evil." Gateways own auth and DLP. mcp-pin owns **the lock**.
 
-`--safe` is the scan you can run on a laptop that is not disposable: nothing is executed, nothing is contacted. `--probe` is how you write the lock, because a tool description does not live in your config.
+`--safe` is the scan you can run on a laptop that is not disposable: nothing is executed, nothing is contacted. `--probe` is how you write the lock, because a tool description does not live in your config. Do that in an isolate. Pinning is not sandboxing.
 
 ## The other mcp-pin
 

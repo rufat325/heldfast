@@ -26,10 +26,23 @@ there, or of something upstream putting it there. What the frame shows is
 that the guard refuses a call by name against the lock, before the server is
 ever asked whether it can do it.
 
+This is one layer. It is a pin, not a sandbox. Pair it with OS isolation,
+least-privilege credentials, and server-side authorization. The workflow
+this trusts:
+
+```
+scan --safe → isolate (you provide this) → approve --probe → commit the lock → wrap or gateway in the path
+```
+
+Not: download a server, probe it on the workstation, now it is trusted.
+`--probe` launches configured STDIO servers. Do that in a container, a VM,
+or a disposable machine.
+
 ```bash
 pipx install mcp-pin
 
-mcp-pin approve --probe          # record what you reviewed
+mcp-pin scan --safe              # nothing executes, nothing connects
+mcp-pin approve --probe          # after the isolate; record what you reviewed
 mcp-pin wrap --name files -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./notes
 ```
 
@@ -198,7 +211,7 @@ following scan was clean.
 
 ```yaml
 # Pin a commit SHA. `@main` is whoever pushed last.
-- uses: rufat325/mcp-pin@298f0379979a2b0a45fd4f6f7f739b65f3776ea3
+- uses: rufat325/mcp-pin@91c060e082e34ff060c0f788c16712262881794c
   with:
     fail-on: high
 ```
@@ -213,10 +226,15 @@ Rules: [docs/rules.md](docs/rules.md). `mcp-pin explain MCPA015` prints one.
 
 ## What it doesn't do
 
-- It is a pin, not a sandbox. `--probe` and `guard` run the child.
+- It is a pin, not a sandbox. `--probe` and `guard` run the child. Confine
+  that child with the OS.
+- Pinning detects change, not initial honesty. A poisoned first version that
+  never moves is the version you approved.
 - The registry pin covers the top-level artifact, not its dependency tree.
-- It does not call tools during a scan, only `initialize` / `tools/list` (and
-  whatever `guard` is proxying).
+- The cache check hashes the package-manager cache before spawn; a refetch
+  after that check is outside what reading the disk can see.
+- A client that talks to the server beside wrap or gateway has no runtime
+  protection. MCPA032 reports the gap; it does not close it.
 - Heuristics below 100% confidence say so. They are not proof.
 
 The longer argument — isolation, gateway, policy, logs, protocol surface —
@@ -231,7 +249,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1151 tests, stdlib unittest, nothing to install.
+1152 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

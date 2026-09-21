@@ -200,6 +200,18 @@ class TestRuleDocs(unittest.TestCase):
         self.assertNotIn("mcp-pin@main", readme)
         self.assertRegex(readme, r"mcp-pin@[0-9a-f]{40}")
 
+    def test_the_first_screen_does_not_tell_you_to_probe_first(self) -> None:
+        """Download, probe on the laptop, now trusted -- that is the
+        workflow this tool must not teach. Isolation is not implemented
+        here; it has to be named before `--probe` or a reader will skip it."""
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        head = readme.split("## Usage", 1)[0]
+        self.assertIn("not a sandbox", head.lower())
+        self.assertIn("one layer", head.lower())
+        self.assertIn("isolate", head.lower())
+        self.assertIn("scan --safe", head)
+        self.assertLess(head.find("scan --safe"), head.find("approve --probe"))
+
     def test_third_party_actions_are_pinned_to_a_commit(self) -> None:
         roots = [ROOT / "action.yml", *(ROOT / ".github").rglob("*.yml")]
         floating = []

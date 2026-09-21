@@ -111,6 +111,7 @@ class TestProbeDoesNotRunWhatItIsJudging(unittest.TestCase):
         result = run(["scan", ".", "--no-user-configs", "--probe",
                       "--fail-on", "never"], self.project)
         self.assertIn("launches these servers as local processes", result.stderr)
+        self.assertIn("not a sandbox", result.stderr)
         self.assertIn("invoices", result.stderr)
 
     def test_a_scan_without_probe_never_executes_anything(self) -> None:
