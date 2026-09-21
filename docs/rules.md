@@ -614,17 +614,17 @@ def count(path: str):
 
 **Registry artifact could not be verified** - severity `low`
 
-**What it looks for.** Nothing in this run could vouch for the bytes behind a pinned registry launch. Either a hash was recorded at approval and could not be checked against anything -- no registry answer, nothing in the local package cache -- or no hash was ever recorded for it at all, which an approval taken under `--safe`, or on a machine that could not reach the registry, produces.
+**What it looks for.** A registry artifact hash was recorded at approval and this run could not check it against anything: no registry answer and nothing in the local package cache to compare. Under `--require-integrity` it also covers an artifact the lockfile records no hash for at all, which an approval taken under `--safe`, or where the registry was unreachable, produces.
 
 **Why it matters.** Silence has to mean one thing. When an unverifiable artifact produced the same quiet output as a verified one, anyone who could make the lookup fail bought that silence -- and an offline or egress-restricted build runner bought it by accident, which is worse, because nobody was even trying to hide. A rule that goes quiet when it cannot see is the exact shape this project's own golden tests exist to catch.
 
 ```
-"integrity": {"npm:@scope/server@1.2.3": "sha512-..."}  # recorded, unchecked -- or the key absent entirely, which is less evidence again
+"integrity": {"npm:@scope/server@1.2.3": "sha512-..."}  # recorded, unchecked. Absent entirely is less evidence again, and is reported under --require-integrity
 ```
 
 **How to fix it.** Re-run where the registry is reachable, or on a machine whose package cache holds the artifact. A build that must not pass on 'could not see' should pass `--require-integrity`. All three commands honour it and it changes more than a severity: on `scan` it raises this to high so the default `--fail-on high` fails, and on `guard` and `gateway` it changes the launch path, refusing to start rather than running something unverified. Gating CI on integrity while developer machines still launched unverified servers would leave the loop open at the end that matters.
 
-**When it is wrong.** This is not a report that anything changed. The recorded hash still stands and the approval is still the approval. The commonest way to reach it is an empty cache -- a fresh machine or a clean CI runner has nothing to compare, and `npx -y` fetches at spawn -- which is why it is low by default rather than a refusal. On a deliberately offline runner it is expected. `--safe` guarantees no connection is made, so under it this fires for every pinned registry launch.
+**When it is wrong.** A lock that records no hash at all is not this finding by default. That is a standing property of the lock rather than something going wrong in this run -- the same class as approving without --probe -- and `coverage` is the surface that names it. Reporting it on every scan would put a permanent note on every project approved offline. This is not a report that anything changed. The recorded hash still stands and the approval is still the approval. The commonest way to reach it is an empty cache -- a fresh machine or a clean CI runner has nothing to compare, and `npx -y` fetches at spawn -- which is why it is low by default rather than a refusal. On a deliberately offline runner it is expected. `--safe` guarantees no connection is made, so under it this fires for every pinned registry launch.
 
 ## MCPA038
 

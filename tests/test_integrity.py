@@ -225,11 +225,21 @@ class TestAMalformedPinDoesNotTakeTheScanDown(unittest.TestCase):
 
         MCPA036 still stays away: no hash was recorded, so nothing can be
         said to have changed."""
-        for shape in ("a string", ["a", "list"], 7, None, {}):
+        for shape in ("a string", ["a", "list"], 7):
             with self.subTest(shape=shape):
                 ids = [f.rule_id for f in self._scan(shape)]
                 self.assertNotIn("MCPA036", ids)
                 self.assertIn("MCPA037", ids)
+
+    def test_no_pin_at_all_waits_for_the_flag(self) -> None:
+        """Absent is not malformed. A lock that records no hash is what every
+        approval taken offline or under `--safe` produces, so reporting it on
+        every scan would put a permanent note on correct projects -- the
+        clean fixture is exactly that shape. `coverage` names it instead, and
+        `--require-integrity` reports it for a runner that asked."""
+        for shape in (None, {}):
+            with self.subTest(shape=shape):
+                self.assertEqual([], [f.rule_id for f in self._scan(shape)])
 
 
 class TestApprovalRecordsWhatItCouldNotDo(unittest.TestCase):
