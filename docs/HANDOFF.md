@@ -277,6 +277,24 @@ Read this file and `docs/GUARANTEES.md` instead.
     out-of-scope line was found -- a passing suite cannot catch a sentence that
     contradicts a theorem two sections above it.
 
+33. ~~Surfaces other people occupy.~~ Done, without growing MCPA rules.
+    The file you commit is the same check that runs in CI and on the wire.
+    - README leads with wrap, names the collision with GautamTalksDev/mcp-pin
+      in one sentence (`npx mcp-pin` is theirs).
+    - `wrap` is `guard`. `mcp-pin -- <server>` is wrap. `doctor` is scan.
+      `ci` refuses `--probe` and keeps `--fail-on high`. `check` verifies
+      the lockfile and launches nothing.
+    - `js/mcp-pin-check` is a zero-dep verifier of `.mcp-pin.lock` (T-DIGEST).
+      `js/mcp-pin-wrap` is `npx @rufat325/mcp-pin`, which execs the Python
+      wheel and does not download one.
+    - Claude Code plugin: SessionStart audit, PreToolUse deny on miss/drift.
+      No hash rewrite, no pin file in `~/.claude`, no Sonnet judge.
+    - Lock spec + twelve golden tool objects. Pre-commit hooks. Badge.
+      Comparison page. Client table frozen 2026-09-21.
+    - Three result-screen theorems (RS-ANSI / RS-SECRET / RS-EXFIL-HOST)
+      withhold even under annotate (T-RESULT-BLOCK).
+    - `release.yml` attaches SHA256SUMS to the GitHub release. The v0.1.3
+      tag predated that job.
 
 ## Lessons that cost something
 

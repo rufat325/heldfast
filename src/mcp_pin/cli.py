@@ -513,8 +513,8 @@ def cmd_guard(args: argparse.Namespace) -> int:
     if argv and argv[0] == "--":
         argv = argv[1:]
     if not argv:
-        print("mcp-pin: guard needs a server command, for example\n"
-              "           mcp-pin guard -- npx -y @scope/server@1.0.0",
+        print("mcp-pin: wrap needs a server command, for example\n"
+              "           mcp-pin wrap -- npx -y @scope/server@1.0.0",
               file=sys.stderr)
         return EXIT_ERROR
 
@@ -537,6 +537,18 @@ def cmd_guard(args: argparse.Namespace) -> int:
         require_integrity=bool(getattr(args, "require_integrity", False)),
         sign_command=getattr(args, "sign_command", None),
     )
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    from . import check as check_mod
+    return check_mod.run(getattr(args, "lock", None))
+
+
+def cmd_ci(args: argparse.Namespace) -> int:
+    # The build-gate name cannot be talked into launching or lowering the bar.
+    args.probe = False
+    args.fail_on = "high"
+    return cmd_scan(args)
 
 
 def cmd_policy(args: argparse.Namespace) -> int:
@@ -767,8 +779,10 @@ def cmd_rules(args: argparse.Namespace) -> int:
 
 
 def _with_default_command(parser: argparse.ArgumentParser, argv: list[str]) -> list[str]:
-    # Make `scan` the default command so bare `mcp-pin` and `mcp-pin .` work.
+    # `mcp-pin -- <server>` is wrap. Bare `mcp-pin` and `mcp-pin .` are scan.
     known = getattr(parser, "mcp_commands", set())
+    if argv and argv[0] == "--":
+        return ["wrap", *argv]
     if not argv or (argv[0] not in known and not argv[0].startswith("-")):
         return ["scan", *argv]
     if argv[0].startswith("-") and argv[0] not in ("-h", "--help", "--version"):
@@ -793,8 +807,12 @@ _COMMANDS = {
     "verify-log": cmd_verify_log,
     "report": cmd_report,
     "guard": cmd_guard,
+    "wrap": cmd_guard,
+    "check": cmd_check,
+    "ci": cmd_ci,
     "serve": lambda _args: _serve(),
     "scan": cmd_scan,
+    "doctor": cmd_scan,
 }
 
 

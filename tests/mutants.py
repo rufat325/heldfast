@@ -207,17 +207,21 @@ FAIL_OPEN = bool(d)
     Mutant(
         id="fingerprint-drops-description",
         theorem="T-FINGERPRINT",
-        path="model.py",
-        original="""        body: dict[str, Any] = {
-            "name": self.name,
-            "title": self.title,
-            "description": self.description,
-            "input_schema": self.input_schema,
+        path="digest.py",
+        original="""    body: dict[str, Any] = {
+        "name": str(tool.get("name") or ""),
+        "title": str(tool.get("title") or ""),
+        "description": str(tool.get("description") or ""),
+        "input_schema": _mapping(schema),
+        "annotations": _mapping(annotations),
+    }
 """,
-        replacement="""        body: dict[str, Any] = {
-            "name": self.name,
-            "title": self.title,
-            "input_schema": self.input_schema,
+        replacement="""    body: dict[str, Any] = {
+        "name": str(tool.get("name") or ""),
+        "title": str(tool.get("title") or ""),
+        "input_schema": _mapping(schema),
+        "annotations": _mapping(annotations),
+    }
 """,
         harm="A tool can rewrite what the model reads without changing its digest.",
         probe="""
@@ -231,9 +235,9 @@ FAIL_OPEN = a.fingerprint() == b.fingerprint()
     Mutant(
         id="fingerprint-drops-annotations",
         theorem="T-FINGERPRINT",
-        path="model.py",
-        original='            "annotations": self.annotations,',
-        replacement='            "annotations": {},',
+        path="digest.py",
+        original='        "annotations": _mapping(annotations),',
+        replacement='        "annotations": {},',
         harm="readOnlyHint can flip after approval without registering as drift.",
         probe="""
 from mcp_pin.model import ToolSpec
@@ -247,26 +251,14 @@ FAIL_OPEN = a.fingerprint() == b.fingerprint()
     Mutant(
         id="fingerprint-key-order",
         theorem="T-FINGERPRINT",
-        path="model.py",
-        original="""        if self.output_schema:
-            body["output_schema"] = self.output_schema
-        # Same conditional, same reason. An icon swapped after approval changes
-        # what the user sees in the dialog they approve from, which is the same
-        # argument that put `title` in the hash.
-        if self.icons:
-            body["icons"] = self.icons
-        payload = json.dumps(body, sort_keys=True, separators=(",", ":"),
-                             ensure_ascii=False)
+        path="digest.py",
+        original="""    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    )
 """,
-        replacement="""        if self.output_schema:
-            body["output_schema"] = self.output_schema
-        # Same conditional, same reason. An icon swapped after approval changes
-        # what the user sees in the dialog they approve from, which is the same
-        # argument that put `title` in the hash.
-        if self.icons:
-            body["icons"] = self.icons
-        payload = json.dumps(body, sort_keys=False, separators=(",", ":"),
-                             ensure_ascii=False)
+        replacement="""    return json.dumps(
+        value, sort_keys=False, separators=(",", ":"), ensure_ascii=False,
+    )
 """,
         harm="Two equal tools hash differently depending on dict insertion order.",
         probe="""

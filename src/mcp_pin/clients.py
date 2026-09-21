@@ -213,6 +213,11 @@ CLIENTS: tuple[ClientDef, ...] = (
 
 BY_ID = {c.id: c for c in CLIENTS}
 
+# Last date this table was checked against live installs. Frozen on purpose:
+# this is not a discoverer race. See docs/CLIENTS.md.
+CLIENTS_VERIFIED = "2026-09-21"
+
+
 # Filenames that are a project-level MCP config regardless of which client
 # wrote them, used when walking a tree.
 GENERIC_PROJECT_FILENAMES = {
