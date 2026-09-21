@@ -677,7 +677,7 @@ The checks are deterministic, and most of the work is in not being fooled:
 |---|---|
 | `"paths": ["/workspace/**"]` | `/workspace/../../etc/passwd`, `~/.ssh/id_rsa`, `/workspace-evil/x`, `%2e%2e` and `%252e%252e`, a second path hidden in another argument |
 | `"domains": ["api.github.com"]` | `api.github.com.evil.io`, `api.github.com@evil.io`, `evil.io\@api.github.com`, `169.254.169.254` |
-| `"sql": ["SELECT"]` | `SELECT 1; DROP TABLE users`, `/*!50000 DROP*/ TABLE t`, `SELECT ... INTO OUTFILE` |
+| `"sql": ["SELECT"]` | `SELECT 1; DROP TABLE users`, `/*!50000 DROP*/ TABLE t`, `SELECT ... INTO OUTFILE`, the same two hidden behind a `'` that desynchronises the literal scanner, and `# c`&#10;`DROP TABLE users` — a MySQL line comment, which the old gate did not recognise as SQL at all |
 | `"deny": true` | and `"deny": ["anything"]`, because that is how people write it |
 
 Paths are normalized before they are matched, `*` stays inside one directory while `**`
@@ -1294,7 +1294,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1152 tests, stdlib unittest, nothing to install.
+1178 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

@@ -70,7 +70,13 @@ function mapping(value) {
 }
 
 function toolBody(tool) {
-  const schema = tool.input_schema !== undefined ? tool.input_schema : tool.inputSchema;
+  // `== null` is deliberate: it covers `null` as well as `undefined`. Python's
+  // tool_body falls back on `is None`, so a tool carrying BOTH spellings with
+  // the snake_case one explicitly null -- which a server chooses -- hashed one
+  // way here and another way there. That is the one thing this algorithm
+  // exists to prevent: the Python guard and this copy would answer differently
+  // about the same frame. Golden vectors 13 and 14 hold the line.
+  const schema = tool.input_schema != null ? tool.input_schema : tool.inputSchema;
   const body = {
     name: tool.name == null ? "" : String(tool.name),
     title: tool.title == null ? "" : String(tool.title),
@@ -79,7 +85,7 @@ function toolBody(tool) {
     annotations: mapping(tool.annotations),
   };
   let output = tool.output_schema;
-  if (output === undefined) output = tool.outputSchema;
+  if (output == null) output = tool.outputSchema;
   if (output && typeof output === "object" && !Array.isArray(output) && Object.keys(output).length) {
     body.output_schema = output;
   }

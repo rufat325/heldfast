@@ -159,7 +159,12 @@ FAIL_OPEN = bool(d)
         id="skip-stacked-sql",
         theorem="T-SQL-STACK",
         path="policy.py",
-        original='    if len(statements) > 1:\n        return False, "more than one statement in a single argument"\n',
+        original="""    for escapes in _DIALECTS:
+        statements = [s for s in _split_statements(value, backslash_escapes=escapes)
+                      if s.strip()]
+        if len(statements) > 1:
+            return False, "more than one statement in a single argument"
+""",
         replacement="",
         harm="SELECT 1; DROP TABLE t is judged by the first statement only.",
         probe="""
@@ -178,8 +183,11 @@ FAIL_OPEN = bool(d)
         harm="MySQL executable comments are treated as comments, so DROP is not SQL.",
         probe="""
 from mcp_pin.policy import Policy
+# Deliberately NOT a parameter named `sql`: that one reaches the operation
+# check by name whatever it holds, so it would not observe this edit. An
+# unnamed parameter has only `looks_like_sql` between it and the server.
 d = Policy({"query": {"sql": ["SELECT"]}}).check(
-    "query", {"sql": "/*!50000 DROP*/ TABLE t"})
+    "query", {"body": "/*!50000 DROP*/ TABLE t"})
 FAIL_OPEN = bool(d)
 """,
     ),
@@ -1423,6 +1431,95 @@ blocker = Finding(rule_id="MCPA002", title="pipe", severity=Severity.CRITICAL,
 with patch("mcp_pin.cli.run_rules", return_value=[blocker]):
     launchable, skipped = _gate_servers(out, Severity.HIGH)
 FAIL_OPEN = cursor in launchable
+""",
+    ),
+    Mutant(
+        id="skip-sql-name-route",
+        theorem="T-SQL-GATE",
+        path="policy.py",
+        original="""                named = bool(_SQL_PARAM.match(name))
+                if not (named or looks_like_sql(value)):
+                    continue
+""",
+        replacement="""                if not looks_like_sql(value):
+                    continue
+""",
+        harm=("A statement `looks_like_sql` does not recognise is skipped "
+              "rather than refused, so the rule never runs on it."),
+        probe="""
+from mcp_pin.policy import Policy
+# `#` is a MySQL line comment, so this is a DROP. The shape gate does not
+# recognise it as SQL at all, which is the fail-open: the check behind the
+# gate refuses an unparseable statement, but only if it is reached.
+d = Policy({"query": {"sql": ["SELECT"]}}).check(
+    "query", {"sql": "# c\\nDROP TABLE users"})
+FAIL_OPEN = bool(d)
+""",
+    ),
+    Mutant(
+        id="skip-sql-second-dialect",
+        theorem="T-SQL-STACK",
+        path="policy.py",
+        original="_DIALECTS = (True, False)",
+        replacement="_DIALECTS = (False,)",
+        harm=("Only one reading of a backslash inside a literal is checked, so "
+              "a statement the other engine splits differently goes past."),
+        probe=r"""
+from mcp_pin.policy import Policy
+# MySQL reads \' as an escaped quote and the scanner, told not to, does not.
+# Its idea of where the literal ends drifts out of step with the engine's and
+# the stacked DROP lands inside a string the engine was never in.
+d = Policy({"query": {"sql": ["SELECT"]}}).check(
+    "query", {"sql": "SELECT 1 WHERE x='\\''; DROP TABLE users; -- '"})
+FAIL_OPEN = bool(d)
+""",
+    ),
+    Mutant(
+        id="redirect-keeps-credentials",
+        theorem="T-REDIRECT",
+        path="fetch.py",
+        original="""            new.headers = {key: value for key, value in new.headers.items()
+                           if key.lower() not in CREDENTIAL_HEADERS}
+""",
+        # Keeps the branch and drops the filtering. Deleting the statement
+        # outright would leave an `if` whose body is only comments, and a
+        # mutant that cannot compile tests the catalog rather than the kernel.
+        replacement="            new.headers = dict(new.headers)\n",
+        harm=("A cross-origin redirect carries the request's Authorization "
+              "header to whatever host the Location named."),
+        probe="""
+import io, urllib.request
+from mcp_pin.fetch import GuardedRedirectHandler
+
+request = urllib.request.Request("https://backend.example/mcp")
+request.add_header("Authorization", "Bearer SECRET")
+moved = GuardedRedirectHandler().redirect_request(
+    request, io.BytesIO(), 302, "Found", {}, "https://attacker.example/x")
+FAIL_OPEN = any(key.lower() == "authorization" for key in moved.headers)
+""",
+    ),
+    Mutant(
+        id="redirect-downgrades-transport",
+        theorem="T-HOSTED-TLS",
+        path="fetch.py",
+        original="""        refusal = transport_refusal(newurl)
+        if refusal:
+            raise urllib.error.HTTPError(newurl, code, refusal, headers, fp)
+""",
+        replacement="",
+        harm=("A redirect moves the connection onto cleartext http for a "
+              "public host, after the configured URL was checked and passed."),
+        probe="""
+import io, urllib.request
+from mcp_pin.fetch import GuardedRedirectHandler
+
+request = urllib.request.Request("https://backend.example/mcp")
+try:
+    moved = GuardedRedirectHandler().redirect_request(
+        request, io.BytesIO(), 302, "Found", {}, "http://attacker.example/x")
+    FAIL_OPEN = moved is not None
+except Exception:
+    FAIL_OPEN = False
 """,
     ),
 )

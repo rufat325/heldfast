@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -11,8 +13,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fake_npm_cache import empty_npm_cache  # noqa: E402
+from fake_npm_cache import empty_npm_cache, fake_npm_cache  # noqa: E402
 from mcp_pin import integrity as integ  # noqa: E402
+from mcp_pin import pkgcache  # noqa: E402
 from mcp_pin.lockfile import Lock  # noqa: E402
 from mcp_pin.model import ServerSpec  # noqa: E402
 from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
@@ -276,6 +279,108 @@ class TestApprovalRecordsWhatItCouldNotDo(unittest.TestCase):
         lock = Lock()
         lock.record([spec], [], [])
         self.assertEqual([], _stamp_integrity(lock, [spec], offline=True))
+
+
+class TestShasumFallbackIsRealSri(unittest.TestCase):
+    """`dist.shasum` is hex; SRI is base64. Recording the hex was a refusal.
+
+    Packages published before npm 5 carry no `dist.integrity`, only a hex
+    `dist.shasum`. That was recorded verbatim as `sha1-<hex>`, which is not an
+    SRI string at all -- npm's own cache stores the same hash base64-encoded.
+    `pkgcache` then found a shared `sha1` algorithm between the two, compared
+    hex against base64, and reported `changed`.
+
+    `changed` is the one state that refuses a launch unconditionally, not
+    gated behind `--require-integrity`. So the strongest action this tool
+    takes fired on a package whose bytes had not moved, and the fallback
+    branch had no test of any kind.
+    """
+
+    def setUp(self) -> None:
+        self._real = integ.get_json
+
+    def tearDown(self) -> None:
+        integ.get_json = self._real
+
+    CONTENT = b"a tarball, for testing purposes"
+    SHASUM = hashlib.sha1(CONTENT).hexdigest()
+
+    def test_the_recorded_hash_is_base64_not_hex(self) -> None:
+        integ.get_json = lambda url: {"dist": {"shasum": self.SHASUM}}
+        got = integ.lookup(_npx())["npm:@scope/pkg@1.2.3"]
+        algo, _, digest = got.partition("-")
+        self.assertEqual("sha1", algo)
+        self.assertEqual(base64.b64decode(digest), bytes.fromhex(self.SHASUM))
+
+    def test_it_matches_what_the_cache_actually_holds(self) -> None:
+        """The whole point: the two forms of the same hash compare equal."""
+        integ.get_json = lambda url: {"dist": {"shasum": self.SHASUM}}
+        approved = integ.lookup(_npx())["npm:@scope/pkg@1.2.3"]
+        cached = "sha1-" + base64.b64encode(bytes.fromhex(self.SHASUM)).decode()
+        self.assertIs(True, pkgcache._sri_matches(approved, cached))
+
+    def test_the_guard_does_not_refuse_a_package_that_did_not_move(self) -> None:
+        integ.get_json = lambda url: {"dist": {"shasum": self.SHASUM}}
+        approved = integ.lookup(_npx())["npm:@scope/pkg@1.2.3"]
+        with tempfile.TemporaryDirectory() as tmp:
+            with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", approved,
+                                content=self.CONTENT):
+                self.assertIsNone(pkgcache.refusal(
+                    {"npm:@scope/pkg@1.2.3": approved}))
+
+    def test_integrity_still_wins_when_npm_publishes_both(self) -> None:
+        integ.get_json = lambda url: {
+            "dist": {"integrity": "sha512-abc", "shasum": self.SHASUM}}
+        self.assertEqual({"npm:@scope/pkg@1.2.3": "sha512-abc"},
+                         integ.lookup(_npx()))
+
+    def test_a_shasum_that_is_not_hex_records_nothing(self) -> None:
+        """Saying nothing is right: `published` turns an empty hash into
+        UNREACHABLE, which is reported as unverifiable and never as a pass."""
+        integ.get_json = lambda url: {"dist": {"shasum": "not-a-hex-digest"}}
+        result = integ.published(_npx())
+        self.assertEqual(integ.UNREACHABLE, result.state)
+        self.assertEqual({}, result.hashes)
+
+
+class TestPypiPrefersTheArtifactThatRuns(unittest.TestCase):
+    """A release carries every file PyPI holds, in the API's order.
+
+    Recording whichever came first could pin the sdist while the wheel is what
+    `uvx` and `pipx` install -- and then `pkgcache` looks up a URL the machine
+    never fetched, answers `absent`, and `--require-integrity` refuses the
+    launch over a file nobody was going to run.
+    """
+
+    def setUp(self) -> None:
+        self._real = integ.get_json
+
+    def tearDown(self) -> None:
+        integ.get_json = self._real
+
+    def test_the_wheel_is_recorded_even_when_the_sdist_is_listed_first(self) -> None:
+        integ.get_json = lambda url: {"urls": [
+            {"packagetype": "sdist", "url": "https://files.example/pkg.tar.gz",
+             "digests": {"sha256": "5" * 64}},
+            {"packagetype": "bdist_wheel", "url": "https://files.example/pkg.whl",
+             "digests": {"sha256": "a" * 64}},
+        ]}
+        spec = ServerSpec(name="n", source="/x", client="c", transport="stdio",
+                          command="uvx", args=["pkg==1.2.3"])
+        result = integ.published(spec)
+        self.assertEqual({"pypi:pkg==1.2.3": "sha256-" + "a" * 64}, result.hashes)
+        self.assertEqual({"pypi:pkg==1.2.3": "https://files.example/pkg.whl"},
+                         result.urls)
+
+    def test_an_sdist_only_release_still_records(self) -> None:
+        integ.get_json = lambda url: {"urls": [
+            {"packagetype": "sdist", "url": "https://files.example/pkg.tar.gz",
+             "digests": {"sha256": "5" * 64}},
+        ]}
+        spec = ServerSpec(name="n", source="/x", client="c", transport="stdio",
+                          command="uvx", args=["pkg==1.2.3"])
+        self.assertEqual({"pypi:pkg==1.2.3": "sha256-" + "5" * 64},
+                         integ.published(spec).hashes)
 
 
 if __name__ == "__main__":

@@ -159,6 +159,40 @@ class TestCrossLanguageParity(unittest.TestCase):
             with self.subTest(why=case["why"]):
                 self.assertEqual(tool_digest(case["tool"]), other)
 
+    def test_every_copy_agrees_on_the_tool_vectors(self) -> None:
+        """All three implementations, against the tool-body vectors.
+
+        `jcs_vectors.json` pins canonicalization. It says nothing about
+        `toolBody`, which is where the wire spellings are resolved -- and that
+        is where they diverged: Python falls back on `is None`, both JS copies
+        used `!== undefined`, so a tool carrying `input_schema: null` beside a
+        real `inputSchema` hashed two different ways. A server chooses that
+        field, and the two enforcement points would have answered differently
+        about the same frame. Vectors 13 and 14 are that case.
+        """
+        script = (
+            "const a=require('./js/mcp-pin-check/index.js');"
+            "const b=require('./plugin/mcp-pin/scripts/lib.js');"
+            "const fs=require('fs');"
+            "const out={};"
+            "for (const f of fs.readdirSync('tests/golden/tools').sort()) {"
+            "  const v=JSON.parse(fs.readFileSync('tests/golden/tools/'+f,'utf8'));"
+            "  out[v.id]=[a.toolDigest(v.tool), b.toolDigest(v.tool)];"
+            "}"
+            "console.log(JSON.stringify(out));"
+        )
+        theirs = json.loads(self._node(script))
+        vectors = {v["id"]: v for v in (
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted((ROOT / "tests" / "golden" / "tools").glob("*.json")))}
+        self.assertEqual(sorted(theirs), sorted(vectors))
+        for vid, (checker, plugin) in theirs.items():
+            with self.subTest(vector=vid):
+                mine = tool_digest(vectors[vid]["tool"])
+                self.assertEqual(vectors[vid]["digest"], mine)
+                self.assertEqual(mine, checker)
+                self.assertEqual(mine, plugin)
+
 
 if __name__ == "__main__":
     unittest.main()
