@@ -610,12 +610,11 @@ DOCS: dict[str, RuleDoc] = {
                    "fixtures are the plausible false positives.",
     ),
     "MCPA037": RuleDoc(
-        what="Nothing in this run could vouch for the bytes behind a pinned registry "
-             "launch. Either a hash was recorded at approval and could not be checked "
-             "against anything -- no registry answer, nothing in the local package "
-             "cache -- or no hash was ever recorded for it at all, which an approval "
-             "taken under `--safe`, or on a machine that could not reach the registry, "
-             "produces.",
+        what="A registry artifact hash was recorded at approval and this run could not "
+             "check it against anything: no registry answer and nothing in the local "
+             "package cache to compare. Under `--require-integrity` it also covers an "
+             "artifact the lockfile records no hash for at all, which an approval taken "
+             "under `--safe`, or where the registry was unreachable, produces.",
         why="Silence has to mean one thing. When an unverifiable artifact produced "
             "the same quiet output as a verified one, anyone who could make the "
             "lookup fail bought that silence -- and an offline or egress-restricted "
@@ -623,7 +622,8 @@ DOCS: dict[str, RuleDoc] = {
             "was even trying to hide. A rule that goes quiet when it cannot see is "
             "the exact shape this project's own golden tests exist to catch.",
         example='"integrity": {"npm:@scope/server@1.2.3": "sha512-..."}  # recorded, '
-                'unchecked -- or the key absent entirely, which is less evidence again',
+                'unchecked. Absent entirely is less evidence again, and is reported '
+                'under --require-integrity',
         fix="Re-run where the registry is reachable, or on a machine whose package "
             "cache holds the artifact. A build that must not pass on 'could not "
             "see' should pass `--require-integrity`. All three commands honour it "
@@ -633,7 +633,12 @@ DOCS: dict[str, RuleDoc] = {
             "something unverified. Gating CI on integrity while developer machines "
             "still launched unverified servers would leave the loop open at the "
             "end that matters.",
-        wrong_when="This is not a report that anything changed. The recorded hash "
+        wrong_when="A lock that records no hash at all is not this finding by default. "
+                   "That is a standing property of the lock rather than something going "
+                   "wrong in this run -- the same class as approving without --probe -- "
+                   "and `coverage` is the surface that names it. Reporting it on every "
+                   "scan would put a permanent note on every project approved offline. "
+                   "This is not a report that anything changed. The recorded hash "
                    "still stands and the approval is still the approval. The "
                    "commonest way to reach it is an empty cache -- a fresh machine "
                    "or a clean CI runner has nothing to compare, and `npx -y` "

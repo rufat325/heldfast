@@ -481,13 +481,35 @@ def _recorded_integrity(ctx: AuditContext) -> Iterator[tuple]:
             continue
         recorded = entry.get("integrity")
         if not isinstance(recorded, dict) or not recorded:
-            # An approved registry launch with no hash recorded against it is
-            # not "nothing to check here". It is the case where nothing was
-            # looked at, and MCPA037 is the rule for could-not-see. Skipping
-            # it meant `approve --safe` produced a lock whose missing pin no
-            # scan ever mentioned again.
+            # An approved registry launch with no hash recorded against it,
+            # which `approve --safe` and any approval taken where the registry
+            # was unreachable both produce.
+            #
+            # Reported only under --require-integrity, and the line between
+            # the two cases is transient versus permanent. The rest of this
+            # rule fires on "a hash was recorded and could not be checked
+            # *this run*", which is a condition that clears. A hash that was
+            # never recorded is a standing property of the lock, in the same
+            # class as "approved without --probe, so no tools are pinned" --
+            # and that one is not a finding either. `coverage` is the surface
+            # for a standing gap and already names this one exactly ("version
+            # 1.2.3 is a name lookup, not a content pin").
+            #
+            # Firing by default would put a permanent LOW on every project
+            # approved offline, which is the shape of a finding people switch
+            # off. Under the flag it is the whole point: a runner that must
+            # not pass on "could not see" is told, and `guard` and `gateway`
+            # refuse the launch regardless of this rule.
             from ..integrity import expects_hash
-            if expects_hash(s):
+            # Absent and malformed are not the same fact. Absent is a
+            # standing property of the lock (see above) and waits for the
+            # flag. A value that is *there* and is not a mapping -- a string,
+            # a list, a number -- is somebody's hand-edit gone wrong, is rare
+            # rather than universal, and verifies exactly nothing; that one
+            # reports like any other error found in the file.
+            garbled = recorded is not None and not isinstance(recorded, dict)
+            if expects_hash(s) and (garbled
+                                    or ctx.options.get("require_integrity")):
                 yield s, {}, {}
             continue
         urls = entry.get("artifact_urls")

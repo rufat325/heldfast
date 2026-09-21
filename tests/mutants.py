@@ -1675,6 +1675,40 @@ FAIL_OPEN = refusal(None, None, require=True, expected=True) is None
 """,
     ),
     Mutant(
+        id="mcpa037-fires-on-a-clean-tree",
+        theorem="T-GOLDEN",
+        path="rules/drift.py",
+        original="""            if expects_hash(s) and (garbled
+                                    or ctx.options.get("require_integrity")):
+""",
+        replacement="""            if expects_hash(s):
+""",
+        harm=("A lock recorded offline -- which is every approval taken under "
+              "--safe or without registry access -- reports a permanent LOW on "
+              "each pinned package, so correct configuration reads as broken."),
+        probe="""
+import sys
+from pathlib import Path
+sys.path.insert(0, "tests/fixtures")
+from mcp_pin.lockfile import Lock
+from mcp_pin.parsers import parse_config
+from mcp_pin.rules import AuditContext, run_rules
+
+clean = Path("tests/fixtures/clean")
+if not (clean / ".mcp.json").is_file():
+    from make_fixtures import main as make
+    make()
+servers, _ = parse_config(clean / ".mcp.json", "claude-code")
+lock = Lock.load(clean / ".mcp-pin.lock")
+found = run_rules(AuditContext(
+    servers=servers,
+    lock={"servers": lock.servers, "skills": lock.skills, "stale_digests": False},
+    options={}))
+# A clean tree that reports anything is the false positive every user sees.
+FAIL_OPEN = bool(found)
+""",
+    ),
+    Mutant(
         id="unread-config-reports-clean",
         theorem="T-READ",
         path="rules/drift.py",
