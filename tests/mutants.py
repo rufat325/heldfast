@@ -993,7 +993,7 @@ FAIL_OPEN = found == []
         path="guard.py",
         original="""    return refusal(integrity if isinstance(integrity, dict) else None,
                    urls if isinstance(urls, dict) else None,
-                   require=require_integrity)""",
+                   require=require_integrity, expected=expects_hash(launch))""",
         replacement="""    return None""",
         harm=("The package cache holds bytes that are not the approved ones and "
               "the child starts anyway. MCPA036 is only a later scan, and `npx` "
@@ -1027,7 +1027,8 @@ FAIL_OPEN = _pin_still_holds(guard, ["npx", "-y", "@scope/pkg@1.2.3"]) is None
         theorem="T-CACHE",
         path="gateway.py",
         original="""                or refusal(self.recorded_integrity, self.artifact_urls,
-                           require=self.require_integrity))""",
+                           require=self.require_integrity,
+                           expected=expects_hash(self.spec)))""",
         replacement="""                )""",
         harm=("The gateway starts a backend whose cached artifact was swapped. "
               "The README recommends the gateway, so this is the downgrade that "
@@ -1081,12 +1082,10 @@ FAIL_OPEN = bool(got) and got[0].state == "verified"
         id="unverifiable-artifact-goes-quiet",
         theorem="T-UNVERIFIED",
         path="rules/drift.py",
-        original="""            yield Finding(
-                rule_id="MCPA037",""",
-        replacement="""            if True:
-                continue
-            yield Finding(
-                rule_id="MCPA037",""",
+        original="""            reason = answer.detail or "the registry did not answer"
+""",
+        replacement="""            continue
+""",
         harm=("An artifact nothing could check reports exactly like one that was "
               "verified. Anyone who can break the lookup buys silence, and an "
               "offline runner buys it by accident."),
@@ -1619,6 +1618,95 @@ entry = lock.servers["claude-code:github"]
 # Without the conflict marker the entry reads as an ordinary approval of
 # whichever server was recorded last.
 FAIL_OPEN = not entry.get("conflict")
+""",
+    ),
+    Mutant(
+        id="probe-gate-blind-to-the-lock",
+        theorem="T-PROBE-GATE",
+        path="cli.py",
+        original="""            servers=out.servers, skills=out.skills, lock=recorded,
+            source_flows=out.source_flows, config_errors=out.errors,
+            unreadable=out.unreadable))
+""",
+        replacement="""            servers=out.servers, skills=out.skills,
+            source_flows=out.source_flows, config_errors=out.errors,
+            unreadable=out.unreadable))
+""",
+        harm=("The probe gate cannot see the lockfile, so every drift rule is "
+              "structurally unable to fire and a rewritten server is launched."),
+        probe="""
+import json, tempfile
+from pathlib import Path
+from mcp_pin.cli import _gate_servers, Collected
+from mcp_pin.findings import Severity
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec
+
+# A server whose recorded script digest no longer matches what is on disk.
+d = Path(tempfile.mkdtemp())
+script = d / "srv.js"
+script.write_text("rewritten", encoding="utf-8")
+spec = ServerSpec(name="s", source=str(d / ".mcp.json"), client="c",
+                  transport="stdio", command="node", args=[str(script)])
+lock = Lock()
+lock.record([spec], [], [])
+lock.servers[spec.identity()]["artifacts"] = {str(script): "0" * 64}
+
+out = Collected()
+out.servers = [spec]
+launchable, skipped = _gate_servers(out, Severity.HIGH, lock)
+FAIL_OPEN = bool(launchable)
+""",
+    ),
+    Mutant(
+        id="require-integrity-ignores-an-absent-hash",
+        theorem="T-UNVERIFIED",
+        path="pkgcache.py",
+        original="""    if expected and not recorded:
+""",
+        replacement="""    if False:
+""",
+        harm=("--require-integrity passes a registry launch whose lockfile "
+              "records no hash at all, which is less evidence than the case "
+              "it does refuse."),
+        probe="""
+from mcp_pin.pkgcache import refusal
+FAIL_OPEN = refusal(None, None, require=True, expected=True) is None
+""",
+    ),
+    Mutant(
+        id="unread-config-reports-clean",
+        theorem="T-READ",
+        path="rules/drift.py",
+        original="""    for path, reason in ctx.unreadable:
+""",
+        replacement="""    for path, reason in []:
+""",
+        harm=("A config file that did not parse produces no finding, so a "
+              "scan reports clean and the build gate passes."),
+        probe="""
+from mcp_pin.rules import AuditContext, run_rules
+ctx = AuditContext(servers=[], unreadable=[("/proj/.mcp.json", "not valid JSON")])
+FAIL_OPEN = "MCPA039" not in [f.rule_id for f in run_rules(ctx)]
+""",
+    ),
+    Mutant(
+        id="unread-config-can-be-suppressed",
+        theorem="T-PINNED",
+        path="suppressions.py",
+        original="""    "MCPA039",
+""",
+        replacement="",
+        harm=("A one-line ignore file switches off the report that a config "
+              "was never read, which does not make it readable."),
+        probe="""
+import tempfile
+from pathlib import Path
+from mcp_pin.suppressions import parse_ignore_file
+path = Path(tempfile.mkdtemp()) / ".mcp-pin-ignore"
+path.write_text("MCPA039\\n", encoding="utf-8")
+sup, errs = parse_ignore_file(path)
+FAIL_OPEN = bool(sup)
 """,
     ),
 )

@@ -1492,6 +1492,7 @@ def _pin_still_holds(guard: Guard, argv: list[str], *,
     not start. A tarball whose cached bytes contradict the approved hash
     refuses unconditionally -- those are the bytes about to run.
     """
+    from .integrity import expects_hash
     from .pkgcache import refusal
 
     entry = guard._resolve_entry() or {}
@@ -1509,9 +1510,14 @@ def _pin_still_holds(guard: Guard, argv: list[str], *,
         return reason
     integrity = entry.get("integrity")
     urls = entry.get("artifact_urls")
+    # `guard` is handed an argv rather than a config entry, so the question
+    # "does this launch fetch a registry artifact" is asked of the tokens.
+    launch = ServerSpec(name=guard.server_name, source="<guard>", client="guard",
+                        transport="stdio",
+                        command=argv[0] if argv else None, args=list(argv[1:]))
     return refusal(integrity if isinstance(integrity, dict) else None,
                    urls if isinstance(urls, dict) else None,
-                   require=require_integrity)
+                   require=require_integrity, expected=expects_hash(launch))
 
 
 def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,

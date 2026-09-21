@@ -213,12 +213,23 @@ class TestAMalformedPinDoesNotTakeTheScanDown(unittest.TestCase):
         found = self._scan({5: "sha512-a", "npm:@scope/pkg@1.2.3": "sha512-b"})
         self.assertIn("MCPA037", [f.rule_id for f in found])
 
-    def test_the_wrong_shape_entirely_is_ignored(self) -> None:
+    def test_the_wrong_shape_entirely_is_reported_not_ignored(self) -> None:
+        """It used to produce neither finding, on the reading that an
+        unusable pin is nothing to check.
+
+        That is the wrong way round, and it is the same fail-open this rule
+        exists to close: a pin nobody can read verifies nothing, so the
+        honest answer is "could not see" rather than silence. The neighbour
+        test already expected MCPA037 for a *partly* malformed map, so a
+        fully malformed one going quiet was the inconsistent case.
+
+        MCPA036 still stays away: no hash was recorded, so nothing can be
+        said to have changed."""
         for shape in ("a string", ["a", "list"], 7, None, {}):
             with self.subTest(shape=shape):
                 ids = [f.rule_id for f in self._scan(shape)]
                 self.assertNotIn("MCPA036", ids)
-                self.assertNotIn("MCPA037", ids)
+                self.assertIn("MCPA037", ids)
 
 
 class TestApprovalRecordsWhatItCouldNotDo(unittest.TestCase):

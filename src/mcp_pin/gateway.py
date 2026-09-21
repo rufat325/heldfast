@@ -126,6 +126,7 @@ class Backend:
         local artifact to hash and no argv to compare.
         """
         from .artifacts import mismatch
+        from .integrity import expects_hash
         from .lockfile import launch_mismatch
         from .pkgcache import refusal
 
@@ -136,7 +137,8 @@ class Backend:
                 or launch_mismatch(self.approved_launch, self.spec.argv,
                                    pinned=self.pinned)
                 or refusal(self.recorded_integrity, self.artifact_urls,
-                           require=self.require_integrity))
+                           require=self.require_integrity,
+                           expected=expects_hash(self.spec)))
 
     def start(self) -> bool:
         """Refuse on a moved pin, then hand over to the transport.
@@ -549,15 +551,55 @@ class Gateway:
                     self.stats.tools_withheld.append(f"{name}{SEPARATOR}{raw}")
                 tool["name"] = f"{name}{SEPARATOR}{raw}"
                 out.append(tool)
+        # Two backends can produce one namespaced name (see split_name). The
+        # client would keep whichever arrived last, so the model could read
+        # one server's description for a call that executes on the other.
+        # Neither is offered.
+        seen: dict[str, int] = {}
+        for tool in out:
+            seen[str(tool.get("name"))] = seen.get(str(tool.get("name")), 0) + 1
+        clashing = {n for n, count in seen.items() if count > 1}
+        if clashing:
+            for name in sorted(clashing):
+                self.log(f"withholding {name!r}: two backends namespace to it")
+                self.stats.tools_withheld.append(name)
+            out = [t for t in out if str(t.get("name")) not in clashing]
         self.stats.tools_exposed = len(out)
         return out
 
     def split_name(self, namespaced: str) -> tuple[str, str] | None:
-        """`server__tool` back into its parts, longest server name first."""
+        """`server__tool` back into its parts, or None when it is ambiguous.
+
+        Backend names are distinct, but the separator can appear inside a
+        tool name, and then the split is not: with backends `a` and `a__b`,
+        `a`'s tool `b__x` and `a__b`'s tool `x` are both spelled `a__b__x`.
+        Taking the longest prefix answered one of them silently.
+
+        So a candidate counts only when that backend actually advertises the
+        remainder, and two candidates are refused rather than guessed
+        between. Routing a call to whichever server won a string comparison
+        is the failure this namespacing exists to prevent.
+        """
+        candidates = []
         for name in sorted(self.backends, key=len, reverse=True):
             prefix = name + SEPARATOR
-            if namespaced.startswith(prefix):
-                return name, namespaced[len(prefix):]
+            if not namespaced.startswith(prefix):
+                continue
+            tool = namespaced[len(prefix):]
+            known = {str(t.get("name") or "")
+                     for t in getattr(self.backends[name], "tools", []) or []}
+            # An empty catalogue means the backend has not listed yet, so the
+            # name cannot be confirmed or denied; keep it as a candidate
+            # rather than dropping a call the backend would have answered.
+            if not known or tool in known:
+                candidates.append((name, tool))
+        if len(candidates) == 1:
+            return candidates[0]
+        if len(candidates) > 1:
+            self.log(f"refusing {namespaced!r}: it splits {len(candidates)} ways "
+                     f"({', '.join(n for n, _ in candidates)}); rename one of "
+                     f"those servers so the namespaced tool is unambiguous")
+            return None
         return None
 
     # -- request handling --------------------------------------------------

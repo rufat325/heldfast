@@ -48,6 +48,8 @@ class Collected:
         # server name -> "answered" or a short reason it did not. Absent means
         # no probe was attempted, which is a different thing from a failed one.
         self.probe_status: dict = {}
+        # (path, reason) for config files that exist and did not parse.
+        self.unreadable: list = []
 
 
 _GATE_NAMES = {
@@ -63,21 +65,37 @@ def _severity_named(name: str):
     return _GATE_NAMES.get(str(name).lower(), Severity.HIGH)
 
 
-def _gate_servers(out: "Collected", gate) -> tuple[list, list]:
+def _gate_servers(out: "Collected", gate, lock: Lock | None = None) -> tuple[list, list]:
     """(servers safe to launch, [(identity, why not)]).
 
     Runs everything that needs no probe data -- the config rules, the skill
     rules, the source scanner -- and holds back any server already carrying a
     finding at or above the gate. Launching a server the scanner is about to
     call dangerous is the one thing a security tool should not do.
+
+    `lock` is what makes that true of a *pin* as well as of a config. Without
+    it the context carried no lockfile, so MCPA015, MCPA016, MCPA031 and
+    MCPA036 -- every rule that compares against an approval -- were
+    structurally unable to fire here. `scan --probe` therefore executed a
+    server whose recorded script had been rewritten, and reported the drift
+    afterwards. The rewrite is the rug pull; running it to find out is the
+    one order these steps must not happen in.
+
+    Deliberately absent when approving: `approve --probe` exists to re-record
+    a server that changed, so gating it on having changed would make the
+    review workflow impossible. The refusal to *write* a drifted lock without
+    `--yes` is what covers that command, and it still does.
     """
     if gate is None:
         return list(out.servers), []
 
+    recorded = ({"servers": lock.servers, "skills": lock.skills,
+                 "stale_digests": lock.stale_digests} if lock is not None else {})
     try:
         findings = run_rules(AuditContext(
-            servers=out.servers, skills=out.skills,
-            source_flows=out.source_flows, config_errors=out.errors))
+            servers=out.servers, skills=out.skills, lock=recorded,
+            source_flows=out.source_flows, config_errors=out.errors,
+            unreadable=out.unreadable))
     except Exception as err:                      # a rule bug must not launch
         why = f"static pre-pass failed: {err}"
         return [], [(s.identity(), why) for s in out.servers]
@@ -127,10 +145,25 @@ def _collect_configs(out: "Collected", roots: list[Path], args: argparse.Namespa
         exclude=_excludes(args),
     )
     out.config_count = len(config_files)
+    from .clients import BY_ID
     for path, client in config_files:
         servers, errors = parse_config(path, client)
         out.servers.extend(servers)
         out.errors.extend(errors)
+        if servers or not errors:
+            continue
+        # A file that exists, yielded nothing, and complained. Two reasons
+        # that apart: a format this scanner never parses is a known and
+        # documented gap (docs/CLIENTS.md), while a file that should have
+        # parsed and did not is a blind spot opening right now. Only the
+        # second is a finding, or the first would fire on every YAML client
+        # forever -- and a finding that fires on everyone forever is one
+        # people switch off.
+        definition = BY_ID.get(client)
+        if definition is not None and definition.unsupported_format:
+            continue
+        reason = errors[0].split(": ", 1)[-1] if errors else "could not be read"
+        out.unreadable.append((str(path), reason))
 
 
 def _collect_skills_and_source(out: "Collected", roots: list[Path],
@@ -163,6 +196,21 @@ def _ingest_probe(out: "Collected", results: list) -> None:
             out.errors.append(f"probe {res.server}: {res.error}")
 
 
+def _gate_lock(args: argparse.Namespace) -> "Lock | None":
+    """The lockfile the probe gate compares against, or None when approving.
+
+    An unreadable lock returns None rather than raising: the gate is one of
+    several checks and losing it must not take the scan down. `scan` reports
+    the same file separately, so the problem is not swallowed.
+    """
+    if getattr(args, "command", "") == "approve":
+        return None
+    try:
+        return Lock.load(_resolve_lock_path(args))
+    except (ValueError, OSError):
+        return None
+
+
 def _collect_probe(out: "Collected", args: argparse.Namespace) -> None:
     if not args.probe:
         return
@@ -176,7 +224,7 @@ def _collect_probe(out: "Collected", args: argparse.Namespace) -> None:
     # before a single rule had looked at the config -- so a config that
     # the scanner was about to call dangerous had already had its say.
     gate = _severity_named(getattr(args, "probe_gate", "high"))
-    launchable, out.probe_skipped = _gate_servers(out, gate)
+    launchable, out.probe_skipped = _gate_servers(out, gate, _gate_lock(args))
     if launchable and not getattr(args, "quiet", False):
         local = [s for s in launchable if s.transport == "stdio"]
         if local and not args.no_stdio_probe:
@@ -233,6 +281,7 @@ def _scan_context(args: argparse.Namespace, data: Collected, lock: Lock) -> Audi
         resources=data.resources,
         instructions=data.instructions,
         config_errors=data.errors,
+        unreadable=data.unreadable,
         lock={"servers": lock.servers, "skills": lock.skills,
               "stale_digests": lock.stale_digests},
         source_flows=data.source_flows,
@@ -633,6 +682,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         prompts=data.prompts, resources=data.resources,
         instructions=data.instructions, source_flows=data.source_flows,
         config_errors=data.errors,
+        unreadable=data.unreadable,
         lock={"servers": lock.servers, "skills": lock.skills,
               "stale_digests": lock.stale_digests},
         options=_rule_options(args, data),

