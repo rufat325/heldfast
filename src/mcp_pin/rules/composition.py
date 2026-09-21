@@ -32,7 +32,7 @@ from collections import defaultdict
 from typing import Iterable
 
 from ..findings import Finding, Location, Severity
-from ..model import ServerSpec
+from ..model import ServerSpec, config_anchors
 from ..enforcement import subcommand
 from .base import AuditContext, rule
 
@@ -65,6 +65,7 @@ def _clients_by_server(ctx: AuditContext) -> dict[str, set[str]]:
     for server in ctx.servers:
         if not server.disabled:
             out[server.name].add(server.client)
+            out[server.identity()].add(server.client)
     return out
 
 
@@ -129,7 +130,7 @@ def _arbitrary_destination_tools(ctx: AuditContext) -> dict[str, list[str]]:
       Severity.MEDIUM)
 def tool_shadowing(ctx: AuditContext) -> Iterable[Finding]:
     """The agent selects a tool by name, so a duplicate name is a contest."""
-    declared = {s.name: (s.source, s.line) for s in ctx.servers}
+    declared = config_anchors(ctx.servers)
     clients = _clients_by_server(ctx)
 
     by_name: dict[str, set[str]] = defaultdict(set)

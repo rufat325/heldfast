@@ -1328,6 +1328,46 @@ cut = auditlog.verify(path).summary()
 FAIL_OPEN = whole.split(",", 1)[1] == cut.split(",", 1)[1]
 """,
     ),
+    Mutant(
+        id="probe-obs-bare-name",
+        theorem="T-PROBE-ID",
+        path="probe.py",
+        original="    return s.identity()",
+        replacement="    return s.name",
+        harm="cursor:github and claude-code:github share one observation key.",
+        probe="""
+from mcp_pin.model import ServerSpec
+from mcp_pin.probe import probe_stdio
+r = probe_stdio(ServerSpec(name="github", source="/c", client="cursor"))
+FAIL_OPEN = r.server == "github"
+""",
+    ),
+    Mutant(
+        id="record-namesake-merge",
+        theorem="T-PROBE-ID",
+        path="model.py",
+        original="""    if sum(1 for s in servers if s.name == spec.name) != 1:
+        return None
+    return bucket.get(spec.name)
+""",
+        replacement="""    return bucket.get(spec.name)
+""",
+        harm="One ToolSpec tagged github is written into every client:github entry.",
+        probe="""
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec, ToolSpec
+cursor = ServerSpec(name="github", source="/c", client="cursor",
+                    transport="stdio", command="node")
+claude = ServerSpec(name="github", source="/d", client="claude-code",
+                    transport="stdio", command="node")
+mixed = ToolSpec(server="github", name="read", description="poison",
+                 input_schema={})
+lock = Lock()
+lock.record([cursor, claude], [mixed], [])
+FAIL_OPEN = ("tools" in lock.servers["cursor:github"]
+             and "tools" in lock.servers["claude-code:github"])
+""",
+    ),
 )
 
 

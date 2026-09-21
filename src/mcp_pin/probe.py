@@ -40,6 +40,11 @@ LEGACY_PROTOCOL_VERSION = "2024-11-05"
 CLIENT_INFO = {"name": "mcp-pin", "version": "0.1.0"}
 
 
+def _obs_id(s: ServerSpec) -> str:
+    """Key observations under client:name. The bare name is not unique."""
+    return s.identity()
+
+
 @dataclass
 class ProbeResult:
     server: str
@@ -146,7 +151,7 @@ def _parse_tools(server: str, payload: dict[str, Any]) -> list[ToolSpec]:
 def probe_stdio(s: ServerSpec, timeout: float = 20.0,
                 share_env: set | None = None) -> ProbeResult:
     if not s.command:
-        return ProbeResult(s.name, [], "no command configured")
+        return ProbeResult(_obs_id(s), [], "no command configured")
     exe = shutil.which(s.command) or s.command
     # A server being probed gets what it declared and the infrastructure it
     # needs to run -- not every token on the machine.
@@ -174,7 +179,7 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0,
             preexec_fn=posix_preexec(),
         )
     except (OSError, ValueError) as exc:
-        return ProbeResult(s.name, [], f"could not launch: {exc}")
+        return ProbeResult(_obs_id(s), [], f"could not launch: {exc}")
 
     bind_child(proc)
 
@@ -362,17 +367,17 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0,
 
     if timed_out:
         detail = f"; stderr: {stderr_tail[-1]}" if stderr_tail else ""
-        return ProbeResult(s.name, [], f"timed out after {timeout:.0f}s{detail}")
+        return ProbeResult(_obs_id(s), [], f"timed out after {timeout:.0f}s{detail}")
     if error:
         detail = f"; stderr: {stderr_tail[-1]}" if stderr_tail else ""
-        return ProbeResult(s.name, [], f"{error}{detail}")
+        return ProbeResult(_obs_id(s), [], f"{error}{detail}")
     return ProbeResult(
-        s.name,
-        _parse_tools(s.name, result),
+        _obs_id(s),
+        _parse_tools(_obs_id(s), result),
         instructions=str((init_result.get("result") or {}).get("instructions") or ""),
-        prompts=_parse_prompts(s.name, prompts_result),
-        resources=(_parse_resources(s.name, resources_result)
-                   + _parse_resources(s.name, templates_result)),
+        prompts=_parse_prompts(_obs_id(s), prompts_result),
+        resources=(_parse_resources(_obs_id(s), resources_result)
+                   + _parse_resources(_obs_id(s), templates_result)),
         protocol_era="modern" if discover_result else "legacy",
         supported_versions=[
             str(v) for v in
@@ -447,7 +452,7 @@ def _describe_connection_error(exc: Exception) -> str:
 
 def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
     if not s.url:
-        return ProbeResult(s.name, [], "no url configured")
+        return ProbeResult(_obs_id(s), [], "no url configured")
     try:
         init, headers = post_rpc(
             s.url, s.headers,
@@ -455,7 +460,7 @@ def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
             timeout,
         )
         if "error" in init:
-            return ProbeResult(s.name, [], f"initialize failed: {init['error']}")
+            return ProbeResult(_obs_id(s), [], f"initialize failed: {init['error']}")
         # Streamable HTTP hands out a session on initialize and requires it on
         # everything after. Without this the probe worked against servers that
         # do not bother and failed on every server that does -- which reads as
@@ -471,7 +476,7 @@ def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
             timeout,
         )
         if "error" in listed:
-            return ProbeResult(s.name, [], f"tools/list failed: {listed['error']}")
+            return ProbeResult(_obs_id(s), [], f"tools/list failed: {listed['error']}")
 
         caps = (init.get("result") or {}).get("capabilities") or {}
         prompts_payload: dict[str, Any] = {}
@@ -491,16 +496,16 @@ def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
                     resources_payload = reply
 
         return ProbeResult(
-            s.name,
-            _parse_tools(s.name, listed),
+            _obs_id(s),
+            _parse_tools(_obs_id(s), listed),
             instructions=str((init.get("result") or {}).get("instructions") or ""),
-            prompts=_parse_prompts(s.name, prompts_payload),
-            resources=_parse_resources(s.name, resources_payload),
+            prompts=_parse_prompts(_obs_id(s), prompts_payload),
+            resources=_parse_resources(_obs_id(s), resources_payload),
         )
     except urllib.error.HTTPError as exc:
-        return ProbeResult(s.name, [], f"HTTP {exc.code} {exc.reason}")
+        return ProbeResult(_obs_id(s), [], f"HTTP {exc.code} {exc.reason}")
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        return ProbeResult(s.name, [], _describe_connection_error(exc))
+        return ProbeResult(_obs_id(s), [], _describe_connection_error(exc))
 
 
 def probe(servers: list[ServerSpec], *, timeout: float = 20.0,
@@ -517,5 +522,5 @@ def probe(servers: list[ServerSpec], *, timeout: float = 20.0,
         elif allow_stdio:
             results.append(probe_stdio(s, timeout, share_env=share_env))
         else:
-            results.append(ProbeResult(s.name, [], "stdio probing disabled"))
+            results.append(ProbeResult(_obs_id(s), [], "stdio probing disabled"))
     return results

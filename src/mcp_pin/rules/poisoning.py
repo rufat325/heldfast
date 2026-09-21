@@ -26,6 +26,7 @@ from typing import Iterable, NamedTuple
 
 from ..confusables import mixed_script_words
 from ..findings import Finding, Location, Severity
+from ..model import config_anchors
 from .base import AuditContext, rule
 
 
@@ -232,9 +233,7 @@ def _targets(ctx: AuditContext) -> list[Target]:
     # A tool description does not live in a file, so findings about it are
     # anchored to the config that declares the server. Anchoring to the
     # server *name* would produce a location nothing can open.
-    declared: dict[str, tuple[str, int]] = {
-        s.name: (s.source, s.line) for s in ctx.servers
-    }
+    declared = config_anchors(ctx.servers)
 
     out: list[Target] = []
 

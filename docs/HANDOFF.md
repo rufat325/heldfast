@@ -296,6 +296,16 @@ Read this file and `docs/GUARANTEES.md` instead.
     - `release.yml` attaches SHA256SUMS to the GitHub release. The v0.1.3
       tag predated that job.
 
+34. ~~Same-named servers from two clients shared one probe observation.~~
+    Done. Probe stored tools, instructions and probe status under `s.name`,
+    and `Lock.record` looked them up the same way while writing entries under
+    `s.identity()`. `cursor:github` and `claude-code:github` therefore merged
+    before they were pinned -- a poisoned definition from one namesake could
+    become the other's baseline. T-DRIFT-ID already refused to *compare*
+    against the first match; it did not cover `approve --probe`. Probe now
+    keys by identity. `record` accepts a bare name only when it is unique
+    among the servers being written. T-PROBE-ID.
+
 ## Lessons that cost something
 
 Kept in the tracked file rather than in local notes, because every one of them

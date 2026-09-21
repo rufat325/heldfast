@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from .clients import display_name
-from .model import ServerSpec, SkillSpec, ToolSpec
+from .model import ServerSpec, SkillSpec, ToolSpec, observed_for
 from .parsers import normalize_tool_grants
 from .rules.credentials import classify_secret, is_indirect_or_placeholder
 
@@ -62,10 +62,10 @@ def build(servers: list[ServerSpec], skills: list[SkillSpec],
             entry["url"] = s.url
         if s.headers:
             entry["headers"] = sorted(s.headers)
-        era = (eras or {}).get(s.name)
+        era = observed_for(eras or {}, s, servers)
         if era and era != "unknown":
             entry["protocol_era"] = era
-        observed = by_server.get(s.name)
+        observed = observed_for(by_server, s, servers)
         if observed is not None:
             entry["tools"] = [
                 {"name": t.name, "description": (t.description or "").strip()[:120]}
