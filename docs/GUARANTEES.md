@@ -57,6 +57,8 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-HOSTED | A server configured with a `url` is enforced by `gateway` exactly as a local one is: same catalogue filter, same call refusal, same result screen, same budget. `guard` still cannot wrap one, and the coverage row says so. | `tests/test_gateway_http.py`, `tests/test_coverage.py`, `tests/test_mutation.py` |
 | T-HOSTED-TLS | `gateway` refuses to front a non-loopback server over cleartext `http://`. | `tests/test_gateway_http.py` |
 | T-LOG-SEALED | A segment signed through `--sign-command` cannot be rewritten afterwards: dropping an entry and recomputing every hash leaves a signature that no longer verifies. A signer that fails costs the signature and never the record. | `tests/test_log_signing.py`, `tests/test_mutation.py` |
+| T-LOG-COMPLETE | `verify` states whether completeness was checked at all. With no `.head` file and no `--expect-*`, an intact chain says a truncated tail would not have been visible rather than printing what a whole log prints. | `tests/test_auditlog.py`, `tests/test_mutation.py` |
+| T-COMPILES-CLEAN | Every module under `src/` and `tests/` compiles with no `SyntaxWarning`. An invalid escape is a warning today and a `SyntaxError` from Python 3.15, and cached bytecode hides it from everyone but a first-time installer. | `tests/test_auditlog.py`, `.github/workflows/ci.yml` |
 | T-PROBE-GATE | A rule exception in the static pre-pass launches nothing. | `tests/test_probe_boundary.py`, `tests/test_mutation.py` |
 | T-DRIFT-ID | Two lock entries sharing a bare name are not compared against the first match. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
 | T-TYPES | `policy.py`, `lockfile.py`, `model.py`, `findings.py`, `pkgcache.py`, `auditlog.py` and `confusables.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
@@ -105,7 +107,12 @@ We do not claim these. Do not imply them in output.
   live same-user attacker can ask that same agent to sign a story of their
   own. Nothing on the same host closes that, and this does not claim to
 - Sandboxing the child server (`--probe` runs it)
-- Proxying remote HTTP/SSE MCP (scan only; `guard` is stdio)
+- Wrapping a remote HTTP/SSE server with `guard`. It launches a child and sits
+  between its pipes, and a `url` has no child. `gateway` fronts one over
+  Streamable HTTP and enforces it the same way (T-HOSTED), so the limitation is
+  the command, not the transport. This entry said "scan only" until that landed
+  and stayed wrong for a day afterwards, which is the cost of a capability
+  arriving and its out-of-scope line not being grepped for
 - Hashing a registry tarball when the registry could not be reached at
   approval. The approval says so at the time, `coverage` shows the layer as
   unverified rather than covered, and a scan reports MCPA037

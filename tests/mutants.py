@@ -1143,6 +1143,37 @@ with open(path + ".head", "w", encoding="utf-8") as fh:
 FAIL_OPEN = auditlog.verify(path, verify_command=verify).ok
 """,
     ),
+    Mutant(
+        id="missing-sidecar-reads-as-complete",
+        theorem="T-LOG-COMPLETE",
+        path="auditlog.py",
+        original="""            if self.completeness == "unchecked":
+                how += (", no head file -- a truncated tail would not be "
+                        "visible; pass --expect-count")""",
+        replacement="""            if False:
+                pass""",
+        harm=("A log whose length nothing checked prints the sentence a whole "
+              "log prints, so deleting the sidecar -- cheaper than forging one "
+              "-- hides a truncated tail behind a clean verdict."),
+        probe="""
+import os, tempfile
+from mcp_pin import auditlog
+os.environ.pop("MCP_PIN_LOG_KEY", None)
+tmp = tempfile.mkdtemp()
+path = os.path.join(tmp, "trail.jsonl")
+log = auditlog.AuditLog(path, "svc")
+log.record("session_start")
+log.record("tool_call", subject="wipe_disk", decision="DENY")
+whole = auditlog.verify(path).summary()
+with open(path, encoding="utf-8") as fh:
+    first = fh.read().splitlines()[0]
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write(first + chr(10))
+os.unlink(path + ".head")
+cut = auditlog.verify(path).summary()
+FAIL_OPEN = whole.split(",", 1)[1] == cut.split(",", 1)[1]
+""",
+    ),
 )
 
 

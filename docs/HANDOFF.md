@@ -246,6 +246,38 @@ Read this file and `docs/GUARANTEES.md` instead.
     morning and false by the afternoon. A remedy line is a claim like any
     other.
 
+32. ~~The same reviewer re-ran every attack and found one new bug plus two
+    stale claims.~~ Done. All three were confirmed by reproducing them before
+    anything changed.
+    - *A `SyntaxWarning` shipped.* `split_command`'s docstring carried
+      `C:\Python\python.exe` in a non-raw string -- a heredoc had eaten one
+      backslash, which is the trap this file already warns about, hit again.
+      Cached bytecode hides it, so the only people who would ever have seen it
+      are the ones installing for the first time, and it becomes a hard
+      `SyntaxError` in Python 3.15. Fixed with `r"""`, and closed as a class:
+      `compileall` under `-W error::SyntaxWarning`, both as a CI step and as a
+      test, because the matrix ran three Pythons and turned no warning into a
+      failure. T-COMPILES-CLEAN.
+    - *The out-of-scope list contradicted T-HOSTED.* It still read "Proxying
+      remote HTTP/SSE MCP (scan only; `guard` is stdio)" a day after the gateway
+      learned HTTP. That list is headed "Do not claim these. Do not imply them
+      in output", which makes a stale line there worse than elsewhere. This is
+      the "a remedy line is a claim with a shelf life" lesson from the section
+      below, written the same day and then not applied to this file -- the
+      coverage surface was grepped and this one was not.
+    - *`verify` was silent when the sidecar was absent.* Deleting the `.head`
+      file is cheaper than forging it, and the result read exactly like a
+      complete log. The summary now says when completeness could not be checked
+      at all, which is the treatment `keyed`/`unkeyed` already gets in the same
+      sentence. `--help` also claimed the head check always happens; it says
+      "if it can" now. T-LOG-COMPLETE.
+
+    Worth recording that the reviewer verified the previous round by re-running
+    the attacks rather than reading the diff, and that is how the stale
+    out-of-scope line was found -- a passing suite cannot catch a sentence that
+    contradicts a theorem two sections above it.
+
+
 ## Lessons that cost something
 
 Kept in the tracked file rather than in local notes, because every one of them
@@ -306,11 +338,16 @@ self-inflicted and two turned CI red.
   a future transport cannot forget the gate -- which is the same failure the
   gateway already had once, when it was missing three screens the guard had.
 
-- **A remedy line is a claim with a shelf life.** `coverage` told a hosted
-  server's operator there was "no fix available today". That was true when it
-  was written and false a few hours later, when the gateway learned HTTP.
-  Whenever a capability lands, grep the reporting surfaces for the sentence
-  that said it was impossible.
+- **A remedy line is a claim with a shelf life, and so is an out-of-scope
+  line.** `coverage` told a hosted server's operator there was "no fix
+  available today". That was true when it was written and false a few hours
+  later, when the gateway learned HTTP. The lesson was written down that same
+  day -- and `docs/GUARANTEES.md` still said "Proxying remote HTTP/SSE MCP
+  (scan only)" until a reviewer found it, because only the coverage surface got
+  grepped. Whenever a capability lands, grep *every* place that said it was
+  impossible: the remedy strings, the out-of-scope list, the README and the
+  manual. A list headed "do not imply these in output" is the worst one to
+  leave stale.
 
 - **Implementing a protocol a second time audits the first.** Giving the
   gateway an HTTP transport found that `probe_http` had been taking the

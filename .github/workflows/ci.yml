@@ -20,6 +20,18 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Generate fixtures
         run: python tests/fixtures/make_fixtures.py
+      # A SyntaxWarning is invisible once bytecode is cached, so it only shows
+      # on a cold compile -- which is exactly what a fresh `pipx install` or a
+      # `uvx` run does. The one that got through was an invalid escape in a
+      # docstring, which becomes a hard SyntaxError in Python 3.15: a warning
+      # today and a broken package later. Runs before the suite, because a file
+      # that will not compile is not worth testing.
+      - name: Compile with warnings as errors
+        shell: bash
+        run: |
+          find . -name __pycache__ -type d -prune -exec rm -rf {} + || true
+          python -W error::SyntaxWarning -m compileall -q src tests
+
       # Failing test names are emitted as annotations, not just logged. Reading
       # a job's log needs a signed-in session with rights on the repository;
       # annotations are readable from the public API. So a red run on an OS

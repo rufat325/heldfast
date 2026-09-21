@@ -288,14 +288,17 @@ def _register_verify_log(sub: argparse._SubParsersAction) -> None:
         help="check that a guard audit log has not been altered",
         description=(
             "Walks the hash chain written by `guard --log` and reports the first "
-            "entry that does not follow the one before it, then checks that it is "
-            "the whole chain rather than a prefix somebody left behind -- against "
-            "the .head file the writer keeps, and against --expect-head / "
-            "--expect-count when you have them from somewhere the log's author "
-            "could not reach. Without MCP_PIN_LOG_KEY set this is tamper-evidence, "
-            "not attestation: an attacker who can write the log can recompute an "
-            "unkeyed chain. With it set the chain is HMAC-SHA256. It never proves "
-            "who wrote the record."
+            "entry that does not follow the one before it. Then, *if it can*, "
+            "checks that this is the whole chain rather than a prefix somebody "
+            "left behind: against the .head file the writer keeps when that file "
+            "is present, and against --expect-head / --expect-count when you "
+            "supply them from somewhere the log's author could not reach. When "
+            "neither is available the summary says so, because deleting the "
+            "sidecar is cheaper than forging it and a silent pass would look "
+            "identical to a complete log. Without MCP_PIN_LOG_KEY set this is "
+            "tamper-evidence, not attestation: an attacker who can write the log "
+            "can recompute an unkeyed chain. With it set the chain is "
+            "HMAC-SHA256. It never proves who wrote the record."
         ),
     )
     verify_p.add_argument("path", metavar="PATH", help="the log file to check")

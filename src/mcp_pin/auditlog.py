@@ -18,6 +18,11 @@ compares the two. `verify-log --expect-head/--expect-count` is the same check
 with the values supplied out of band, for when the sidecar is as writable as
 the log.
 
+And when neither is there, the summary says so. Deleting the sidecar is cheaper
+than forging one, so "no sidecar" must not print the sentence a complete log
+prints -- the same reason `keyed` and `unkeyed` are distinguished rather than
+both reading "intact".
+
 **An unkeyed chain can be recomputed.** The adversary here is a malicious MCP
 server that already runs as the user, so it can already write the log; with
 SHA-256 alone, dropping an entry and re-chaining the rest costs it one loop.
@@ -121,13 +126,19 @@ def segment_payload(seq: int, head: str) -> bytes:
 
 
 def split_command(command: str) -> list[str]:
-    """Split a command line the way the platform means it.
+    r"""Split a command line the way the platform means it.
 
     `shlex` has no good setting for Windows. With `posix=True` it eats the
     backslashes out of `C:\Python\python.exe`; with `posix=False` it leaves
     the quotes attached to the token, so the quoted path is looked up
     literally, quotes and all. Neither finds the program. So: split without
     posix rules, then strip the quotes that splitting was supposed to consume.
+
+    Raw, and it has to be: the path above made this docstring a string with an
+    invalid escape in it. That is a SyntaxWarning today and a SyntaxError from
+    Python 3.15, and cached bytecode hides it from everyone except a user
+    installing for the first time -- which is the worst audience to show it to.
+    `compileall` under `-W error::SyntaxWarning` is a CI job for this reason.
     """
     import shlex
 
@@ -253,6 +264,12 @@ class VerifyResult:
     # (through_seq, head_hash, signature, signer) for each signed segment.
     segments: list[tuple[int, str, str, str]] = field(default_factory=list)
     signatures_checked: int = 0
+    # Whether anything outside the file confirmed this is the *whole* chain.
+    # "head" -- the sidecar agreed. "expected" -- values supplied out of band
+    # agreed. "unchecked" -- neither was available, so a truncated tail is
+    # invisible. Deleting the sidecar is easier than forging it, and without
+    # this the two produced the same sentence as a genuinely complete log.
+    completeness: str = "unchecked"
 
     @property
     def keyed(self) -> bool:
@@ -267,6 +284,9 @@ class VerifyResult:
             elif self.segments:
                 sealed = (f", {len(self.segments)} signed segment(s) not checked "
                           f"(pass --verify-command)")
+            if self.completeness == "unchecked":
+                how += (", no head file -- a truncated tail would not be "
+                        "visible; pass --expect-count")
             return f"{self.entries} entries, chain intact ({how}){sealed}"
         first = self.problems[0]
         where = f" at line {first.line}" if first.line else ""
@@ -491,6 +511,8 @@ def _check_completeness(result: VerifyResult, path: str | "os.PathLike[str]",
     and leaves a chain that verifies. These three comparisons are the only
     things that catch it, and each needs a fact from outside the file.
     """
+    if expect_count is not None or expect_head is not None:
+        result.completeness = "expected"
     if expect_count is not None and result.entries != expect_count:
         result.problems.append(Broken(
             0, f"expected {expect_count} entries and found {result.entries}"))
@@ -500,6 +522,9 @@ def _check_completeness(result: VerifyResult, path: str | "os.PathLike[str]",
 
     recorded = read_head(path)
     if not recorded:
+        # No sidecar, so nothing outside the file says how long it should be.
+        # The summary has to say that rather than print the sentence a complete
+        # log prints: removing the sidecar is cheaper than forging one.
         return
     seq, claimed = recorded.get("seq"), str(recorded.get("hash") or "")
     if not isinstance(seq, int):
@@ -508,6 +533,7 @@ def _check_completeness(result: VerifyResult, path: str | "os.PathLike[str]",
     # at all. The head is written *after* the entry it describes, so a killed
     # process leaves the head behind the log -- never ahead of it. A head that
     # knows about entries the log no longer has is removal, not a crash.
+    result.completeness = "head"
     if seq > result.entries:
         result.problems.append(Broken(
             0, f"the head file records {seq} entries and the log has "

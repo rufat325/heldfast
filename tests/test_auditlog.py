@@ -351,5 +351,118 @@ class TestKeyedChains(unittest.TestCase):
                             auditlog._digest(dict(body, alg="hmac-sha256"), b"k"))
 
 
+class TestAMissingSidecarIsNotSilence(unittest.TestCase):
+    """Deleting the sidecar is cheaper than forging one.
+
+    An outside reviewer put both side by side:
+
+        truncate + delete sidecar : 2 entries, chain intact (unkeyed) | ok
+        truncate + forge sidecar  : 2 entries, chain intact (unkeyed) | ok
+
+    The second is the documented limit -- the sidecar is as writable as the log,
+    which is what `--expect-count` is for. The first was not a limit, it was a
+    silence: the sentence a complete log prints, printed for a log whose length
+    nothing had checked. The module already distinguishes `keyed` from
+    `unkeyed` in that same sentence rather than letting both read "intact", so
+    this gets the same treatment.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self._tmp.name) / "trail.jsonl"
+        os.environ.pop(auditlog.KEY_VAR, None)
+
+    def tearDown(self) -> None:
+        os.environ.pop(auditlog.KEY_VAR, None)
+        self._tmp.cleanup()
+
+    def _write(self) -> None:
+        log = auditlog.AuditLog(self.path, "svc")
+        log.record("session_start")
+        log.record("tool_call", subject="read_invoice", decision="allow")
+        log.record("tool_call", subject="wipe_disk", decision="DENY")
+        log.record("session_end")
+
+    def _truncate(self, keep: int = 2) -> None:
+        lines = self.path.read_text(encoding="utf-8").splitlines()
+        self.path.write_text("\n".join(lines[:keep]) + "\n", encoding="utf-8")
+
+    def test_with_the_sidecar_the_summary_makes_no_caveat(self) -> None:
+        self._write()
+        result = auditlog.verify(self.path)
+        self.assertTrue(result.ok)
+        self.assertEqual("head", result.completeness)
+        self.assertNotIn("no head file", result.summary())
+
+    def test_without_the_sidecar_the_summary_says_what_was_not_checked(self) -> None:
+        self._write()
+        auditlog.head_path(self.path).unlink()
+        result = auditlog.verify(self.path)
+        self.assertTrue(result.ok, "a missing sidecar is not evidence of tampering")
+        self.assertEqual("unchecked", result.completeness)
+        self.assertIn("no head file", result.summary())
+        self.assertIn("--expect-count", result.summary())
+
+    def test_a_truncated_log_with_no_sidecar_reads_differently_from_a_whole_one(self) -> None:
+        """The two strings have to differ, or the report launders the edit."""
+        self._write()
+        whole = auditlog.verify(self.path).summary()
+        self._truncate()
+        auditlog.head_path(self.path).unlink()
+        cut = auditlog.verify(self.path).summary()
+        self.assertNotEqual(whole, cut)
+        self.assertIn("would not be visible", cut)
+
+    def test_out_of_band_values_count_as_having_checked(self) -> None:
+        self._write()
+        auditlog.head_path(self.path).unlink()
+        result = auditlog.verify(self.path, expect_count=4)
+        self.assertTrue(result.ok)
+        self.assertEqual("expected", result.completeness)
+        self.assertNotIn("no head file", result.summary())
+
+    def test_out_of_band_values_still_catch_the_truncation(self) -> None:
+        self._write()
+        self._truncate()
+        auditlog.head_path(self.path).unlink()
+        result = auditlog.verify(self.path, expect_count=4)
+        self.assertFalse(result.ok)
+        self.assertIn("expected 4 entries", result.problems[0].reason)
+
+
+class TestTheTreeCompilesWithoutWarnings(unittest.TestCase):
+    """An invalid escape in a docstring is a SyntaxWarning now and a
+    SyntaxError from Python 3.15.
+
+    It shipped in `split_command`, where a heredoc turned `C:\\\\Python` into a
+    live escape. Cached bytecode hides it from everyone who has already run the
+    package once, so the only people who see it are the ones installing for the
+    first time -- and eventually the package simply will not import.
+    """
+
+    def test_no_module_compiles_with_a_syntax_warning(self) -> None:
+        import warnings
+
+        offenders = []
+        for path in sorted(list((ROOT / "src").rglob("*.py"))
+                           + list((ROOT / "tests").rglob("*.py"))):
+            if "__pycache__" in path.parts:
+                continue
+            source = path.read_text(encoding="utf-8")
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                try:
+                    compile(source, str(path), "exec")
+                except SyntaxError as exc:
+                    offenders.append(f"{path.name}: {exc}")
+                    continue
+            for warning in caught:
+                if issubclass(warning.category, SyntaxWarning):
+                    offenders.append(f"{path.name}:{warning.lineno}: {warning.message}")
+        self.assertEqual([], offenders,
+                         "modules that do not compile cleanly:\n  "
+                         + "\n  ".join(offenders))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
