@@ -181,7 +181,8 @@ def _collect_probe(out: "Collected", args: argparse.Namespace) -> None:
         local = [s for s in launchable if s.transport == "stdio"]
         if local and not args.no_stdio_probe:
             print("mcp-pin: --probe launches these servers as local "
-                  "processes: " + ", ".join(sorted(s.identity() for s in local)),
+                  "processes: " + ", ".join(sorted(s.identity() for s in local))
+                  + " -- this is a pin, not a sandbox",
                   file=sys.stderr)
     for identity, reason in out.probe_skipped:
         out.errors.append(f"not probed: {identity} -- {reason}")

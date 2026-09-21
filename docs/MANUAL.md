@@ -1227,7 +1227,16 @@ MCPA015 works without it.
 
 The tradeoff is unavoidable — tool descriptions are the most useful thing to look at, and
 there's no way to read them from a STDIO server without running it. If that's not acceptable
-where you are, probe in a sandbox.
+where you are, probe in a sandbox. The workflow this trusts, and the one the first screen
+now leads with:
+
+```
+scan --safe → isolate (container, VM, disposable machine) → approve --probe → commit the lock → wrap or gateway in the path
+```
+
+Not: download a server, probe it on the workstation, now it is trusted. Pinning is not
+sandboxing. `--probe` and `guard` run the child; confine that child with the OS. The lock
+is one layer, next to least-privilege credentials and server-side authorization.
 
 ## What it doesn't do
 
@@ -1285,7 +1294,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1151 tests, stdlib unittest, nothing to install.
+1152 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

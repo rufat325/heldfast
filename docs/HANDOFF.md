@@ -321,6 +321,15 @@ Read this file and `docs/GUARANTEES.md` instead.
     `--safe` vs `--probe`, the audit log and the mutation catalog already
     cover the pieces of that note that belong here.
 
+36. ~~The first screen taught "probe on this machine, now it is trusted".~~
+    Done. A review that liked the kernel still would not put this between
+    every MCP server and credentials, because pinning is not sandboxing and
+    `--probe` launches the child. That was already in GUARANTEES. The README
+    led with `approve --probe` anyway. The first screen is now
+    `scan --safe → isolate → approve --probe → commit → wrap`, `--probe`
+    says "not a sandbox" on stderr, and the Action example is the identity
+    merge rather than a SHA from before it. Do not implement a sandbox.
+
 ## Lessons that cost something
 
 Kept in the tracked file rather than in local notes, because every one of them
