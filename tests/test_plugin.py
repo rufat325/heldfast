@@ -39,7 +39,7 @@ class TestPreToolUse(unittest.TestCase):
     def test_unknown_tool_is_denied(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             lock = {
-                "version": 1,
+                "version": 2,
                 "servers": {
                     "claude-code:files": {
                         "name": "files",
@@ -62,7 +62,7 @@ class TestPreToolUse(unittest.TestCase):
     def test_pinned_tool_is_allowed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             lock = {
-                "version": 1,
+                "version": 2,
                 "servers": {
                     "claude-code:files": {
                         "name": "files",

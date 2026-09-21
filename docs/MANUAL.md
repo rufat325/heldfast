@@ -356,6 +356,22 @@ variables it withheld, on stderr, per server. Declare it in that server's `env`,
 `--share-env NAME` to give it to all of them, or `--no-isolate-env` to restore the old
 behaviour entirely.
 
+**`wrap` is the other half, and its default is the opposite way round.** `guard`/`wrap`
+took a command rather than a config entry and launched it with no environment of its own at
+all, so the wrapped server received everything this process had. It now builds the child's
+environment the same way, but full isolation is opt-in — `--isolate-env`, with
+`--share-env NAME` alongside it. The asymmetry is deliberate: a `wrap` invocation has no
+declared `env` block to read a server's own token out of, so isolating by default would
+withhold the credential an already-working server reads from the shell. A boundary that
+breaks working servers is a boundary people remove.
+
+What is *not* optional on either path is mcp-pin's own variables. `MCP_PIN_LOG_KEY` is
+never handed to a server, under any setting: it is what makes the audit chain a MAC rather
+than a hash, and the server being wrapped is exactly the adversary that key is aimed at. A
+server holding it can drop an entry and recompute the rest, which is the single property
+keying was added to provide. `guard` prints which posture is in force on startup, so
+"whose environment is this server running in" is on screen rather than inferred.
+
 ### A ceiling on calls (`--max-calls`)
 
 ```bash
@@ -1294,7 +1310,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1178 tests, stdlib unittest, nothing to install.
+1195 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

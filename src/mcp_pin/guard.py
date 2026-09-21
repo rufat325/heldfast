@@ -165,6 +165,9 @@ class Guard:
         # Names of lock entries this server could be, when the name alone is
         # not enough to tell. Set by _resolve_entry().
         self.ambiguous: list[str] = []
+        # Set by _resolve_entry when the lock entry covers more than one
+        # server and therefore speaks for none of them.
+        self.conflict: list[str] = []
         self._locked_tools = self._load_locked_tools()
         # Distinct from self.policy, which is the block/strip/warn mode for
         # tool *definitions*. This one constrains tool *arguments*.
@@ -254,17 +257,31 @@ class Guard:
 
         # An explicit client:name wins outright.
         if ":" in self.server_name and self.server_name in entries:
-            return entries[self.server_name]
+            return self._unless_conflicted(entries[self.server_name])
 
         matches = {key: value for key, value in entries.items()
                    if value.get("name") == self.server_name}
         if not matches:
             return None
         if len(matches) == 1:
-            return next(iter(matches.values()))
+            return self._unless_conflicted(next(iter(matches.values())))
 
         self.ambiguous = sorted(matches)
         return None
+
+    def _unless_conflicted(self, entry: dict[str, Any]) -> dict[str, Any] | None:
+        """None when this entry stands for more than one server.
+
+        `approve` writes a `conflict` list rather than letting one server's
+        approval overwrite another's under the same client:name. There is no
+        answer to "was this tool approved" for such an entry, so it enforces
+        nothing and the tool policy treats the server as unapproved.
+        """
+        conflict = entry.get("conflict")
+        if isinstance(conflict, list) and conflict:
+            self.conflict = [str(c) for c in conflict]
+            return None
+        return entry
 
     def _load_locked_tools(self) -> dict[str, str] | None:
         """Approved name -> fingerprint, or None when the server is unknown."""
@@ -362,6 +379,11 @@ class Guard:
                 return "deny", (f"{self.server_name!r} matches "
                                 f"{len(self.ambiguous)} lock entries; pass "
                                 f"--name client:name to say which")
+            if self.conflict:
+                return "deny", (f"the lockfile entry for {self.server_name!r} "
+                                f"covers {len(self.conflict)} different server "
+                                f"definitions, so it cannot say which was "
+                                f"approved; re-run `mcp-pin approve`")
             return "deny", "server is not in the lockfile"
 
         locked = self._locked_tools.get(tool.name)
@@ -1221,11 +1243,41 @@ def _announce_posture(guard: Guard, name: str, lock_path: Path,
                   f"(policy={policy})")
 
 
-def _launch(argv: list[str]) -> subprocess.Popen | None:
+def _child_env(share: set[str] | None, isolate: bool) -> tuple[dict[str, str], list[str]]:
+    """The environment the wrapped server gets, and what was kept back.
+
+    `guard` wraps an argv rather than a config entry, so there is no declared
+    `env` block to honour -- which is why full isolation is opt-in here and
+    the default in `gateway`. Turning it on by default would withhold the
+    token an already-working server reads from the operator's shell, and a
+    boundary that breaks working servers is a boundary people remove.
+
+    What is *not* optional is this tool's own variables. The child never sees
+    `MCP_PIN_LOG_KEY` under either setting: the server being wrapped is the
+    adversary the audit chain's key is aimed at.
+    """
+    from .childenv import build
+    return build(None, share=share, isolate=isolate)
+
+
+def _announce_env(guard: Guard, withheld: list[str], isolate: bool) -> None:
+    from .childenv import notable
+
+    if isolate:
+        secrets = notable(withheld)
+        guard.log(f"child environment: isolated, {len(withheld)} variable(s) withheld"
+                  + (f" including {', '.join(secrets[:5])}" if secrets else ""))
+        return
+    guard.log("child environment: inherited. The wrapped server receives every "
+              "variable this process has, including credentials meant for other "
+              "servers. Pass --isolate-env to withhold them.")
+
+
+def _launch(argv: list[str], env: dict[str, str] | None = None) -> subprocess.Popen | None:
     try:
         return subprocess.Popen(
             argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
-            text=True, encoding="utf-8", errors="replace", bufsize=1,
+            env=env, text=True, encoding="utf-8", errors="replace", bufsize=1,
             preexec_fn=posix_preexec(),
         )
     except OSError as exc:
@@ -1469,7 +1521,8 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         deny_roots: bool = False, result_policy: str = "annotate",
         log_path: Path | None = None, allow_unapproved: bool = False,
         dry_run: bool = False, require_integrity: bool = False,
-        sign_command: str | None = None, lock_was_explicit: bool = True) -> int:
+        sign_command: str | None = None, lock_was_explicit: bool = True,
+        share_env: set[str] | None = None, isolate_env: bool = False) -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("mcp-pin guard: no server command given", file=sys.stderr)
@@ -1496,9 +1549,17 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         print(f"mcp-pin guard: {reason}", file=sys.stderr)
         return 2
 
-    proc = _launch(argv)
+    env, withheld = _child_env(share_env, isolate_env)
+    _announce_env(guard, withheld, isolate_env)
+
+    proc = _launch(argv, env)
     if proc is None:
         return 2
+    return _proxy(proc, guard, trail)
+
+
+def _proxy(proc: subprocess.Popen, guard: Guard, trail: AuditLog | None) -> int:
+    """Pump both directions until the child goes away. Returns its status."""
     # Tie the server's lifetime to ours. The finally block below handles a
     # normal exit, but if this process is killed outright it never runs, and a
     # server that ignores stdin close would be orphaned indefinitely.

@@ -234,7 +234,9 @@ Rules: [docs/rules.md](docs/rules.md). `mcp-pin explain MCPA015` prints one.
 - The cache check hashes the package-manager cache before spawn; a refetch
   after that check is outside what reading the disk can see.
 - A client that talks to the server beside wrap or gateway has no runtime
-  protection. MCPA032 reports the gap; it does not close it.
+  protection. MCPA032 reports the gap. On stdio nothing can close it, because
+  nothing is in the path; in Claude Code the plugin hook is a second call site
+  that does not need to be, and it refuses the call against the same lock.
 - Heuristics below 100% confidence say so. They are not proof.
 
 The longer argument — isolation, gateway, policy, logs, protocol surface —
@@ -249,7 +251,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1178 tests, stdlib unittest, nothing to install.
+1195 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable
