@@ -50,7 +50,7 @@ def unapproved_server(ctx: AuditContext) -> Iterable[Finding]:
                 "Review the server, then run `mcp-pin approve` to record it. An MCP server "
                 "nobody reviewed is the plain definition of shadow MCP."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0010"],
             tags=["drift", "shadow-mcp"],
         )
@@ -80,7 +80,7 @@ def unpinned_findings(servers: list) -> list[Finding]:
                 "Review the server, then run `mcp-pin approve` to record it. An MCP server "
                 "nobody reviewed is the plain definition of shadow MCP."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0010"],
             tags=["drift", "shadow-mcp"],
         ))
@@ -220,7 +220,7 @@ def command_drift(ctx: AuditContext) -> Iterable[Finding]:
                     "Confirm you made this change. A modified launch command means different "
                     "code runs on the next agent start, under the approval you gave the old one."
                 ),
-                server=s.name,
+                server=s.identity(),
                 atlas=["AML.T0010.001"],
                 tags=["drift"],
             )
@@ -413,7 +413,7 @@ def artifact_drift(ctx: AuditContext) -> Iterable[Finding]:
                     "editing a config somebody committed. Re-run `mcp-pin approve "
                     "--probe` once you have read the change."
                 ),
-                server=s.name,
+                server=s.identity(),
                 atlas=["AML.T0010.001"],
                 cwe=["CWE-494"],
                 tags=["drift", "supply-chain"],
@@ -505,7 +505,7 @@ def _integrity_finding(s: Any, key: str, detail: str, *,
             "intercepting the fetch. Confirm the publish before you accept "
             "it, then `mcp-pin approve --probe --yes`."
         ),
-        server=s.name,
+        server=s.identity(),
         atlas=["AML.T0010.001"],
         cwe=["CWE-494"],
         tags=["drift", "supply-chain"],
@@ -554,7 +554,7 @@ def integrity_unverified(ctx: AuditContext) -> Iterable[Finding]:
                     "that must not proceed unverified should pass "
                     "`--require-integrity`, which makes this HIGH."
                 ),
-                server=s.name,
+                server=s.identity(),
                 atlas=["AML.T0010.001"],
                 cwe=["CWE-494"],
                 tags=["drift", "supply-chain", "coverage"],

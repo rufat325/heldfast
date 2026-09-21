@@ -205,6 +205,25 @@ class TestWhatItReports(unittest.TestCase):
         row = status_mod.build(lock, [spec("alpha")], many)["servers"][0]
         self.assertLessEqual(len(row["findings"]), 4)
 
+    def test_two_githubs_do_not_share_findings(self) -> None:
+        """The status page used to look up findings by the bare name, so a
+        finding on cursor:github showed up on claude-code:github too."""
+        cursor = ServerSpec(name="github", source="/c", client="cursor",
+                            transport="stdio", command="node")
+        claude = ServerSpec(name="github", source="/d", client="claude-code",
+                            transport="stdio", command="node")
+        lock = Lock()
+        lock.record([cursor, claude], [], [])
+        data = status_mod.build(
+            lock, [cursor, claude],
+            [finding("MCPA015", "cursor:github"),
+             finding("MCPA010", "claude-code:github", Severity.HIGH)])
+        by = {row["identity"]: row for row in data["servers"]}
+        self.assertEqual(["MCPA015"],
+                         [f["rule_id"] for f in by["cursor:github"]["findings"]])
+        self.assertEqual(["MCPA010"],
+                         [f["rule_id"] for f in by["claude-code:github"]["findings"]])
+
 
 class TestTheAuditTrail(unittest.TestCase):
     def test_an_intact_trail_is_reported_as_intact(self) -> None:

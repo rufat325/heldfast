@@ -132,7 +132,7 @@ def dangerous_env(ctx: AuditContext) -> Iterable[Finding]:
                     "this way, and none of 196 real configs sets it. If you did not "
                     "add this line, the config is running code nobody reviewed."
                 ),
-                server=server.name,
+                server=server.identity(),
                 atlas=["AML.T0011"],
                 cwe=["CWE-426", "CWE-94"],
                 tags=["environment", "execution"],
@@ -155,7 +155,7 @@ def dangerous_env(ctx: AuditContext) -> Iterable[Finding]:
                     "-- a heap size is fine -- and --require/--import there is a way to "
                     "run code without it appearing in the command."
                 ),
-                server=server.name,
+                server=server.identity(),
                 atlas=["AML.T0011"],
                 cwe=["CWE-94"],
                 tags=["environment", "execution"],
@@ -177,7 +177,7 @@ def dangerous_env(ctx: AuditContext) -> Iterable[Finding]:
                     "Name the binary by absolute path in `command` instead, so what "
                     "runs is visible in the line you review."
                 ),
-                server=server.name,
+                server=server.identity(),
                 atlas=["AML.T0011"],
                 cwe=["CWE-426"],
                 tags=["environment", "execution"],
@@ -200,7 +200,7 @@ def dangerous_env(ctx: AuditContext) -> Iterable[Finding]:
                     "Remove it and fix the certificate instead. If a corporate root is "
                     "the reason, add that root rather than accepting every certificate."
                 ),
-                server=server.name,
+                server=server.identity(),
                 atlas=["AML.T0011"],
                 cwe=["CWE-295"],
                 tags=["environment", "transport"],
@@ -221,7 +221,7 @@ def dangerous_env(ctx: AuditContext) -> Iterable[Finding]:
                     "Install the root in the system trust store, where it is visible to "
                     "everything, rather than substituting one for this process."
                 ),
-                server=server.name,
+                server=server.identity(),
                 atlas=["AML.T0011"],
                 cwe=["CWE-295"],
                 confidence=0.85,
@@ -243,7 +243,7 @@ def dangerous_env(ctx: AuditContext) -> Iterable[Finding]:
                     "A proxy set machine-wide is ordinary; one pinned into a server's "
                     "config is worth confirming, because only that server uses it."
                 ),
-                server=server.name,
+                server=server.identity(),
                 atlas=["AML.T0011"],
                 cwe=["CWE-319"],
                 confidence=0.7,
@@ -293,7 +293,7 @@ def aliased_credential(ctx: AuditContext) -> Iterable[Finding]:
                 f"environment isolation cannot refuse, because a declaration is what "
                 f"isolation honours."
             ),
-            server=server.name,
+            server=server.identity(),
             atlas=["AML.T0024", "AML.T0057"],
             cwe=["CWE-522"],
             confidence=0.9,

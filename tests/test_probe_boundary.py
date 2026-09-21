@@ -138,6 +138,31 @@ class TestARuleCrashDoesNotLaunch(unittest.TestCase):
         self.assertEqual(1, len(skipped))
         self.assertIn("static pre-pass failed", skipped[0][1])
 
+    def test_a_finding_on_one_github_does_not_skip_the_other(self) -> None:
+        """The gate looked up blockers by the bare name, so a HIGH finding on
+        cursor:github also blocked claude-code:github -- or, after a refactor
+        the other way, launched both."""
+        from unittest.mock import patch
+        from mcp_pin.cli import Collected, _gate_servers
+        from mcp_pin.findings import Finding, Location, Severity
+        from mcp_pin.model import ServerSpec
+
+        cursor = ServerSpec(name="github", source="/c", client="cursor",
+                            transport="stdio", command="node")
+        claude = ServerSpec(name="github", source="/d", client="claude-code",
+                            transport="stdio", command="node")
+        out = Collected()
+        out.servers = [cursor, claude]
+        blocker = Finding(
+            rule_id="MCPA002", title="pipe", severity=Severity.CRITICAL,
+            location=Location(path="/c", line=1), evidence="e", remediation="r",
+            server=cursor.identity(),
+        )
+        with patch("mcp_pin.cli.run_rules", return_value=[blocker]):
+            launchable, skipped = _gate_servers(out, Severity.HIGH)
+        self.assertEqual([claude], launchable)
+        self.assertEqual([cursor.identity()], [ident for ident, _ in skipped])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

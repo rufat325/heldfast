@@ -57,7 +57,15 @@ class Suppression:
             return False
         if self.server == "*":
             return True
-        return bool(f.server) and fnmatch.fnmatch(f.server, self.server)
+        if not f.server:
+            return False
+        if fnmatch.fnmatch(f.server, self.server):
+            return True
+        # Findings are tagged client:name. An ignore line that names the
+        # server still matches; one that names the identity matches only that
+        # client.
+        name = f.server.split(":", 1)[-1]
+        return name != f.server and fnmatch.fnmatch(name, self.server)
 
 
 def parse_ignore_file(path: Path) -> tuple[list[Suppression], list[str]]:

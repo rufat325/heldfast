@@ -165,7 +165,7 @@ def shell_invocation(ctx: AuditContext) -> Iterable[Finding]:
             location=_server_location(s),
             evidence=evidence,
             remediation=remediation,
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0011"],
             cwe=["CWE-78"],
             tags=["execution", "stdio"],
@@ -189,7 +189,7 @@ def curl_pipe_shell(ctx: AuditContext) -> Iterable[Finding]:
                 "Never pipe a network fetch into an interpreter at server start. Install the "
                 "server from a pinned package or a vendored artifact whose hash you verify."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0010.001", "AML.T0011"],
             cwe=["CWE-494"],
             tags=["execution", "supply-chain"],
@@ -291,7 +291,7 @@ def unpinned_package(ctx: AuditContext) -> Iterable[Finding]:
                 "resolution is the mechanism that turns a maintainer compromise into your "
                 "compromise with no action on your part."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0010.001"],
             cwe=["CWE-1357"],
             tags=["supply-chain"],
@@ -389,7 +389,7 @@ def typosquat(ctx: AuditContext) -> Iterable[Finding]:
                 f"{official!r}. If this package is a legitimate fork, pin it and record the "
                 "decision so future scans stop flagging it."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0010.001"],
             cwe=["CWE-1357"],
             tags=["supply-chain", "typosquat"],
@@ -501,7 +501,7 @@ def allowlist_bypass(ctx: AuditContext) -> Iterable[Finding]:
                     "argument that runs a command of the caller's choosing, so the "
                     "allowlist permits everything while appearing to permit little."
                 ),
-                server=s.name,
+                server=s.identity(),
                 atlas=["AML.T0053"],
                 cwe=["CWE-183"],
                 tags=["execution", "allowlist"],

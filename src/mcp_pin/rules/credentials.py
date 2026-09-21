@@ -147,7 +147,7 @@ def plaintext_credentials(ctx: AuditContext) -> Iterable[Finding]:
                     "was ever committed or synced, rotate it -- the config file is not a "
                     "secret store and is read by every agent on the machine."
                 ),
-                server=s.name,
+                server=s.identity(),
                 atlas=["AML.T0055"],
                 cwe=["CWE-798", "CWE-312"],
                 confidence=confidence,

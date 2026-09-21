@@ -61,7 +61,7 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-COMPILES-CLEAN | Every module under `src/` and `tests/` compiles with no `SyntaxWarning`. An invalid escape is a warning today and a `SyntaxError` from Python 3.15, and cached bytecode hides it from everyone but a first-time installer. | `tests/test_auditlog.py`, `.github/workflows/ci.yml` |
 | T-PROBE-GATE | A rule exception in the static pre-pass launches nothing. | `tests/test_probe_boundary.py`, `tests/test_mutation.py` |
 | T-DRIFT-ID | Two lock entries sharing a bare name are not compared against the first match. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
-| T-PROBE-ID | Probe observations are keyed by `client:name`. Two servers that share a bare name keep separate tools, instructions and probe status in the lockfile; a definition from one namesake cannot become the other's baseline. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
+| T-PROBE-ID | Subject IDs are `client:name` from probe through findings, the probe gate, the status page and the lockfile. Two servers that share a bare name keep separate tools, instructions, findings and probe status; a definition or a finding from one namesake cannot become the other's. | `tests/test_mcp_pin.py`, `tests/test_status.py`, `tests/test_probe_boundary.py`, `tests/test_mutation.py` |
 | T-TYPES | `policy.py`, `lockfile.py`, `model.py`, `findings.py`, `pkgcache.py`, `auditlog.py`, `confusables.py` and `digest.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
 | T-SIZE | Functions in `cli.py` and `guard.py` fit on one page (60 lines). | `tests/test_function_size.py` |
 | T-WHEEL | The published wheel has no runtime dependencies. | `.github/workflows/release.yml` |

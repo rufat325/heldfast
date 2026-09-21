@@ -11,7 +11,7 @@ from . import __version__
 from .discovery import discover_config_files
 from .findings import Finding, Severity
 from .lockfile import Lock, resolve_lock_path
-from .model import ServerSpec, SkillSpec, ToolSpec
+from .model import ServerSpec, SkillSpec, ToolSpec, observed_for
 from .parsers import discover_skills, parse_config
 from .probe import probe
 from .sourcescan import scan_source_tree
@@ -92,7 +92,7 @@ def _gate_servers(out: "Collected", gate) -> tuple[list, list]:
 
     launchable, skipped = [], []
     for server in out.servers:
-        blocker = worst.get(server.name)
+        blocker = observed_for(worst, server, out.servers)
         if blocker is None:
             launchable.append(server)
             continue

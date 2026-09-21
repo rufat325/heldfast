@@ -113,6 +113,29 @@ def _integrity_state(entry: dict) -> str:
     return "unverified"
 
 
+def _name_owners(servers: list, lock: Lock) -> dict[str, set[str]]:
+    """Bare name -> the identities that use it. A name two clients share
+    is not unique even if it appears once in the config and once in the lock."""
+    owners: dict[str, set[str]] = {}
+    for spec in servers:
+        owners.setdefault(spec.name, set()).add(spec.identity())
+    for key, entry in lock.servers.items():
+        if isinstance(entry, dict):
+            owners.setdefault(str(entry.get("name") or key), set()).add(key)
+    return owners
+
+
+def _findings_for(by: dict[str, list[Finding]], identity: str, name: str,
+                  owners: dict[str, set[str]]) -> list[Finding]:
+    """Findings tagged for this server. Identity first; a bare name only
+    when it is unique. Two clients both called github are not one row."""
+    if identity in by:
+        return by[identity]
+    if len(owners.get(name, ())) != 1:
+        return []
+    return by.get(name, [])
+
+
 def build(lock: Lock, servers: list, findings: list[Finding],
           log_path: Path | None = None, probed: bool = False) -> dict[str, Any]:
     """The whole picture as data, so the renderer stays dumb."""
@@ -124,6 +147,7 @@ def build(lock: Lock, servers: list, findings: list[Finding],
     configured = {s.identity(): s for s in servers}
     fronting = fronting_clients(servers)
     rows: list[ServerStatus] = []
+    owners = _name_owners(servers, lock)
 
     for key, entry in sorted(lock.servers.items()):
         if not isinstance(entry, dict):
@@ -145,7 +169,7 @@ def build(lock: Lock, servers: list, findings: list[Finding],
             # only prompts or resources has a real baseline pinned.
             pins_nothing=not any(entry.get(k) for k in
                                  ("tools", "prompts", "resources", "instructions")),
-            findings=by_name.get(name, []),
+            findings=_findings_for(by_name, key, name, owners),
         ))
 
     # Configured but never approved: the case the lockfile cannot show, and
@@ -160,7 +184,7 @@ def build(lock: Lock, servers: list, findings: list[Finding],
             # as unapproved would flag the one entry that is doing the work.
             continue
         rows.append(ServerStatus(identity=key, name=spec.name, configured=True,
-                                 findings=by_name.get(spec.name, [])))
+                                 findings=_findings_for(by_name, key, spec.name, owners)))
 
     trail: dict[str, Any] = {}
     if log_path is not None and log_path.exists():
