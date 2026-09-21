@@ -229,13 +229,117 @@ class TestSchemelessDestinations(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertFalse(allows(self.RULES, "fetch", {"url": value}))
 
-    def test_a_comment_inside_a_keyword_is_not_a_bypass(self) -> None:
-        """`SEL/**/ECT 1` reads as SELECT here and as `SEL ECT` to an engine,
-        because a comment is a token separator rather than nothing. The policy
-        allows a string the database will reject, which costs nothing. The
-        variant that *does* execute is `/*! */`, and that one is refused."""
-        self.assertTrue(allows({"sql": ["SELECT"]}, "query",
-                               {"sql": "SEL/**/ECT 1"}))
+    def test_a_comment_inside_a_keyword_is_refused(self) -> None:
+        """`SEL/**/ECT 1` reads as `SEL` here and as `SEL ECT` to an engine,
+        because a comment is a token separator rather than nothing. It was
+        allowed on the grounds that the database would reject it anyway.
+
+        It is refused now, and that is a consequence rather than a new
+        opinion: a value under a parameter named `sql` goes through
+        `sql_is_allowed` whatever it looks like, and `SEL` is not a permitted
+        operation. Refusing a string no engine will run costs nothing in this
+        direction either, and the gate that used to skip it is the same gate
+        that skipped a MySQL `#` comment."""
+        self.assertFalse(allows({"sql": ["SELECT"]}, "query",
+                                {"sql": "SEL/**/ECT 1"}))
+
+
+class TestSqlTheGateNeverLookedAt(unittest.TestCase):
+    """`looks_like_sql` was the fail-open, not the check behind it.
+
+    The rule only ran `if looks_like_sql(value)`, and that wants a bare
+    keyword after optional whitespace and `--` or slash-star comments. Every
+    other opening meant the value was not SQL as far as the policy was
+    concerned, so a `sql: ["SELECT"]` rule did not run at all -- and
+    `sql_is_allowed`, which already refuses an unparseable statement, never
+    saw it.
+
+    `paths` matched on the parameter name as well as the shape; that is the
+    `.env` fix. `domains` refused a named parameter that resolved to no host.
+    The SQL constraint had neither, and it is the one whose failure hands an
+    engine a statement.
+    """
+
+    RULES = {"sql": ["SELECT"]}
+
+    def test_a_mysql_line_comment_opens_the_statement(self) -> None:
+        """`#` is a comment to end of line in MySQL and MariaDB. What follows
+        it is a DROP, under a policy that permits only SELECT."""
+        for sql in ("# note\nDROP TABLE users",
+                    "#\nDELETE FROM t",
+                    "   # x\n  DROP TABLE users"):
+            with self.subTest(sql=sql):
+                self.assertFalse(allows(self.RULES, "query", {"sql": sql}))
+
+    def test_punctuation_before_the_keyword(self) -> None:
+        for sql in (";DROP TABLE users",
+                    "(SELECT 1) UNION SELECT load_file('/etc/passwd')",
+                    ")DROP TABLE users"):
+            with self.subTest(sql=sql):
+                self.assertFalse(allows(self.RULES, "query", {"sql": sql}))
+
+    def test_a_named_parameter_is_checked_whatever_it_holds(self) -> None:
+        """The rule `paths` already applies: the schema's name for a parameter
+        says what it holds, and the text does not get a vote."""
+        for name in ("sql", "query", "statement", "expression"):
+            with self.subTest(name=name):
+                self.assertFalse(allows(self.RULES, "query",
+                                        {name: "DROP TABLE users"}))
+
+    def test_a_named_parameter_nested_in_an_object(self) -> None:
+        self.assertFalse(allows(self.RULES, "query",
+                                {"opts": {"query": "DROP TABLE users"}}))
+
+    def test_an_unnamed_parameter_holding_prose_still_passes(self) -> None:
+        """Not a filter on every string in the call. A parameter that neither
+        looks like SQL nor is named like it stays out of it."""
+        self.assertTrue(allows(self.RULES, "query",
+                               {"sql": "SELECT 1", "note": "ran the report"}))
+
+
+class TestBackslashEscapesDesyncTheLiteralScanner(unittest.TestCase):
+    r"""MySQL reads `\'` as an escaped quote; the scanner did not.
+
+    That single character put the checker's idea of where a literal ends out
+    of step with the engine's. After it the quote state is inverted, so
+    everything the engine reads as code the checker reads as the inside of a
+    string, and both documented refusals walked straight through.
+
+    The fix is not to adopt MySQL's reading. PostgreSQL with
+    standard_conforming_strings and SQLite read the backslash literally, and
+    picking either dialect leaves the hole open for the other. Both readings
+    are tried and a violation under either one refuses.
+    """
+
+    RULES = {"sql": ["SELECT"]}
+
+    def test_a_stacked_statement_hidden_behind_an_escape(self) -> None:
+        for sql in (r"SELECT 1 WHERE x='\''; DROP TABLE users; -- '",
+                    r"SELECT a FROM t WHERE b='\''; DELETE FROM t; -- '"):
+            with self.subTest(sql=sql):
+                self.assertFalse(allows(self.RULES, "query", {"sql": sql}))
+
+    def test_into_outfile_hidden_behind_an_escape(self) -> None:
+        sql = r"SELECT a FROM t WHERE b='\'' INTO OUTFILE '/var/www/s.php' -- '"
+        self.assertFalse(allows(self.RULES, "query", {"sql": sql}))
+
+    def test_the_other_dialect_is_covered_too(self) -> None:
+        r"""Read with backslash-as-escape this is one statement. Read the
+        PostgreSQL way the literal ends at `'a\'` and the DROP is code, so
+        only checking the MySQL reading would reopen the hole facing the
+        other way."""
+        sql = r"SELECT 'a\' ; DROP TABLE users ; --'"
+        self.assertFalse(allows(self.RULES, "query", {"sql": sql}))
+
+    def test_a_literal_backslash_is_not_by_itself_a_refusal(self) -> None:
+        """Over-refusing every Windows path in a WHERE clause would be its own
+        outage. A backslash that changes neither the statement count nor what
+        the statement writes is left alone."""
+        for sql in (r"SELECT * FROM t WHERE p = 'C:\temp\x'",
+                    r"SELECT * FROM t WHERE p LIKE 'a\_b'",
+                    "SELECT a FROM t WHERE b = 'into outfile'"):
+            with self.subTest(sql=sql):
+                self.assertTrue(allows(self.RULES, "query", {"sql": sql}))
 
 
 if __name__ == "__main__":

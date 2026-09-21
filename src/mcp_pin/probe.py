@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .childenv import build as build_child_env
+from .fetch import urlopen as fetch_url
 from .lifetime import bind_child, posix_preexec
 from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec
 
@@ -409,7 +410,9 @@ def post_rpc(url: str, headers: dict[str, str], payload: dict[str, Any],
     req.add_header("Accept", "application/json, text/event-stream")
     for k, v in headers.items():
         req.add_header(k, v)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 - user-supplied URL by design
+    # Not urllib's default opener: that one follows a redirect with the
+    # Authorization header still attached, and onto cleartext. See fetch.py.
+    with fetch_url(req, timeout) as resp:  # noqa: S310 - user-supplied URL by design
         raw = resp.read().decode("utf-8", errors="replace")
         got = {k: v for k, v in resp.headers.items()}
     raw = raw.strip()

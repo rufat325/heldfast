@@ -19,13 +19,15 @@ reaches launch time rather than stopping at scan time.
 
 from __future__ import annotations
 
+import base64
 import json
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.error import URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
+from .fetch import urlopen
 from .rules.execution import _FLOATING, extract_package, split_package
 
 TIMEOUT = 8.0
@@ -89,6 +91,33 @@ def lookup(server: Any) -> dict[str, str]:
     return published(server).hashes
 
 
+def _sri_from_shasum(shasum: str) -> str:
+    """`dist.shasum` as an SRI string, which means base64 and not hex.
+
+    Packages published before npm 5 carry only `dist.shasum`. It is hex; SRI
+    digests are base64, and npm's own cache stores this same hash in the
+    base64 form. Recording the hex produced a value that could never match
+    the cache, so `pkgcache` compared the two, found a shared `sha1`
+    algorithm, saw different text and reported `changed` -- which refuses the
+    launch unconditionally. The package had not moved by one byte.
+
+    sha1 is a weak pin and this does not pretend otherwise. MCPA036 exists for
+    a registry, mirror or caching proxy serving different bytes for a name,
+    and a chosen-prefix sha1 collision is within that adversary's reach. It is
+    recorded because it is what npm published for this version, not because it
+    settles the question.
+    """
+    if not shasum:
+        return ""
+    try:
+        return "sha1-" + base64.b64encode(bytes.fromhex(shasum)).decode("ascii")
+    except ValueError:
+        # Not hex, so not a shasum this understands. Saying nothing is right:
+        # `published` turns an empty hash into UNREACHABLE, which is reported
+        # as unverifiable rather than as a pass.
+        return ""
+
+
 def _npm(name: str, version: str) -> Published:
     enc = quote(name, safe="@")
     data = get_json(f"https://registry.npmjs.org/{enc}/{quote(version, safe='')}")
@@ -103,8 +132,7 @@ def _npm(name: str, version: str) -> Published:
         urls[key] = tarball
     integrity = str(dist.get("integrity") or "")
     if not integrity:
-        shasum = str(dist.get("shasum") or "")
-        integrity = f"sha1-{shasum}" if shasum else ""
+        integrity = _sri_from_shasum(str(dist.get("shasum") or ""))
     if not integrity:
         return Published(UNREACHABLE, urls=urls,
                          detail=f"npm published no integrity hash for {name}@{version}")
@@ -121,9 +149,7 @@ def _pypi(name: str, version: str) -> Published:
         return Published(UNREACHABLE,
                          detail=f"pypi.org returned no files for {name}=={version}")
     key = f"pypi:{name}=={version}"
-    for item in urls:
-        if not isinstance(item, dict):
-            continue
+    for item in _installable_first(urls):
         digests = item.get("digests") if isinstance(item.get("digests"), dict) else {}
         sha = str(digests.get("sha256") or "")
         if not sha:
@@ -133,3 +159,23 @@ def _pypi(name: str, version: str) -> Published:
         return Published(ANSWERED, {key: f"sha256-{sha}"}, found)
     return Published(UNREACHABLE,
                      detail=f"no file on PyPI for {name}=={version} publishes a sha256")
+
+
+def _installable_first(urls: list[Any]) -> list[dict[str, Any]]:
+    """The release's files, wheels before sdists.
+
+    A release carries every distribution PyPI holds for it, and the order is
+    the API's, not a preference. `uvx` and `pipx` install a wheel when one
+    fits, so recording whichever file happened to come first could pin the
+    sdist while the wheel is what runs -- and then `pkgcache` looks up a URL
+    the machine never fetched and answers `absent`, which under
+    `--require-integrity` refuses the launch.
+
+    This does not attempt to pick the *right* wheel: platform tags, ABI and
+    Python version all decide that, and this has no business resolving it
+    offline. Preferring a wheel is the part that is knowable here, and it is
+    the part that was wrong.
+    """
+    files = [item for item in urls if isinstance(item, dict)]
+    wheels = [f for f in files if str(f.get("packagetype") or "") == "bdist_wheel"]
+    return wheels + [f for f in files if f not in wheels]

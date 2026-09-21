@@ -15,6 +15,19 @@ from urllib.parse import parse_qs, urlsplit
 from ..findings import Finding, Location, Severity
 from .base import AuditContext, rule
 
+# `host.docker.internal` is in this set and is NOT loopback. It resolves to
+# the container's gateway, so the traffic leaves the container and crosses the
+# bridge network, where anything else on that bridge can see it. It is here
+# because a server in a container reaching a tool on the host is the ordinary
+# way people run this, and treating it as internet-facing made MCPA007 fire on
+# every containerised setup -- a finding that fires on everyone, forever, is a
+# finding people switch off.
+#
+# What it costs, stated rather than left to be discovered: MCPA007 does not
+# report cleartext to that host, and `gateway` will front it over plain
+# `http://`. On a single-tenant Docker host that is a fair trade. On a shared
+# bridge with untrusted containers it is not, and there the server wants TLS
+# or a real loopback address.
 LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "0000:0000:0000:0000:0000:0000:0000:0001",
                   "host.docker.internal"}
 

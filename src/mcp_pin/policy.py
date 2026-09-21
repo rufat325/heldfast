@@ -241,20 +241,35 @@ def unmask_sql(value: str) -> str:
     return _MYSQL_EXEC_COMMENT.sub(r" \1 ", str(value or ""))
 
 
-def _without_literals(sql: str) -> str:
+def _without_literals(sql: str, *, backslash_escapes: bool) -> str:
     """The statement with quoted contents blanked out.
 
     Keyword matching has to ignore string literals or it reports the data
     rather than the query: `WHERE note = 'into outfile'` is a search for a
     phrase, not a write. Found by the precision case in the same commit that
     added the check.
+
+    `backslash_escapes` picks the dialect. It has to be a parameter rather
+    than a choice because the two readings disagree about where a literal
+    ends, and being wrong in either direction is a hole -- see the comment on
+    `_DIALECTS`. Callers ask both ways.
     """
-    out, quote = [], ""
+    out: list[str] = []
+    quote = ""
+    escaped = False
     for ch in str(sql or ""):
         if quote:
-            if ch == quote:
+            if escaped:
+                escaped = False
+                out.append(" ")
+            elif backslash_escapes and ch == "\\":
+                escaped = True
+                out.append(" ")
+            elif ch == quote:
                 quote = ""
-            out.append(" " if ch != quote else ch)
+                out.append(ch)
+            else:
+                out.append(" ")
         elif ch in "'\"`":
             quote = ch
             out.append(ch)
@@ -263,33 +278,69 @@ def _without_literals(sql: str) -> str:
     return "".join(out)
 
 
+# Whether a backslash escapes the next character inside a string literal.
+# MySQL and MariaDB say yes by default; PostgreSQL with
+# standard_conforming_strings (on since 9.1) and SQLite say no.
+#
+# There is no single right answer here, and picking one is a hole in the
+# direction of whichever engine was not picked. Reading `\'` as an escape
+# makes `SELECT 'a\' ; DROP TABLE t ; --'` one statement, which is true for
+# MySQL and false for PostgreSQL. Reading it as an ordinary character makes
+# `SELECT 1 WHERE x='\''; DROP TABLE t; -- '` one statement, which is true
+# for PostgreSQL and false for MySQL -- and that second one was live: the
+# scanner's idea of where the literal ended drifted out of step with the
+# engine's, and everything after the drift landed inside a string the engine
+# was never in. The stacked statement and the `INTO OUTFILE` both went past.
+#
+# So both readings are tried and a violation under either one refuses. That
+# over-refuses a literal that only one dialect accepts, which is the direction
+# this module says it errs in.
+_DIALECTS = (True, False)
+
+
 def sql_is_allowed(value: str, operations: list[str]) -> tuple[bool, str]:
     """(allowed, why not). Stacked statements are refused outright."""
     permitted = {op.lower() for op in operations}
     value = unmask_sql(value)
-    statements = [s for s in _split_statements(value) if s.strip()]
-    if len(statements) > 1:
-        return False, "more than one statement in a single argument"
+    for escapes in _DIALECTS:
+        statements = [s for s in _split_statements(value, backslash_escapes=escapes)
+                      if s.strip()]
+        if len(statements) > 1:
+            return False, "more than one statement in a single argument"
     match = _SQL_LEAD.match(value)
     if not match:
         return False, "no recognizable SQL statement"
     keyword = match.group(1).lower()
     if keyword not in permitted:
         return False, f"{keyword.upper()} is not a permitted operation"
-    if keyword == "select" and _SELECT_WRITES.search(_without_literals(value)):
+    if keyword == "select" and any(
+            _SELECT_WRITES.search(_without_literals(value, backslash_escapes=escapes))
+            for escapes in _DIALECTS):
         return False, ("SELECT ... INTO OUTFILE writes a file; permitting SELECT "
                        "permits reading, not writing")
     return True, ""
 
 
-def _split_statements(sql: str) -> list[str]:
-    """Split on semicolons that are not inside a string literal."""
-    out, current, quote = [], [], ""
+def _split_statements(sql: str, *, backslash_escapes: bool) -> list[str]:
+    r"""Split on semicolons that are not inside a string literal.
+
+    `backslash_escapes` picks the dialect, for the reason on `_DIALECTS`:
+    `\'` closes a literal in one reading and continues it in the other, and
+    a semicolon after that point is either a statement separator or ordinary
+    text depending on which reading the engine uses.
+    """
+    out: list[str] = []
+    current: list[str] = []
+    quote = ""
     index = 0
     while index < len(sql):
         char = sql[index]
         if quote:
             current.append(char)
+            if backslash_escapes and char == "\\" and index + 1 < len(sql):
+                current.append(sql[index + 1])
+                index += 2
+                continue
             if char == quote:
                 if index + 1 < len(sql) and sql[index + 1] == quote:
                     current.append(sql[index + 1])
@@ -450,7 +501,6 @@ class Policy:
                 f"arguments nest deeper than {exc.depth} levels; refusing "
                 f"rather than checking only part of them",
                 "depth", "")
-        values = [text for _, text in pairs]
 
         # Policy is hand-written, so it arrives malformed sooner or later --
         # a null left in a list, a string where a list belongs. Non-strings
@@ -509,15 +559,28 @@ class Policy:
 
         operations = entries(rule.get("sql"))
         if operations:
-            for value in values:
-                if looks_like_sql(value):
-                    ok, why = sql_is_allowed(value, operations)
-                    if not ok:
-                        return Decision(
-                            False,
-                            f"{why}; permitted here: "
-                            f"{', '.join(o.upper() for o in operations)}",
-                            "sql", value)
+            for name, value in pairs:
+                # By name as well as by shape, for the same reason `paths` is.
+                # `looks_like_sql` wants a bare keyword after optional
+                # whitespace and `--` or `/* */` comments, so anything else
+                # read as "not SQL" and the rule did not run at all: `# c`
+                # (a MySQL line comment), a leading `;`, a leading `(`. The
+                # gate was the fail-open, not the check behind it -- which
+                # already refuses an unparseable statement. A parameter the
+                # schema calls `sql` or `query` holds a statement whatever the
+                # text looks like, exactly as a `path` parameter holds a path.
+                named = bool(_SQL_PARAM.match(name))
+                if not (named or looks_like_sql(value)):
+                    continue
+                if not value.strip():
+                    continue
+                ok, why = sql_is_allowed(value, operations)
+                if not ok:
+                    return Decision(
+                        False,
+                        f"{why}; permitted here: "
+                        f"{', '.join(o.upper() for o in operations)}",
+                        "sql", value)
 
         return ALLOWED
 
