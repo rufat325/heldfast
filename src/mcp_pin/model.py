@@ -48,6 +48,35 @@ class ServerSpec:
         return f"{self.client}:{self.name}"
 
 
+def observed_for(bucket: dict, spec: "ServerSpec",
+                 servers: list["ServerSpec"]):
+    """The observations tagged for this server, or None.
+
+    Probe keys by `identity()`. Call sites that still tag with the bare name
+    are accepted only when that name is unique among `servers`. Two clients
+    both called github are not the same server -- looking up by name wrote
+    one of them's live tools into both lock entries.
+    """
+    ident = spec.identity()
+    if ident in bucket:
+        return bucket[ident]
+    if sum(1 for s in servers if s.name == spec.name) != 1:
+        return None
+    return bucket.get(spec.name)
+
+
+def config_anchors(servers: list["ServerSpec"]) -> dict[str, tuple[str, int]]:
+    """Map identity, and a unique bare name, to the declaring config."""
+    names = [s.name for s in servers]
+    out: dict[str, tuple[str, int]] = {}
+    for s in servers:
+        loc = (s.source, s.line)
+        out[s.identity()] = loc
+        if names.count(s.name) == 1:
+            out[s.name] = loc
+    return out
+
+
 @dataclass
 class ToolSpec:
     """A tool advertised by a server. Populated by probing or from the lock."""

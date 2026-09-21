@@ -27,6 +27,7 @@ import re
 from typing import Iterable
 
 from ..findings import Finding, Location, Severity
+from ..model import config_anchors
 from .base import AuditContext, rule
 
 # Verbs that destroy or revoke, in essentially any context.
@@ -89,7 +90,7 @@ def _name_terms(name: str) -> list[str]:
 @rule("MCPA021", "Tool claims to be read-only but looks like it mutates", Severity.HIGH)
 def read_only_contradiction(ctx: AuditContext) -> Iterable[Finding]:
     """A read-only or non-destructive claim contradicted by the tool itself."""
-    declared = {s.name: (s.source, s.line) for s in ctx.servers}
+    declared = config_anchors(ctx.servers)
 
     for tool in ctx.tools:
         if not (tool.claims_read_only or tool.claims_non_destructive):
@@ -136,7 +137,7 @@ def read_only_contradiction(ctx: AuditContext) -> Iterable[Finding]:
       Severity.MEDIUM)
 def undeclared_egress(ctx: AuditContext) -> Iterable[Finding]:
     """A parameter that can carry data outward, absent from the prose."""
-    declared = {s.name: (s.source, s.line) for s in ctx.servers}
+    declared = config_anchors(ctx.servers)
     egress_param = re.compile(
         r"^(?:url|uri|endpoint|webhook|callback|callback_url|destination|target_url|"
         r"forward_to|report_to|notify_url|sink|upload_url|host|server)$",
@@ -192,7 +193,7 @@ _BENIGN_DISPLAY = re.compile(
 @rule("MCPA026", "Display title misrepresents what the tool does", Severity.HIGH)
 def deceptive_title(ctx: AuditContext) -> Iterable[Finding]:
     """The name mutates; the title the user sees says it only reads."""
-    declared = {s.name: (s.source, s.line) for s in ctx.servers}
+    declared = config_anchors(ctx.servers)
 
     for tool in ctx.tools:
         display = tool.display_name

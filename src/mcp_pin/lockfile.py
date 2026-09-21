@@ -23,7 +23,7 @@ from typing import Any
 
 from .artifacts import artifact_digests
 from .model import (PromptSpec, ResourceSpec, ServerSpec, SkillSpec, ToolSpec,
-                    instructions_fingerprint)
+                    instructions_fingerprint, observed_for)
 
 # 2 changed the digest algorithm to RFC 8785 (JCS). Version 1 fingerprints
 # were written by Python's `json.dumps`, which the JavaScript checker could
@@ -239,23 +239,24 @@ class Lock:
             # server was launched and never replied -- and the second is worth
             # knowing: it is an approval covering a server that does not run.
             # Without this the coverage report had to guess, and guessed wrong.
-            if probe_status and s.name in probe_status:
-                entry["probe"] = probe_status[s.name]
-            if s.name in instructions:
-                text = instructions[s.name]
+            status = observed_for(probe_status or {}, s, servers)
+            if status is not None:
+                entry["probe"] = status
+            text = observed_for(instructions, s, servers)
+            if text:
                 entry["instructions"] = {
                     "fingerprint": instructions_fingerprint(text),
                     "preview": text[:160],
                     "length": len(text),
                 }
-            observed_prompts = prompts_by_server.get(s.name)
+            observed_prompts = observed_for(prompts_by_server, s, servers)
             if observed_prompts is not None:
                 entry["prompts"] = {
                     pr.name: {"fingerprint": pr.fingerprint(),
                               "description_preview": (pr.description or "")[:160]}
                     for pr in sorted(observed_prompts, key=lambda x: x.name)
                 }
-            observed_resources = resources_by_server.get(s.name)
+            observed_resources = observed_for(resources_by_server, s, servers)
             if observed_resources is not None:
                 entry["resources"] = {
                     rs.uri: {"fingerprint": rs.fingerprint(),
@@ -271,7 +272,7 @@ class Lock:
             carried = kept_policies.get(s.identity())
             if carried:
                 entry["policy"] = carried
-            observed = by_server.get(s.name)
+            observed = observed_for(by_server, s, servers)
             if observed is not None:
                 entry["tools"] = {
                     t.name: {

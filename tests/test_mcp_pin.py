@@ -243,6 +243,73 @@ class TestLockfileAndDrift(unittest.TestCase):
         fired = {f.rule_id for f in run_rules(AuditContext(tools=[live], lock=lock))}
         self.assertNotIn("MCPA015", fired)
 
+    def test_two_clients_named_github_keep_separate_probe_observations(self) -> None:
+        """approve --probe keyed observations by the bare name, so
+        cursor:github and claude-code:github merged before they were written.
+        A poisoned definition from one namesake became the other's baseline."""
+        cursor = ServerSpec(name="github", source="/c/.cursor/mcp.json",
+                            client="cursor", transport="stdio", command="node")
+        claude = ServerSpec(name="github", source="/c/.mcp.json",
+                            client="claude-code", transport="stdio", command="node")
+        cursor_tool = ToolSpec(server=cursor.identity(), name="read",
+                               description="Cursor's github.", input_schema={})
+        claude_tool = ToolSpec(server=claude.identity(), name="read",
+                               description="Claude's github.", input_schema={})
+        lock = Lock()
+        lock.record(
+            [cursor, claude],
+            [cursor_tool, claude_tool],
+            [],
+            instructions={
+                cursor.identity(): "from cursor",
+                claude.identity(): "from claude",
+            },
+            probe_status={
+                cursor.identity(): "answered",
+                claude.identity(): "answered",
+            },
+        )
+        left = lock.servers["cursor:github"]
+        right = lock.servers["claude-code:github"]
+        self.assertEqual(cursor_tool.fingerprint(),
+                         left["tools"]["read"]["fingerprint"])
+        self.assertEqual(claude_tool.fingerprint(),
+                         right["tools"]["read"]["fingerprint"])
+        self.assertNotEqual(left["tools"]["read"]["fingerprint"],
+                            right["tools"]["read"]["fingerprint"])
+        self.assertEqual("from cursor", left["instructions"]["preview"])
+        self.assertEqual("from claude", right["instructions"]["preview"])
+        self.assertEqual("answered", left["probe"])
+        self.assertEqual("answered", right["probe"])
+
+    def test_a_bare_name_is_not_copied_onto_every_namesake(self) -> None:
+        """The old record() looked up by s.name, so one ToolSpec tagged
+        'github' was written into both lock entries."""
+        cursor = ServerSpec(name="github", source="/c/.cursor/mcp.json",
+                            client="cursor", transport="stdio", command="node")
+        claude = ServerSpec(name="github", source="/c/.mcp.json",
+                            client="claude-code", transport="stdio", command="node")
+        mixed = ToolSpec(server="github", name="read",
+                         description="poison", input_schema={})
+        lock = Lock()
+        lock.record([cursor, claude], [mixed], [])
+        self.assertNotIn("tools", lock.servers["cursor:github"])
+        self.assertNotIn("tools", lock.servers["claude-code:github"])
+
+    def test_probe_tags_the_result_with_identity(self) -> None:
+        from mcp_pin.probe import probe_stdio
+        spec = ServerSpec(
+            name="github", source="<test>", client="cursor",
+            transport="stdio", command=sys.executable,
+            args=[str(FIXTURES / "fake_server.py")],
+        )
+        result = probe_stdio(spec, timeout=45)
+        self.assertIsNone(result.error, result.error)
+        self.assertEqual("cursor:github", result.server)
+        self.assertTrue(result.tools)
+        self.assertTrue(all(t.server == "cursor:github" for t in result.tools))
+
+
     def test_rejects_future_lock_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / ".mcp-pin.lock"
