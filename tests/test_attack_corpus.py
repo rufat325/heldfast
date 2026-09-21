@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from mcp_pin.findings import Severity  # noqa: E402
 from mcp_pin.lockfile import Lock  # noqa: E402
 from mcp_pin.model import (PromptSpec, ResourceSpec, ServerSpec,  # noqa: E402
                              SkillSpec, ToolSpec)
@@ -400,6 +401,29 @@ class TestApprovalAttacks(unittest.TestCase):
             integ.get_json = real
         self.assertTrue(found)
         self.assertNotIn("MCPA036", [f.rule_id for f in found])
+
+
+class TestCoverageAttacks(unittest.TestCase):
+    """Attacks that work by making the scanner see nothing at all."""
+
+    def test_a_config_the_client_reads_and_the_scanner_cannot(self) -> None:
+        """One brace short. The scan used to print a parse error and then
+        report `clean`, and `ci` exited 0 -- so the server inside passed a
+        build gate without any rule ever looking at it. VS Code's JSONC
+        parser recovers from errors Python's does not, so this is a file a
+        client can load and this scanner cannot."""
+        ctx = AuditContext(
+            servers=[],
+            unreadable=[("/proj/.vscode/mcp.json",
+                         "not valid JSON/JSONC (Expecting ',' delimiter at line 1)")])
+        found = caught("MCPA039", ctx)
+        self.assertTrue(found)
+        self.assertEqual(Severity.HIGH, found[0].severity)
+
+    def test_a_format_this_never_parses_is_not_this_finding(self) -> None:
+        """A documented permanent gap, not something going wrong now. Firing
+        on every YAML client forever is how a rule gets switched off."""
+        self.assertEqual([], caught("MCPA039", AuditContext(servers=[])))
 
 
 class TestCompositionAttacks(unittest.TestCase):

@@ -118,6 +118,28 @@ def _sri_from_shasum(shasum: str) -> str:
         return ""
 
 
+def expects_hash(server: Any) -> bool:
+    """Whether this launch fetches a pinned registry artifact at spawn time.
+
+    The question `--require-integrity` needs and could not ask. `refusal`
+    only ever saw the recorded hashes, so it could tell "recorded and
+    unverifiable" from "recorded and fine" -- and could not tell either from
+    "never recorded at all", which it read as nothing to check and passed.
+
+    That is the wrong way round. A lock with no hash for `npx pkg@1.2.3` is
+    not a launch with nothing to verify; it is the one case where nothing was
+    even looked at. `approve --safe` produces exactly that lock, and so does
+    approving on a machine the registry could not be reached from -- the
+    air-gapped runner the README says will fail on this.
+    """
+    found = extract_package(server)
+    if not found:
+        return False
+    runner, token = found
+    name, version = split_package(token, runner)
+    return bool(name and version and not _FLOATING.match(version))
+
+
 def _npm(name: str, version: str) -> Published:
     enc = quote(name, safe="@")
     data = get_json(f"https://registry.npmjs.org/{enc}/{quote(version, safe='')}")

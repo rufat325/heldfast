@@ -5,7 +5,8 @@ open endpoint from one that negotiates OAuth at connect time, and telling
 someone to live with a permanent false positive is how a scanner gets removed
 from CI. So the advice to "suppress this" has to be backed by a mechanism.
 
-Lockfile theorems (MCPA014-017, 019, 020, 031, 036) cannot be suppressed. A pin
+Lockfile theorems (MCPA014-017, 019, 020, 031, 036, 037, 039) cannot be
+suppressed. A pin
 that a committed one-line file can switch off is not a pin.
 
 Format (`.mcp-pin-ignore`), one rule per line:
@@ -42,6 +43,10 @@ PINNED = frozenset({
     # An offline runner does not need to suppress it -- it is low by default
     # and does not fail `--fail-on high` unless that flag was asked for.
     "MCPA037",
+    # Same reasoning one step earlier: MCPA039 says a config was not read at
+    # all. Suppressing that does not make the file readable, it only makes
+    # the blind spot quiet, which is the trade this whole file refuses.
+    "MCPA039",
 })
 
 

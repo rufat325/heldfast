@@ -218,7 +218,10 @@ def tool_check_config(args: dict[str, Any]) -> dict[str, Any]:
         findings = [f for f in run_rules(ctx) if f.severity >= floor]
         payload = _findings_payload(findings, {"servers": len(servers)})
         if errors:
-            payload["errors"] = errors
+            # Stripped the same way the raise path above strips it. The temp
+            # directory is an implementation detail of this tool, and every
+            # other field in this payload already hides it.
+            payload["errors"] = [e.split(": ", 1)[-1] for e in errors]
         # The temp path is an implementation detail; do not leak it back.
         for item in payload["findings"]:
             item["path"] = "<supplied config>"

@@ -356,7 +356,7 @@ def check(recorded: dict[str, str] | None,
 
 def refusal(recorded: dict[str, str] | None,
             urls: dict[str, str] | None = None, *,
-            require: bool = False) -> str | None:
+            require: bool = False, expected: bool = False) -> str | None:
     """Why this server must not be started, or None.
 
     A `changed` artifact always refuses: the machine is holding bytes that
@@ -372,6 +372,15 @@ def refusal(recorded: dict[str, str] | None,
             return f"approved artifact {item.key} has changed: {item.detail}"
     if not require:
         return None
+    if expected and not recorded:
+        # The worse silence, and the one that used to pass. A recorded hash
+        # that cannot be checked refuses below; a hash that was never
+        # recorded is strictly less evidence than that, so refusing the
+        # second and not the first would be exactly backwards.
+        return ("--require-integrity was given and this launch fetches a "
+                "pinned registry artifact that the lockfile records no hash "
+                "for, so there is nothing to verify it against; re-run "
+                "`mcp-pin approve` with network access to record one")
     unverified = [c for c in checks if c.state != "verified"]
     if unverified:
         first = unverified[0]

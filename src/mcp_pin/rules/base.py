@@ -24,6 +24,10 @@ class AuditContext:
     # Populated only when a path was scanned, never by the user-config sweep.
     source_flows: list = field(default_factory=list)
     config_errors: list[str] = field(default_factory=list)
+    # (path, reason) for a config file that exists and could not be read.
+    # Kept apart from config_errors, which is a grab-bag of scan diagnostics
+    # -- "not probed", the --safe note -- and cannot be judged as a class.
+    unreadable: list[tuple[str, str]] = field(default_factory=list)
     # Populated by the lockfile stage; rules for rug-pull detection read it.
     lock: dict[str, Any] = field(default_factory=dict)
     # Populated by the optional --llm stage, keyed by target label. Empty
