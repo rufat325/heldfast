@@ -1,0 +1,77 @@
+{
+  "_comment": [
+    "Shared RFC 8785 golden vectors for src/mcp_pin/digest.py and",
+    "js/mcp-pin-check/index.js. Both languages load THIS file and assert the",
+    "same `canonical` string, so the two implementations cannot drift apart",
+    "in silence the way they did before JCS.",
+    "",
+    "Python: tests/test_digest_parity.py. JavaScript: js/mcp-pin-check/test.js.",
+    "",
+    "Keep this file ASCII-escaped. It deliberately contains a lone surrogate,",
+    "which is legal in JSON but cannot be written as raw UTF-8 -- a rewrite",
+    "with ensure_ascii=False will fail or corrupt it.",
+    "",
+    "`refuses` is checked in Python only. By the time JavaScript sees a number,",
+    "JSON.parse has already collapsed it to a double, so a literal that lost",
+    "precision looks identical to one that did not. Python's arbitrary-precision",
+    "ints can still tell, so the refusal lives on the side that writes the lock."
+  ],
+  "canonical": [
+    {"why": "a float that is integral -- the Pydantic/FastMCP bound that used to split the two sides", "value": 1.0, "expect": "1"},
+    {"why": "plain integer", "value": 1, "expect": "1"},
+    {"why": "negative zero folds, because ECMAScript String(-0) is '0'", "value": -0.0, "expect": "0"},
+    {"why": "positive zero", "value": 0, "expect": "0"},
+    {"why": "1e16 is above 2**53 and still exact, so it is written in full", "value": 1e16, "expect": "10000000000000000"},
+    {"why": "1e20 is still inside the full-decimal window", "value": 1e20, "expect": "100000000000000000000"},
+    {"why": "1e21 is the first exponent-notation value", "value": 1e21, "expect": "1e+21"},
+    {"why": "1e-6 is written in full", "value": 1e-6, "expect": "0.000001"},
+    {"why": "1e-7 is the first small value in exponent notation", "value": 1e-7, "expect": "1e-7"},
+    {"why": "an ordinary fraction", "value": 0.5, "expect": "0.5"},
+    {"why": "shortest round-tripping repr, which both languages already share", "value": 3.141592653589793, "expect": "3.141592653589793"},
+    {"why": "largest exactly-representable integer", "value": 9007199254740991, "expect": "9007199254740991"},
+    {"why": "smallest denormal", "value": 5e-324, "expect": "5e-324"},
+    {"why": "largest finite double", "value": 1.7976931348623157e308, "expect": "1.7976931348623157e+308"},
+    {"why": "negative fraction", "value": -1.5, "expect": "-1.5"},
+
+    {"why": "literal null", "value": null, "expect": "null"},
+    {"why": "literal true", "value": true, "expect": "true"},
+    {"why": "literal false", "value": false, "expect": "false"},
+
+    {"why": "plain string", "value": "hello", "expect": "\"hello\""},
+    {"why": "the two-character escapes", "value": "a\"b\\c\nd\te", "expect": "\"a\\\"b\\\\c\\nd\\te\""},
+    {"why": "C0 control that has no short escape", "value": "\u0001", "expect": "\"\\u0001\""},
+    {"why": "non-ASCII stays raw -- JCS does not backslash-escape it", "value": "\u00e9\u4e2d", "expect": "\"\u00e9\u4e2d\""},
+    {"why": "astral character stays raw as one code point", "value": "\ud83d\ude00", "expect": "\"\ud83d\ude00\""},
+    {"why": "a LONE surrogate is escaped rather than crashing the encoder", "value": "hi \ud800 there", "expect": "\"hi \\ud800 there\""},
+    {"why": "lone low surrogate", "value": "\udfff", "expect": "\"\\udfff\""},
+
+    {"why": "empty object", "value": {}, "expect": "{}"},
+    {"why": "empty array", "value": [], "expect": "[]"},
+    {"why": "array order is preserved, never sorted", "value": [3, 1, 2], "expect": "[3,1,2]"},
+    {"why": "keys sort ASCII", "value": {"b": 1, "a": 2}, "expect": "{\"a\":2,\"b\":1}"},
+    {"why": "BMP private-use vs astral: UTF-16 order puts the astral pair FIRST, code-point order would not", "value": {"\ue000": 1, "\ud83d\ude00": 2}, "expect": "{\"\ud83d\ude00\":2,\"\ue000\":1}"},
+    {"why": "nesting, with an integral float inside", "value": {"z": [{"y": 1.0}], "a": null}, "expect": "{\"a\":null,\"z\":[{\"y\":1}]}"}
+  ],
+  "refuses": [
+    {"why": "an integer that loses precision as a double cannot round-trip through JavaScript", "json": "9007199254740993"},
+    {"why": "same, negative", "json": "-9007199254740993"}
+  ],
+  "digests": [
+    {
+      "why": "the Pydantic-shaped tool that used to report false drift in the plugin hook",
+      "tool": {"name": "t", "inputSchema": {"properties": {"n": {"minimum": 1.0}}}}
+    },
+    {
+      "why": "a description carrying a lone surrogate",
+      "tool": {"name": "t", "description": "hi \ud800 there", "inputSchema": {"type": "object"}}
+    },
+    {
+      "why": "wire spellings and the omit-when-empty fields",
+      "tool": {"name": "t", "title": "T", "description": "d", "inputSchema": {"type": "object"}, "outputSchema": {"type": "string"}, "annotations": {"readOnlyHint": true}, "icons": [{"src": "a.png"}]}
+    },
+    {
+      "why": "mixed BMP and astral keys",
+      "tool": {"name": "t", "inputSchema": {"\ue000": 1, "\ud83d\ude00": 2}}
+    }
+  ]
+}

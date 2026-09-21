@@ -201,16 +201,22 @@ def path_is_allowed(value: str, patterns: list[str]) -> bool:
 
 
 def host_is_allowed(value: str, domains: list[str]) -> bool:
-    # A backslash in the authority is a parser differential, not a URL.
-    # Python reads `https://evil.io\@api.github.com/x` as userinfo `evil.io\`
-    # on host api.github.com; WHATWG parsers -- browsers, Node's `new URL`,
-    # Go -- treat `\` as `/`, which ends the authority at evil.io. So the
-    # policy would approve one host and the server would fetch another.
-    # Nothing legitimate needs it, so it is simply not an approved
-    # destination.
-    if "\\" in value.split("?", 1)[0]:
-        return False
-    host = (urlsplit(value).hostname or "").lower().rstrip(".")
+    """Whether a URL's host is approved.
+
+    Both the host extraction and the backslash defence live in `host_of`, so
+    there is one copy of each. Two copies would mean either could be removed
+    without the other noticing, which is the same as having none.
+    """
+    return host_allowed(host_of(value) or "", domains)
+
+
+def host_allowed(host: str, domains: list[str]) -> bool:
+    """Whether an already-extracted host is in the allowlist.
+
+    Split out from `host_is_allowed` so the schemeless forms -- a bare
+    `evil.example` in a `host` parameter, `//evil.example/x` -- are matched
+    by exactly the same suffix rule rather than a second copy of it.
+    """
     if not host:
         return False
     for allowed in domains:
@@ -303,24 +309,95 @@ def _split_statements(sql: str) -> list[str]:
     return out
 
 
-def _strings_in(value: Any, depth: int = 0) -> list[str]:
-    """Every string anywhere in the arguments, nesting included.
+MAX_ARGUMENT_DEPTH = 12
 
-    A constraint that only reads top-level arguments checks the field the
-    author expected and misses the one an attacker chose.
+
+class PolicyTooDeep(Exception):
+    """Arguments nested deeper than the policy will walk.
+
+    Raised rather than returning what was found so far. Returning the partial
+    list made the depth cap a bypass: anything below level 12 was simply not
+    seen, and "we stopped looking" gave the same verdict as "there was nothing
+    to find". A constraint that fails open on input whose shape the attacker
+    chooses is not a constraint.
     """
-    if depth > 12:
-        return []
+
+    def __init__(self, depth: int) -> None:
+        super().__init__(f"arguments nested deeper than {depth} levels")
+        self.depth = depth
+
+
+def _values_in(value: Any, name: str = "", depth: int = 0) -> list[tuple[str, str]]:
+    """Every string in the arguments, paired with the key it sits under.
+
+    The name matters as much as the value. Classifying purely by shape means
+    a rule limiting `paths` never looks at a parameter called `path` whose
+    value happens not to look like one -- `.env` has no separator, so it read
+    as ordinary text and went straight through a paths allowlist, while
+    `./.env`, the same file, was refused.
+
+    A string inside a list keeps the list's own key, because `{"paths": [..]}`
+    is how these parameters usually arrive.
+    """
+    if depth > MAX_ARGUMENT_DEPTH:
+        raise PolicyTooDeep(depth)
     if isinstance(value, str):
-        return [value]
-    out: list[str] = []
+        return [(name, value)]
+    out: list[tuple[str, str]] = []
     if isinstance(value, dict):
-        for item in value.values():
-            out.extend(_strings_in(item, depth + 1))
+        for key, item in value.items():
+            out.extend(_values_in(item, str(key), depth + 1))
     elif isinstance(value, (list, tuple)):
         for item in value:
-            out.extend(_strings_in(item, depth + 1))
+            out.extend(_values_in(item, name, depth + 1))
     return out
+
+
+def file_url_path(value: str) -> str | None:
+    """The local path a `file:` URL names, or None if it is not one.
+
+    `file:///etc/passwd` is a URL, so `looks_like_path` skipped it; on a rule
+    with `paths` and no `domains`, nothing else looked at it either. It names
+    a local file as plainly as `/etc/passwd` does, so it is checked as one.
+    """
+    if not value.lower().startswith("file:"):
+        return None
+    path = unquote(urlsplit(value).path)
+    # file:///C:/x parses with a leading slash before the drive letter.
+    if _WINDOWS_ABS.match(path.lstrip("/")[:3]):
+        path = path.lstrip("/")
+    return path or None
+
+
+def host_of(value: str) -> str | None:
+    """The host a string names, whether or not it carries a scheme.
+
+    `looks_like_url` requires `scheme://`, so a domain allowlist ignored
+    `evil.example/upload`, `//evil.example/x`, and a bare `evil.example` in a
+    `host` parameter. A server handed any of those reaches the same place.
+    """
+    text = (value or "").strip()
+    if not text:
+        return None
+    # A backslash in the authority is a parser differential, not a URL.
+    # Python reads `https://evil.io\@api.github.com/x` as userinfo `evil.io\`
+    # on host api.github.com; WHATWG parsers -- browsers, Node's `new URL`,
+    # Go -- treat `\` as `/`, which ends the authority at evil.io. So the
+    # policy would approve one host and the server would fetch another.
+    # Nothing legitimate needs it, so no host is named for it at all.
+    if "\\" in text.split("?", 1)[0]:
+        return None
+    if _URL_LIKE.match(text):
+        candidate = text
+    elif text.startswith("//"):
+        candidate = "http:" + text
+    else:
+        candidate = "http://" + text
+    try:
+        host = urlsplit(candidate).hostname
+    except ValueError:
+        return None
+    return (host or "").lower().rstrip(".") or None
 
 
 class Policy:
@@ -362,7 +439,18 @@ class Policy:
                 f"refusing rather than ignoring it",
                 "unknown", unknown[0])
 
-        values = _strings_in(arguments)
+        try:
+            pairs = _values_in(arguments)
+        except PolicyTooDeep as exc:
+            # Refuse rather than check a prefix of the arguments. The depth
+            # cap exists to bound the walk, not to define a region the policy
+            # does not apply to.
+            return Decision(
+                False,
+                f"arguments nest deeper than {exc.depth} levels; refusing "
+                f"rather than checking only part of them",
+                "depth", "")
+        values = [text for _, text in pairs]
 
         # Policy is hand-written, so it arrives malformed sooner or later --
         # a null left in a list, a string where a list belongs. Non-strings
@@ -376,19 +464,43 @@ class Policy:
 
         paths = entries(rule.get("paths"))
         if paths:
-            for value in values:
-                if looks_like_path(value) and not path_is_allowed(value, paths):
+            for name, value in pairs:
+                # By name as well as by shape. A parameter the schema calls
+                # `path` holds a path whatever the value looks like, which is
+                # what `.env` exploited; and a `file:` URL names a local file
+                # however it is spelled.
+                named = bool(_PATH_PARAM.match(name))
+                candidate = file_url_path(value)
+                if candidate is None:
+                    if not (named or looks_like_path(value)):
+                        continue
+                    candidate = value
+                if not candidate.strip():
+                    continue
+                if not path_is_allowed(candidate, paths):
                     return Decision(
                         False,
-                        f"{normalize_path(value)} is outside the approved paths "
-                        f"({', '.join(paths)})",
+                        f"{normalize_path(candidate)} is outside the approved "
+                        f"paths ({', '.join(paths)})",
                         "paths", value)
 
         domains = entries(rule.get("domains"))
         if domains:
-            for value in values:
-                if looks_like_url(value) and not host_is_allowed(value, domains):
-                    host = urlsplit(value).hostname or value
+            for name, value in pairs:
+                named = bool(_URL_PARAM.match(name))
+                if not (named or looks_like_url(value)):
+                    continue
+                host = host_of(value)
+                if host is None:
+                    # A parameter that should name a destination and does not
+                    # resolve to one. Refusing beats guessing: the server will
+                    # resolve it somehow, and this is the one chance to say no.
+                    return Decision(
+                        False,
+                        f"{value!r} does not name a resolvable host; approved "
+                        f"destinations are {', '.join(domains)}",
+                        "domains", value)
+                if not host_allowed(host, domains):
                     return Decision(
                         False,
                         f"{host} is not an approved destination "

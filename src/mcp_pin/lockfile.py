@@ -25,21 +25,43 @@ from .artifacts import artifact_digests
 from .model import (PromptSpec, ResourceSpec, ServerSpec, SkillSpec, ToolSpec,
                     instructions_fingerprint)
 
-LOCK_VERSION = 1
+# 2 changed the digest algorithm to RFC 8785 (JCS). Version 1 fingerprints
+# were written by Python's `json.dumps`, which the JavaScript checker could
+# not reproduce for integral floats, large integers, -0.0, or keys mixing BMP
+# with astral characters. Those digests are not comparable with these, so a
+# version 1 lock is reported as needing re-approval rather than silently
+# mismatching every tool in it -- which would look exactly like a rug pull.
+LOCK_VERSION = 2
+DIGEST_CHANGED_IN = 2
 DEFAULT_LOCK_NAME = ".mcp-pin.lock"
 # Previous product name. Loaded only when the current file is absent, so a
 # rename does not quietly drop enforcement.
 LEGACY_LOCK_NAME = ".mcp-audit.lock"
 
 
-def launch_mismatch(approved: str | None, argv: list[str] | None) -> str | None:
+def launch_mismatch(approved: str | None, argv: list[str] | None, *,
+                    pinned: bool = True) -> str | None:
     """None if the tokens about to run are the ones that were pinned.
 
-    Empty approved is an old lock, not a pass: there was no command to pin.
-    Guard and gateway must not start a different binary than the one reviewed.
+    An empty `approved` on a server that *has* a lock entry is an old lock or
+    a hand-edited one, not a pass: the entry stands for an approval and names
+    no command, which let the guard start any binary at all under that
+    server's name. The docstring said this for a while before the code did.
+
+    `pinned=False` says there is no lock entry to read a command from. That
+    is a different situation -- an unlisted server, reached through
+    `--allow-unapproved` -- and it is handled by the tool policy rather than
+    by refusing to launch.
+
+    An empty `argv` is a third case: a remote backend has no local command to
+    compare, so there is nothing to say.
     """
-    if not approved or not argv:
+    if not argv or not pinned:
         return None
+    if not approved:
+        return ("the lockfile entry for this server records no launch command, "
+                "so there is nothing to pin the binary against; re-run "
+                "`mcp-pin approve` to record one")
     current = " ".join(shlex.quote(tok) for tok in argv)
     if current == approved:
         return None
@@ -94,6 +116,10 @@ class Lock:
     # observed, so `record` preserves it the same way it preserves policy.
     identities: dict[str, Any] = field(default_factory=dict)
     path: Path | None = None
+    # True when this lock was written before the RFC 8785 digest change, so
+    # its fingerprints cannot be compared with the ones computed now. Callers
+    # say "re-approve" instead of reporting every tool as drifted.
+    stale_digests: bool = False
 
     @property
     def is_empty(self) -> bool:
@@ -120,6 +146,7 @@ class Lock:
         return cls(
             version=version or LOCK_VERSION,
             generated=str(data.get("generated") or _now()),
+            stale_digests=bool(version and version < DIGEST_CHANGED_IN),
             servers=dict(data.get("servers") or {}),
             skills=dict(data.get("skills") or {}),
             identities=dict(data.get("identities") or {}),

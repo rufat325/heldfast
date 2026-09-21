@@ -2,7 +2,14 @@
 
 /**
  * Canonical MCP tool digest. Must match src/mcp_pin/digest.py:
- * JSON (sorted keys, no whitespace, Unicode kept) -> UTF-8 -> SHA-256 hex.
+ * RFC 8785 (JSON Canonicalization Scheme) -> UTF-8 -> SHA-256 hex.
+ *
+ * This file and digest.py are checked against the same golden vectors in
+ * tests/golden/jcs_vectors.json, from both languages, because the previous
+ * pair of hand-matched implementations disagreed on five ordinary inputs --
+ * `1.0`, `1e16`, integers that lose precision as doubles, `-0.0`, and keys
+ * mixing BMP with astral characters. JCS is what makes "same object, same
+ * digest, any language" a specification rather than a hope.
  *
  * Zero runtime dependencies. Node 18+ (global crypto.webcrypto / crypto.hash).
  */
@@ -11,25 +18,68 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
+const ESCAPES = {
+  '"': '\\"',
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+};
+
+/**
+ * A JSON string literal, escaped as JSON.stringify escapes -- except that a
+ * lone surrogate becomes an explicit \udXXX escape instead of being emitted
+ * raw. Node's JSON.stringify passes lone surrogates through since the
+ * well-formed-stringify proposal, which would produce bytes Python's UTF-8
+ * encoder refuses; spelling the escape out keeps both sides on ASCII.
+ */
+function escapeString(text) {
+  let out = '"';
+  for (const char of text) {
+    const code = char.codePointAt(0);
+    const escape = ESCAPES[char];
+    if (escape !== undefined) {
+      out += escape;
+    } else if (code < 0x20 || (code >= 0xd800 && code <= 0xdfff)) {
+      out += "\\u" + code.toString(16).padStart(4, "0");
+    } else {
+      out += char;
+    }
+  }
+  return out + '"';
+}
+
+/**
+ * Key order is by UTF-16 code unit, which is what RFC 8785 section 3.2.3
+ * says and what a plain `Array.prototype.sort` on strings already does.
+ * Python has to encode to UTF-16 to reach the same order; here it is free.
+ */
 function canonical(value) {
   if (value === null) return "null";
   const t = typeof value;
   if (t === "boolean") return value ? "true" : "false";
   if (t === "number") {
     if (!Number.isFinite(value)) {
-      throw new TypeError("non-finite numbers are not in the digest");
+      throw new TypeError("NaN and Infinity are not JSON numbers");
     }
-    // Python json.dumps emits 1 for ints and 1.0 for floats. Goldens use
-    // integers; a float must keep a decimal so the two sides can agree.
-    return Number.isInteger(value) ? String(value) : JSON.stringify(value);
+    // No magnitude check here, deliberately. By this point JSON.parse has
+    // already collapsed the source text to a double, so a literal that lost
+    // precision is indistinguishable from one that did not -- 1e16 is above
+    // 2**53 and exact, 9007199254740993 is above it and is not. Python can
+    // still see the difference, because its ints are arbitrary precision, so
+    // that refusal lives in digest.py at approve time. Here, JCS is simply
+    // ECMAScript Number::toString, with String(-0) folded to "0".
+    return value === 0 ? "0" : String(value);
   }
-  if (t === "string") return JSON.stringify(value);
+  if (t === "string") return escapeString(value);
   if (Array.isArray(value)) {
     return "[" + value.map(canonical).join(",") + "]";
   }
   if (t === "object") {
     const keys = Object.keys(value).sort();
-    return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonical(value[k])).join(",") + "}";
+    return "{" + keys.map((k) => escapeString(k) + ":" + canonical(value[k])).join(",") + "}";
   }
   throw new TypeError("unsupported digest value: " + t);
 }
@@ -72,7 +122,11 @@ function loadLock(lockPath) {
   return data;
 }
 
-const LOCK_VERSION = 1;
+// 2 changed the digest algorithm to RFC 8785 (JCS). A version 1 lock holds
+// fingerprints this checker cannot reproduce, so it is reported as needing
+// re-approval rather than as a wall of drift.
+const LOCK_VERSION = 2;
+const DIGEST_CHANGED_IN = 2;
 
 function checkLock(lockPath) {
   if (!fs.existsSync(lockPath)) {
@@ -90,6 +144,15 @@ function checkLock(lockPath) {
       ok: false,
       code: "T-LOCK-FUTURE",
       message: lockPath + ": lockfile version " + version + " is newer than this checker understands",
+    };
+  }
+  if (version && version < DIGEST_CHANGED_IN) {
+    return {
+      ok: false,
+      code: "T-LOCK-STALE-DIGEST",
+      message: lockPath + ": lockfile version " + version + " predates the RFC 8785 " +
+        "digest; its fingerprints are not comparable with the ones computed now. " +
+        "Run `mcp-pin approve` to re-record it.",
     };
   }
   const servers = data.servers && typeof data.servers === "object" ? data.servers : {};

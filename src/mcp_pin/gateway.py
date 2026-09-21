@@ -104,6 +104,9 @@ class Backend:
         self.on_unsolicited: Any = None
         self.recorded_artifacts: dict[str, str] = {}
         self.approved_launch: str = ""
+        # Whether a lock entry exists for this backend at all, as opposed to
+        # existing and recording no command. Only the second is a refusal.
+        self.pinned: bool = False
         self.recorded_integrity: dict[str, str] = {}
         self.artifact_urls: dict[str, str] = {}
         self.require_integrity: bool = False
@@ -130,7 +133,8 @@ class Backend:
         # a scan-time opinion, while the package cache holds the bytes this
         # spawn is about to run.
         return (mismatch(self.recorded_artifacts)
-                or launch_mismatch(self.approved_launch, self.spec.argv)
+                or launch_mismatch(self.approved_launch, self.spec.argv,
+                                   pinned=self.pinned)
                 or refusal(self.recorded_integrity, self.artifact_urls,
                            require=self.require_integrity))
 
@@ -452,6 +456,7 @@ class Gateway:
             recorded = entry.get("artifacts")
             backend.recorded_artifacts = recorded if isinstance(recorded, dict) else {}
             backend.approved_launch = str(entry.get("command_line") or "")
+            backend.pinned = bool(entry)
             integrity = entry.get("integrity")
             backend.recorded_integrity = integrity if isinstance(integrity, dict) else {}
             urls = entry.get("artifact_urls")

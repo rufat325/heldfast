@@ -93,6 +93,30 @@ def tool_drift(ctx: AuditContext) -> Iterable[Finding]:
     lock = _lock(ctx)
     if not lock:
         return
+    if ctx.lock.get("stale_digests"):
+        # The lock predates the RFC 8785 digest change, so every fingerprint
+        # in it would compare unequal. Reporting that as a rug pull on every
+        # tool at once is both wrong and the kind of noise that teaches
+        # people to ignore this rule. Say what actually happened instead.
+        yield Finding(
+            rule_id="MCPA015",
+            title="Lockfile predates the current digest algorithm",
+            severity=Severity.MEDIUM,
+            location=Location(path=".mcp-pin.lock", line=0, snippet="version 1"),
+            evidence=(
+                "this lockfile was written with the pre-RFC 8785 digest, whose "
+                "fingerprints are not comparable with the ones computed now, so "
+                "drift cannot be checked against it"
+            ),
+            remediation=(
+                "Re-run `mcp-pin approve` to record the current state with the new "
+                "digest. Review the diff as usual: the fingerprints all change "
+                "because the algorithm changed, but the description previews beside "
+                "them do not, and those are what tell you a tool actually moved."
+            ),
+            tags=["drift", "lockfile"],
+        )
+        return
     known = lock["servers"]
 
     observed: dict[str, dict[str, object]] = {}

@@ -285,9 +285,16 @@ class TestHostileStdoutBeforeFrame(unittest.TestCase):
             "frames": live["frames"],
         })
         kinds = [f["kind"] for f in live["frames"]]
-        self.assertGreaterEqual(kinds.count("raw"), 1, live)
+        # The banner used to be forwarded to stdout as a raw line, which left
+        # "stdout carries nothing but JSON-RPC" resting on every client's
+        # parser being at least as strict as Python's. `{...} {...}` is one
+        # such line: Python rejects it, a lenient parser might not. The proxy
+        # now keeps that guarantee by itself -- unparseable output goes to
+        # stderr, where it is still visible to whoever is debugging.
+        self.assertEqual(0, kinds.count("raw"),
+                         f"stdout must carry only JSON-RPC, got {kinds}")
         self.assertIn("jsonrpc", kinds)
-        self.assertEqual("raw", kinds[0], "the banner must come before any frame")
+        self.assertEqual("jsonrpc", kinds[0])
 
 
 class TestProtocolSurfaces(unittest.TestCase):

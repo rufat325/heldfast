@@ -15,9 +15,16 @@ No runtime dependencies.
 
 The GIF is two sessions we ran against this tree: wrapping
 [`@modelcontextprotocol/server-filesystem@2026.8.31`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem)
-(14 tools; `wipe_disk` refused because it was not in the pin), then a
-server that kept the same config and rewrote `read_invoice` to ask for
-`~/.ssh/id_rsa`. Nothing queued was forwarded while the pin was wrong.
+(14 tools), then a server that kept the same config and rewrote
+`read_invoice` to ask for `~/.ssh/id_rsa`. Nothing queued was forwarded
+while the pin was wrong.
+
+`wipe_disk` in that first session is **not** a tool the filesystem server
+has. It is a `tools/call` injected onto the wire for a name the server never
+advertised -- the shape of a model talking itself into a tool that is not
+there, or of something upstream putting it there. What the frame shows is
+that the guard refuses a call by name against the lock, before the server is
+ever asked whether it can do it.
 
 ```bash
 pipx install mcp-pin
@@ -160,14 +167,23 @@ recorded. A lock that never recorded prompts is not pretend-enforced.
 }
 ```
 
-Ran against that official filesystem server: 14 tools listed, `list_allowed_directories`
-returned the scoped directory, `wipe_disk` came back
+Ran against that official filesystem server: 14 tools listed, and
+`list_allowed_directories` returned the scoped directory. A `tools/call` for
+`wipe_disk` -- a name that server does not advertise, put on the wire to
+stand in for a call the model was talked into -- came back
 
 ```
 [BLOCKED BY mcp-pin] wipe_disk was not called. tool was not present at approval.
 ```
 
 The same lockfile is what CI reads. One artifact, three places: review, build, call site.
+
+**Pass `--lock` for a server you configure outside one project.** Without it
+the lock is whichever `.mcp-pin.lock` sits in the working directory, so a
+server in your user-level config takes its approvals from whatever repository
+you happen to have open -- including one you just cloned. `guard` prints the
+path it resolved and warns when that file is outside the guarded server's own
+tree, but it cannot tell your lock from someone else's.
 
 `guard --log` leaves a hash-chained record, and `--sign-command` seals it with
 whatever already holds your keys (`ssh-keygen -Y sign`, a smartcard, a KMS
@@ -215,7 +231,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1093 tests, stdlib unittest, nothing to install.
+1145 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

@@ -2,12 +2,47 @@
 
 /**
  * Tiny lock reader for Claude Code hooks. Stdlib only.
- * Digest matches js/mcp-pin-check and src/mcp_pin/digest.py.
+ *
+ * RFC 8785 (JCS). Must match js/mcp-pin-check/index.js and
+ * src/mcp_pin/digest.py byte for byte. This is the third copy of the
+ * algorithm and the one that decides whether a PreToolUse hook denies a
+ * call, so a disagreement here shows up as the tool refusing work the user
+ * approved -- which is exactly what `1.0` used to do, on every Pydantic or
+ * FastMCP server that writes a `"minimum": 0.0` bound.
+ *
+ * It cannot `require` the checker: the plugin is distributed on its own.
+ * `tests/test_digest_parity.py` hashes the shared golden vectors through
+ * this file and compares them against Python, so the copies cannot drift.
  */
 
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+
+const ESCAPES = {
+  '"': '\\"',
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+};
+
+// Lone surrogates are escaped rather than emitted raw: Node's JSON.stringify
+// passes them through, and those are bytes Python's UTF-8 encoder refuses.
+function escapeString(text) {
+  let out = '"';
+  for (const char of text) {
+    const code = char.codePointAt(0);
+    const escape = ESCAPES[char];
+    if (escape !== undefined) out += escape;
+    else if (code < 0x20 || (code >= 0xd800 && code <= 0xdfff)) {
+      out += "\\u" + code.toString(16).padStart(4, "0");
+    } else out += char;
+  }
+  return out + '"';
+}
 
 function canonical(value) {
   if (value === null) return "null";
@@ -15,13 +50,17 @@ function canonical(value) {
   if (t === "boolean") return value ? "true" : "false";
   if (t === "number") {
     if (!Number.isFinite(value)) throw new TypeError("non-finite numbers");
-    return Number.isInteger(value) ? String(value) : JSON.stringify(value);
+    // String(-0) is "0", the fold JCS specifies. Everything else is
+    // ECMAScript Number::toString, which is what JCS defers to.
+    return value === 0 ? "0" : String(value);
   }
-  if (t === "string") return JSON.stringify(value);
+  if (t === "string") return escapeString(value);
   if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
   if (t === "object") {
+    // Array.prototype.sort on strings is already UTF-16 code-unit order,
+    // which is what RFC 8785 section 3.2.3 requires.
     const keys = Object.keys(value).sort();
-    return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonical(value[k])).join(",") + "}";
+    return "{" + keys.map((k) => escapeString(k) + ":" + canonical(value[k])).join(",") + "}";
   }
   throw new TypeError("unsupported " + t);
 }
@@ -99,6 +138,7 @@ function readStdin() {
 }
 
 module.exports = {
+  canonical,
   toolDigest,
   findLock,
   loadLock,
