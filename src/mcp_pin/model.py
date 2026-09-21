@@ -19,6 +19,10 @@ class ServerSpec:
     name: str
     source: str                       # absolute path of the config file
     client: str                       # "claude-desktop", "cursor", ...
+    # The namespace within the config that declared this server: a project
+    # directory for ~/.claude.json's per-project maps, empty otherwise. Two
+    # projects can each define a `github` and they are different servers.
+    scope: str = ""
     line: int = 0                     # line of the server's key in `source`
     transport: str = "unknown"        # stdio | http | sse | unknown
     command: str | None = None
@@ -44,7 +48,15 @@ class ServerSpec:
         return " ".join(shlex.quote(tok) for tok in self.argv)
 
     def identity(self) -> str:
-        """Stable id across config files: client + name."""
+        """Stable id across config files: client + name.
+
+        `scope` is deliberately not in here. Putting it in would rename every
+        lock entry recorded from a per-project map, which reads as "server is
+        not in the lockfile" until each one is re-approved -- a migration this
+        does not need. Two servers that collide on this id are recorded as a
+        conflict instead, and a conflicted entry enforces nothing: see
+        Lock.record and Guard._resolve_entry.
+        """
         return f"{self.client}:{self.name}"
 
 

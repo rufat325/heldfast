@@ -539,6 +539,8 @@ def cmd_guard(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
         require_integrity=bool(getattr(args, "require_integrity", False)),
         sign_command=getattr(args, "sign_command", None),
+        share_env=set(getattr(args, "share_env", None) or []),
+        isolate_env=bool(getattr(args, "isolate_env", False)),
     )
 
 

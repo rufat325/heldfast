@@ -404,6 +404,17 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
                          help="what to do when a tool RESULT contains injection "
                               "signals: fence it as untrusted data (default), "
                               "withhold it, or only log")
+    guard_p.add_argument("--isolate-env", action="store_true",
+                         help="give the wrapped server only the environment it needs "
+                              "to run, instead of everything this process has. Off by "
+                              "default because wrap takes a command rather than a "
+                              "config entry, so there is no declared 'env' block to "
+                              "read a server's own token from -- turning it on may "
+                              "need --share-env. mcp-pin's own variables are withheld "
+                              "either way")
+    guard_p.add_argument("--share-env", metavar="NAME", action="append", default=[],
+                         help="with --isolate-env, also pass this variable through "
+                              "(repeatable)")
 
 
 def _register_check(sub: argparse._SubParsersAction) -> None:

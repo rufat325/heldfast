@@ -112,19 +112,39 @@ function loadLock(cwd) {
   return { path: lockPath, data };
 }
 
+// Lockfile versions this hook understands, kept in step with index.js and
+// lockfile.py. A file from the future is refused rather than read with
+// today's meaning; a version 1 file holds pre-JCS digests that cannot be
+// compared with the ones computed now.
+const LOCK_VERSION = 2;
+const DIGEST_CHANGED_IN = 2;
+
+/**
+ * Resolve a bare server name to exactly one lock entry.
+ *
+ * Returns {entry} when one matched, {ambiguous: n} when several did, or null
+ * when none did. The count matters: entries are keyed `client:name` because
+ * two clients can each configure a server called `github` and they are not
+ * the same server. Taking the first match meant Cursor's approvals governed
+ * Claude Code's server -- allowing a tool that was approved somewhere else,
+ * which is the whole failure T-DRIFT-ID names. `guard.py` refuses to guess
+ * here and so does this.
+ */
 function findServerEntry(lock, serverName) {
   if (!lock || !lock.servers || typeof lock.servers !== "object") return null;
   const servers = lock.servers;
+  // An explicit `client:name` wins outright, the same as --name does.
   if (servers[serverName] && typeof servers[serverName] === "object") {
-    return servers[serverName];
+    return { entry: servers[serverName] };
   }
   const suffix = ":" + serverName;
-  const matches = Object.keys(servers).filter((k) => k === serverName || k.endsWith(suffix));
-  if (matches.length === 1) return servers[matches[0]];
-  for (const key of Object.keys(servers)) {
+  const matches = Object.keys(servers).filter((key) => {
     const entry = servers[key];
-    if (entry && entry.name === serverName) return entry;
-  }
+    if (!entry || typeof entry !== "object") return false;
+    return key === serverName || key.endsWith(suffix) || entry.name === serverName;
+  });
+  if (matches.length === 1) return { entry: servers[matches[0]] };
+  if (matches.length > 1) return { ambiguous: matches.length };
   return null;
 }
 
@@ -144,6 +164,8 @@ function readStdin() {
 }
 
 module.exports = {
+  LOCK_VERSION,
+  DIGEST_CHANGED_IN,
   canonical,
   toolDigest,
   findLock,

@@ -281,6 +281,21 @@ class Lock:
                     }
                     for t in sorted(observed, key=lambda t: t.name)
                 }
+            # Two servers can share client:name -- the same name under two
+            # project scopes in one ~/.claude.json, say. They are different
+            # servers and this id cannot tell them apart, so neither entry is
+            # allowed to stand for both: the conflict is written down and a
+            # conflicted entry enforces nothing (Guard._resolve_entry refuses
+            # it). Overwriting silently would approve whichever came last
+            # while the report named the other.
+            existing = self.servers.get(s.identity())
+            if isinstance(existing, dict):
+                lines = existing.get("conflict") or [existing.get("command_line") or ""]
+                entry = {
+                    "name": s.name, "client": s.client, "source": s.source,
+                    "approved_at": _now(),
+                    "conflict": sorted({*lines, s.command_line} - {""}),
+                }
             self.servers[s.identity()] = entry
 
         self.skills = {

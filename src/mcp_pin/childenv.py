@@ -62,7 +62,12 @@ _RUNTIME = {
 # run. Loaders that execute a file (`NODE_OPTIONS=--require`, `PYTHONPATH`
 # shadowing) are not inherited; a server that needs one declares it.
 _TOOLCHAIN = {
-    "PYTHONHOME", "PYTHONUNBUFFERED", "PYTHONIOENCODING",
+    # PYTHONHOME is deliberately absent. It relocates the standard
+    # library wholesale, which is the same class of thing as PYTHONPATH
+    # shadowing an import and NODE_OPTIONS=--require: a parent variable
+    # that decides what code the child loads. A server that genuinely
+    # runs under a relocated interpreter declares it.
+    "PYTHONUNBUFFERED", "PYTHONIOENCODING",
     "PYTHONUTF8", "PYTHONDONTWRITEBYTECODE", "VIRTUAL_ENV", "CONDA_PREFIX",
     "CONDA_DEFAULT_ENV", "PIPX_HOME", "PIPX_BIN_DIR", "UV_CACHE_DIR",
     "UV_PYTHON", "UV_INDEX",
@@ -81,6 +86,33 @@ _NETWORK = {
 
 BASE = {name.upper() for name in (_RUNTIME | _TOOLCHAIN | _NETWORK)}
 
+# This tool's own variables, which are never a child's business.
+#
+# MCP_PIN_LOG_KEY is the reason this is unconditional. It turns the audit
+# chain from a hash into a MAC, and the adversary it is aimed at is precisely
+# the server being wrapped -- so handing that server the key gives away the
+# one property keying was added for. `auditlog.py` has always said the guard
+# does not pass it on; this is where that becomes true.
+#
+# MCP_PIN_ALLOW_PATH_SCAN is here for the same reason one step down: it is a
+# capability this deployment was granted, and a child that happens to be
+# another mcp-pin should not inherit it by standing close enough.
+#
+# Withheld under `isolate=False` as well. That switch exists so an operator
+# can keep their own environment flowing to a server while they move secrets
+# into config; it was never a request for ours.
+#
+# Named one by one rather than matched on an `MCP_PIN_` prefix. The prefix
+# version also swallowed variables that are not ours to take -- a server's
+# own `MCP_PIN_*` setting, and this suite's `MCP_PIN_HOSTILE`, which is how
+# the fixture is told which attack to run. Withholding what we do not own is
+# the same class of mistake as leaking what we do, just quieter.
+OWN = frozenset({"MCP_PIN_LOG_KEY", "MCP_PIN_ALLOW_PATH_SCAN"})
+
+
+def _mine(name: str) -> bool:
+    return name.upper() in OWN
+
 # `${VAR}`, `$VAR`, and the `%VAR%` a Windows config might carry.
 _REF = re.compile(r"^\s*(?:\$\{(\w+)\}|\$(\w+)|%(\w+)%)\s*$")
 
@@ -97,7 +129,7 @@ def _resolve(value: str, source: dict) -> str:
     return source.get(name, value)
 
 
-def build(spec: Any, parent: dict | None = None,
+def build(spec: Any | None, parent: dict | None = None,
           share: set | None = None, isolate: bool = True) -> tuple[dict, list]:
     """(environment for this backend, names withheld from it).
 
@@ -108,20 +140,22 @@ def build(spec: Any, parent: dict | None = None,
     declared = {str(k): str(v) for k, v in (getattr(spec, "env", None) or {}).items()}
 
     if not isolate:
-        env = dict(parent)
+        env = {k: v for k, v in parent.items() if not _mine(k)}
         env.update({k: _resolve(v, parent) for k, v in declared.items()})
         env.setdefault("PYTHONUNBUFFERED", "1")
-        return env, []
+        return env, sorted(k for k in parent if _mine(k) and k not in declared)
 
     allowed = BASE | {s.upper() for s in (share or set())}
-    env = {k: v for k, v in parent.items() if k.upper() in allowed}
+    env = {k: v for k, v in parent.items()
+           if k.upper() in allowed and not _mine(k)}
     # Declared last, so a server can override anything in the base set for
     # itself -- that is what declaring it means.
     env.update({k: _resolve(v, parent) for k, v in declared.items()})
     env.setdefault("PYTHONUNBUFFERED", "1")
 
     withheld = sorted(k for k in parent
-                      if k.upper() not in allowed and k not in declared)
+                      if (k.upper() not in allowed or _mine(k))
+                      and k not in declared)
     return env, withheld
 
 

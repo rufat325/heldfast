@@ -51,22 +51,28 @@ EXFIL_HOSTS = (
 )
 
 
+# One host, with optional subdomains, not glued to a longer label.
+#
+# The boundary used to be an allowlist of the character before the host --
+# `./:@ ` -- which is not how hostnames end. Six ordinary spellings walked
+# past it: a newline before the host (the common case in real tool output),
+# a quote, an `=`, a `(`, a `,`, a tab. This asks the question the other way
+# round, which is the only way that is exhaustive: the character before must
+# not be part of a label, and neither must the character after.
+#
+# A leading `.` is still a match, because `foo.webhook.site` is the host's own
+# subdomain and the docstring has always said so. A trailing `.` is not,
+# because `webhook.site.example` is somebody else's domain.
+_EXFIL_RE = re.compile(
+    r"(?<![A-Za-z0-9-])(?:[A-Za-z0-9-]+\.)*(?:"
+    + "|".join(re.escape(host) for host in EXFIL_HOSTS)
+    + r")(?![A-Za-z0-9.-])",
+    re.IGNORECASE,
+)
+
+
 def _has_exfil_host(text: str) -> bool:
-    lower = text.lower()
-    for host in EXFIL_HOSTS:
-        if host in lower:
-            # Require a host boundary so `notwebhook.site.example` is quiet.
-            idx = 0
-            while True:
-                pos = lower.find(host, idx)
-                if pos < 0:
-                    break
-                before = lower[pos - 1] if pos else "."
-                after = lower[pos + len(host)] if pos + len(host) < len(lower) else "."
-                if before in "./:@ " and after in "./:/?&# ":
-                    return True
-                idx = pos + 1
-    return False
+    return bool(_EXFIL_RE.search(text))
 
 
 def classify(text: str) -> list[str]:
