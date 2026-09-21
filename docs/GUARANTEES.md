@@ -67,6 +67,12 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-REDACT | Findings cannot carry a live credential or a control character that rewrites the report. | `tests/test_output_integrity.py` |
 | T-DIGEST | The same tool object produces the same SHA-256 digest in Python and in the zero-dep JS checker. Twelve golden vectors are the contract. Empty `output_schema` / `icons` are omitted. | `tests/test_lock_spec.py` |
 | T-RESULT-BLOCK | `RS-ANSI`, `RS-SECRET` and `RS-EXFIL-HOST` withhold a tool result even under `--result-policy annotate`. English-injection fencing stays best-effort. | `tests/test_result_theorems.py` |
+| T-DENY-REQUEST | `--deny-sampling`, `--deny-elicitation` and `--deny-roots` refuse the request in **both** forms it can arrive in: a legacy server-to-client JSON-RPC request, and an `inputRequests` entry on a modern (MRTR) result. A denied request is answered to the server and never reaches the client. | `tests/test_guard_requests.py`, `tests/test_mutation.py` |
+| T-RESULT-WALK | The result screen reads every model-visible string in a result, whatever shape it arrives in -- an embedded resource, `structuredContent`, a `prompts/get` description, a `resource_link` description -- rather than a fixed list of known keys. A result nested past the walk's depth cap is withheld, not skipped. | `tests/test_guard_requests.py`, `tests/test_mutation.py` |
+| T-APPROVED-SHAPE | A tool forwarded as approved carries only the fields the fingerprint covered. A key that was not hashed -- `_meta`, or anything else a server adds -- does not reach the client on the strength of a digest that never saw it. | `tests/test_guard_requests.py`, `tests/test_mutation.py` |
+| T-STDOUT-JSON | `guard` writes nothing to stdout that it did not parse as JSON-RPC. A line it cannot parse goes to stderr, so the guarantee does not rest on the client's parser being as strict as Python's. | `tests/test_golden_traces.py` |
+| T-ARG-DEPTH | Arguments nested past the policy's depth cap are refused, not waved through. "We stopped looking" is never the same answer as "there was nothing to find". | `tests/test_policy_evasions.py`, `tests/test_mutation.py` |
+| T-ARG-NAMED | A parameter the schema names as a path or a destination is checked as one whatever its value looks like. `{"path": ".env"}` and `{"url": "evil.example/x"}` are not exempt for being unremarkable strings. | `tests/test_policy_evasions.py`, `tests/test_mutation.py` |
 
 ## Best-effort
 
@@ -134,6 +140,29 @@ We do not claim these. Do not imply them in output.
   of reading its cache, is outside what reading the disk can see
 - Stopping a client that talks to the server *beside* the gateway (MCPA032 reports it)
 - Proving a regex matches "all prompt injection"
+- Checking the *current* definition of a tool on a `tools/call` that arrives
+  before any `tools/list`. The name is checked against the lock, and a tool
+  withheld from a catalogue the guard has seen cannot be called -- but until
+  the server has been asked for its catalogue there is no current definition
+  to compare, and the call is forwarded on the name alone. Every client lists
+  before it calls; a client that does not gets name-level enforcement only
+- Resolving symlinks in a path policy. `paths` is matched lexically after
+  normalisation, so a symlink inside `/workspace` pointing at `/etc` is
+  inside the allowlist as far as this can tell. Following links would mean
+  touching the filesystem from `Policy.check`, which T-POLICY-PURE forbids
+  and which would still race the server's own open(). Confining a server to a
+  directory is the operating system's job -- a container, a sandbox profile,
+  or a server that refuses to leave its root
+- Knowing the working directory a server resolves a relative path against.
+  `{"path": ".env"}` is refused under a `paths` rule because nothing can show
+  it is inside the allowlist, not because its target is known
+- Tying a lockfile to the person who reviewed it. Without `--lock`, the lock
+  is whichever `.mcp-pin.lock` sits in the working directory, so a server
+  configured once at user level takes its approvals from whatever repository
+  is open. `guard` prints the absolute path it resolved and warns when that
+  file sits outside the tree the guarded server lives in, but it cannot tell
+  a lock you wrote from one that arrived with a clone. Pass `--lock` for any
+  server configured outside a single project
 
 ## Rules
 

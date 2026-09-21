@@ -175,19 +175,59 @@ class TestWhatIsStillAllowedOnPurpose(unittest.TestCase):
         self.assertTrue(allows({"domains": ["api.github.com"]}, "fetch",
                                {"url": "https://evil.api.github.com/x"}))
 
-    def test_a_destination_written_without_a_scheme(self) -> None:
-        """`evil.io/x` is not checked, because a domains rule only applies to
-        values that are recognisably URLs and a scheme is what makes one
-        recognisable.
+    def test_a_destination_in_a_parameter_nothing_calls_a_destination(self) -> None:
+        """`evil.io/x` is still not checked when nothing says it is one.
 
-        Widening that needs a host-like pattern, and `README.md/section` fits
-        every version of one worth writing. This project's rule is to widen
-        recall only when precision can be shown to hold on real data, and
-        there is no corpus of real tool *arguments* to show it against. So it
-        is left, and written down, rather than guessed at.
+        The note here used to say widening this needed a host-like pattern,
+        and that `README.md/section` fits every version of one worth writing.
+        That remains true of matching by *shape*. Matching by *name* has no
+        such problem, so a parameter the schema calls `url`, `endpoint` or
+        `host` is now checked whether or not it carries a scheme -- see
+        TestSchemelessDestinations below.
+
+        What is left is a bare string in a parameter with no destination-like
+        name, where shape is the only evidence there is. That one stays, and
+        stays written down.
         """
         self.assertTrue(allows({"domains": ["api.github.com"]}, "fetch",
-                               {"url": "evil.io/x"}))
+                               {"note": "see evil.io/x for details"}))
+
+
+class TestSchemelessDestinations(unittest.TestCase):
+    """A domains rule reads the parameters the schema names as destinations.
+
+    Classifying only by shape meant `domains: ["api.github.com"]` admitted
+    `evil.example/upload`, `//evil.example/x` and `{"host": "evil.example"}`,
+    because only a leading `scheme://` counted as a URL at all. The server
+    resolves every one of those to the same place.
+    """
+
+    RULES = {"domains": ["api.github.com"]}
+
+    def test_a_named_parameter_without_a_scheme_is_refused(self) -> None:
+        for param, value in (("url", "evil.example/upload"),
+                             ("host", "evil.example"),
+                             ("endpoint", "evil.example"),
+                             ("webhook", "//evil.example/x"),
+                             ("uri", "//evil.example/x")):
+            with self.subTest(param=param, value=value):
+                self.assertFalse(allows(self.RULES, "fetch", {param: value}))
+
+    def test_the_approved_host_still_passes_without_a_scheme(self) -> None:
+        for value in ("api.github.com", "api.github.com/repos",
+                      "//api.github.com/repos", "https://api.github.com/x"):
+            with self.subTest(value=value):
+                self.assertTrue(allows(self.RULES, "fetch", {"url": value}))
+
+    def test_a_named_parameter_that_names_no_host_is_refused(self) -> None:
+        """An empty or unparseable destination is refused rather than skipped.
+
+        The server will resolve it somehow, and this is the only point at
+        which saying no is still possible.
+        """
+        for value in ("   ", "://", "http://"):
+            with self.subTest(value=value):
+                self.assertFalse(allows(self.RULES, "fetch", {"url": value}))
 
     def test_a_comment_inside_a_keyword_is_not_a_bypass(self) -> None:
         """`SEL/**/ECT 1` reads as SELECT here and as `SEL ECT` to an engine,

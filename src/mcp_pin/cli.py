@@ -232,7 +232,8 @@ def _scan_context(args: argparse.Namespace, data: Collected, lock: Lock) -> Audi
         resources=data.resources,
         instructions=data.instructions,
         config_errors=data.errors,
-        lock={"servers": lock.servers, "skills": lock.skills},
+        lock={"servers": lock.servers, "skills": lock.skills,
+              "stale_digests": lock.stale_digests},
         source_flows=data.source_flows,
         options=_rule_options(args, data),
     )
@@ -522,6 +523,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
     return guard_mod.run(
         argv,
         lock_path=lock_path,
+        lock_was_explicit=bool(getattr(args, "lock", None)),
         policy=args.policy,
         server_name=args.name,
         strict=not args.fail_open,
@@ -628,7 +630,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         prompts=data.prompts, resources=data.resources,
         instructions=data.instructions, source_flows=data.source_flows,
         config_errors=data.errors,
-        lock={"servers": lock.servers, "skills": lock.skills},
+        lock={"servers": lock.servers, "skills": lock.skills,
+              "stale_digests": lock.stale_digests},
         options=_rule_options(args, data),
     )
     findings = run_rules(ctx)

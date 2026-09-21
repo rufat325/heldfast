@@ -73,8 +73,25 @@ class TestLaunchMismatch(unittest.TestCase):
         self.assertIsNotNone(launch_mismatch("python s.py", ["python", "evil.py"]))
 
     def test_an_old_lock_without_a_command_is_not_a_pass(self) -> None:
-        self.assertIsNone(launch_mismatch("", ["python", "s.py"]))
-        self.assertIsNone(launch_mismatch(None, ["python", "s.py"]))
+        """An entry that stands for an approval and records no command is a
+        refusal -- which is what this test's name always claimed, and what
+        the function's own docstring always said. It used to assert the
+        opposite, so an entry missing `command_line`, whether old or
+        hand-edited, let the guard start any binary at all under that
+        server's name."""
+        self.assertIsNotNone(launch_mismatch("", ["python", "s.py"]))
+        self.assertIsNotNone(launch_mismatch(None, ["python", "s.py"]))
+
+    def test_no_lock_entry_at_all_is_left_to_the_tool_policy(self) -> None:
+        """A different case with a different answer. An unlisted server
+        reached through --allow-unapproved has no entry to read a command
+        from, and refusing to launch it would make that flag mean nothing."""
+        self.assertIsNone(launch_mismatch(None, ["python", "s.py"], pinned=False))
+        self.assertIsNone(launch_mismatch("", ["python", "s.py"], pinned=False))
+
+    def test_a_remote_backend_has_no_argv_to_compare(self) -> None:
+        self.assertIsNone(launch_mismatch("", []))
+        self.assertIsNone(launch_mismatch("python s.py", None))
 
 
 class TestApproveRefusesToRubberStamp(unittest.TestCase):
