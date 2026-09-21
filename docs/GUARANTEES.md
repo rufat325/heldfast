@@ -61,10 +61,12 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-COMPILES-CLEAN | Every module under `src/` and `tests/` compiles with no `SyntaxWarning`. An invalid escape is a warning today and a `SyntaxError` from Python 3.15, and cached bytecode hides it from everyone but a first-time installer. | `tests/test_auditlog.py`, `.github/workflows/ci.yml` |
 | T-PROBE-GATE | A rule exception in the static pre-pass launches nothing. | `tests/test_probe_boundary.py`, `tests/test_mutation.py` |
 | T-DRIFT-ID | Two lock entries sharing a bare name are not compared against the first match. | `tests/test_mcp_pin.py`, `tests/test_mutation.py` |
-| T-TYPES | `policy.py`, `lockfile.py`, `model.py`, `findings.py`, `pkgcache.py`, `auditlog.py` and `confusables.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
+| T-TYPES | `policy.py`, `lockfile.py`, `model.py`, `findings.py`, `pkgcache.py`, `auditlog.py`, `confusables.py` and `digest.py` type-check under `mypy --strict`. | `.github/workflows/ci.yml` |
 | T-SIZE | Functions in `cli.py` and `guard.py` fit on one page (60 lines). | `tests/test_function_size.py` |
 | T-WHEEL | The published wheel has no runtime dependencies. | `.github/workflows/release.yml` |
 | T-REDACT | Findings cannot carry a live credential or a control character that rewrites the report. | `tests/test_output_integrity.py` |
+| T-DIGEST | The same tool object produces the same SHA-256 digest in Python and in the zero-dep JS checker. Twelve golden vectors are the contract. Empty `output_schema` / `icons` are omitted. | `tests/test_lock_spec.py` |
+| T-RESULT-BLOCK | `RS-ANSI`, `RS-SECRET` and `RS-EXFIL-HOST` withhold a tool result even under `--result-policy annotate`. English-injection fencing stays best-effort. | `tests/test_result_theorems.py` |
 
 ## Best-effort
 
@@ -92,7 +94,7 @@ We try. Evasion is expected. A miss here is not a CVE in this tool.
 - MCPA004 typosquat list (static names, not a registry oracle)
 - MCPA021 / MCPA022 / MCPA026 annotation and title heuristics
 - `--llm` semantic classifier
-- Result-screen fencing (`--result-policy`)
+- Result-screen fencing of English-injection phrases (`--result-policy`); the three named classes are T-RESULT-BLOCK
 - Source-scan dataflow past one hop (MCPA030)
 - Windows ACL equivalent of MCPA006
 

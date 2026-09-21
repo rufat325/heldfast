@@ -58,7 +58,11 @@ def _add_scan_arguments(p: argparse.ArgumentParser) -> None:
 
 
 def _register_scan(sub: argparse._SubParsersAction) -> None:
-    scan = sub.add_parser("scan", help="scan for findings (default command)")
+    scan = sub.add_parser(
+        "scan",
+        aliases=["doctor"],
+        help="scan for findings (default command; `doctor` is the same job)",
+    )
     _add_scan_arguments(scan)
     scan.add_argument("-f", "--format", choices=("text", "json", "sarif"), default="text")
     scan.add_argument("-o", "--output", metavar="FILE", help="write the report to FILE")
@@ -338,12 +342,13 @@ def _register_report(sub: argparse._SubParsersAction) -> None:
 def _register_guard(sub: argparse._SubParsersAction) -> None:
     guard_p = sub.add_parser(
         "guard",
+        aliases=["wrap"],
         help="proxy a server and enforce the approval lockfile at runtime",
         description=(
             "Sit between the client and an MCP server, and refuse to pass through tools "
             "that are unapproved or whose definition changed since approval. Reads the "
             "same .mcp-pin.lock the CI gate reads, so one artifact governs both. "
-            "Usage: mcp-pin guard -- <server command...>"
+            "`wrap` is the same command. Usage: mcp-pin wrap -- <server command...>"
         ),
     )
     guard_p.add_argument("--lock", metavar="PATH", default=None,
@@ -401,6 +406,45 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
                               "withhold it, or only log")
 
 
+def _register_check(sub: argparse._SubParsersAction) -> None:
+    check_p = sub.add_parser(
+        "check",
+        help="verify .mcp-pin.lock is well-formed (no scan, no launch)",
+        description=(
+            "The lockfile check another language can run. Refuses a missing file "
+            "(MCPA014) and a version this tool does not understand. Does not "
+            "launch servers and does not contact a registry."
+        ),
+    )
+    check_p.add_argument("--lock", metavar="PATH", default=None,
+                         help=f"lockfile (default: ./{DEFAULT_LOCK_NAME})")
+
+
+def _register_ci(sub: argparse._SubParsersAction) -> None:
+    ci = sub.add_parser(
+        "ci",
+        help="scan that fails the PR on MCPA014/015 (never launches)",
+        description=(
+            "The build-gate name. Equivalent to `scan --fail-on high` with "
+            "`--probe` refused, so a runner cannot be talked into launching "
+            "configured servers. MCPA014 (no lock) and MCPA015 (drift) fail "
+            "the job under the default threshold."
+        ),
+    )
+    _add_scan_arguments(ci)
+    ci.add_argument("-f", "--format", choices=("text", "json", "sarif"), default="text")
+    ci.add_argument("-o", "--output", metavar="FILE", help="write the report to FILE")
+    ci.add_argument("--fail-on", default="high",
+                    choices=[s.label for s in Severity] + ["never"],
+                    help="minimum severity that sets exit code 1 (ci forces high)")
+    ci.add_argument("--min-severity", default="info", choices=[s.label for s in Severity])
+    ci.add_argument("--only", action="append", metavar="RULE", default=[])
+    ci.add_argument("--disable", action="append", metavar="RULE", default=[])
+    ci.add_argument("--no-color", action="store_true")
+    ci.add_argument("--ignore-file", metavar="PATH", default=None)
+    ci.add_argument("--no-ignore", action="store_true")
+
+
 def _register_serve(sub: argparse._SubParsersAction) -> None:
     sub.add_parser(
         "serve",
@@ -440,6 +484,8 @@ def build_parser() -> argparse.ArgumentParser:
     _register_verify_log(sub)
     _register_report(sub)
     _register_guard(sub)
+    _register_check(sub)
+    _register_ci(sub)
     _register_serve(sub)
     # The command names come from the parser rather than a second list.
     # A hardcoded set is how `verify-log` was silently treated as a path

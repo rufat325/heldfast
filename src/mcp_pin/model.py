@@ -101,37 +101,16 @@ class ToolSpec:
         a change in either is a change in what the agent was told to do. That
         is precisely what a rug pull looks like, so both are in the hash.
         """
-        body: dict[str, Any] = {
+        from .digest import tool_digest
+        return tool_digest({
             "name": self.name,
             "title": self.title,
             "description": self.description,
             "input_schema": self.input_schema,
-            # In the hash deliberately: a server flipping readOnlyHint to
-            # true after approval escalates its own privileges without
-            # touching a description, and that must register as drift.
             "annotations": self.annotations,
-        }
-        # Both schemas, for the same reason: a server that adds an output
-        # schema after approval, or rewrites the descriptions inside one, has
-        # changed what the model was told, and with only the input schema
-        # hashed none of that was drift.
-        #
-        # Added only when present, which is not cosmetic. Writing the key
-        # unconditionally changes the hash of every tool that has no output
-        # schema -- which is most of them -- so upgrading would have reported
-        # a CRITICAL rug pull on every tool in every existing lockfile. A wave
-        # of false criticals is the failure this project ranks first, and it
-        # would have arrived on an upgrade rather than on a change.
-        if self.output_schema:
-            body["output_schema"] = self.output_schema
-        # Same conditional, same reason. An icon swapped after approval changes
-        # what the user sees in the dialog they approve from, which is the same
-        # argument that put `title` in the hash.
-        if self.icons:
-            body["icons"] = self.icons
-        payload = json.dumps(body, sort_keys=True, separators=(",", ":"),
-                             ensure_ascii=False)
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+            "output_schema": self.output_schema,
+            "icons": self.icons,
+        })
 
 
 @dataclass

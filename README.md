@@ -2,9 +2,12 @@
 
 [![ci](https://github.com/rufat325/mcp-pin/actions/workflows/ci.yml/badge.svg)](https://github.com/rufat325/mcp-pin/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/mcp-pin.svg)](https://pypi.org/project/mcp-pin/)
+[![mcp-pin](docs/badge.svg)](docs/LOCK.md)
 
-You approve an MCP server. mcp-pin records what you approved. Later it tells
-you what moved, and `guard` refuses the rest.
+The file you commit is the same check that runs in CI and on the wire.
+If the tool the model can see is not the tool you approved, the call does not happen.
+
+There is another project named mcp-pin ([GautamTalksDev/mcp-pin](https://github.com/GautamTalksDev/mcp-pin)). That one pins on first connect. This one records a review, then refuses the rest. `npx mcp-pin` is theirs.
 
 No runtime dependencies.
 
@@ -14,15 +17,19 @@ The GIF is two sessions we ran against this tree: wrapping
 [`@modelcontextprotocol/server-filesystem@2026.8.31`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem)
 (14 tools; `wipe_disk` refused because it was not in the pin), then a
 server that kept the same config and rewrote `read_invoice` to ask for
-`~/.ssh/id_rsa`.
+`~/.ssh/id_rsa`. Nothing queued was forwarded while the pin was wrong.
 
 ```bash
 pipx install mcp-pin
 
-mcp-pin approve --probe   # record what you reviewed
-mcp-pin                   # later: see what changed
-mcp-pin guard -- npx -y @scope/server@1.0.0
+mcp-pin approve --probe          # record what you reviewed
+mcp-pin wrap --name files -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./notes
 ```
+
+If there is no lock, wrap will not start. That is not TOFU.
+
+`npx @rufat325/mcp-pin -- <server>` is the same wrap, once the Python package is installed.
+`npx mcp-pin-check` verifies `.mcp-pin.lock` with zero npm dependencies.
 
 ## Install
 
@@ -35,24 +42,37 @@ pip install mcp-pin
 Python 3.9+. Zero runtime dependencies, on purpose — a supply-chain scanner that drags in a
 dependency tree is asking you to trust the thing it's auditing.
 
+Claude Code, without rewriting `mcpServers` argv:
+
+```
+/plugin marketplace add rufat325/mcp-pin
+/plugin install mcp-pin@mcp-pin
+```
+
+The hook reads the same `.mcp-pin.lock`. PreToolUse denies `mcp__server__tool` on a miss or a drifted digest. It does not rewrite hashes.
+
 ## Usage
 
 ```bash
-mcp-pin                              # scan discovered configs + skills
-mcp-pin scan ./my-project            # scan one project
+mcp-pin wrap -- npx -y pkg@1.0.0     # refuse the rest (alias of guard)
+mcp-pin -- npx -y pkg@1.0.0          # same wrap
 mcp-pin approve --probe              # pin; --yes-tool NAME for critical drift
-mcp-pin guard -- npx -y pkg@1.0.0    # refuse the rest
+mcp-pin doctor                       # later: see what changed (alias of scan)
+mcp-pin ci                           # fail the PR on MCPA014/015; never launches
+mcp-pin check                        # the lockfile, nothing else
+mcp-pin scan ./my-project            # scan one project
+mcp-pin scan --safe                  # never execute, never connect
 ```
 
+`--safe` is the scan you run on a machine that is not disposable. `--probe` launches configured STDIO servers; a scan without it does not run anyone else's code. Keep `--llm` optional and disclosed: it sends tool text to an API.
+
 The rest of the commands, flags, gateway, policy and logs are in
-[docs/MANUAL.md](docs/MANUAL.md). `mcp-pin --help` lists them.
+[docs/MANUAL.md](docs/MANUAL.md). `mcp-pin --help` lists them. The digest other tools implement is [docs/LOCK.md](docs/LOCK.md). Scan vs pin vs refuse-call vs refuse-spawn: [docs/COMPARE.md](docs/COMPARE.md).
 
 Finds configs for 17 clients - Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed,
 Cline, Roo, Kilo, Continue, LM Studio, opencode, Gemini CLI, Amp, Witsy, and more - on
-Windows, macOS and Linux, plus any `SKILL.md` files in the tree.
-
-`--probe` launches configured STDIO servers. `--safe` executes nothing and connects to
-nothing. A scan without `--probe` does not run anyone else's code.
+Windows, macOS and Linux, plus any `SKILL.md` files in the tree. The list is frozen;
+last verified 2026-09-21. [docs/CLIENTS.md](docs/CLIENTS.md).
 
 ## Why
 
@@ -195,7 +215,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1062 tests, stdlib unittest, nothing to install.
+1093 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

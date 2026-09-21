@@ -515,3 +515,13 @@ class TestTheReadmeMatchesTheCode(unittest.TestCase):
         match = re.search(r"Finds configs for (\d+) clients", self._readme())
         self.assertIsNotNone(match, "the README no longer states a client count")
         self.assertEqual(len(clients.CLIENTS), int(match.group(1)))
+
+    def test_the_clients_table_lists_every_id(self) -> None:
+        table = (ROOT / "docs" / "CLIENTS.md").read_text(encoding="utf-8")
+        for c in clients.CLIENTS:
+            with self.subTest(c.id):
+                self.assertIn(f"| {c.id} |", table)
+        self.assertIn(clients.CLIENTS_VERIFIED, table)
+
+    def test_the_readme_names_the_other_mcp_pin(self) -> None:
+        self.assertIn("GautamTalksDev/mcp-pin", self._readme())

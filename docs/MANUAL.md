@@ -74,11 +74,15 @@ mcp-pin scan --no-user-configs .     # project only, skip ~/ configs
 mcp-pin scan --probe                 # also read live tool descriptions
 mcp-pin scan --safe                  # never execute, never connect
 mcp-pin scan --no-source             # skip reading server source
+mcp-pin doctor                       # same job as scan
+mcp-pin ci                           # fail the PR on MCPA014/015; never launches
+mcp-pin check                        # verify .mcp-pin.lock, launch nothing
 mcp-pin approve --probe              # write .mcp-pin.lock
 mcp-pin inspect                      # what is configured, no judgement
 mcp-pin rules                        # list rules
 mcp-pin explain MCPA015              # describe one rule in full
-mcp-pin guard -- npx -y pkg@1.0.0    # proxy a server, enforce the lockfile
+mcp-pin wrap -- npx -y pkg@1.0.0     # proxy a server, enforce the lockfile
+mcp-pin guard -- npx -y pkg@1.0.0    # same command as wrap
 mcp-pin guard --log trail.jsonl -- npx pkg   # proxy and record the session
 mcp-pin verify-log trail.jsonl       # check the record was not altered
 mcp-pin report trail.jsonl           # what the agent did: sessions, calls, refusals
@@ -1281,7 +1285,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1062 tests, stdlib unittest, nothing to install.
+1093 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from
