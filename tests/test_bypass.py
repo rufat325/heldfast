@@ -56,13 +56,14 @@ class TestItFires(unittest.TestCase):
         direct = server("github")
         found = fired([GATEWAY, direct], approved=[direct])
         self.assertEqual(1, len(found))
-        self.assertEqual("github", found[0].server)
+        self.assertEqual("claude-code:github", found[0].server)
 
     def test_each_bypassable_server_is_named_separately(self) -> None:
         """Four servers and one summary line would leave you guessing which."""
         a, b = server("github"), server("postgres")
         found = fired([GATEWAY, a, b], approved=[a, b])
-        self.assertEqual({"github", "postgres"}, {f.server for f in found})
+        self.assertEqual({"claude-code:github", "claude-code:postgres"},
+                         {f.server for f in found})
 
     def test_the_remedy_says_what_the_gateway_already_exposes(self) -> None:
         direct = server("github")
@@ -87,7 +88,7 @@ class TestItStaysQuiet(unittest.TestCase):
         approved, stray = server("github"), server("stray")
         self.assertEqual([], [f for f in fired([GATEWAY, approved, stray],
                                                approved=[approved])
-                              if f.server == "stray"])
+                              if f.server == "claude-code:stray"])
 
     def test_nothing_approved_means_nothing_to_bypass(self) -> None:
         self.assertEqual([], fired([GATEWAY, server("github")]))

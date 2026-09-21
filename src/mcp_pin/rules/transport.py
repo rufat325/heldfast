@@ -100,7 +100,7 @@ def cleartext_transport(ctx: AuditContext) -> Iterable[Finding]:
                 "readable and modifiable in transit -- and a tampered tool *description* "
                 "rewrites what the agent believes it is allowed to do."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0051.001"],
             cwe=["CWE-319"],
             tags=["transport"],
@@ -137,7 +137,7 @@ def unauthenticated_remote(ctx: AuditContext) -> Iterable[Finding]:
                 "connect time this finding is expected and can be suppressed; if it does "
                 "not, anyone who can reach the URL can drive the same tools your agent can."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0012"],
             cwe=["CWE-306"],
             confidence=0.7,
@@ -175,7 +175,7 @@ def bind_all_interfaces(ctx: AuditContext) -> Iterable[Finding]:
                 "server on 0.0.0.0 is reachable by anything that can route to this host, "
                 "and MCP servers are typically written assuming a trusted local caller."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0012"],
             cwe=["CWE-1327"],
             tags=["transport", "exposure"],
@@ -220,7 +220,7 @@ def dangerous_url_scheme(ctx: AuditContext) -> Iterable[Finding]:
                 "vbscript: URLs, because a client that opens one hands the page's author "
                 "execution in the client's context."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0011"],
             cwe=["CWE-79", "CWE-749"],
             tags=["transport", "scheme"],
@@ -317,7 +317,7 @@ def metadata_endpoint(ctx: AuditContext) -> Iterable[Finding]:
                 "not a server -- it is a request for the agent to fetch cloud credentials "
                 "and hand them back as tool output."
             ),
-            server=s.name,
+            server=s.identity(),
             atlas=["AML.T0055", "AML.T0024"],
             cwe=["CWE-918"],
             tags=["transport", "ssrf", "credentials"],
@@ -360,7 +360,7 @@ def broad_scope(ctx: AuditContext) -> Iterable[Finding]:
                     "omnibus token gives an attacker everything at once, and revoking it "
                     "breaks every workflow rather than one."
                 ),
-                server=s.name,
+                server=s.identity(),
                 atlas=["AML.T0012"],
                 cwe=["CWE-250"],
                 tags=["oauth", "scope"],

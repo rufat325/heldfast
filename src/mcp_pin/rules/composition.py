@@ -226,7 +226,7 @@ def exfiltration_reach(ctx: AuditContext) -> Iterable[Finding]:
                         "steer the agent can read a key with one and send it with the "
                         "other."
                     ),
-                    server=reader.name,
+                    server=reader.identity(),
                     atlas=["AML.T0024", "AML.T0057"],
                     cwe=["CWE-200"],
                     confidence=0.9,
@@ -298,7 +298,7 @@ def bypassable_gateway(ctx: AuditContext) -> Iterable[Finding]:
                     "worse than having no boundary -- it is a committed artifact "
                     "asserting one."
                 ),
-                server=server.name,
+                server=server.identity(),
                 atlas=["AML.T0051"],
                 cwe=["CWE-693"],
                 confidence=0.95,

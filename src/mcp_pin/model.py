@@ -11,7 +11,7 @@ import hashlib
 import json
 import shlex
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeVar
 
 
 @dataclass
@@ -48,8 +48,11 @@ class ServerSpec:
         return f"{self.client}:{self.name}"
 
 
-def observed_for(bucket: dict, spec: "ServerSpec",
-                 servers: list["ServerSpec"]):
+T = TypeVar("T")
+
+
+def observed_for(bucket: dict[str, T], spec: "ServerSpec",
+                 servers: list["ServerSpec"]) -> T | None:
     """The observations tagged for this server, or None.
 
     Probe keys by `identity()`. Call sites that still tag with the bare name

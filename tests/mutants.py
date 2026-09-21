@@ -1368,6 +1368,63 @@ FAIL_OPEN = ("tools" in lock.servers["cursor:github"]
              and "tools" in lock.servers["claude-code:github"])
 """,
     ),
+    Mutant(
+        id="status-namesake-merge",
+        theorem="T-PROBE-ID",
+        path="status.py",
+        original="""    if len(owners.get(name, ())) != 1:
+        return []
+    return by.get(name, [])
+""",
+        replacement="""    return by.get(name, [])
+""",
+        harm="A finding on cursor:github is shown on claude-code:github too.",
+        probe="""
+from mcp_pin.findings import Finding, Location, Severity
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ServerSpec
+from mcp_pin import status as status_mod
+cursor = ServerSpec(name="github", source="/c", client="cursor",
+                    transport="stdio", command="node")
+claude = ServerSpec(name="github", source="/d", client="claude-code",
+                    transport="stdio", command="node")
+lock = Lock()
+lock.record([cursor, claude], [], [])
+finding = Finding(rule_id="MCPA015", title="t", severity=Severity.CRITICAL,
+                  location=Location(path="/c", line=1), evidence="e",
+                  remediation="r", server="github")
+data = status_mod.build(lock, [cursor, claude], [finding])
+by = {row["identity"]: row for row in data["servers"]}
+FAIL_OPEN = (by["cursor:github"]["findings"]
+             and by["claude-code:github"]["findings"])
+""",
+    ),
+    Mutant(
+        id="gate-namesake-skip",
+        theorem="T-PROBE-ID",
+        path="cli.py",
+        original="        blocker = observed_for(worst, server, out.servers)",
+        replacement="        blocker = worst.get(server.name)",
+        harm="A HIGH finding tagged cursor:github is missed; the gate looks up 'github'.",
+        probe="""
+from unittest.mock import patch
+from mcp_pin.cli import Collected, _gate_servers
+from mcp_pin.findings import Finding, Location, Severity
+from mcp_pin.model import ServerSpec
+cursor = ServerSpec(name="github", source="/c", client="cursor",
+                    transport="stdio", command="node")
+claude = ServerSpec(name="github", source="/d", client="claude-code",
+                    transport="stdio", command="node")
+out = Collected()
+out.servers = [cursor, claude]
+blocker = Finding(rule_id="MCPA002", title="pipe", severity=Severity.CRITICAL,
+                  location=Location(path="/c", line=1), evidence="e",
+                  remediation="r", server=cursor.identity())
+with patch("mcp_pin.cli.run_rules", return_value=[blocker]):
+    launchable, skipped = _gate_servers(out, Severity.HIGH)
+FAIL_OPEN = cursor in launchable
+""",
+    ),
 )
 
 

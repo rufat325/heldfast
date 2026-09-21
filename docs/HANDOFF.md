@@ -306,6 +306,21 @@ Read this file and `docs/GUARANTEES.md` instead.
     keys by identity. `record` accepts a bare name only when it is unique
     among the servers being written. T-PROBE-ID.
 
+35. ~~Subject IDs leaked back to the bare name after the pin was written.~~
+    Done. Findings, the probe gate and the status page still keyed on
+    `s.name`, so a HIGH finding on `cursor:github` could skip (or decorate)
+    `claude-code:github` too. They now use `identity()`, with the same
+    unique-name fallback as `record`. The types job on #3 was red because
+    `observed_for` had no return annotation; that is typed.
+
+    The architecture note that followed -- ATR rules, Aguara analyzers,
+    mcpsnoop observe, Node9 shields, agent-bom evidence graphs, SkillHawk
+    benchmarks, offsec-ai active testing -- is not a backlog. The lock is
+    the product. Those projects already occupy those surfaces. Gluing them
+    on is seven tools. Composition toxic-flow (MCPA028), argument policy,
+    `--safe` vs `--probe`, the audit log and the mutation catalog already
+    cover the pieces of that note that belong here.
+
 ## Lessons that cost something
 
 Kept in the tracked file rather than in local notes, because every one of them

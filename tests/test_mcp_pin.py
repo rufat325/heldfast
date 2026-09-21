@@ -418,6 +418,21 @@ class TestSuppressions(unittest.TestCase):
         self.assertEqual(1, len(dropped))
         self.assertEqual("alpha", dropped[0][0].server)
 
+    def test_a_bare_name_still_matches_an_identity_tagged_finding(self) -> None:
+        """Findings are tagged client:name. An ignore line that names the
+        server, written before that, must still apply."""
+        rules = [suppressions.Suppression("MCPA008", "github", "", 1)]
+        kept, dropped = suppressions.apply(
+            [self._finding("MCPA008", "cursor:github"),
+             self._finding("MCPA008", "claude-code:github"),
+             self._finding("MCPA008", "cursor:other")],
+            rules,
+        )
+        self.assertEqual(["cursor:other"], [f.server for f in kept])
+        self.assertEqual({"cursor:github", "claude-code:github"},
+                         {f.server for f, _ in dropped})
+
+
     def test_bare_rule_suppresses_serverless_findings(self) -> None:
         rules = [suppressions.Suppression("MCPA013", "*", "", 1)]
         kept, dropped = suppressions.apply([self._finding("MCPA013", None)], rules)
