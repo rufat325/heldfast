@@ -20,6 +20,66 @@ from ..textdiff import changed_text
 from .base import AuditContext, rule
 
 
+def _block(text: str) -> str:
+    """A diff section, or nothing when there was none to show."""
+    return text + "\n" if text else ""
+
+
+def _scope(moved: int, carried: int) -> str:
+    """How much of this server's catalogue moved, in words.
+
+    Measured across twenty consecutive releases of four official servers:
+    when a tool definition changes, it is usually not alone. Four of those
+    releases moved every tool at once, 45 tool-versions in total, because the
+    server adopted a new spec field -- `server-memory` gained `annotations`
+    on all nine tools in one release. Six releases moved a single tool while
+    its siblings stayed put.
+
+    Those two shapes want different reactions, and the report gave no way to
+    tell them apart: thirteen CRITICALs from a version bump look exactly like
+    thirteen from an attack, so the one that matters is read at the same rate
+    as the twelve that do not.
+
+    Naming the shape is as far as this goes. The severity does not move, and
+    a catalogue-wide change is not the quieter one -- rewriting every tool at
+    once is available to an attacker too, and would be the obvious play
+    against a rule that treated breadth as innocence.
+    """
+    if carried <= 1:
+        return "this server advertises one tool, and it changed"
+    if moved == carried:
+        return (f"every one of the {carried} tools on this server changed, "
+                f"which is the shape of a version upgrade -- and equally of a "
+                f"server rewriting all of them at once")
+    return (f"{moved} of {carried} tools on this server changed; the other "
+            f"{carried - moved} are unchanged, which is the shape of a "
+            f"targeted edit rather than an upgrade")
+
+
+def _nature(was: str, now: str, recorded_length: int | None) -> str:
+    """Whether the prose moved, or something else in the definition did.
+
+    `now.startswith(was)` is not the test on its own: text with a payload
+    appended starts with the text it was appended to, so a complete record
+    and a truncated one have to be told apart before the answer means
+    anything.
+    """
+    if not was:
+        return ("no description was recorded at approval, so what moved "
+                "cannot be narrowed further")
+    complete = recorded_length is not None and recorded_length <= len(was)
+    if complete:
+        if now == was:
+            return ("the description is identical; the change is elsewhere in "
+                    "the definition -- input schema, annotations or title")
+        return "the description itself changed"
+    if now.startswith(was):
+        return (f"the first {len(was)} characters of the description are "
+                f"unchanged; the rest of it was not recorded, so the change "
+                f"may be later in the prose or elsewhere in the definition")
+    return "the description itself changed"
+
+
 def _int_or_none(value: Any) -> int | None:
     """A recorded length, when the lockfile has a usable one."""
     return value if isinstance(value, int) else None
@@ -185,6 +245,12 @@ def tool_drift(ctx: AuditContext) -> Iterable[Finding]:
         locked_tools = entry.get("tools") or {}
         source = str(entry.get("source") or "")
 
+        carried = [n for n in current_tools if isinstance(
+            locked_tools.get(n), dict)]
+        moved = [n for n in carried
+                 if locked_tools[n].get("fingerprint")
+                 != current_tools[n].fingerprint()]
+
         for name, tool in sorted(current_tools.items()):
             locked = locked_tools.get(name)
             if locked is None:
@@ -217,9 +283,11 @@ def tool_drift(ctx: AuditContext) -> Iterable[Finding]:
                 location=Location(path=source, line=0, snippet=f"{server_name}/{name}"),
                 evidence=(
                     f"tool {name!r} fingerprint changed\n"
-                    + changed_text(was, now, recorded_length=(
+                    + _block(changed_text(was, now, recorded_length=(
                         approved_len if isinstance(approved_len, int)
-                        else None))
+                        else None)))
+                    + f"      scope: {_scope(len(moved), len(carried))}"
+                    + f"\n      what:  {_nature(was, now, _int_or_none(approved_len))}"
                 ),
                 remediation=(
                     "Diff the full definition before using this server again. The config file "

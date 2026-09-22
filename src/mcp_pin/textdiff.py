@@ -102,6 +102,15 @@ def changed_text(was: str, now: str, *, recorded_length: int | None = None,
     the lock knows. `now` is the live text in full -- pass it unclipped, the
     windowing here is the only place it should be shortened.
     """
+    if was and was == now:
+        # The fingerprint moved while this text did not, so the change is in
+        # the schema, the annotations or the title. Falling through would
+        # report "text ends at character N", which describes a shortening
+        # that did not happen. Empty rather than a sentence: the caller says
+        # what moved instead, and two lines saying it is not the description
+        # is one more than the reader needs.
+        return ""
+
     at = first_difference(was, now)
 
     if at >= len(now):

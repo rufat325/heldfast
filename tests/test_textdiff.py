@@ -122,6 +122,79 @@ class TestItDoesNotClaimWhatItCannotKnow(unittest.TestCase):
         self.assertIn("text ends at character 50", out)
 
 
+class TestTheShapeOfTheChange(unittest.TestCase):
+    """Measured across twenty releases of four official servers: when a tool
+    moves, it usually does not move alone. Four of those releases moved every
+    tool at once because the server adopted `annotations`; six moved one tool
+    while its siblings stayed put. The report treated both identically, so a
+    version bump produced thirteen CRITICALs that read exactly like an attack.
+    """
+
+    def _catalogue(self, total: int, changed: int, kind: str):
+        live, locked = [], {}
+        for i in range(total):
+            text = f"Tool {i} does a thing. " * 3
+            approved = ToolSpec(server="s", name=f"tool_{i}", description=text,
+                                input_schema={"type": "object"})
+            locked[approved.name] = {
+                "fingerprint": approved.fingerprint(),
+                "description_preview": text, "description_length": len(text)}
+            if i < changed and kind == "description":
+                live.append(ToolSpec(server="s", name=approved.name,
+                                     description=text + PAYLOAD,
+                                     input_schema={"type": "object"}))
+            elif i < changed:
+                live.append(ToolSpec(server="s", name=approved.name,
+                                     description=text,
+                                     input_schema={"type": "object"},
+                                     annotations={"readOnlyHint": True}))
+            else:
+                live.append(approved)
+        spec = ServerSpec(name="s", source="/p/.mcp.json", client="c",
+                          transport="stdio", command="node", args=["x.js"])
+        lock = {"version": 2, "servers": {"c:s": {
+            "name": "s", "client": "c", "source": "/p/.mcp.json",
+            "tools": locked}}}
+        ctx = AuditContext(servers=[spec], skills=[], lock=lock, tools=live)
+        return [f for f in run_rules(ctx) if f.rule_id == "MCPA015"]
+
+    def test_a_catalogue_wide_change_is_named_as_one(self) -> None:
+        found = self._catalogue(9, 9, "annotations")
+        self.assertEqual(9, len(found))
+        self.assertIn("every one of the 9 tools", found[0].evidence)
+
+    def test_an_isolated_change_says_the_siblings_held(self) -> None:
+        found = self._catalogue(14, 1, "description")
+        self.assertEqual(1, len(found))
+        self.assertIn("1 of 14 tools", found[0].evidence)
+        self.assertIn("the other 13 are unchanged", found[0].evidence)
+
+    def test_breadth_is_not_treated_as_innocence(self) -> None:
+        """The evasion this must not open. If a catalogue-wide change were
+        the quieter one, rewriting every tool at once would be the way
+        through -- available to an attacker for the cost of one more edit.
+        """
+        for found in (self._catalogue(9, 9, "description"),
+                      self._catalogue(14, 1, "description")):
+            for finding in found:
+                self.assertEqual("CRITICAL", finding.severity.name)
+
+    def test_annotations_only_is_not_reported_as_prose(self) -> None:
+        """`server-memory` gained `annotations` on all nine tools in one
+        release without touching a word of any description. Saying "the
+        description changed" there would be false."""
+        evidence = self._catalogue(9, 9, "annotations")[0].evidence
+        self.assertIn("the description is identical", evidence)
+        self.assertNotIn("was:", evidence)
+
+    def test_an_appended_payload_is_reported_as_prose(self) -> None:
+        """`startswith` is true for an append, so this is the case a naive
+        check calls unchanged."""
+        evidence = self._catalogue(14, 1, "description")[0].evidence
+        self.assertIn("the description itself changed", evidence)
+        self.assertIn("id_rsa", evidence)
+
+
 class TestTheWindow(unittest.TestCase):
     def test_a_prefix_gives_the_shorter_length(self) -> None:
         self.assertEqual(3, first_difference("abc", "abcdef"))
