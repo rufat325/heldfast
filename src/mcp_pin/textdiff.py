@@ -38,9 +38,12 @@ from __future__ import annotations
 # How much of the approved text a lockfile keeps. Only a reading aid -- the
 # fingerprint covers the whole string -- but 160 was short enough that an
 # ordinary tool description overflowed it, which is what made a rewritten
-# description undiffable. Long enough now to hold a real description, short
-# enough that a server with many tools does not turn the lock into a corpus.
-PREVIEW_CHARS = 1024
+# description undiffable. Sized against the real distribution rather than a
+# guess: the longest description across four official servers is
+# sequential-thinking's, at 2783 characters, and the release where it last
+# changed differs only at character 2706. A cap under that would have shown
+# the wrong part of it.
+PREVIEW_CHARS = 4096
 
 # Characters shown either side of the first divergence.
 CONTEXT = 90
@@ -134,15 +137,18 @@ def changed_text(was: str, now: str, *, recorded_length: int | None = None,
         ])
 
     if recorded_length > len(was):
-        # The recorded prefix matches, so the change is past the end of it and
-        # the old bytes are simply not in the lockfile. Say that rather than
-        # printing the prefix twice.
+        # The recorded prefix matches, so the change is somewhere past the end
+        # of it and the old bytes are not in the lockfile. The divergence
+        # cannot be located -- windowing at the end of the prefix would point
+        # at text that did not move and imply otherwise -- so this shows where
+        # the live text now ends, which is where an appended payload is.
         return "\n".join([
             f"{indent}was: {len(was)} of {recorded_length} characters were "
-            f"recorded, and they still match",
-            f"{indent}now: {ahead}",
-            f"{indent}     (the change is past character {len(was)}; "
-            f"re-approve to record the new text in full)",
+            f"recorded, and they match",
+            f"{indent}now: {len(now)} characters, ending "
+            f"{window(now, len(now), before=LOOKAHEAD, after=0)}",
+            f"{indent}     (the change is past character {len(was)} and cannot "
+            f"be placed exactly; re-approve to record the new text)",
         ])
 
     # Appended to text that was recorded in full: the addition is the change,
