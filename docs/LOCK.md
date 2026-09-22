@@ -72,7 +72,7 @@ implementations cannot drift apart again without a test going red.
 
 ```bash
 python -c "from mcp_pin.digest import tool_digest; ..."
-npx mcp-pin-check --golden tests/golden/tools
+node js/mcp-pin-check/bin.js --golden tests/golden/tools
 ```
 
 ## File

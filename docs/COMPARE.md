@@ -17,6 +17,6 @@ Snyk and Cisco own "does this text look evil." Gateways own auth and DLP. mcp-pi
 
 ## The other mcp-pin
 
-[GautamTalksDev/mcp-pin](https://github.com/GautamTalksDev/mcp-pin) is a different program that shares this name. It pins on first connect (TOFU). This one records a review (`--yes-tool` for a critical change) and then refuses the rest. `npx mcp-pin` is theirs. This tool is `pipx install mcp-pin` or `npx @rufat325/mcp-pin`.
+[GautamTalksDev/mcp-pin](https://github.com/GautamTalksDev/mcp-pin) is a different program that shares this name. It pins on first connect (TOFU). This one records a review (`--yes-tool` for a critical change) and then refuses the rest. `npx mcp-pin` is theirs. This tool is `pipx install mcp-pin`. The npm shim in `js/mcp-pin-wrap` is not published, so there is no `npx` spelling of this one yet.
 
 If Warden and Gautam keep their own hashes, a PR that fails on *this* file is still the win.

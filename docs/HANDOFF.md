@@ -285,8 +285,9 @@ Read this file and `docs/GUARANTEES.md` instead.
       `ci` refuses `--probe` and keeps `--fail-on high`. `check` verifies
       the lockfile and launches nothing.
     - `js/mcp-pin-check` is a zero-dep verifier of `.mcp-pin.lock` (T-DIGEST).
-      `js/mcp-pin-wrap` is `npx @rufat325/mcp-pin`, which execs the Python
-      wheel and does not download one.
+      `js/mcp-pin-wrap` would be `npx @rufat325/mcp-pin`, which execs the
+      Python wheel and does not download one. Neither is published to
+      npm; the docs say `node js/.../bin.js` because that is what works.
     - Claude Code plugin: SessionStart audit, PreToolUse deny on miss/drift.
       No hash rewrite, no pin file in `~/.claude`, no Sonnet judge.
     - Lock spec + twelve golden tool objects. Pre-commit hooks. Badge.

@@ -48,8 +48,7 @@ mcp-pin wrap --name files -- npx -y @modelcontextprotocol/server-filesystem@2026
 
 If there is no lock, wrap will not start. That is not TOFU.
 
-`npx @rufat325/mcp-pin -- <server>` is the same wrap, once the Python package is installed.
-`npx mcp-pin-check` verifies `.mcp-pin.lock` with zero npm dependencies.
+Neither npm package is published yet, so both run from a clone: `node js/mcp-pin-wrap/bin.js -- <server>` is the same wrap once the Python package is installed, and `node js/mcp-pin-check/bin.js` verifies `.mcp-pin.lock` with zero npm dependencies.
 
 ## Install
 

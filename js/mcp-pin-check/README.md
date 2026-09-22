@@ -2,10 +2,12 @@
 
 Zero-dependency verifier for `.mcp-pin.lock`. Same digest the Python wheel writes. Does not launch servers.
 
+Not published to npm yet, so run it from a clone:
+
 ```bash
-npx mcp-pin-check
-npx mcp-pin-check --lock path/to/.mcp-pin.lock
-npx mcp-pin-check --golden tests/golden/tools
+node bin.js
+node bin.js --lock path/to/.mcp-pin.lock
+node bin.js --golden tests/golden/tools
 ```
 
 Missing file exits 1 (`MCPA014`). A version this checker does not understand exits 2.
