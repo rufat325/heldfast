@@ -1709,6 +1709,65 @@ FAIL_OPEN = bool(found)
 """,
     ),
     Mutant(
+        id="catalogue-is-only-the-clients-business",
+        theorem="T-FAIL-CLOSED",
+        path="guard.py",
+        original="""            if isinstance(result, dict) and "capabilities" in result:
+""",
+        replacement="""            if False:
+""",
+        harm=("The guard never fetches the tool list itself, so the drift "
+              "check runs only when the client happens to ask for one."),
+        probe="""
+from mcp_pin.guard import Guard
+from mcp_pin.lockfile import Lock
+from mcp_pin.model import ToolSpec
+
+TOOL = {"name": "read_text_file", "description": "Read a file.",
+        "inputSchema": {"type": "object"}}
+lock = Lock(servers={"c:files": {"name": "files", "client": "c",
+                                 "tools": {"read_text_file": {"fingerprint": "0" * 64}}}})
+g = Guard("files", lock, quiet=True)
+sent = []
+g.respond_to_server = sent.append
+g.handle_server_message({"jsonrpc": "2.0", "id": 1, "result": {
+    "protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {}}})
+for msg in list(sent):
+    g.handle_server_message({"jsonrpc": "2.0", "id": msg["id"],
+                             "result": {"tools": [dict(TOOL)]}})
+# A drifted tool, and a client that never asked for the catalogue.
+refusal = g.check_call({"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                        "params": {"name": "read_text_file", "arguments": {}}})
+FAIL_OPEN = refusal is None
+""",
+    ),
+    Mutant(
+        id="unlisted-tool-is-assumed-to-match",
+        theorem="T-FAIL-CLOSED",
+        path="guard.py",
+        original="""        elif not self._asked_for_catalogue:
+""",
+        replacement="""        elif True:
+""",
+        harm=("A tool the server never advertised is forwarded on the "
+              "strength of its name being in the lock, unchecked."),
+        probe="""
+from mcp_pin.guard import Guard
+from mcp_pin.lockfile import Lock
+
+lock = Lock(servers={"c:files": {"name": "files", "client": "c",
+                                 "tools": {"read_text_file": {"fingerprint": "0" * 64}}}})
+g = Guard("files", lock, quiet=True)
+g.respond_to_server = lambda m: None
+# Asked for the catalogue; the server answered nothing.
+g.handle_server_message({"jsonrpc": "2.0", "id": 1, "result": {
+    "protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {}}})
+refusal = g.check_call({"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                        "params": {"name": "read_text_file", "arguments": {}}})
+FAIL_OPEN = refusal is None
+""",
+    ),
+    Mutant(
         id="unread-config-reports-clean",
         theorem="T-READ",
         path="rules/drift.py",

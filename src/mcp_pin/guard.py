@@ -37,6 +37,7 @@ carries nothing but JSON-RPC.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import threading
@@ -190,6 +191,10 @@ class Guard:
         # to carry a `tools` key was rewritten as a catalogue and recorded as
         # the last tools/list. Matching the id says what was actually asked.
         self._pending: dict[tuple[str, Any], str] = {}
+        # Requests this proxy made for itself. Their answers populate the
+        # catalogue and are never forwarded to the client, which did not ask.
+        self._own_ids: set[tuple[str, Any]] = set()
+        self._asked_for_catalogue = False
 
     # -- last-seen catalogue -----------------------------------------------
     #
@@ -483,8 +488,36 @@ class Guard:
             verdict, reason = self._verdict(ToolSpec(server=self.server_name, name=name))
         elif name not in self._locked_tools:
             verdict, reason = "deny", "tool was not present at approval"
-        else:
+        elif not self._asked_for_catalogue:
+            # No catalogue has been requested on this connection, so the
+            # identity layer has nothing to compare and says nothing. The
+            # argument policy below still applies. This is the shape a `Guard`
+            # used as a library has -- `gateway` drives `filter_tools` itself
+            # and never needs this -- and it is not reachable while proxying,
+            # because `adopt_catalogue` asks as soon as initialize is answered.
             return None
+        else:
+            # We asked for the catalogue and this tool is not in the answer:
+            # either the server never sent one, or it sent one without this
+            # tool. Both mean there is no live definition to compare against
+            # the approved fingerprint.
+            #
+            # This used to forward. The catalogue filter is what compares
+            # fingerprints, so a client that called without listing -- or
+            # before the first `tools/list` reply arrived -- skipped the drift
+            # check completely: the rug pull was caught only if the client
+            # happened to ask for the catalogue. Found by driving a real
+            # filesystem server with a deliberately drifted lock; the call
+            # returned the file.
+            #
+            # "Could not check" is not "matches", which is the rule everywhere
+            # else in this file, so it refuses. Withholding the catalogue is
+            # then not a way around the pin: a server that answers initialize
+            # and never answers tools/list gets no calls either.
+            verdict, reason = "deny", (
+                "this server did not advertise that tool when the catalogue "
+                "was requested, so its definition could not be checked "
+                "against the approval")
         if verdict == "allow":
             return None
         if self._observe_only:
@@ -1051,6 +1084,38 @@ class Guard:
         send(denial)
         return None
 
+    # A string id, so it cannot collide with a client's numeric one --
+    # `_id_key` keys on type as well as value.
+    CATALOGUE_ID = "mcp-pin:tools/list"
+
+    def adopt_catalogue(self) -> None:
+        """Fetch `tools/list` for ourselves, once, after initialize.
+
+        The catalogue filter is what compares a live tool against its approved
+        fingerprint, and until this existed it only ran when the *client*
+        asked for the list. A client that called without listing skipped the
+        drift check, and one that pipelined a call behind its own list raced
+        it -- refusing that call instead would have broken ordinary clients.
+        Asking for ourselves removes the dependency on client behaviour, which
+        is what `gateway` has always done at startup.
+        """
+        send = self.respond_to_server
+        if send is None or self._asked_for_catalogue:
+            return
+        self._asked_for_catalogue = True
+        key = self._id_key(self.CATALOGUE_ID)
+        with self._listed_lock:
+            self._own_ids.add(key)
+            self._pending[key] = "tools/list"
+        send({"jsonrpc": "2.0", "id": self.CATALOGUE_ID,
+              "method": "tools/list", "params": {}})
+
+    def _is_own(self, message: dict[str, Any]) -> bool:
+        if "id" not in message:
+            return False
+        with self._listed_lock:
+            return self._id_key(message["id"]) in self._own_ids
+
     def handle_server_message(self, message: dict[str, Any]) -> dict[str, Any] | None:
         """Inspect a message travelling server -> client.
 
@@ -1064,8 +1129,18 @@ class Guard:
             if self._is_server_request(message):
                 return self._screen_inbound_request(message)
             result = message.get("result")
+            mine = self._is_own(message)
             if isinstance(result, dict):
                 self._screen_result(message, result, self._method_for(message))
+            if mine:
+                # Ours. The client never asked for it and must not see it.
+                with self._listed_lock:
+                    self._own_ids.discard(self._id_key(message["id"]))
+                return None
+            if isinstance(result, dict) and "capabilities" in result:
+                # The server has just finished initialising, which is the
+                # first moment tools/list is legal on this connection.
+                self.adopt_catalogue()
         except Exception as exc:
             self.stats.internal_errors.append(str(exc))
             self.log(f"INTERNAL ERROR inspecting message: {exc}")
@@ -1274,9 +1349,29 @@ def _announce_env(guard: Guard, withheld: list[str], isolate: bool) -> None:
 
 
 def _launch(argv: list[str], env: dict[str, str] | None = None) -> subprocess.Popen | None:
+    """Spawn the wrapped server, resolving the program the way a shell would.
+
+    `npx` on Windows is `npx.cmd`, and CreateProcess cannot execute a batch
+    file, so `mcp-pin wrap -- npx -y @scope/server@1.2.3` -- the command the
+    README leads with, and the `.mcp.json` snippet beside it -- failed with
+    "cannot launch 'npx'". `gateway` and `probe` both resolve through
+    `shutil.which` before spawning; this was the one launch path that did not,
+    which is why the matrix never caught it: the suite launches
+    `sys.executable`, an absolute path that needs no resolving.
+
+    Resolution happens here and not a line earlier on purpose. `_pin_still_holds`
+    has already compared `argv` against the approved command line, and it has
+    to see the tokens the operator wrote: swapping the runner's name for
+    the absolute path of the batch file before that point would make every
+    pinned launch command mismatch itself.
+    """
+    resolved = list(argv)
+    found = shutil.which(resolved[0]) if resolved else None
+    if found:
+        resolved[0] = found
     try:
         return subprocess.Popen(
-            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
+            resolved, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
             env=env, text=True, encoding="utf-8", errors="replace", bufsize=1,
             preexec_fn=posix_preexec(),
         )
