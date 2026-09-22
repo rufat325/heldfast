@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import artifact_digests
+from .textdiff import PREVIEW_CHARS
 from .model import (PromptSpec, ResourceSpec, ServerSpec, SkillSpec, ToolSpec,
                     instructions_fingerprint, observed_for)
 
@@ -246,21 +247,25 @@ class Lock:
             if text:
                 entry["instructions"] = {
                     "fingerprint": instructions_fingerprint(text),
-                    "preview": text[:160],
+                    "preview": text[:PREVIEW_CHARS],
                     "length": len(text),
                 }
             observed_prompts = observed_for(prompts_by_server, s, servers)
             if observed_prompts is not None:
                 entry["prompts"] = {
                     pr.name: {"fingerprint": pr.fingerprint(),
-                              "description_preview": (pr.description or "")[:160]}
+                              "description_preview":
+                                  (pr.description or "")[:PREVIEW_CHARS],
+                              "description_length": len(pr.description or "")}
                     for pr in sorted(observed_prompts, key=lambda x: x.name)
                 }
             observed_resources = observed_for(resources_by_server, s, servers)
             if observed_resources is not None:
                 entry["resources"] = {
                     rs.uri: {"fingerprint": rs.fingerprint(),
-                             "description_preview": (rs.description or "")[:160]}
+                             "description_preview":
+                                 (rs.description or "")[:PREVIEW_CHARS],
+                             "description_length": len(rs.description or "")}
                     for rs in sorted(observed_resources, key=lambda x: x.uri)
                 }
             # The command is the promise; this is what was behind it. A
@@ -277,7 +282,9 @@ class Lock:
                 entry["tools"] = {
                     t.name: {
                         "fingerprint": t.fingerprint(),
-                        "description_preview": (t.description or "")[:160],
+                        "description_preview":
+                            (t.description or "")[:PREVIEW_CHARS],
+                        "description_length": len(t.description or ""),
                     }
                     for t in sorted(observed, key=lambda t: t.name)
                 }

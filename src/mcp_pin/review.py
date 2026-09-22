@@ -167,6 +167,12 @@ def _named_map_changes(ident: str, kind: str, old: object, new: object) -> list[
     return out
 
 
+# Kinds whose `old` and `new` are recorded text from the lockfile. The
+# others carry a fixed label ("digest moved") in both columns, which is
+# not a preview and must not be read as one.
+TEXT_KINDS = frozenset({"tool", "prompt", "resource", "instructions"})
+
+
 def render(moved: list[Change]) -> str:
     if not moved:
         return ""
@@ -181,6 +187,14 @@ def render(moved: list[Change]) -> str:
         delta = word_diff(item.old, item.new)
         if delta:
             lines.append(f"           {delta}")
+        elif item.kind in TEXT_KINDS and item.old and item.old == item.new:
+            # The fingerprints differ -- that is the only reason this is in
+            # the list -- while the recorded previews are identical, so the
+            # change is past the end of what either lockfile wrote down.
+            # Printing the two matching lines reads as "nothing changed",
+            # which is the opposite of what happened.
+            lines.append("           the recorded text is identical; the "
+                         "change is past what the lockfile stores")
         elif item.old or item.new:
             if item.old:
                 lines.append(f"           - {item.old[:160]}")

@@ -16,7 +16,13 @@ from typing import Any, Iterable, Iterator
 
 from ..findings import Finding, Location, Severity
 from ..model import instructions_fingerprint
+from ..textdiff import changed_text
 from .base import AuditContext, rule
+
+
+def _int_or_none(value: Any) -> int | None:
+    """A recorded length, when the lockfile has a usable one."""
+    return value if isinstance(value, int) else None
 
 
 def _lock(ctx: AuditContext) -> dict:
@@ -202,7 +208,8 @@ def tool_drift(ctx: AuditContext) -> Iterable[Finding]:
             if current_fp == locked.get("fingerprint"):
                 continue
             was = str(locked.get("description_preview") or "")
-            now = (getattr(tool, "description", "") or "")[:160]
+            now = getattr(tool, "description", "") or ""
+            approved_len = locked.get("description_length")
             yield Finding(
                 rule_id="MCPA015",
                 title="Tool definition changed since approval (possible rug pull)",
@@ -210,8 +217,9 @@ def tool_drift(ctx: AuditContext) -> Iterable[Finding]:
                 location=Location(path=source, line=0, snippet=f"{server_name}/{name}"),
                 evidence=(
                     f"tool {name!r} fingerprint changed\n"
-                    f"      was: {was!r}\n"
-                    f"      now: {now!r}"
+                    + changed_text(was, now, recorded_length=(
+                        approved_len if isinstance(approved_len, int)
+                        else None))
                 ),
                 remediation=(
                     "Diff the full definition before using this server again. The config file "
@@ -346,8 +354,12 @@ def instructions_drift(ctx: AuditContext) -> Iterable[Finding]:
                               snippet=f"{server_name} (instructions)"),
             evidence=(
                 f"server {server_name!r} changed its `instructions`\n"
-                f"      was: {str(recorded.get('preview') or '')!r}\n"
-                f"      now: {text[:160]!r}"
+                + changed_text(
+                    str(recorded.get("preview") or ""), text,
+                    recorded_length=(
+                        recorded.get("length")
+                        if isinstance(recorded.get("length"), int)
+                        else None))
             ),
             remediation=(
                 "Read the new text in full before using this server again. The protocol "
@@ -410,8 +422,11 @@ def prompt_resource_drift(ctx: AuditContext) -> Iterable[Finding]:
                     location=Location(path=source, line=0, snippet=f"{server_name}/{key}"),
                     evidence=(
                         f"{label} {key!r} fingerprint changed\n"
-                        f"      was: {str(recorded.get('description_preview') or '')!r}\n"
-                        f"      now: {getattr(spec, 'description', '')[:160]!r}"
+                        + changed_text(
+                            str(recorded.get("description_preview") or ""),
+                            getattr(spec, "description", "") or "",
+                            recorded_length=_int_or_none(
+                                recorded.get("description_length")))
                     ),
                     remediation=(
                         f"Diff the {label} before using it again. Prompt and resource text "
