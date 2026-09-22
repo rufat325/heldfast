@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .childenv import build as build_child_env
+from .fetch import USER_AGENT
 from .fetch import urlopen as fetch_url
 from .lifetime import bind_child, posix_preexec
 from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec
@@ -408,6 +409,8 @@ def post_rpc(url: str, headers: dict[str, str], payload: dict[str, Any],
     req = urllib.request.Request(url, data=body, method="POST")
     req.add_header("Content-Type", "application/json")
     req.add_header("Accept", "application/json, text/event-stream")
+    if not any(k.lower() == "user-agent" for k in headers):
+        req.add_header("User-Agent", USER_AGENT)
     for k, v in headers.items():
         req.add_header(k, v)
     # Not urllib's default opener: that one follows a redirect with the

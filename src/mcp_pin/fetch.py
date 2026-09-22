@@ -48,6 +48,18 @@ CREDENTIAL_HEADERS = frozenset({
     "cookie",
 })
 
+# How this tool identifies itself on the wire.
+#
+# urllib's default is `Python-urllib/3.x`, which bot filters in front of
+# hosted MCP servers block on sight -- gitmcp.io answers 403 to it and 200 to
+# everything else, so `probe` and `gateway` could not reach a server a browser
+# or curl reaches fine. `integrity.get_json` had always sent a real name;
+# `post_rpc` had not, and it is the one that talks to other people's servers.
+#
+# Naming the tool is also the honest thing to do: an operator reading their
+# access log should be able to tell what connected to them.
+USER_AGENT = "mcp-pin (+https://github.com/rufat325/mcp-pin)"
+
 # Schemes a redirect may land on at all. The base handler also permits `ftp`,
 # which has no business answering for an MCP backend.
 ALLOWED_SCHEMES = frozenset({"http", "https"})
@@ -79,12 +91,31 @@ def transport_refusal(url: str) -> str | None:
     return None
 
 
+# Redirects that preserve the method and the body. The stdlib handler refuses
+# these outright on anything but GET/HEAD, which for a POST-only transport
+# means refusing them entirely: a hosted MCP server behind an apex-to-www or a
+# moved-path redirect was simply unreachable, and the spec has clients follow
+# redirects. Reproduced against a real 307 from httpbin.org.
+#
+# 301/302/303 keep the stdlib's behaviour, which turns a POST into a GET and
+# drops the body. That is lossy for JSON-RPC and deliberately not "fixed"
+# here: those codes have meant "retry as GET" for twenty years, and a server
+# that wants its body preserved says 307.
+METHOD_PRESERVING = (307, 308)
+
+
 class GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Follows redirects, but not off a cliff."""
 
     def redirect_request(self, req: Any, fp: Any, code: int, msg: str,
                          headers: Any, newurl: str) -> Any:
-        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if code in METHOD_PRESERVING:
+            new = urllib.request.Request(
+                newurl, data=req.data, headers=dict(req.headers),
+                origin_req_host=req.origin_req_host, unverifiable=True,
+                method=req.get_method())
+        else:
+            new = super().redirect_request(req, fp, code, msg, headers, newurl)
         if new is None:
             return None
         refusal = transport_refusal(newurl)

@@ -48,9 +48,11 @@ class _Destination(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def _answer(self) -> None:
-        _drain(self)
+        length = int(self.headers.get("Content-Length") or 0)
+        RECEIVED["body"] = self.rfile.read(length).decode("utf-8") if length else ""
         RECEIVED["headers"] = dict(self.headers)
         RECEIVED["path"] = self.path
+        RECEIVED["method"] = self.command
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {}}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -71,13 +73,13 @@ def _serve(handler: type) -> HTTPServer:
     return server
 
 
-def _redirector(location: str) -> type:
+def _redirector(location: str, code: int = 302) -> type:
     class _Redirect(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
         def do_POST(self) -> None:
             _drain(self)
-            self.send_response(302)
+            self.send_response(code)
             self.send_header("Location", location)
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -223,6 +225,95 @@ class TestOriginComparison(unittest.TestCase):
             with self.subTest(other=other):
                 self.assertNotEqual(fetch.origin_of(same),
                                     fetch.origin_of(other))
+
+
+class TestItSaysWhoItIs(unittest.TestCase):
+    """urllib's default User-Agent gets this tool blocked.
+
+    `Python-urllib/3.x` is what bot filters in front of hosted MCP servers
+    look for: gitmcp.io answers 403 to it and 200 to curl, to a browser, and
+    to no User-Agent at all -- so `probe` and `gateway` could not reach a
+    server anything else reaches. `integrity.get_json` had always sent a real
+    name; `post_rpc`, the one that talks to other people's servers, had not.
+
+    Naming the tool is also the courteous half: an operator reading their
+    access log can tell what connected to them.
+    """
+
+    def setUp(self) -> None:
+        RECEIVED.clear()
+        self.server = _serve(_Destination)
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+
+    def _post(self, headers):
+        from mcp_pin.probe import post_rpc
+        post_rpc(f"http://127.0.0.1:{self.server.server_port}/mcp", headers,
+                 {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}, 5.0)
+        return RECEIVED.get("headers", {})
+
+    def test_the_default_agent_is_not_what_goes_out(self) -> None:
+        agent = self._post({}).get("User-Agent", "")
+        self.assertNotIn("Python-urllib", agent)
+        self.assertIn("mcp-pin", agent)
+
+    def test_it_is_the_same_name_the_registry_lookup_uses(self) -> None:
+        from mcp_pin import integrity
+        self.assertEqual(fetch.USER_AGENT, integrity._UA)
+
+    def test_a_configured_agent_still_wins(self) -> None:
+        """An operator who set one meant it."""
+        agent = self._post({"User-Agent": "acme-corp-proxy/2"}).get("User-Agent", "")
+        self.assertEqual("acme-corp-proxy/2", agent)
+
+
+class TestMethodPreservingRedirects(_ServerCase):
+    """307 and 308 keep the method and the body; the stdlib refuses them.
+
+    `HTTPRedirectHandler.redirect_request` allows 301/302/303 on POST and
+    raises on everything else, so for a POST-only transport it refused 307 and
+    308 outright -- and those are exactly the codes a server uses when it
+    wants the request repeated as sent. A hosted MCP server behind an
+    apex-to-www or moved-path redirect was unreachable, while the spec has
+    clients follow redirects. Reproduced against a real 307 from httpbin.org.
+    """
+
+    BODY = b'{"jsonrpc":"2.0","id":1,"method":"initialize"}'
+
+    def _through(self, code, destination=None):
+        RECEIVED.clear()
+        landing = self.spawn(_Destination)
+        target = destination or f"http://127.0.0.1:{landing.server_port}/landed"
+        hop = self.spawn(_redirector(target, code))
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{hop.server_port}/mcp", data=self.BODY, method="POST")
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Authorization", "Bearer SECRET")
+        fetch.urlopen(request, 5.0).read()
+        return RECEIVED
+
+    def test_the_method_and_body_survive(self) -> None:
+        for code in (307, 308):
+            with self.subTest(code=code):
+                got = self._through(code)
+                self.assertEqual("POST", got.get("method"))
+                self.assertEqual(self.BODY.decode(), got.get("body"))
+
+    def test_the_credential_is_still_dropped_across_the_hop(self) -> None:
+        """Preserving the method must not quietly preserve the token too."""
+        got = self._through(307)
+        self.assertIsNone(got.get("headers", {}).get("Authorization"))
+
+    def test_a_downgrade_is_refused_on_these_codes_too(self) -> None:
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self._through(308, destination="http://attacker.example/x")
+        self.assertIn("cleartext", str(caught.exception.reason))
+
+    def test_302_keeps_the_stdlib_meaning(self) -> None:
+        """Left alone on purpose: those codes have meant "retry as GET" for
+        twenty years, and a server that wants its body preserved says 307."""
+        got = self._through(302)
+        self.assertEqual("GET", got.get("method"))
 
 
 if __name__ == "__main__":
