@@ -426,7 +426,7 @@ def prompt_resource_drift(ctx: AuditContext) -> Iterable[Finding]:
 @rule("MCPA031", "Server script changed since approval", Severity.HIGH)
 def artifact_drift(ctx: AuditContext) -> Iterable[Finding]:
     """The launch command is unchanged; the code it starts is not."""
-    from ..artifacts import artifact_digests
+    from ..artifacts import artifact_digests, unmatched
 
     lock = _lock(ctx)
     if not lock:
@@ -440,21 +440,28 @@ def artifact_drift(ctx: AuditContext) -> Iterable[Finding]:
         if not isinstance(recorded, dict) or not recorded:
             continue
 
+        # Matched by content rather than by path, so the same bytes in a
+        # different checkout are the same approved script. See
+        # artifacts.unmatched.
         current = artifact_digests(s)
-        for path, approved in sorted(recorded.items()):
-            now = current.get(path)
-            if now == approved:
-                continue
-            if now is None:
-                detail = "is no longer readable at that path"
+        for path, approved in unmatched(recorded, current):
+            if path in current:
+                # Same name, different bytes: the ordinary rug pull, and the
+                # one worth naming precisely.
+                detail = f"now hashes to {current[path][:16]}"
+            elif not current:
+                detail = "is no longer readable, and nothing else is either"
             else:
-                detail = f"now hashes to {now[:16]}, was {str(approved)[:16]}"
+                starts = ", ".join(sorted(current)[:3])
+                detail = (f"matches none of the {len(current)} script(s) it "
+                          f"starts now ({starts})")
             yield Finding(
                 rule_id="MCPA031",
                 title="Server script changed since approval",
                 severity=Severity.HIGH,
                 location=Location(path=s.source, line=s.line, snippet=path),
-                evidence=f"{s.identity()} starts {path}, which {detail}",
+                evidence=(f"{s.identity()} approved {path} at {str(approved)[:16]}, which "
+                          f"{detail}"),
                 remediation=(
                     "Confirm you made this change. The launch command in the config is "
                     "identical to the one you approved, so nothing else here would "

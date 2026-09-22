@@ -1522,6 +1522,52 @@ except Exception:
 """,
     ),
     Mutant(
+        id="artifacts-matched-by-name-not-content",
+        theorem="T-PORTABLE",
+        path="artifacts.py",
+        original="""    have = set(current.values())
+    return [(name, digest) for name, digest in sorted(recorded.items())
+            if digest not in have]
+""",
+        replacement="""    return []
+""",
+        harm=("Every approved script matches, so a rewritten server.js is "
+              "started as if it were the code that was reviewed."),
+        probe="""
+from mcp_pin.artifacts import unmatched
+FAIL_OPEN = not unmatched({"a": "d1"}, {"a": "d2"})
+""",
+    ),
+    Mutant(
+        id="everything-is-an-interpreter",
+        theorem="T-ARTIFACT",
+        path="artifacts.py",
+        original="""        if found and head in INTERPRETERS and _VERSIONISH.fullmatch(rest):
+            return True
+    return False
+""",
+        replacement="""        if found and head in INTERPRETERS and _VERSIONISH.fullmatch(rest):
+            return True
+    return True
+""",
+        harm=("A server that is its own binary -- /opt/mcp/bin/server -- is "
+              "read as an interpreter, so nothing about it is hashed and the "
+              "lock pins an empty set while reporting itself as covered."),
+        probe="""
+import pathlib, tempfile
+from mcp_pin.artifacts import artifact_digests
+from mcp_pin.model import ServerSpec
+
+with tempfile.TemporaryDirectory() as td:
+    root = pathlib.Path(td)
+    (root / "server.bin").write_bytes(b"real server")
+    spec = ServerSpec(name="n", source=str(root / ".mcp.json"), client="c",
+                      transport="stdio", command=str(root / "server.bin"),
+                      args=[])
+    FAIL_OPEN = not artifact_digests(spec)
+""",
+    ),
+    Mutant(
         id="redirect-308-left-to-the-stdlib",
         theorem="T-REDIRECT",
         path="fetch.py",

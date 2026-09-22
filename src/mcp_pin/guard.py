@@ -1591,11 +1591,19 @@ def _pin_still_holds(guard: Guard, argv: list[str], *,
     from .pkgcache import refusal
 
     entry = guard._resolve_entry() or {}
-    recorded = entry.get("artifacts")
-    reason = mismatch(recorded if isinstance(recorded, dict) else None)
-    if reason:
-        return reason
+    # `guard` is handed an argv rather than a config entry, so every question
+    # below is asked of the tokens about to be spawned: which scripts this
+    # launch reads, and whether it fetches a registry artifact.
+    launch = ServerSpec(name=guard.server_name, source="<guard>", client="guard",
+                        transport="stdio",
+                        command=argv[0] if argv else None, args=list(argv[1:]))
+
     approved = entry.get("command_line")
+    # Checked before the artifacts, because the command is what the artifacts
+    # hang off. When the argv itself moved, "launch command changed" is the
+    # diagnosis; hashing the scripts named by a command nobody approved
+    # reports the symptom and hides the cause.
+    #
     # `pinned` is whether a lock entry exists at all. An entry with no
     # command_line is refused; no entry is left to the tool policy, which is
     # what --allow-unapproved is for.
@@ -1603,13 +1611,16 @@ def _pin_still_holds(guard: Guard, argv: list[str], *,
                              argv, pinned=bool(entry))
     if reason:
         return reason
+
+    recorded = entry.get("artifacts")
+    # Matched by content rather than by recorded path, so a lockfile written
+    # in another checkout still validates the same bytes here.
+    reason = mismatch(recorded if isinstance(recorded, dict) else None, launch)
+    if reason:
+        return reason
+
     integrity = entry.get("integrity")
     urls = entry.get("artifact_urls")
-    # `guard` is handed an argv rather than a config entry, so the question
-    # "does this launch fetch a registry artifact" is asked of the tokens.
-    launch = ServerSpec(name=guard.server_name, source="<guard>", client="guard",
-                        transport="stdio",
-                        command=argv[0] if argv else None, args=list(argv[1:]))
     return refusal(integrity if isinstance(integrity, dict) else None,
                    urls if isinstance(urls, dict) else None,
                    require=require_integrity, expected=expects_hash(launch))

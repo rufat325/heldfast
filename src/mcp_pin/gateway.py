@@ -133,9 +133,12 @@ class Backend:
         # Offline, and on the launch path on purpose: the registry answer is
         # a scan-time opinion, while the package cache holds the bytes this
         # spawn is about to run.
-        return (mismatch(self.recorded_artifacts)
-                or launch_mismatch(self.approved_launch, self.spec.argv,
-                                   pinned=self.pinned)
+        # Launch command before artifacts, for the same reason as
+        # guard._pin_still_holds: a changed argv is the cause, and the
+        # scripts it happens to name are the symptom.
+        return (launch_mismatch(self.approved_launch, self.spec.argv,
+                                pinned=self.pinned)
+                or mismatch(self.recorded_artifacts, self.spec)
                 or refusal(self.recorded_integrity, self.artifact_urls,
                            require=self.require_integrity,
                            expected=expects_hash(self.spec)))
