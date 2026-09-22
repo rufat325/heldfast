@@ -27,11 +27,11 @@ from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request
 
-from .fetch import urlopen
+from .fetch import USER_AGENT, urlopen
 from .rules.execution import _FLOATING, extract_package, split_package
 
 TIMEOUT = 8.0
-_UA = "mcp-pin (+https://github.com/rufat325/mcp-pin)"
+_UA = USER_AGENT  # one copy, in fetch.py
 
 # What `state` can be.
 ANSWERED = "answered"
