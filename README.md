@@ -251,7 +251,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1200 tests, stdlib unittest, nothing to install.
+1212 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable
