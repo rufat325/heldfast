@@ -1522,6 +1522,27 @@ except Exception:
 """,
     ),
     Mutant(
+        id="redirect-308-left-to-the-stdlib",
+        theorem="T-REDIRECT",
+        path="fetch.py",
+        original="""    http_error_308 = urllib.request.HTTPRedirectHandler.http_error_302
+""",
+        replacement="",
+        # Structural rather than behavioural on purpose. urllib only learned
+        # 308 in Python 3.11, so on 3.12 the inherited alias makes this
+        # mutant invisible to any request-level probe -- which is exactly how
+        # the bug reached main, green on every local run and red on all three
+        # 3.9 jobs. The property worth pinning is that the dispatch is ours on
+        # every supported interpreter, not the stdlib's on the recent ones.
+        harm=("On Python 3.9 and 3.10 a 308 never reaches redirect_request: "
+              "the hop is neither followed nor checked for a downgrade, and "
+              "surfaces as a bare HTTP Error 308."),
+        probe="""
+from mcp_pin.fetch import GuardedRedirectHandler
+FAIL_OPEN = "http_error_308" not in vars(GuardedRedirectHandler)
+""",
+    ),
+    Mutant(
         id="childenv-leaks-our-own-key",
         theorem="T-OWN-ENV",
         path="childenv.py",

@@ -107,6 +107,18 @@ METHOD_PRESERVING = (307, 308)
 class GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Follows redirects, but not off a cliff."""
 
+    # 308 support landed in urllib in Python 3.11; 3.9 and 3.10 alias only
+    # 301/303/307 onto `http_error_302`. On those versions a 308 therefore
+    # never reached `redirect_request` at all -- it fell past the redirect
+    # handler to `HTTPDefaultErrorHandler` and surfaced as a bare
+    # `HTTP Error 308`, so the hop was neither followed nor checked. Naming it
+    # here makes 307 and 308 behave the same way on every version this
+    # project supports rather than on whichever ones the stdlib happened to
+    # cover, and the test below asserts it is defined on this class rather
+    # than inherited.
+    http_error_308 = urllib.request.HTTPRedirectHandler.http_error_302
+
+
     def redirect_request(self, req: Any, fp: Any, code: int, msg: str,
                          headers: Any, newurl: str) -> Any:
         if code in METHOD_PRESERVING:

@@ -315,6 +315,25 @@ class TestMethodPreservingRedirects(_ServerCase):
         got = self._through(302)
         self.assertEqual("GET", got.get("method"))
 
+    def test_308_is_dispatched_by_this_class_and_not_by_the_stdlib(self) -> None:
+        """The version-independence, asserted rather than assumed.
+
+        urllib only learned 308 in Python 3.11. On 3.9 and 3.10 the redirect
+        handler aliases 301/303/307 onto `http_error_302` and nothing else, so
+        a 308 fell straight past `redirect_request` to the default handler and
+        came back as a bare `HTTP Error 308`: the hop was neither followed nor
+        checked for a downgrade. The behavioural tests above cannot see this
+        on a modern interpreter, because there the stdlib supplies the alias
+        and everything passes -- it was three red 3.9 jobs that showed it.
+
+        So this asserts the dispatch is ours: `http_error_308` defined on
+        `GuardedRedirectHandler` itself, not inherited from whichever stdlib
+        happens to be running.
+        """
+        self.assertIn("http_error_308", vars(fetch.GuardedRedirectHandler))
+        self.assertIs(fetch.GuardedRedirectHandler.http_error_308,
+                      urllib.request.HTTPRedirectHandler.http_error_302)
+
 
 if __name__ == "__main__":
     unittest.main()
