@@ -1,17 +1,17 @@
 {
- "checked_at": "2026-09-23T04:22:24+00:00",
+ "checked_at": "2026-09-23T04:25:16+00:00",
  "package": "clinicaltrialsgov-mcp-server",
- "published": "2026-09-18T11:31:47.639Z",
+ "published": "2026-09-22T23:53:48.680Z",
  "tools": {
   "clinicaltrials_find_eligible": {
-   "digest": "1192be6ec9f86d9203af1684e6c994ccfd07450649fde26ff21ad3cc53aa11b7",
+   "digest": "0faf14dde18baa5dcf972cc1643598033db407cc7c90b6769326978ef2a15650",
    "raw": {
     "annotations": {
      "idempotentHint": true,
      "openWorldHint": true,
      "readOnlyHint": true
     },
-    "description": "Match patient demographics and conditions to eligible recruiting clinical trials. Provide age, sex, conditions, and location to find studies with matching eligibility criteria, contact information, and recruiting locations. Results are re-ranked so studies whose own condition matches a requested condition surface above tangential matches from ClinicalTrials.gov's fuzzy condition search. Each candidate returns only the sites matching the requested location (capped by locationLimit), not the study's full registered site list \u2014 a large trial can register hundreds of sites worldwide. When none of a candidate's matched sites is recruiting, its nearest recruiting site is added, so an enrollable site is never hidden behind a closer closed one. Fetch a study's complete record with clinicaltrials_get_study_record.",
+    "description": "Match patient demographics and conditions to eligible recruiting clinical trials. Provide age, sex, conditions, and location to find studies with matching eligibility criteria, contact information, and recruiting locations. Results are re-ranked so studies whose own condition matches a requested condition surface above tangential matches from ClinicalTrials.gov's fuzzy condition search. Each candidate returns only the sites matching the requested location (capped by locationLimit), not the study's full registered site list \u2014 a large trial can register hundreds of sites worldwide. When none of a candidate's matched sites is recruiting, one recruiting site is added so an enrollable site is never hidden behind a closer closed one: the one nearest the matched sites by their published coordinates, in the requested country whenever a site there recruits, carrying distanceMi, or the first in match order when coordinates are missing. Fetch a study's complete record with clinicaltrials_get_study_record.",
     "inputSchema": {
      "$schema": "https://json-schema.org/draft/2020-12/schema",
      "additionalProperties": false,
@@ -58,7 +58,7 @@
       },
       "locationLimit": {
        "default": 10,
-       "description": "Cap on the sites returned per candidate. Each candidate keeps only the sites matching the requested location at the narrowest level that matched (city, else state, else country), capped at this many; the rest of the study's registered sites are omitted. The cap governs those matched sites \u2014 when none of them is recruiting, the candidate's nearest recruiting site is added on top of it, so a candidate can carry one site more than this. Raise it to see more nearby sites, or fetch the complete site list with clinicaltrials_get_study_record. Each candidate reports totalLocations / matchedLocations / locationsTruncated / nearestRecruitingSiteAdded in locationSummary only when the bound actually dropped sites.",
+       "description": "Cap on the sites returned per candidate. Each candidate keeps only the sites matching the requested location at the narrowest level that matched (city, else state, else country), capped at this many; the rest of the study's registered sites are omitted. The cap governs those matched sites \u2014 when none of them is recruiting, one recruiting site is added on top of it (the nearest to any matched site, measured before this cap, when coordinates allow \u2014 in the requested country whenever a site there recruits), so a candidate can carry one site more than this. Raise it to see more nearby sites, or fetch the complete site list with clinicaltrials_get_study_record. Each candidate reports totalLocations / matchedLocations / locationsTruncated / nearestRecruitingSiteAdded in locationSummary only when the bound actually dropped sites.",
        "maximum": 500,
        "minimum": 1,
        "type": "integer"
@@ -245,7 +245,7 @@
        "type": "object"
       },
       "studies": {
-       "description": "Matching studies with eligibility and location fields. Each candidate's protocolSection.contactsLocationsModule.locations is BOUNDED to the sites matching the requested location (capped at locationLimit) plus, when none of those is recruiting, the candidate's nearest recruiting site \u2014 not the study's full registered site list. A candidate whose sites were bounded also carries a top-level locationSummary object \u2014 { totalLocations, matchedLocations, locationsTruncated, nearestRecruitingSiteAdded?, retrieveFullStudyWith } \u2014 absent when nothing was dropped; nearestRecruitingSiteAdded is present only when that extra site was added. Fetch a study's complete record and site list with clinicaltrials_get_study_record.",
+       "description": "Matching studies with eligibility and location fields. Each candidate's protocolSection.contactsLocationsModule.locations is BOUNDED to the sites matching the requested location (capped at locationLimit) plus, when none of those is recruiting, one added recruiting site \u2014 not the study's full registered site list. The added site is the one nearest any matched site by published coordinates, taken from the requested country whenever a site there recruits, and carries distanceMi (miles to that nearest matched site); when the matched or recruiting sites publish no coordinates it is the first in match order and carries no distanceMi. A candidate whose sites were bounded also carries a top-level locationSummary object \u2014 { totalLocations, matchedLocations, locationsTruncated, nearestRecruitingSiteAdded?, retrieveFullStudyWith } \u2014 absent when nothing was dropped; nearestRecruitingSiteAdded is present only when that extra site was added (the key keeps its name in the match-order fallback). Fetch a study's complete record and site list with clinicaltrials_get_study_record.",
        "items": {
         "additionalProperties": {},
         "propertyNames": {
@@ -1192,7 +1192,7 @@
    }
   },
   "clinicaltrials_get_study_results": {
-   "digest": "2384cdd45dd06d8149097068b1c5d48a9fc3287e7fdb21cd24b03d51748de9c8",
+   "digest": "6519fa2716f79c50df740f225c7bb06e9a8e582f9e8d2e2f435be61025cd39a2",
    "raw": {
     "annotations": {
      "idempotentHint": true,
@@ -1205,7 +1205,7 @@
      "additionalProperties": false,
      "properties": {
       "adverseEventLimit": {
-       "description": "Optional cap on the number of serious and other adverse events returned per study, applied to each list separately in upstream order. Omit for no cap (every event). Applies to full mode only \u2014 summary mode already ranks the top 20 by participants affected. Event groups are never capped. Upstream totals preserved in filtersApplied.totalSeriousEvents / totalOtherEvents only when the cap trims a list.",
+       "description": "Optional cap on the number of serious and other adverse events returned per study, applied to each list separately in upstream order. Omit for no cap (every event). Applies to full mode only \u2014 summary mode already ranks the top 20 by the most participants affected in any one event group. Event groups are never capped. Upstream totals preserved in filtersApplied.totalSeriousEvents / totalOtherEvents only when the cap trims a list.",
        "maximum": 500,
        "minimum": 1,
        "type": "integer"
@@ -1289,9 +1289,6 @@
        "type": "boolean"
       }
      },
-     "required": [
-      "nctIds"
-     ],
      "type": "object"
     },
     "name": "clinicaltrials_get_study_results",
@@ -1400,7 +1397,7 @@
         "properties": {
          "adverseEvents": {
           "additionalProperties": {},
-          "description": "Adverse events. Summary mode: timeFrame, groupCount, seriousEventCount, otherEventCount, plus topEvents \u2014 the most frequent events ranked by participants affected, aggregated across arms (term, organSystem, kind, numAffected, numAtRisk). Full mode: adds eventGroups, seriousEvents, otherEvents with per-event term and per-group affected/at-risk stats.",
+          "description": "Adverse events. Summary mode: timeFrame, groupCount, seriousEventCount, otherEventCount, eventGroups (id and title of each event group), plus topEvents \u2014 up to 20 events ranked by the most participants affected in any one event group, each with term, organSystem, kind, and byGroup (one { groupId, numAffected, numAtRisk } row per event group; resolve groupId against eventGroups). Counts are never pooled across groups: groups can overlap (a crossover or second-course group re-counts participants of its parent arm), so compare arms row by row. Full mode: eventGroups with descriptions and per-group totals, plus seriousEvents and otherEvents with per-event term and per-group affected/at-risk stats.",
           "propertyNames": {
            "type": "string"
           },
@@ -1504,7 +1501,7 @@
           "type": "object"
          },
          "nctId": {
-          "description": "The NCT identifier as requested, echoed verbatim. When it is a previous (alias) ID, ClinicalTrials.gov answers with the canonical record and canonicalNctId names it.",
+          "description": "The NCT identifier as requested, trimmed and uppercased. When it is a previous (alias) ID, ClinicalTrials.gov answers with the canonical record and canonicalNctId names it.",
           "type": "string"
          },
          "outcomes": {
@@ -1558,7 +1555,7 @@
    }
   },
   "clinicaltrials_search_studies": {
-   "digest": "8ef81a5794008b2abb3a37cf4c5a364ac5f832751df337e9f78d0dd0e9afeac2",
+   "digest": "49e101ea3b2f3f52414b7b40555cab1b2baf0c642e4464e1545a0e919a4734de",
    "raw": {
     "annotations": {
      "idempotentHint": true,
@@ -1571,7 +1568,7 @@
      "additionalProperties": false,
      "properties": {
       "advancedFilter": {
-       "description": "Advanced filter using AREA[FieldName]value syntax. Examples: \"AREA[StudyType]INTERVENTIONAL\", \"AREA[EnrollmentCount]RANGE[100, 1000]\", \"AREA[Phase]PHASE2 AND AREA[StudyType]INTERVENTIONAL\", \"(AREA[Phase]PHASE3 OR AREA[Phase]PHASE4) AND AREA[StudyType]INTERVENTIONAL\". AND/OR/NOT join complete AREA[FieldName]value expressions; parentheses group them. Call clinicaltrials_get_field_definitions to find AREA[]-compatible field names.",
+       "description": "Advanced filter using AREA[FieldName]value syntax. Examples: \"AREA[StudyType]INTERVENTIONAL\", \"AREA[EnrollmentCount]RANGE[100, 1000]\", \"AREA[Phase]PHASE2 AND AREA[StudyType]INTERVENTIONAL\", \"(AREA[Phase]PHASE3 OR AREA[Phase]PHASE4) AND AREA[StudyType]INTERVENTIONAL\". \"AREA[HasResults]true\" restricts to studies with posted results. AND/OR/NOT join complete AREA[FieldName]value expressions; parentheses group them. Call clinicaltrials_get_field_definitions to find AREA[]-compatible field names.",
        "type": "string"
       },
       "conditionQuery": {
@@ -1799,7 +1796,7 @@
        "type": "object"
       },
       "studies": {
-       "description": "Matching studies. By default each entry is a COMPACT index projection \u2014 nctId, briefTitle, overallStatus, phases, enrollmentCount, leadSponsor, conditions, and a bounded locations summary ({ total, nearest }) \u2014 mirroring the rendered result, NOT the full ~70KB record. Pass the fields parameter to receive exactly the requested leaves at full fidelity instead (e.g. all locations). Fetch a full single record with clinicaltrials_get_study_record.",
+       "description": "Matching studies. By default each entry is a COMPACT index projection \u2014 nctId, briefTitle, overallStatus, phases, enrollmentCount, leadSponsor, conditions, hasResults, startDate and primaryCompletionDate (YYYY-MM or YYYY-MM-DD, as registered), and a bounded locations summary ({ total, nearest }); keys the study does not publish are omitted \u2014 mirroring the rendered result, NOT the full ~70KB record. Pass the fields parameter to receive exactly the requested leaves at full fidelity instead (e.g. all locations). Fetch a full single record with clinicaltrials_get_study_record.",
        "items": {
         "additionalProperties": {},
         "propertyNames": {
@@ -1820,5 +1817,5 @@
    }
   }
  },
- "version": "2.9.8"
+ "version": "2.9.10"
 }

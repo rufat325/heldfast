@@ -1,10 +1,10 @@
 {
- "checked_at": "2026-09-23T04:22:20+00:00",
+ "checked_at": "2026-09-23T04:24:37+00:00",
  "package": "@cyanheads/pubmed-mcp-server",
- "published": "2026-09-18T11:33:32.017Z",
+ "published": "2026-09-23T04:01:24.949Z",
  "tools": {
   "pubmed_convert_ids": {
-   "digest": "772180381357ef8f640cc6376cc8c331bf44a1d92ec36ace8f04a920f9a748a6",
+   "digest": "893b9d7fb80cc052d600071f1ad2ab5852243ac3433f0dc35329bfaeaa6cbe69",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -91,7 +91,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: Local NCBI request queue is at capacity. `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `malformed_id`: An `ids` element does not match the declared `idType` \u2014 most often several identifiers packed into one element, which the comma-delimited upstream batch would split into extra records. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `malformed_id`: An `ids` element does not match the declared `idType` \u2014 most often several identifiers packed into one element, which the comma-delimited upstream batch would split into extra records. Other values are possible when a failure originates below the handler.",
            "examples": [
             "queue_full",
             "ncbi_unreachable",
@@ -182,7 +182,7 @@
    }
   },
   "pubmed_europepmc_fetch": {
-   "digest": "2e502d05d32bdc5a3b52cc9b31357c245b0043aeeb39b7bb58145a59054808d9",
+   "digest": "5617c0bb48542f07e422a73bb599d876cc260b2a5464a2b31e20844403f81279",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -284,7 +284,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `europepmc_unreachable`: Europe PMC was unreachable after all retry attempts. `europepmc_invalid_response`: Europe PMC returned a body that could not be parsed (invalid JSON or XML). `europepmc_invalid_input`: Europe PMC rejected the request input (empty query, unknown sort field, malformed parameter). `europepmc_disabled`: Europe PMC service is disabled via EUROPEPMC_ENABLED=false. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `europepmc_unreachable`: Europe PMC failed on every retry attempt \u2014 unreachable, an HTTP 404 or 5xx other than a 504 timeout from its search endpoint, or an empty response with no results. `europepmc_invalid_response`: Europe PMC returned a body that could not be parsed (invalid JSON or XML). `europepmc_invalid_input`: Europe PMC rejected the request input \u2014 an error message such as an empty query, an empty response to a sort with an undocumented field or no asc/desc direction, or an empty response to a pagination cursor on every attempt. `europepmc_disabled`: Europe PMC service is disabled via EUROPEPMC_ENABLED=false. Other values are possible when a failure originates below the handler.",
            "examples": [
             "europepmc_unreachable",
             "europepmc_invalid_response",
@@ -450,7 +450,7 @@
    }
   },
   "pubmed_europepmc_search": {
-   "digest": "c3842ddc79376a30ee2d334435c1adeefa4d92d13680fd564f9c54b524ff97c9",
+   "digest": "4059fe2f10700251214f05269479c35d4cb1445f11d69bd4c0c7f260f02294a0",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -490,7 +490,7 @@
        "type": "integer"
       },
       "query": {
-       "description": "Europe PMC search query. Supports field tokens like `AUTH:\"<name>\"`, `JOURNAL:\"<title>\"`, `TITLE:\"<words>\"`, `PUB_YEAR:[2020 TO 2024]`, `DOI:\"...\"`, `EXT_ID:<pmid> AND SRC:MED`, `PMCID:PMC<digits>`. Identifier tokens combined with `AND SRC:` must be unquoted \u2014 the quoted form matches nothing. Free text is matched broadly across abstract/title/keywords.",
+       "description": "Europe PMC search query. Supports field tokens like `AUTH:\"<name>\"`, `JOURNAL:\"<title>\"`, `TITLE:\"<words>\"`, `PUB_YEAR:[2020 TO 2024]`, `DOI:\"...\"`, `EXT_ID:<pmid> AND SRC:MED`, `PMCID:PMC<digits>`. Identifier tokens may be quoted or unquoted \u2014 this tool wraps every query with its `sources` filter, and Europe PMC honors a quoted identifier inside that wrapper. A PubMed-indexed article resolves under `SRC:MED`, not `SRC:PMC`, whichever identifier is used. Free text is matched broadly across abstract/title/keywords.",
        "minLength": 1,
        "type": "string"
       },
@@ -504,7 +504,7 @@
        "type": "string"
       },
       "sort": {
-       "description": "Optional EPMC sort: `<field> asc|desc`. Documented sortable fields: `P_PDATE_D` (publication date), `CITED` (citation count), `AUTH_FIRST` (first author surname), `PUB_YEAR` (publication year). Examples: `P_PDATE_D desc` (newest first), `CITED desc` (most cited). Omit for relevance ranking. Fields outside the documented set are rejected by EPMC. Note: `P_PDATE_D` is ignored for preprint-only (`sources: [\"PPR\"]`) result sets \u2014 preprints have no populated publication date, so use `PUB_YEAR` to order preprints by date.",
+       "description": "Optional EPMC sort: `<field> asc|desc`, or several comma-separated keys applied in order (`PUB_YEAR desc, CITED desc`). Documented sortable fields: `P_PDATE_D` (publication date), `CITED` (citation count), `AUTH_FIRST` (first author surname), `PUB_YEAR` (publication year). Examples: `P_PDATE_D desc` (newest first), `CITED desc` (most cited). Omit for relevance ranking. Field and direction match case-insensitively. A field outside the documented set may be honored, silently ignored, or rejected, and a sort using one \u2014 or a key without `asc`/`desc` \u2014 can fail with `europepmc_invalid_input` naming it, even when Europe PMC honors the field. Note: `P_PDATE_D` is ignored for preprint-only (`sources: [\"PPR\"]`) result sets \u2014 preprints have no populated publication date, so use `PUB_YEAR` to order preprints by date.",
        "type": "string"
       },
       "sources": {
@@ -543,8 +543,8 @@
         "hits",
         "cursorMark",
         "searchUrl",
-        "query",
         "totalCount",
+        "query",
         "appliedSources"
        ]
       },
@@ -587,7 +587,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `europepmc_unreachable`: Europe PMC was unreachable after all retry attempts. `europepmc_invalid_response`: Europe PMC returned a body that could not be parsed (invalid JSON or XML). `europepmc_invalid_input`: Europe PMC rejected the request input (empty query, unknown sort field, malformed parameter). `europepmc_disabled`: Europe PMC service is disabled via EUROPEPMC_ENABLED=false. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `europepmc_unreachable`: Europe PMC failed on every retry attempt \u2014 unreachable, an HTTP 404 or 5xx other than a 504 timeout from its search endpoint, or an empty response with no results. `europepmc_invalid_response`: Europe PMC returned a body that could not be parsed (invalid JSON or XML). `europepmc_invalid_input`: Europe PMC rejected the request input \u2014 an error message such as an empty query, an empty response to a sort with an undocumented field or no asc/desc direction, or an empty response to a pagination cursor on every attempt. `europepmc_disabled`: Europe PMC service is disabled via EUROPEPMC_ENABLED=false. Other values are possible when a failure originates below the handler.",
            "examples": [
             "europepmc_unreachable",
             "europepmc_invalid_response",
@@ -741,7 +741,7 @@
    }
   },
   "pubmed_fetch_articles": {
-   "digest": "61a278597a95c58bb4da71e60160c8cb302b78ed2235f40f04b639a3917823d5",
+   "digest": "4cb6c79a8254d0fa71c3d2c35fa0b847ffc19fd1c15a6f79d4e3861008315b26",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -1243,7 +1243,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: Local NCBI request queue is at capacity. `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `invalid_efetch_response`: NCBI EFetch returned a payload missing the PubmedArticleSet wrapper. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `invalid_efetch_response`: NCBI EFetch returned a payload missing the PubmedArticleSet wrapper. Other values are possible when a failure originates below the handler.",
            "examples": [
             "queue_full",
             "ncbi_unreachable",
@@ -1311,7 +1311,7 @@
    }
   },
   "pubmed_fetch_fulltext": {
-   "digest": "6564392b2b77af510a2551f32ef9f66ecc17a99ffd897b6903ea97b35a79a421",
+   "digest": "7dcb46c11c50a170e04896c826e66488a98781b14df327b81e13c43c60ed5016",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -1927,7 +1927,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: Local NCBI request queue is at capacity. `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `unpaywall_unreachable`: Unpaywall was unreachable when resolving a DOI or fetching content. `europepmc_unreachable`: Europe PMC was unreachable after all retry attempts. `europepmc_invalid_response`: Europe PMC returned a body that could not be parsed (invalid JSON or XML). `europepmc_invalid_input`: Europe PMC rejected the request input (empty query, unknown sort field, malformed parameter). Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `unpaywall_unreachable`: Unpaywall was unreachable when resolving a DOI or fetching content. `europepmc_unreachable`: Europe PMC failed on every retry attempt \u2014 unreachable, an HTTP 404 or 5xx other than a 504 timeout from its search endpoint, or an empty response with no results. `europepmc_invalid_response`: Europe PMC returned a body that could not be parsed (invalid JSON or XML). `europepmc_invalid_input`: Europe PMC rejected the request input \u2014 an error message such as an empty query, an empty response to a sort with an undocumented field or no asc/desc direction, or an empty response to a pagination cursor on every attempt. Other values are possible when a failure originates below the handler.",
            "examples": [
             "queue_full",
             "ncbi_unreachable",
@@ -2234,7 +2234,7 @@
    }
   },
   "pubmed_find_related": {
-   "digest": "d021b3453d666b1d9a3a8b467731a337e4d93946045cb102c9996e653e08be3a",
+   "digest": "8d6094a64dcccddd5a7a6a1b51f9973a169abf4f1c1a175b16574f4921844407",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -2419,18 +2419,8 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: Local NCBI request queue is at capacity. `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `europepmc_unreachable`: Europe PMC was unreachable after all retry attempts. `europepmc_invalid_response`: Europe PMC returned a body that could not be parsed (invalid JSON or XML). `europepmc_invalid_input`: Europe PMC rejected the request input (empty query, unknown sort field, malformed parameter). `openalex_unreachable`: OpenAlex was unreachable after all retry attempts. `openalex_invalid_response`: OpenAlex returned a body that could not be parsed (invalid JSON). `all_providers_failed`: Every provider eligible for the requested relationship failed; none answered. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `all_providers_failed`: Every provider eligible for the requested relationship failed; none answered. Other values are possible when a failure originates below the handler.",
            "examples": [
-            "queue_full",
-            "ncbi_unreachable",
-            "ncbi_deadline_exceeded",
-            "ncbi_invalid_response",
-            "ncbi_resource_not_found",
-            "europepmc_unreachable",
-            "europepmc_invalid_response",
-            "europepmc_invalid_input",
-            "openalex_unreachable",
-            "openalex_invalid_response",
             "all_providers_failed"
            ],
            "type": "string"
@@ -2507,7 +2497,7 @@
    }
   },
   "pubmed_format_citations": {
-   "digest": "96a6831e1fb148f1b110eec30cdb44a4f3bd16e01b8717a04ad7462eb2d23b65",
+   "digest": "a1a70f135cea909200a9c4a9e6649035e30b97ac43766fb6283b61e6341880d1",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -2649,7 +2639,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: Local NCBI request queue is at capacity. `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). Other values are possible when a failure originates below the handler.",
            "examples": [
             "queue_full",
             "ncbi_unreachable",
@@ -2716,7 +2706,7 @@
    }
   },
   "pubmed_lookup_citation": {
-   "digest": "10dbb12b257749a17054481a8e669fdeb29d5803653a4e9cc5eeb551eb4e8aaa",
+   "digest": "f1e1e1dba260e6b4fdebb053169d96436dcd6fdddfca2c7aa7d169dd85d98e2b",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -2744,45 +2734,85 @@
      "additionalProperties": false,
      "properties": {
       "citations": {
-       "description": "Citations to look up. More fields = better match accuracy.",
-       "items": {
-        "description": "Citation to match against PubMed. Must include at least journal or year \u2014 ECitMatch primary-keys on journal+volume+page, so author-only or volume-only inputs guarantee no match.",
-        "properties": {
-         "authorName": {
-          "description": "Author name, typically \"lastname initials\" (e.g., \"mann bj\"). Cannot contain a pipe (\"|\") or a line break.",
-          "pattern": "^[^|\\r\\n]*$",
-          "type": "string"
+       "anyOf": [
+        {
+         "description": "Up to 25 citations, each matched independently.",
+         "items": {
+          "description": "Citation to match against PubMed. Must include at least journal or year \u2014 ECitMatch primary-keys on journal+volume+page, so author-only or volume-only inputs guarantee no match.",
+          "properties": {
+           "authorName": {
+            "description": "Author name, typically \"lastname initials\" (e.g., \"mann bj\"). Cannot contain a pipe (\"|\") or a line break.",
+            "pattern": "^[^|\\r\\n]*$",
+            "type": "string"
+           },
+           "firstPage": {
+            "description": "First page number. Cannot contain a pipe (\"|\") or a line break.",
+            "pattern": "^[^|\\r\\n]*$",
+            "type": "string"
+           },
+           "journal": {
+            "description": "Journal title or ISO abbreviation (e.g., \"proc natl acad sci u s a\"). Cannot contain a pipe (\"|\") or a line break.",
+            "pattern": "^[^|\\r\\n]*$",
+            "type": "string"
+           },
+           "key": {
+            "description": "Arbitrary label to track this citation in results. Auto-assigned if omitted. Echoed back unchanged and never sent to NCBI, so any character is accepted here.",
+            "type": "string"
+           },
+           "volume": {
+            "description": "Volume number. Cannot contain a pipe (\"|\") or a line break.",
+            "pattern": "^[^|\\r\\n]*$",
+            "type": "string"
+           },
+           "year": {
+            "description": "Publication year (e.g., \"1991\"). Cannot contain a pipe (\"|\") or a line break.",
+            "pattern": "^[^|\\r\\n]*$",
+            "type": "string"
+           }
+          },
+          "type": "object"
          },
-         "firstPage": {
-          "description": "First page number. Cannot contain a pipe (\"|\") or a line break.",
-          "pattern": "^[^|\\r\\n]*$",
-          "type": "string"
-         },
-         "journal": {
-          "description": "Journal title or ISO abbreviation (e.g., \"proc natl acad sci u s a\"). Cannot contain a pipe (\"|\") or a line break.",
-          "pattern": "^[^|\\r\\n]*$",
-          "type": "string"
-         },
-         "key": {
-          "description": "Arbitrary label to track this citation in results. Auto-assigned if omitted. Echoed back unchanged and never sent to NCBI, so any character is accepted here.",
-          "type": "string"
-         },
-         "volume": {
-          "description": "Volume number. Cannot contain a pipe (\"|\") or a line break.",
-          "pattern": "^[^|\\r\\n]*$",
-          "type": "string"
-         },
-         "year": {
-          "description": "Publication year (e.g., \"1991\"). Cannot contain a pipe (\"|\") or a line break.",
-          "pattern": "^[^|\\r\\n]*$",
-          "type": "string"
-         }
+         "maxItems": 25,
+         "minItems": 1,
+         "type": "array"
         },
-        "type": "object"
-       },
-       "maxItems": 25,
-       "minItems": 1,
-       "type": "array"
+        {
+         "description": "Citation to match against PubMed. Must include at least journal or year \u2014 ECitMatch primary-keys on journal+volume+page, so author-only or volume-only inputs guarantee no match.",
+         "properties": {
+          "authorName": {
+           "description": "Author name, typically \"lastname initials\" (e.g., \"mann bj\"). Cannot contain a pipe (\"|\") or a line break.",
+           "pattern": "^[^|\\r\\n]*$",
+           "type": "string"
+          },
+          "firstPage": {
+           "description": "First page number. Cannot contain a pipe (\"|\") or a line break.",
+           "pattern": "^[^|\\r\\n]*$",
+           "type": "string"
+          },
+          "journal": {
+           "description": "Journal title or ISO abbreviation (e.g., \"proc natl acad sci u s a\"). Cannot contain a pipe (\"|\") or a line break.",
+           "pattern": "^[^|\\r\\n]*$",
+           "type": "string"
+          },
+          "key": {
+           "description": "Arbitrary label to track this citation in results. Auto-assigned if omitted. Echoed back unchanged and never sent to NCBI, so any character is accepted here.",
+           "type": "string"
+          },
+          "volume": {
+           "description": "Volume number. Cannot contain a pipe (\"|\") or a line break.",
+           "pattern": "^[^|\\r\\n]*$",
+           "type": "string"
+          },
+          "year": {
+           "description": "Publication year (e.g., \"1991\"). Cannot contain a pipe (\"|\") or a line break.",
+           "pattern": "^[^|\\r\\n]*$",
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       ],
+       "description": "Citations to look up \u2014 an array of up to 25, or a single citation object. More fields = better match accuracy."
       }
      },
      "required": [
@@ -2829,7 +2859,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: Local NCBI request queue is at capacity. `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). Other values are possible when a failure originates below the handler.",
            "examples": [
             "queue_full",
             "ncbi_unreachable",
@@ -2969,7 +2999,7 @@
    }
   },
   "pubmed_lookup_mesh": {
-   "digest": "bb33eb7738b5ac592a21467a22907481b0b39a62d9593a0a22534c2303632487",
+   "digest": "704ec5a4455624077bc9a844462579503ef27861f532df91a5523d5c45dd81dd",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -3069,7 +3099,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: Local NCBI request queue is at capacity. `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `blank_query`: The query holds no search term once whitespace, and any markup the tool strips first, are removed \u2014 so NCBI would receive a blank term. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `blank_query`: The query holds no search term once whitespace, and anything the tool strips before searching, are removed \u2014 so NCBI would receive a blank term. pubmed_search_articles strips markup, bracketed field tags, and parentheses, so a bare field tag such as `[pdat]` or empty parentheses `()` count as blank there. Other values are possible when a failure originates below the handler.",
            "examples": [
             "queue_full",
             "ncbi_unreachable",
@@ -3184,7 +3214,7 @@
    }
   },
   "pubmed_search_articles": {
-   "digest": "08b3f80fd5ef031017a23057171745844dea5700c883d0a9005afdd09e730b09",
+   "digest": "c03236d3ec94c8cb5cfbfd997574238b25bc3e0e5ba9174f8005b48c6598e5f1",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -3290,7 +3320,7 @@
        "type": "array"
       },
       "query": {
-       "description": "PubMed search query (supports full NCBI syntax). Must carry a search term: a value that is blank once markup is stripped is rejected rather than sent to PubMed as an empty term.",
+       "description": "PubMed search query (supports full NCBI syntax). Must carry a search term: a value that is blank once markup, bracketed field tags (`[pdat]`), and parentheses are removed is rejected rather than sent to PubMed as an empty term.",
        "minLength": 1,
        "type": "string"
       },
@@ -3343,8 +3373,8 @@
         "pmids",
         "summaries",
         "searchUrl",
-        "effectiveQuery",
         "totalCount",
+        "effectiveQuery",
         "appliedFilters"
        ]
       },
@@ -3451,7 +3481,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: Local NCBI request queue is at capacity. `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `blank_query`: The query holds no search term once whitespace, and any markup the tool strips first, are removed \u2014 so NCBI would receive a blank term. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `blank_query`: The query holds no search term once whitespace, and anything the tool strips before searching, are removed \u2014 so NCBI would receive a blank term. pubmed_search_articles strips markup, bracketed field tags, and parentheses, so a bare field tag such as `[pdat]` or empty parentheses `()` count as blank there. Other values are possible when a failure originates below the handler.",
            "examples": [
             "queue_full",
             "ncbi_unreachable",
@@ -3597,7 +3627,7 @@
    }
   },
   "pubmed_spell_check": {
-   "digest": "14d5fb59a5a5eb5f48780051e4990ec61c6cf95159dbde701b6ef940d4286d0f",
+   "digest": "2e62a6967636a3677f940d4f38947818805f27823a53ec7aea7baf095adb07ea",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -3611,7 +3641,7 @@
      "openWorldHint": true,
      "readOnlyHint": true
     },
-    "description": "Spell-check a query and get NCBI's suggested correction. Useful for refining search queries.",
+    "description": "Spell-check a PubMed search query against NCBI ESpell and get the corrected query back. Use after a zero-hit or thin `pubmed_search_articles` result, or when a drug, gene, disease, or author name may be misspelled \u2014 every misspelled token is corrected in one call (`alzhiemer diseese treatmnt outcomse` \u2192 `alzheimer disease treatment outcomes`), and `hasSuggestion` is false when NCBI has no change to offer. Re-run the search with `corrected`.",
     "inputSchema": {
      "$schema": "https://json-schema.org/draft/2020-12/schema",
      "additionalProperties": false,
@@ -3669,7 +3699,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: Local NCBI request queue is at capacity. `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `blank_query`: The query holds no search term once whitespace, and any markup the tool strips first, are removed \u2014 so NCBI would receive a blank term. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `blank_query`: The query holds no search term once whitespace, and anything the tool strips before searching, are removed \u2014 so NCBI would receive a blank term. pubmed_search_articles strips markup, bracketed field tags, and parentheses, so a bare field tag such as `[pdat]` or empty parentheses `()` count as blank there. Other values are possible when a failure originates below the handler.",
            "examples": [
             "queue_full",
             "ncbi_unreachable",
@@ -3726,5 +3756,5 @@
    }
   }
  },
- "version": "2.10.14"
+ "version": "2.10.16"
 }

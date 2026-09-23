@@ -1,15 +1,15 @@
 {
- "checked_at": "2026-09-23T04:22:17+00:00",
+ "checked_at": "2026-09-23T04:23:59+00:00",
  "package": "obsidian-mcp-server",
- "published": "2026-09-19T16:12:29.994Z",
+ "published": "2026-09-23T00:31:27.974Z",
  "tools": {
   "obsidian_append_to_note": {
-   "digest": "ff2445b50a04e8c5a78dedd43403db7b8b893560727e89012dd7a6a98a3407b2",
+   "digest": "3e8ababb66e649b0e51902a437d5f2682176c31924d4b2089133d32f3c06e15f",
    "raw": {
     "annotations": {
      "destructiveHint": true
     },
-    "description": "Append content to a note. **Without `section`: appends to the end of the file, or creates the file if it does not exist (your content becomes the full file).** With `section`: appends to the end of that heading/block/frontmatter \u2014 use `obsidian_get_note` with `format: \"document-map\"` to discover available targets. A nested heading may be named either by its full `Parent::Child` path or by a bare leaf name that matches exactly one heading; a leaf shared by several headings is rejected with `ambiguous_section`. For block-reference targets, content is concatenated adjacent to the block line without inserting a separator \u2014 include a leading newline in `content` if you want one. Set `createTargetIfMissing` to bring the target section into existence rather than failing when it does not exist.",
+    "description": "Append content to a note. **Without `section`: appends to the end of the file, or creates the file if it does not exist (your content becomes the full file).** With `section`: appends to the end of that heading/block/frontmatter \u2014 use `obsidian_get_note` with `format: \"document-map\"` to discover available targets. Name a heading by its full `Parent::Child` path as the document map lists it, or by a bare leaf name matched at any depth. A leaf shared by several headings is rejected with `ambiguous_section`, unless one of them has no parent heading, in which case the write targets that one; a full path that occurs more than once in the note is rejected with `ambiguous_section` too. For block-reference targets, content is concatenated adjacent to the block line without inserting a separator \u2014 include a leading newline in `content` if you want one. Set `createTargetIfMissing` to bring the target section into existence rather than failing when it does not exist.",
     "inputSchema": {
      "$schema": "https://json-schema.org/draft/2020-12/schema",
      "additionalProperties": false,
@@ -36,7 +36,7 @@
        "description": "Optional sub-document target. When set, content is appended to that section instead of the file.",
        "properties": {
         "target": {
-         "description": "Heading name \u2014 either the full path (`\"Parent::Child\"`) or a bare leaf name that matches exactly one heading \u2014 a block reference without the leading caret (e.g. \"2d9b4a\", not \"^2d9b4a\"), or a frontmatter field name.",
+         "description": "Heading, block, or frontmatter locator. Heading: the full `Parent::Child` path as `obsidian_get_note` `format: \"document-map\"` lists it, or a bare leaf name matched at any depth. A leaf shared by several headings reads the first (every full path comes back in `candidates`); a write rejects it with `ambiguous_section`, unless one of them has no parent heading, in which case the write targets that one. A full path that occurs more than once in the note reads the first; a write rejects it with `ambiguous_section`. Block: the reference ID without the caret (e.g. \"2d9b4a\", not \"^2d9b4a\"). Frontmatter: the field name.",
          "minLength": 1,
          "type": "string"
         },
@@ -181,7 +181,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `path_forbidden`: The target path is outside OBSIDIAN_WRITE_PATHS, or OBSIDIAN_READ_ONLY=true denies all writes. `note_missing`: Section append targets a path that does not resolve to an existing note (PATCH requires the file to exist). `no_active_file`: Target was `active` but no file is currently open in Obsidian. `periodic_unsupported`: Target was `periodic` and this vault runs Local REST API v5.0.2 or later without the companion periodic-notes extension, so the `/periodic/` routes are not served at all. `periodic_not_found`: Target was `periodic`, the `/periodic/` routes are served on this vault, and no note exists for the requested period. `periodic_disabled`: Target was `periodic` but the requested period is not enabled in Obsidian's Periodic Notes plugin settings. `section_target_missing`: `section` was provided but the named heading/block/frontmatter field does not exist in the note. `ambiguous_section`: A bare heading leaf name matches more than one heading in the note, so the append target is undetermined. `content_preexists`: Section append where the supplied content already appears at the target \u2014 rejected to keep retries idempotent (the default for the section path). `path_is_directory`: The supplied path names a folder rather than a note file. `path_traversal`: The path contains a `.` or `..` segment, which is rejected to prevent vault escape. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `path_forbidden`: The target path is outside OBSIDIAN_WRITE_PATHS, or OBSIDIAN_READ_ONLY=true denies all writes. `note_missing`: Section append targets a path that does not resolve to an existing note (PATCH requires the file to exist). `no_active_file`: Target was `active` but no file is currently open in Obsidian. `periodic_unsupported`: Target was `periodic` and this vault runs Local REST API v5.0.2 or later without the companion periodic-notes extension, so the `/periodic/` routes are not served at all. `periodic_not_found`: Target was `periodic`, the `/periodic/` routes are served on this vault, and no note exists for the requested period. `periodic_disabled`: Target was `periodic` but the requested period is not enabled in Obsidian's Periodic Notes plugin settings. `section_target_missing`: `section` was provided but the named heading/block/frontmatter field does not exist in the note. `ambiguous_section`: A bare heading leaf name matches more than one heading in the note, or the resolved full heading path occurs more than once, so the append target is undetermined. `content_preexists`: Section append where the supplied content already appears at the target \u2014 rejected to keep retries idempotent (the default for the section path). `path_is_directory`: The supplied path names a folder rather than a note file. `path_traversal`: The path contains a `.` or `..` segment, which is rejected to prevent vault escape. Other values are possible when a failure originates below the handler.",
            "examples": [
             "path_forbidden",
             "note_missing",
@@ -444,7 +444,7 @@
    }
   },
   "obsidian_get_note": {
-   "digest": "384c36797f9871d6e4ea02edaa98e136166cd86e88b9e30b921f4dbc0708f0a6",
+   "digest": "7300779c2e807e4aa69d77cc1c866cc38e26f7f64c026b0d4a1a1f1243270c8c",
    "raw": {
     "annotations": {
      "idempotentHint": true,
@@ -474,7 +474,7 @@
        "description": "Required when `format` is `\"section\"`. Identifies the heading/block/frontmatter to extract.",
        "properties": {
         "target": {
-         "description": "Heading name \u2014 either the full path (`\"Parent::Child\"`) or a bare leaf name that matches exactly one heading \u2014 a block reference without the leading caret (e.g. \"2d9b4a\", not \"^2d9b4a\"), or a frontmatter field name.",
+         "description": "Heading, block, or frontmatter locator. Heading: the full `Parent::Child` path as `obsidian_get_note` `format: \"document-map\"` lists it, or a bare leaf name matched at any depth. A leaf shared by several headings reads the first (every full path comes back in `candidates`); a write rejects it with `ambiguous_section`, unless one of them has no parent heading, in which case the write targets that one. A full path that occurs more than once in the note reads the first; a write rejects it with `ambiguous_section`. Block: the reference ID without the caret (e.g. \"2d9b4a\", not \"^2d9b4a\"). Frontmatter: the field name.",
          "minLength": 1,
          "type": "string"
         },
@@ -655,7 +655,7 @@
        "type": "object"
       },
       "notice": {
-       "description": "Guidance when a bare heading leaf matched several headings \u2014 names the path that was read and points at `candidates` for the rest.",
+       "description": "Guidance when a heading locator matched several headings \u2014 names the path that was read and points at `candidates` for the rest.",
        "type": "string"
       },
       "result": {
@@ -829,7 +829,7 @@
          "description": "Single-section projection.",
          "properties": {
           "candidates": {
-           "description": "Every full heading path sharing the bare leaf name in `section.target`, in document order. Present only when more than one heading matched; the read still returns the first. Same field the write tools carry as `ambiguous_section` error data \u2014 re-issue with one of these to pin the section.",
+           "description": "Every full heading path `section.target` could name, in document order: each heading sharing a bare leaf name, or each repeat of a full path that occurs more than once in the note (the strings are then identical). Present only when more than one heading matched; the read still returns the first. Same field the write tools carry as `ambiguous_section` error data \u2014 re-issue with a distinct path from this list to pin the section.",
            "items": {
             "type": "string"
            },
@@ -849,7 +849,7 @@
            "description": "Echoed section locator.",
            "properties": {
             "target": {
-             "description": "Heading name \u2014 either the full path (`\"Parent::Child\"`) or a bare leaf name that matches exactly one heading \u2014 a block reference without the leading caret (e.g. \"2d9b4a\", not \"^2d9b4a\"), or a frontmatter field name.",
+             "description": "Heading, block, or frontmatter locator. Heading: the full `Parent::Child` path as `obsidian_get_note` `format: \"document-map\"` lists it, or a bare leaf name matched at any depth. A leaf shared by several headings reads the first (every full path comes back in `candidates`); a write rejects it with `ambiguous_section`, unless one of them has no parent heading, in which case the write targets that one. A full path that occurs more than once in the note reads the first; a write rejects it with `ambiguous_section`. Block: the reference ID without the caret (e.g. \"2d9b4a\", not \"^2d9b4a\"). Frontmatter: the field name.",
              "minLength": 1,
              "type": "string"
             },
@@ -1622,12 +1622,12 @@
    }
   },
   "obsidian_manage_tags": {
-   "digest": "89fa528c73ad191418fe30ec4e80736ffe1578be15346d990e296d768d744c3f",
+   "digest": "fb2f7a4e5b88922bcff536d898c3ffb0c315741572e6a0239cd564a364eddf90",
    "raw": {
     "annotations": {
      "destructiveHint": true
     },
-    "description": "Add, remove, or list a note's tags. Defaults to the frontmatter `tags:` array \u2014 set `location` to `inline` or `both` to mutate the note body. `add` ensures the tag is present in the requested location(s); `remove` strips it; `both` reconciles across both representations. Inline `#tag` detection skips code spans (fenced and inline), link spans (`[[...]]`, `[text](...)`, `[text][ref]`) so a heading anchor, block anchor, or wikilink alias is never read as a tag or rewritten by a removal, and a hash escaped as `\\#`; a `#` inside an HTML comment or a math span is still counted. Inline-location additions append the new tag at end-of-file. `list` ignores the input `tags` array.",
+    "description": "Add, remove, or list a note's tags. Defaults to the frontmatter `tags:` array \u2014 set `location` to `inline` or `both` to mutate the note body. `add` ensures the tag is present in the requested location(s); `remove` strips it; `both` reconciles across both representations. Inline `#tag` detection skips code spans (fenced and inline), link spans (`[[...]]`, `[text](...)`, `[text][ref]`) so a heading anchor, block anchor, or wikilink alias is never read as a tag or rewritten by a removal, and HTML comments (`<!-- \u2026 -->`) and math (`$\u2026$`, `$$\u2026$$`), where Obsidian indexes no tag. An inline tag starts at line start, after whitespace, or right after markup such as `**`, `==`, `<br>`, or a `\\`-escape (`**#x**` is a tag; `(#x`, `a *#x`, and `\\#x` are not); a `#` inside a `%% \u2026 %%` comment still counts. Inline-location additions append the new tag at end-of-file. `list` ignores the input `tags` array.",
     "inputSchema": {
      "$schema": "https://json-schema.org/draft/2020-12/schema",
      "additionalProperties": false,
@@ -2123,12 +2123,12 @@
    }
   },
   "obsidian_patch_note": {
-   "digest": "1f8aa6e830fc6c2c119d5efdd6061eff4dea8bc9a166f2ec29772701d43a9633",
+   "digest": "a3e35750eb4818f0a2e39dbd9715beba2d0c9aabf29ba0a8d7dc2aefeccc64b5",
    "raw": {
     "annotations": {
      "destructiveHint": true
     },
-    "description": "Edit a heading, block reference, or frontmatter field in place \u2014 append to, prepend to, or replace the target's body. Use `obsidian_get_note` with `format: \"document-map\"` to discover available targets first. A nested heading may be named either by its full `Parent::Child` path or by a bare leaf name that matches exactly one heading; a leaf shared by several headings is rejected with `ambiguous_section`.",
+    "description": "Edit a heading, block reference, or frontmatter field in place \u2014 append to, prepend to, or replace the target's body. Use `obsidian_get_note` with `format: \"document-map\"` to discover available targets first. Name a heading by its full `Parent::Child` path as the document map lists it, or by a bare leaf name matched at any depth. A leaf shared by several headings is rejected with `ambiguous_section`, unless one of them has no parent heading, in which case the write targets that one; a full path that occurs more than once in the note is rejected with `ambiguous_section` too.",
     "inputSchema": {
      "$schema": "https://json-schema.org/draft/2020-12/schema",
      "additionalProperties": false,
@@ -2180,7 +2180,7 @@
        "description": "Which heading/block/frontmatter field to edit.",
        "properties": {
         "target": {
-         "description": "Heading name \u2014 either the full path (`\"Parent::Child\"`) or a bare leaf name that matches exactly one heading \u2014 a block reference without the leading caret (e.g. \"2d9b4a\", not \"^2d9b4a\"), or a frontmatter field name.",
+         "description": "Heading, block, or frontmatter locator. Heading: the full `Parent::Child` path as `obsidian_get_note` `format: \"document-map\"` lists it, or a bare leaf name matched at any depth. A leaf shared by several headings reads the first (every full path comes back in `candidates`); a write rejects it with `ambiguous_section`, unless one of them has no parent heading, in which case the write targets that one. A full path that occurs more than once in the note reads the first; a write rejects it with `ambiguous_section`. Block: the reference ID without the caret (e.g. \"2d9b4a\", not \"^2d9b4a\"). Frontmatter: the field name.",
          "minLength": 1,
          "type": "string"
         },
@@ -2323,7 +2323,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `path_forbidden`: The target path is outside OBSIDIAN_WRITE_PATHS, or OBSIDIAN_READ_ONLY=true denies all writes. `note_missing`: The vault path does not resolve to an existing note. `no_active_file`: Target was `active` but no file is currently open in Obsidian. `periodic_unsupported`: Target was `periodic` and this vault runs Local REST API v5.0.2 or later without the companion periodic-notes extension, so the `/periodic/` routes are not served at all. `periodic_not_found`: Target was `periodic`, the `/periodic/` routes are served on this vault, and no note exists for the requested period. `periodic_disabled`: Target was `periodic` but the requested period is not enabled in Obsidian's Periodic Notes plugin settings. `section_target_missing`: The named heading/block/frontmatter field does not exist in the note. Use `obsidian_get_note` with `format: \"document-map\"` to discover available targets. `ambiguous_section`: A bare heading leaf name matches more than one heading in the note, so the write target is undetermined. `content_preexists`: The supplied content already appears at the target \u2014 the patch was rejected to keep retries idempotent (the default). `path_is_directory`: The supplied path names a folder rather than a note file. `path_traversal`: The path contains a `.` or `..` segment, which is rejected to prevent vault escape. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `path_forbidden`: The target path is outside OBSIDIAN_WRITE_PATHS, or OBSIDIAN_READ_ONLY=true denies all writes. `note_missing`: The vault path does not resolve to an existing note. `no_active_file`: Target was `active` but no file is currently open in Obsidian. `periodic_unsupported`: Target was `periodic` and this vault runs Local REST API v5.0.2 or later without the companion periodic-notes extension, so the `/periodic/` routes are not served at all. `periodic_not_found`: Target was `periodic`, the `/periodic/` routes are served on this vault, and no note exists for the requested period. `periodic_disabled`: Target was `periodic` but the requested period is not enabled in Obsidian's Periodic Notes plugin settings. `section_target_missing`: The named heading/block/frontmatter field does not exist in the note. Use `obsidian_get_note` with `format: \"document-map\"` to discover available targets. `ambiguous_section`: A bare heading leaf name matches more than one heading in the note, or the resolved full heading path occurs more than once, so the write target is undetermined. `content_preexists`: The supplied content already appears at the target \u2014 the patch was rejected to keep retries idempotent (the default). `path_is_directory`: The supplied path names a folder rather than a note file. `path_traversal`: The path contains a `.` or `..` segment, which is rejected to prevent vault escape. Other values are possible when a failure originates below the handler.",
            "examples": [
             "path_forbidden",
             "note_missing",
@@ -2392,7 +2392,7 @@
        "description": "Section locator the patch was applied to. For headings this is the resolved locator \u2014 a bare leaf name is reported back as its full `Parent::Child` path.",
        "properties": {
         "target": {
-         "description": "Heading name \u2014 either the full path (`\"Parent::Child\"`) or a bare leaf name that matches exactly one heading \u2014 a block reference without the leading caret (e.g. \"2d9b4a\", not \"^2d9b4a\"), or a frontmatter field name.",
+         "description": "Heading, block, or frontmatter locator. Heading: the full `Parent::Child` path as `obsidian_get_note` `format: \"document-map\"` lists it, or a bare leaf name matched at any depth. A leaf shared by several headings reads the first (every full path comes back in `candidates`); a write rejects it with `ambiguous_section`, unless one of them has no parent heading, in which case the write targets that one. A full path that occurs more than once in the note reads the first; a write rejects it with `ambiguous_section`. Block: the reference ID without the caret (e.g. \"2d9b4a\", not \"^2d9b4a\"). Frontmatter: the field name.",
          "minLength": 1,
          "type": "string"
         },
@@ -2708,20 +2708,20 @@
    }
   },
   "obsidian_search_notes": {
-   "digest": "029a56d62bb5ab7e28bf43712e72c9f5c724334759c01faa91dd7fae7b19af18",
+   "digest": "a025f1e42ffc952253b877ca872226abc41d8cfacaf0b17165d029dfffd74bb0",
    "raw": {
     "annotations": {
      "idempotentHint": true,
      "readOnlyHint": true
     },
-    "description": "Search the vault by text substring or JSONLogic predicate. Pick the mode that matches the query shape. Results paginate via opaque cursors: omit `cursor` for the first page, then pass `nextCursor` from the prior response. Text-mode hits additionally clip per file at `maxMatchesPerHit`.",
+    "description": "Search the vault by text tokens or JSONLogic predicate. Pick the mode that matches the query shape. Results paginate via opaque cursors: omit `cursor` for the first page, then pass `nextCursor` from the prior response. Text-mode hits additionally clip per file at `maxMatchesPerHit` match locations.",
     "inputSchema": {
      "$schema": "https://json-schema.org/draft/2020-12/schema",
      "additionalProperties": false,
      "properties": {
       "contextLength": {
        "default": 100,
-       "description": "Characters of context on each side of the match (text mode only). Sizes the rendered text as well as the structured payload, so a wide window multiplies the response across every match on the page.",
+       "description": "Characters of context on each side of a match location (text mode only). Sizes the rendered text as well as the structured payload, so a wide window multiplies the response across every location on the page. Query tokens within 2 \u00d7 `contextLength` of each other share a location.",
        "exclusiveMinimum": 0,
        "maximum": 9007199254740991,
        "type": "integer"
@@ -2740,13 +2740,13 @@
       },
       "maxMatchesPerHit": {
        "default": 10,
-       "description": "Cap on match contexts returned per file in text mode. When clipped, the hit carries `truncated: true` and `totalMatches`.",
+       "description": "Cap on match locations returned per file in text mode. A phrase whose tokens share one location counts once. When clipped, the hit carries `truncated: true` and `totalMatches`.",
        "exclusiveMinimum": 0,
        "maximum": 9007199254740991,
        "type": "integer"
       },
       "mode": {
-       "description": "Which search algorithm to run. `text` matches a substring case-insensitively across filenames and note bodies, returning surrounding context windows. `jsonlogic` evaluates a JSONLogic tree against each note, with `var` paths into `path`, `content`, `frontmatter.<key>`, `tags`, and `stat.{ctime,mtime,size}`, plus `glob` and `regexp` operators \u2014 both take their arguments as `[PATTERN, VALUE]`, so the pattern comes first and the `{\"var\": ...}` reference second.",
+       "description": "Which search algorithm to run. `text` splits `query` on whitespace and requires every token, each matched case-insensitively as a substring of the filename or note body. Quotes are literal characters, not a phrase operator. Each hit returns match locations with surrounding context windows; tokens that sit close together, such as the words of a phrase, share one location. `jsonlogic` evaluates a JSONLogic tree against each note, with `var` paths into `path`, `content`, `frontmatter.<key>`, `tags`, and `stat.{ctime,mtime,size}`, plus `glob` and `regexp` operators \u2014 both take their arguments as `[PATTERN, VALUE]`, so the pattern comes first and the `{\"var\": ...}` reference second.",
        "enum": [
         "text",
         "jsonlogic"
@@ -2758,7 +2758,7 @@
        "type": "string"
       },
       "query": {
-       "description": "The query string. Required for `text` and `omnisearch` modes; ignored in `jsonlogic` mode (use `logic` instead \u2014 this field must be a string, so passing a JSONLogic tree here is rejected).",
+       "description": "The query string. Required for `text` and `omnisearch` modes; ignored in `jsonlogic` mode (use `logic` instead \u2014 this field must be a string, so passing a JSONLogic tree here is rejected). In `text` mode it is split on whitespace and every token must appear; quotes stay part of the tokens, so a quoted phrase matches nothing unless the note contains the quote characters.",
        "type": "string"
       }
      },
@@ -2861,43 +2861,43 @@
          "description": "Text-search results.",
          "properties": {
           "hits": {
-           "description": "Matching files with per-match context.",
+           "description": "Matching files with their match locations.",
            "items": {
             "additionalProperties": false,
-            "description": "A file with one or more text-search matches.",
+            "description": "A file with one or more text-search match locations.",
             "properties": {
              "filename": {
               "description": "Vault-relative path of the matching note.",
               "type": "string"
              },
              "matches": {
-              "description": "Per-match context windows. Capped per file by `maxMatchesPerHit`.",
+              "description": "Match locations with their context windows, in document order. Capped per file by `maxMatchesPerHit`.",
               "items": {
                "additionalProperties": false,
-               "description": "A single match within a file.",
+               "description": "A match location within a file: one token occurrence, or several query tokens close enough to share one context window (a phrase).",
                "properties": {
                 "context": {
-                 "description": "Surrounding text around the match.",
+                 "description": "Surrounding text around the location.",
                  "type": "string"
                 },
                 "match": {
                  "additionalProperties": false,
-                 "description": "Where the match sits, on two origins: `start`/`end` index the matched subject, `contextStart`/`contextEnd` index the accompanying `context` window.",
+                 "description": "Where the location sits, on two origins: `start`/`end` index the matched subject, `contextStart`/`contextEnd` index the accompanying `context` window.",
                  "properties": {
                   "contextEnd": {
-                   "description": "Match end offset within `context`.",
+                   "description": "Location end offset within `context`.",
                    "type": "number"
                   },
                   "contextStart": {
-                   "description": "Match start offset within `context`. `context.slice(contextStart, contextEnd)` is the matched text.",
+                   "description": "Location start offset within `context`. `context.slice(contextStart, contextEnd)` is the matched text, from the first matched token through the last.",
                    "type": "number"
                   },
                   "end": {
-                   "description": "Match end offset within the same subject `start` indexes.",
+                   "description": "Location end offset within the same subject `start` indexes.",
                    "type": "number"
                   },
                   "start": {
-                   "description": "Match start offset within the subject upstream matched \u2014 the note body in the usual case, or the note basename (extension stripped) when the filename itself matched, in which case `context` is that basename. This is not an offset into `context`; use `contextStart` for that. Note-body values index the same string `obsidian_get_note` returns.",
+                   "description": "Location start offset within the subject upstream matched \u2014 the note body in the usual case, or the note basename (extension stripped) when the filename itself matched, in which case `context` is that basename. This is not an offset into `context`; use `contextStart` for that. Note-body values index the same string `obsidian_get_note` returns.",
                    "type": "number"
                   }
                  },
@@ -2919,11 +2919,11 @@
               "type": "array"
              },
              "totalMatches": {
-              "description": "Total matches in this file. Present only when `matches` was clipped to `maxMatchesPerHit`.",
+              "description": "Total match locations in this file. Present only when `matches` was clipped to `maxMatchesPerHit`.",
               "type": "number"
              },
              "truncated": {
-              "description": "True when `matches` was clipped to `maxMatchesPerHit`. Use `obsidian_get_note` to read the full file when more context is needed.",
+              "description": "True when `matches` was clipped to `maxMatchesPerHit` locations. Use `obsidian_get_note` to read the full file when more context is needed.",
               "type": "boolean"
              }
             },
@@ -3012,13 +3012,13 @@
    }
   },
   "obsidian_write_note": {
-   "digest": "cf05e15d4123023d0a14de71d766f162598a1037fbf28bf9148b984f1913c481",
+   "digest": "7beb0792bd4c0aeb1af78d8dffdcc03dc2a2389203fe3edac332e4d54dfeefde",
    "raw": {
     "annotations": {
      "destructiveHint": true,
      "idempotentHint": true
     },
-    "description": "Create or overwrite a note. With `section`, replaces just that heading/block/frontmatter section in place \u2014 use `obsidian_get_note` with `format: \"document-map\"` to discover available targets. A nested heading may be named either by its full `Parent::Child` path or by a bare leaf name that matches exactly one heading; a leaf shared by several headings is rejected with `ambiguous_section`. Whole-file writes fail with `file_exists` against an existing note unless `overwrite: true` \u2014 for in-place edits, prefer `obsidian_patch_note` (sections), `obsidian_append_to_note` (append), or `obsidian_replace_in_note` (find-and-replace). For heading sections, `content` is the new body; the heading line is preserved automatically.",
+    "description": "Create or overwrite a note. With `section`, replaces just that heading/block/frontmatter section in place \u2014 use `obsidian_get_note` with `format: \"document-map\"` to discover available targets. Name a heading by its full `Parent::Child` path as the document map lists it, or by a bare leaf name matched at any depth. A leaf shared by several headings is rejected with `ambiguous_section`, unless one of them has no parent heading, in which case the write targets that one; a full path that occurs more than once in the note is rejected with `ambiguous_section` too. Whole-file writes fail with `file_exists` against an existing note unless `overwrite: true` \u2014 for in-place edits, prefer `obsidian_patch_note` (sections), `obsidian_append_to_note` (append), or `obsidian_replace_in_note` (find-and-replace). For heading sections, `content` is the new body; the heading line is preserved automatically.",
     "inputSchema": {
      "$schema": "https://json-schema.org/draft/2020-12/schema",
      "additionalProperties": false,
@@ -3045,7 +3045,7 @@
        "description": "Optional sub-document target. When set, only this section is replaced; rest of the note is untouched.",
        "properties": {
         "target": {
-         "description": "Heading name \u2014 either the full path (`\"Parent::Child\"`) or a bare leaf name that matches exactly one heading \u2014 a block reference without the leading caret (e.g. \"2d9b4a\", not \"^2d9b4a\"), or a frontmatter field name.",
+         "description": "Heading, block, or frontmatter locator. Heading: the full `Parent::Child` path as `obsidian_get_note` `format: \"document-map\"` lists it, or a bare leaf name matched at any depth. A leaf shared by several headings reads the first (every full path comes back in `candidates`); a write rejects it with `ambiguous_section`, unless one of them has no parent heading, in which case the write targets that one. A full path that occurs more than once in the note reads the first; a write rejects it with `ambiguous_section`. Block: the reference ID without the caret (e.g. \"2d9b4a\", not \"^2d9b4a\"). Frontmatter: the field name.",
          "minLength": 1,
          "type": "string"
         },
@@ -3190,7 +3190,7 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `file_exists`: Whole-file write was attempted against an existing note and `overwrite` was not set to `true`. `path_forbidden`: The target path is outside OBSIDIAN_WRITE_PATHS, or OBSIDIAN_READ_ONLY=true denies all writes. `note_missing`: Section replace targets a path that does not resolve to an existing note (PATCH requires the file to exist). `no_active_file`: Target was `active` but no file is currently open in Obsidian. `periodic_unsupported`: Target was `periodic` and this vault runs Local REST API v5.0.2 or later without the companion periodic-notes extension, so the `/periodic/` routes are not served at all. `periodic_not_found`: Target was `periodic`, the `/periodic/` routes are served on this vault, and no note exists for the requested period. `periodic_disabled`: Target was `periodic` but the requested period is not enabled in Obsidian's Periodic Notes plugin settings. `section_target_missing`: `section` was provided but the named heading/block/frontmatter field does not exist in the note. `ambiguous_section`: A bare heading leaf name matches more than one heading in the note, so the replacement target is undetermined. `path_is_directory`: The supplied path names a folder rather than a note file. `path_traversal`: The path contains a `.` or `..` segment, which is rejected to prevent vault escape. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `file_exists`: Whole-file write was attempted against an existing note and `overwrite` was not set to `true`. `path_forbidden`: The target path is outside OBSIDIAN_WRITE_PATHS, or OBSIDIAN_READ_ONLY=true denies all writes. `note_missing`: Section replace targets a path that does not resolve to an existing note (PATCH requires the file to exist). `no_active_file`: Target was `active` but no file is currently open in Obsidian. `periodic_unsupported`: Target was `periodic` and this vault runs Local REST API v5.0.2 or later without the companion periodic-notes extension, so the `/periodic/` routes are not served at all. `periodic_not_found`: Target was `periodic`, the `/periodic/` routes are served on this vault, and no note exists for the requested period. `periodic_disabled`: Target was `periodic` but the requested period is not enabled in Obsidian's Periodic Notes plugin settings. `section_target_missing`: `section` was provided but the named heading/block/frontmatter field does not exist in the note. `ambiguous_section`: A bare heading leaf name matches more than one heading in the note, or the resolved full heading path occurs more than once, so the replacement target is undetermined. `path_is_directory`: The supplied path names a folder rather than a note file. `path_traversal`: The path contains a `.` or `..` segment, which is rejected to prevent vault escape. Other values are possible when a failure originates below the handler.",
            "examples": [
             "file_exists",
             "path_forbidden",
@@ -3260,5 +3260,5 @@
    }
   }
  },
- "version": "3.5.4"
+ "version": "3.5.5"
 }

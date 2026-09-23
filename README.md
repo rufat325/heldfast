@@ -1,8 +1,8 @@
 # MCP server tool changes
 
-Generated 2026-09-23T04:22:27+00:00 by `research/feed/watch.py` on the `main` branch. Watching 154 servers: the 150 most-downloaded npm stdio servers in the official MCP registry, and the four `@modelcontextprotocol` servers.
+Generated 2026-09-23T04:25:33+00:00 by `research/feed/watch.py` on the `main` branch. Watching 154 servers: the 150 most-downloaded npm stdio servers in the official MCP registry, and the four `@modelcontextprotocol` servers.
 
-246 releases that changed a tool definition (0 observed live, 246 from the [churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); 3 where `mcp-pin wrap --drift graded` would refuse something.
+256 releases that changed a tool definition (10 observed live, 246 from the [churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); 3 where `mcp-pin wrap --drift graded` would refuse something.
 
 Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, with the words that moved: [events/](events).
 
@@ -10,6 +10,16 @@ Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, w
 
 | published | package | release | tools | grade |
 |---|---|---|---|---|
+| 2026-09-23 | `@cyanheads/pubmed-mcp-server` | 2.10.14 → 2.10.16 | 11 changed (every tool) | quiet |
+| 2026-09-23 | `hermoso` | 0.1.270 → 0.1.272 | 3 changed | quiet |
+| 2026-09-23 | `run402-mcp` | 4.93.2 → 4.98.0 | 3 changed, 4 added, 212 removed | quiet |
+| 2026-09-23 | `gdharness` | 1.0.13 → 1.0.17 | 3 changed | quiet |
+| 2026-09-23 | `@oracle-agent/oracle` | 0.35.47 → 0.35.48 | 2 added | quiet |
+| 2026-09-23 | `obsidian-mcp-server` | 3.5.4 → 3.5.5 | 6 changed | quiet |
+| 2026-09-22 | `clinicaltrialsgov-mcp-server` | 2.9.8 → 2.9.10 | 3 changed | quiet |
+| 2026-09-22 | `@togglhq/mcp` | 1.11.30 → 1.11.34 | 1 changed | quiet |
+| 2026-09-22 | `firecrawl-mcp` | 3.25.2 → 3.25.3 | 4 changed | quiet |
+| 2026-09-22 | `trace-mcp` | 3.31.2 → 3.31.3 | 7 changed | quiet |
 | 2026-09-22 | `@togglhq/mcp` | 1.11.28 → 1.11.29 | 8 changed | quiet |
 | 2026-09-22 | `agent-device` | 0.21.11 → 0.21.12 | 1 changed | quiet |
 | 2026-09-22 | `gdharness` | 1.0.11 → 1.0.12 | 6 changed | quiet |
@@ -60,13 +70,3 @@ Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, w
 | 2026-09-18 | `@alisaitteke/photoshop-mcp` | 1.7.16 → 1.7.17 | 1 changed, 1 added | quiet |
 | 2026-09-18 | `@imgly/codesign-mcp` | 0.3.4 → 0.3.5 | 1 changed | quiet |
 | 2026-09-18 | `@mozilla/firefox-devtools-mcp` | 0.10.2 → 0.10.3 | 2 changed, 1 added, 1 removed | quiet |
-| 2026-09-18 | `@qase/mcp-server` | 2.5.0 → 2.5.1 | 14 changed (every tool) | quiet |
-| 2026-09-18 | `githits` | 0.19.0 → 0.20.0 | 13 changed (every tool) | quiet |
-| 2026-09-18 | `@getbourdon/mcp-server` | 0.6.0 → 0.7.0 | 1 added | quiet |
-| 2026-09-17 | `claude-flow` | 3.42.3 → 3.42.4 | 1 changed | quiet |
-| 2026-09-17 | `@trusty-squire/mcp` | 1.1.14 → 1.1.15 | 1 changed | quiet |
-| 2026-09-17 | `premiere-pro-mcp` | 1.16.0 → 1.16.1 | 4 changed, 8 added | quiet |
-| 2026-09-17 | `@shipstatic/mcp` | 1.12.1 → 1.12.2 | 5 changed | quiet |
-| 2026-09-17 | `@brave/brave-search-mcp-server` | 2.1.3 → 2.1.4 | 1 changed | quiet |
-| 2026-09-17 | `@qase/mcp-server` | 2.4.1 → 2.5.0 | 1 changed | quiet |
-| 2026-09-17 | `@browserstack/mcp-server` | 1.4.0 → 1.4.1 | 3 changed | quiet |
