@@ -1,6 +1,6 @@
 # MCP server tool changes
 
-Generated 2026-09-23T04:25:33+00:00 by `research/feed/watch.py` on the `main` branch. Watching 154 servers: the 150 most-downloaded npm stdio servers in the official MCP registry, and the four `@modelcontextprotocol` servers.
+Generated 2026-09-23T05:00:35+00:00 by `research/feed/watch.py` on the `main` branch. Watching 154 servers: the 150 most-downloaded npm stdio servers in the official MCP registry, and the four `@modelcontextprotocol` servers.
 
 256 releases that changed a tool definition (10 observed live, 246 from the [churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); 3 where `mcp-pin wrap --drift graded` would refuse something.
 
