@@ -45,15 +45,31 @@ SIGNALS: list[Signal] = [
     Signal(
         "concealment",
         re.compile(
-            r"\b(?:do\s+not|don't|never)\s+(?:mention|tell|inform|reveal|disclose|show|display|"
-            r"report|notify|alert|explain)\b[^.\n]{0,40}\b(?:the\s+)?(?:user|human|operator|"
-            r"anyone|them)\b|"
-            # "without asking" alone is ordinary prose ("what you get without asking"),
-            # so the concealment reading requires an explicit person as the object.
-            r"\bwithout\s+(?:telling|informing|notifying|alerting|asking|consulting)\s+"
+            # What is hidden has to be the agent's own action or this
+            # instruction. Read against 240,464 real tool definitions (docs/
+            # SCAN.md), "do not tell the user" is overwhelmingly an honesty
+            # guardrail -- "do not tell the user a refund is coming", "never
+            # tell the user their deposit has been sent" -- and flagging those
+            # taught the reader to ignore this rule. Concealment says what the
+            # user must not learn: about this step, that you did it, what or
+            # which or when, or nothing at all.
+            r"\b(?:do\s+not|don't|never)\s+(?:tell|inform|notify|alert|let)\s+(?:the\s+|a\s+)?"
+            r"(?:user|human|operator|anyone|them)\s+(?:about|of|know|you\b|that\s+(?:you|this|"
+            r"it|we)\b|what|which|when|where|how|why|anything)|"
+            r"\b(?:do\s+not|don't|never)\s+(?:tell|inform|notify|alert)\s+(?:the\s+|a\s+)?"
+            r"(?:user|human|operator|anyone|them)\s*[.;!]|"
+            r"\b(?:do\s+not|don't|never)\s+(?:mention|reveal|disclose|show|display|report|"
+            r"explain)\s+(?:this|that|it|these|those|any\s+of\s+this|the\s+(?:above|"
+            r"instructions?|step|call|request|action))\b[^.\n]{0,40}?\b(?:to|with)\s+"
+            r"(?:the\s+|a\s+)?(?:user|human|operator|anyone|them)\b|"
+            # "Without asking the user" is about consent, not concealment, and
+            # real tools say it of harmless things (polling, form defaults).
+            r"\bwithout\s+(?:telling|informing|notifying|alerting)\s+"
             r"(?:the\s+)?(?:user|human|operator|owner|anyone|them)\b|"
-            r"\b(?:keep|hide)\s+(?:this|it|that)\s+(?:secret|hidden|confidential|quiet)\b|"
-            r"\bdo\s+not\s+(?:log|record|output|print)\b|"
+            r"\b(?:keep|hide)\s+(?:this|it|that)\s+(?:(?:secret|hidden|confidential|quiet)\s+)?"
+            r"from\s+(?:the\s+)?(?:user|human|operator|anyone)\b|"
+            r"\bdo\s+not\s+(?:log|record)\s+(?:this|the|any)\s+(?:call|request|action|step|"
+            r"invocation|interaction|conversation)\b|"
             # Politely and passively phrased concealment. Found by writing the
             # same instruction several ways and seeing which got through: the
             # imperative was caught and "please refrain from mentioning this to
@@ -63,8 +79,11 @@ SIGNALS: list[Signal] = [
             r"(?:mention|mentioning|telling|informing|disclosing|revealing|"
             r"reporting|notifying)\b[^.\n]{0,40}\b(?:the\s+)?"
             r"(?:user|human|operator|anyone|them)\b|"
+            # "must not be shown as one", "should not be reported as a gain":
+            # the passive form conceals only when it names the reader.
             r"\b(?:should|must)\s+not\s+be\s+"
-            r"(?:mentioned|disclosed|revealed|reported|shown|logged)\b",
+            r"(?:mentioned|disclosed|revealed|reported|shown|logged)\s+to\s+(?:the\s+)?"
+            r"(?:user|human|operator|anyone)\b",
             re.IGNORECASE,
         ),
         Severity.CRITICAL, 0.95, True,
@@ -160,11 +179,48 @@ SENSITIVE_PATHS = re.compile(
 )
 
 
+# Scripts whose spelling needs the zero-width joiner and non-joiner: Persian
+# writes ZWNJ (U+200C) inside ordinary words ("میخواهم"), and the Indic
+# scripts use both to choose a conjunct form. Found in Persian tool text on
+# three hosted servers, where flagging it called correct spelling an attack.
+_JOINING_SCRIPTS = ((0x0600, 0x06FF), (0x0700, 0x074F), (0x0750, 0x077F),
+                    (0x08A0, 0x08FF), (0x0900, 0x0DFF), (0xFB50, 0xFDFF),
+                    (0xFE70, 0xFEFF))
+
+
+def _joins(ch: str) -> bool:
+    cp = ord(ch)
+    return any(lo <= cp <= hi for lo, hi in _JOINING_SCRIPTS)
+
+
+def _emoji(ch: str) -> bool:
+    cp = ord(ch)
+    return cp >= 0x1F000 or 0x2600 <= cp <= 0x27BF or cp == 0xFE0F
+
+
+def _orthographic(text: str, idx: int) -> bool:
+    """A joiner the writing system, not an attacker, put there.
+
+    ZWNJ or ZWJ between two letters of a script that spells with them, or
+    ZWJ inside an emoji sequence. Anywhere else -- between Latin letters,
+    at the start of a word, in a run -- it is still reported.
+    """
+    ch = text[idx]
+    if ch not in "\u200c\u200d" or idx == 0 or idx + 1 >= len(text):
+        return False
+    before, after = text[idx - 1], text[idx + 1]
+    if _joins(before) and _joins(after):
+        return True
+    return ch == "\u200d" and _emoji(before) and _emoji(after)
+
+
 def invisible_runs(text: str) -> list[tuple[int, str, str]]:
     """Return (index, char_name, kind) for characters the user cannot see."""
     out: list[tuple[int, str, str]] = []
     for idx, ch in enumerate(text):
         cp = ord(ch)
+        if _orthographic(text, idx):
+            continue
         if 0xE0000 <= cp <= 0xE007F:
             out.append((idx, f"U+{cp:04X}", "unicode tag character"))
         elif cp in (0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF, 0x00AD, 0x180E):

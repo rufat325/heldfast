@@ -34,6 +34,7 @@ like ASCII at a glance.
 
 from __future__ import annotations
 
+import re
 import unicodedata
 
 # Confusable code point -> the ASCII letter it imitates. Read as "somebody
@@ -72,6 +73,8 @@ _CONFUSABLE = {k: v for k, v in _CONFUSABLE.items() if len(k) == 1}
 # Scripts whose letters imitate Latin. Used to decide whether a *word* mixes
 # scripts in a way that has no innocent explanation.
 _LATINISH = ("CYRILLIC", "GREEK", "ARMENIAN", "CHEROKEE")
+# Letters only: no digits, underscores, hyphens or other punctuation.
+_LETTER_RUNS = re.compile(r"[^\W\d_]+")
 
 
 def fold(text: str) -> str:
@@ -101,18 +104,23 @@ def mixed_script_words(text: str, limit: int = 5) -> list[str]:
     if not text or text.isascii():
         return []
     out: list[str] = []
-    for word in text.split():
+    # A run of letters, not a whitespace-separated word. Ukrainian and
+    # Russian technical writing joins a Latin term to a Cyrillic one with a
+    # hyphen -- "MCP-сервис", "email-шаблон" -- and splitting on spaces made
+    # every such compound a "mixed word". A substitution happens inside a
+    # run of letters; a hyphen between two scripts is punctuation.
+    for word in _LETTER_RUNS.findall(text):
         latin = confusable = False
         for ch in word:
-            if not ch.isalpha():
-                continue
             try:
                 name = unicodedata.name(ch)
             except ValueError:
                 continue
             if name.startswith("LATIN"):
                 latin = True
-            elif name.startswith(_LATINISH):
+            # A letter that imitates a Latin one, not merely any Greek or
+            # Cyrillic letter: "ΔG" is Gibbs energy, and Δ passes for nothing.
+            elif ch in _CONFUSABLE and name.startswith(_LATINISH):
                 confusable = True
         if latin and confusable:
             out.append(word)

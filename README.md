@@ -139,7 +139,9 @@ Cross-server shadowing is what MCPA027 and MCPA028 are for. Approval records wha
 reviewed. It does not prove the first version was honest.
 
 Both attacks reproduced end to end, with the real output and the four gaps this does not
-close: [docs/TOOL-POISONING.md](docs/TOOL-POISONING.md).
+close: [docs/TOOL-POISONING.md](docs/TOOL-POISONING.md). What the rules find when they read
+every tool of 13,170 public servers -- and the three rules that reading fixed:
+[docs/SCAN.md](docs/SCAN.md).
 
 ## Pin, then refuse
 
@@ -300,7 +302,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1342 tests, stdlib unittest, nothing to install.
+1348 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable
