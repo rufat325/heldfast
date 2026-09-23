@@ -594,6 +594,33 @@ def cmd_guard(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_grade_drift(_args: argparse.Namespace) -> int:
+    """`guard --drift graded`'s test, for a caller that is not Python.
+
+    The definition goes through the guard's own wire reader, so a field the
+    guard grades is a field this grades; a second reader is where the two
+    would start to disagree.
+    """
+    from .driftgrade import introduced, live_text
+    from .guard import _tool_from_wire
+
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+        definition = payload.get("definition")
+        if not isinstance(definition, dict):
+            raise ValueError("no tool definition given")
+        recorded = payload.get("recorded")
+        tool = _tool_from_wire("hook", definition)
+        found = introduced(recorded if isinstance(recorded, dict) else None, live_text(
+            tool.description, tool.title, tool.annotations,
+            tool.input_schema, tool.output_schema))
+    except (ValueError, AttributeError, TypeError) as exc:
+        print(f"mcp-pin grade-drift: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    print(json.dumps({"introduced": [{"kind": s.kind, "match": s.match} for s in found]}))
+    return EXIT_OK
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     from . import check as check_mod
     return check_mod.run(getattr(args, "lock", None))
@@ -867,6 +894,7 @@ _COMMANDS = {
     "guard": cmd_guard,
     "wrap": cmd_guard,
     "check": cmd_check,
+    "grade-drift": cmd_grade_drift,
     "ci": cmd_ci,
     "serve": lambda _args: _serve(),
     "scan": cmd_scan,

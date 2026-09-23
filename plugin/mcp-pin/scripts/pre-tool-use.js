@@ -27,10 +27,80 @@
  *
  * `tests/test_plugin.py` walks a table of lock states and asserts the two
  * agree on every one of them.
+ *
+ * GRADED DRIFT (MCP_PIN_DRIFT=graded)
+ * -----------------------------------
+ * `wrap --drift graded` forwards a changed tool when the change introduced no
+ * signal. This hook does the same only by asking `mcp-pin grade-drift`, the
+ * same Python the wrap runs, rather than keeping a JavaScript copy of the
+ * patterns: two copies of a regex table are two answers waiting to happen.
+ * Anything but a clean answer from it -- not installed, timed out, exited
+ * non-zero, printed something that is not the expected JSON -- is a deny.
+ * Without grading this call was refused, so refusing it is not a new failure.
  */
 
+const { spawnSync } = require("child_process");
 const { loadLock, findServerEntry, parseMcpTool, toolDigest, readStdin,
         LOCK_VERSION, DIGEST_CHANGED_IN } = require("./lib.js");
+
+const GRADE_TIMEOUT_MS = 15000;
+
+/** {introduced: [...]} from mcp-pin, or {error: "..."}. Never throws. */
+function gradeDrift(recorded, definition) {
+  // MCP_PIN_PYTHON runs the module from a given interpreter (a venv, a test);
+  // otherwise the `mcp-pin` on PATH, which is what `pipx install` puts there.
+  const python = process.env.MCP_PIN_PYTHON;
+  const cmd = python || "mcp-pin";
+  const args = python ? ["-m", "mcp_pin", "grade-drift"] : ["grade-drift"];
+  let proc;
+  try {
+    proc = spawnSync(cmd, args, {
+      input: JSON.stringify({ recorded, definition }),
+      encoding: "utf8", timeout: GRADE_TIMEOUT_MS, windowsHide: true,
+    });
+  } catch (err) {
+    return { error: String(err && err.message || err) };
+  }
+  if (proc.error) return { error: String(proc.error.message || proc.error) };
+  if (proc.status !== 0) {
+    return { error: "grade-drift exited " + proc.status + ": " +
+      String(proc.stderr || "").trim().slice(0, 200) };
+  }
+  let out;
+  try {
+    out = JSON.parse(proc.stdout);
+  } catch (_err) {
+    return { error: "grade-drift printed something that is not JSON" };
+  }
+  if (!out || !Array.isArray(out.introduced)) {
+    return { error: "grade-drift answered without an `introduced` list" };
+  }
+  return { introduced: out.introduced };
+}
+
+function describe(found) {
+  const head = found.slice(0, 3).map((s) => String(s.kind) + " '" + String(s.match) + "'");
+  return head.join(", ") + (found.length > 3 ? " and " + (found.length - 3) + " more" : "");
+}
+
+function driftVerdict(tool, recorded, definition) {
+  if (process.env.MCP_PIN_DRIFT !== "graded") {
+    return deny("tool '" + tool + "' fingerprint changed since approval");
+  }
+  const graded = gradeDrift(recorded, definition);
+  if (graded.error) {
+    return deny("tool '" + tool + "' fingerprint changed since approval, and grading " +
+      "the change failed (" + graded.error + "); refusing rather than allowing");
+  }
+  if (graded.introduced.length) {
+    return deny("tool '" + tool + "' fingerprint changed since approval and the change " +
+      "introduced " + describe(graded.introduced));
+  }
+  process.stderr.write("mcp-pin: tool '" + tool + "' changed since approval; the change " +
+    "introduced no signal (MCP_PIN_DRIFT=graded). Forwarded, not approved -- " +
+    "`mcp-pin approve --probe` pins it.\n");
+  return allow();
+}
 
 function deny(reason) {
   process.stdout.write(JSON.stringify({
@@ -105,9 +175,9 @@ async function decide(event) {
     (event.tool_input && event.tool_input._definition) || null;
   if (live && tools[parsed.tool] && tools[parsed.tool].fingerprint) {
     const pinned = String(tools[parsed.tool].fingerprint);
-    const got = toolDigest(Object.assign({ name: parsed.tool }, live));
-    if (got !== pinned) {
-      return deny("tool '" + parsed.tool + "' fingerprint changed since approval");
+    const definition = Object.assign({ name: parsed.tool }, live);
+    if (toolDigest(definition) !== pinned) {
+      return driftVerdict(parsed.tool, tools[parsed.tool], definition);
     }
   }
   return allow();

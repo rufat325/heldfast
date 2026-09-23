@@ -441,6 +441,21 @@ def _register_check(sub: argparse._SubParsersAction) -> None:
                          help=f"lockfile (default: ./{DEFAULT_LOCK_NAME})")
 
 
+def _register_grade_drift(sub: argparse._SubParsersAction) -> None:
+    sub.add_parser(
+        "grade-drift",
+        help="grade one changed tool definition, JSON in and out (for hooks)",
+        description=(
+            "Reads {\"recorded\": <lock entry for the tool>, \"definition\": "
+            "<live tool>} on stdin and prints {\"introduced\": [...]}: the "
+            "signals the live definition carries that the recorded text did "
+            "not. The same test `guard --drift graded` applies, so a caller in "
+            "another language -- the Claude Code hook -- does not keep a second "
+            "copy of the patterns. Exit 2 on input it cannot read."
+        ),
+    )
+
+
 def _register_ci(sub: argparse._SubParsersAction) -> None:
     ci = sub.add_parser(
         "ci",
@@ -506,6 +521,7 @@ def build_parser() -> argparse.ArgumentParser:
     _register_report(sub)
     _register_guard(sub)
     _register_check(sub)
+    _register_grade_drift(sub)
     _register_ci(sub)
     _register_serve(sub)
     # The command names come from the parser rather than a second list.

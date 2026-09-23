@@ -87,6 +87,8 @@ mcp-pin guard --log trail.jsonl -- npx pkg   # proxy and record the session
 mcp-pin verify-log trail.jsonl       # check the record was not altered
 mcp-pin report trail.jsonl           # what the agent did: sessions, calls, refusals
 mcp-pin guard --dry-run -- npx pkg   # what would the policy block?
+mcp-pin wrap --drift graded -- npx pkg  # forward a change that introduced nothing
+mcp-pin grade-drift < change.json    # the same grading, JSON in and out (hooks)
 mcp-pin policy --probe               # propose argument limits to review
 mcp-pin gateway                      # one endpoint in front of every approved server
 mcp-pin gateway --as finance         # ...restricted to one declared identity
@@ -1176,8 +1178,12 @@ Things that do not change under grading:
   refused, so refusing it is not a new failure.
 - **`approve` agrees with it.** A change graded mode would refuse is graded critical at
   approval, so `--yes` will not write it; name it with `--yes-tool`.
-- **The Claude Code hook stays strict.** It compares digests and has no grading, so a tool
-  forwarded by a graded `guard` may still be refused by the hook. The stricter call site wins.
+- **The Claude Code hook grades the same way, if you ask it to.** Set `MCP_PIN_DRIFT=graded`
+  in the environment Claude Code runs hooks in. The hook does not carry its own copy of the
+  patterns: on a changed definition it asks `mcp-pin grade-drift` -- the same Python the
+  wrap runs -- and denies if that is not installed, fails, or answers with anything but a
+  clean list. Without the variable the hook refuses every change, as before. Point
+  `MCP_PIN_PYTHON` at an interpreter to run the module from a particular environment.
 
 **This is a heuristic, which is why it is not the default.** Grading answers "did the change
 match any pattern we know", not "is the change safe". A rewrite phrased to miss every
@@ -1368,7 +1374,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1273 tests, stdlib unittest, nothing to install.
+1283 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

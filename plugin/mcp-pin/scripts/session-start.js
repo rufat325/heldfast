@@ -45,4 +45,10 @@ function summary(lock) {
     "mcp-pin: " + lockPath + " — " + s.n + " server(s), " + s.tools +
       " tool(s) pinned" + (s.names.length ? " (" + s.names.join(", ") + ")" : "") + ".\n"
   );
+  if (process.env.MCP_PIN_DRIFT === "graded") {
+    process.stdout.write(
+      "mcp-pin: MCP_PIN_DRIFT=graded -- a changed tool is allowed when the change " +
+        "introduced no signal, graded by `mcp-pin grade-drift`. A heuristic, not a pin.\n"
+    );
+  }
 })();
