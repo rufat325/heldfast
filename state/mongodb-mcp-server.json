@@ -1,10 +1,10 @@
 {
- "checked_at": "2026-09-23T04:20:21+00:00",
+ "checked_at": "2026-09-23T15:10:46+00:00",
  "package": "mongodb-mcp-server",
- "published": "2026-09-21T08:45:18.852Z",
+ "published": "2026-09-23T13:57:19.131Z",
  "tools": {
   "aggregate": {
-   "digest": "b6b02f5b791f0bc8ceee937be303af5fed37dfcb8d1951ac5b12eb97c03c091e",
+   "digest": "33ce75512bccd661b2cb8ba1aeffa5c06220a2802413a47f696bf18559f03729",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -17,24 +17,23 @@
      "title": "aggregate"
     },
     "description": "Run an aggregation against a MongoDB collection",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "pipeline": {
-       "description": "An array of aggregation stages to execute.\n\nIf the user has asked for a vector search, `$vectorSearch` **MUST** be the first stage\nof the pipeline (or the first stage of a `$unionWith` sub-pipeline only when explicitly\ncombining unrelated result sets \u2014 for hybrid full-text + vector search, use `$rankFusion`\nor `$scoreFusion` instead, see below).\n\nIf the user has asked for lexical/Atlas search, use `$search` instead of `$text`.\n### Usage Rules for `$vectorSearch`\n- **Index Type Detection:**\n  Use the collection-indexes tool to determine if the target field has a classic vector index (type: 'vector') or an auto-embed index (type: 'autoEmbed').\n- **Classic Vector Search (type: 'vector'):**\n  Use 'queryVector' with embeddings as an array of numbers.\n- **Auto-Embed Vector Search (type: 'autoEmbed'):**\n  Use 'query' - MongoDB automatically generates embeddings at query time. Do NOT use 'queryVector' or 'embeddingParameters' for auto-embed indexes.\n- **Unset embeddings:**\n  Unless the user explicitly requests the embeddings, add an `$unset` stage **at the end of the pipeline** to remove the embedding field and avoid context limits. **The $unset stage in this situation is mandatory**.\n- **Pre-filtering:**\n  If the user requests additional filtering, include filters in `$vectorSearch.filter` only for pre-filter fields in the vector index.\n  NEVER include fields in $vectorSearch.filter that are not part of the vector index.\n- **Post-filtering:**\n  For all remaining filters, add a $match stage after $vectorSearch.\n- If unsure which fields are filterable, use the collection-indexes tool to determine valid prefilter fields.\n- If no requested filters are valid prefilters, omit the filter key from $vectorSearch.\n\n### Usage Rules for `$search`\n- Include the index name, unless you know for a fact there's a default index. If unsure, use the collection-indexes tool to determine the index name.\n- The `$search` stage supports multiple operators, such as 'autocomplete', 'text', 'geoWithin', and others. Choose the appropriate operator based on the user's query. If unsure of the exact syntax, consult the MongoDB Atlas Search documentation, which can be found here: https://www.mongodb.com/docs/atlas/atlas-search/operators-and-collectors/\n\n### Usage Rules for `$rankFusion` and `$scoreFusion` (Hybrid Search)\nUse these stages when the user wants to combine full-text (`$search`) and vector\n(`$vectorSearch`) retrieval into a single fused result set. **Prefer native\nfusion over a `$unionWith` + `$group` workaround** \u2014 the workaround averages\nincompatible score scales and produces wrong rankings.\n\n**Which stage to use:**\n- `$rankFusion` (MongoDB 8.0+) \u2014 Reciprocal Rank Fusion. The recommended default.\n  Normalizes scores across incompatible scales automatically. No score tuning needed.\n- `$scoreFusion` (MongoDB 8.2+) \u2014 Score-based fusion. Use when the user needs explicit\n  per-pipeline weights, score normalisation (sigmoid / minMaxScaler), or a custom\n  combination expression.\n\n**Construction rules:**\n- `$rankFusion` / `$scoreFusion` MUST be the first stage of the top-level pipeline.\n- Sub-pipelines go inside `input.pipelines` as a named map (not an array). Each name\n  must be non-empty, must not start with `$`, and must not contain `.` or null bytes.\n- Allowed stages inside sub-pipelines: `$search`, `$vectorSearch`, `$match`, `$sort`,\n  `$geoNear`, `$skip`, `$limit`. `$project` and `$unset` are NOT allowed inside sub-pipelines.\n- Do field shaping (`$project` / `$unset`) only AFTER the fusion stage, at the root.\n- Both a vectorSearch (or autoEmbed) index AND a search (lexical) index must exist on\n  the collection. Use the collection-indexes tool to confirm both before running a hybrid query.\n- Add a `$limit` stage after the fusion stage to cap the final result set.\n- Add `$unset` at the end to remove embedding fields and avoid context bloat.\n\n### Usage Rules for `$rerank` (Native Reranking)\nUse this stage when the user wants to reorder a set of candidate documents using a cross-encoder reranker model.\n\n**Construction rules:**\n- `$rerank` can be any stage in the pipeline on an Atlas cluster running MongoDB 8.3 or higher.\n- It is recommended to use `$rerank` after a sorted pipeline, e.g. `$search`, `$vectorSearch`, `$rankFusion`, `$scoreFusion`, or [`$match`, `$sort`].\n- $rerank must be enabled via the Native Reranking Project Setting\n- Set `numDocsToRerank` as the number of documents passed into `$rerank`. This will also limit the number of documents returned by `$rerank`\n- Set `path` as a field name or an array of field names that exist in all documents. Use `$match` or `$set` before `$rerank` to validate no fields are missing.\n- Add `$addFields` after `$rerank` to retrieve the reranker score.\n\n**`$rerank` example (recommended default):**\n```javascript\n[\n  {\n    $match: {\n      description: { $exists: true },\n      name: { $exists: true }\n    }\n  },\n  {\n    $sort: {\n      lastUpdated: -1\n    }\n  },\n  {\n    $rerank: {\n      query: {\n        text: \"query text including instructions\"\n      },\n      model: \"rerank-2.5\",\n      numDocsToRerank: 100,\n      path: [\"description\", \"name\"]\n    }\n  },\n  {\n    $addFields: {\n      rerankScore: { $meta: \"score\" }\n    }\n  }\n]\n```\n",
        "items": {
         "anyOf": [
          {
@@ -42,41 +41,30 @@
            "$vectorSearch": {
             "anyOf": [
              {
-              "description": "Classic vector search using 'queryVector'. Use this when the indexed field has a classic vector index (type: 'vector'). Note to LLM: Use the collection-indexes tool to verify the target field has a classic vector index before using 'queryVector'.",
               "properties": {
                "exact": {
                 "default": false,
-                "description": "When true, uses an ENN algorithm, otherwise uses ANN. Using ENN is not compatible with numCandidates, in that case, numCandidates must be left empty.",
                 "type": "boolean"
                },
                "filter": {
                 "additionalProperties": {},
-                "description": "MQL filter that can only use filter fields from the index definition. Note to LLM: If unsure, use the `collection-indexes` tool to learn which fields can be used for filtering.",
                 "properties": {},
                 "type": "object"
                },
                "index": {
-                "description": "Name of the index, as retrieved from the `collection-indexes` tool.",
                 "type": "string"
                },
                "limit": {
                 "default": 10,
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991,
-                "type": "integer"
+                "type": "number"
                },
                "numCandidates": {
-                "description": "Number of candidates for the ANN algorithm. Mandatory when exact is false.",
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991,
-                "type": "integer"
+                "type": "number"
                },
                "path": {
-                "description": "Field, in dot notation, where to search. There must be a vector search index for that field.",
                 "type": "string"
                },
                "queryVector": {
-                "description": "The vector embeddings to search for when using classic vector search indexes (type: 'vector'). Provide embeddings as an array of numbers. Use this for classic vector indexes. For auto-embed indexes (type: 'autoEmbed'), use 'query' instead.",
                 "items": {
                  "type": "number"
                 },
@@ -91,31 +79,24 @@
               "type": "object"
              },
              {
-              "description": "Auto-embed vector search using 'query'. Use this when the indexed field has an auto-embed index (type: 'autoEmbed'). Note to LLM: Use the collection-indexes tool to verify the target field has an auto-embed index before using 'query'.",
               "properties": {
                "exact": {
                 "default": false,
-                "description": "When true, uses an ENN algorithm, otherwise uses ANN. Using ENN is not compatible with numCandidates, in that case, numCandidates must be left empty.",
                 "type": "boolean"
                },
                "filter": {
                 "additionalProperties": {},
-                "description": "MQL filter that can only use filter fields from the index definition. Note to LLM: If unsure, use the `collection-indexes` tool to learn which fields can be used for filtering.",
                 "properties": {},
                 "type": "object"
                },
                "index": {
-                "description": "Name of the index, as retrieved from the `collection-indexes` tool.",
                 "type": "string"
                },
                "limit": {
                 "default": 10,
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991,
-                "type": "integer"
+                "type": "number"
                },
                "model": {
-                "description": "The embedding model to use for generating embeddings from the query text. If not specified, defaults to the model configured in the auto-embed index definition.",
                 "enum": [
                  "voyage-4",
                  "voyage-4-large",
@@ -125,20 +106,14 @@
                 "type": "string"
                },
                "numCandidates": {
-                "description": "Number of candidates for the ANN algorithm. Mandatory when exact is false.",
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991,
-                "type": "integer"
+                "type": "number"
                },
                "path": {
-                "description": "Field, in dot notation, where to search. There must be a vector search index for that field.",
                 "type": "string"
                },
                "query": {
-                "description": "The query to search for when using auto-embed indexes (type: 'autoEmbed'). MongoDB will automatically generate embeddings for the text at query time. Use this for auto-embed indexes, not 'queryVector'.",
                 "properties": {
                  "text": {
-                  "description": "The text query to search for.",
                   "type": "string"
                  }
                 },
@@ -174,7 +149,6 @@
       },
       "responseBytesLimit": {
        "default": 1048576,
-       "description": "The maximum number of bytes to return in the response. This value is capped by the server's configured maximum and cannot be exceeded.",
        "type": "number"
       }
      },
@@ -188,11 +162,10 @@
     },
     "name": "aggregate",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "appliedLimits": {
-       "description": "The limits applied to the aggregation pipeline",
        "items": {
         "enum": [
          "config.maxDocumentsPerQuery",
@@ -212,11 +185,9 @@
          "const": "indeterminate",
          "type": "string"
         }
-       ],
-       "description": "The total number of documents returned by the aggregation pipeline"
+       ]
       },
       "documents": {
-       "description": "The documents returned by the aggregation pipeline",
        "items": {},
        "type": "array"
       }
@@ -231,7 +202,7 @@
    }
   },
   "aggregate-db": {
-   "digest": "6cb362b993c37a4d8becd643256fa22cd7cb123f0fdd4a8839c86489a7135419",
+   "digest": "7d28410e8c15e0ef6b3e46b2e133ef9b2b112f4dc2ab765378311506e2cc7074",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -244,31 +215,29 @@
      "title": "aggregate-db"
     },
     "description": "Run an aggregation against a MongoDB database",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "pipeline": {
-       "description": "An array of aggregation stages to execute. The first stage must be a database-level aggregation stage (one of `$changeStream`, `$currentOp`, `$documents`, `$listLocalSessions`, `$queryStats`). https://www.mongodb.com/docs/manual/reference/mql/aggregation-stages/#db.aggregate---stages",
        "items": {
         "additionalProperties": {},
         "properties": {},
         "type": "object"
        },
-       "minItems": 1,
        "type": "array"
       },
       "responseBytesLimit": {
        "default": 1048576,
-       "description": "The maximum number of bytes to return in the response. This value is capped by the server's configured maximum and cannot be exceeded.",
        "type": "number"
       }
      },
@@ -281,15 +250,13 @@
     },
     "name": "aggregate-db",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "aggResultsCount": {
-       "description": "The total number of documents returned by the aggregation pipeline",
        "type": "number"
       },
       "appliedLimits": {
-       "description": "The limits applied to the aggregation pipeline",
        "items": {
         "enum": [
          "config.maxDocumentsPerQuery",
@@ -301,7 +268,6 @@
        "type": "array"
       },
       "documents": {
-       "description": "The documents returned by the aggregation pipeline",
        "items": {},
        "type": "array"
       }
@@ -315,7 +281,7 @@
    }
   },
   "collection-indexes": {
-   "digest": "7d29c3a440a7c0974a8cd199ae552dc30fc3ceb48744a8c1e417ba0c6ef4fcc3",
+   "digest": "5bb1f28eed3170eb123d5d1f08caad9c80d14f090ccae9ba117f592b40a43189",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -328,20 +294,20 @@
      "title": "collection-indexes"
     },
     "description": "Describe the indexes for a collection",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       }
      },
@@ -354,7 +320,7 @@
     },
     "name": "collection-indexes",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "classicIndexes": {
@@ -433,7 +399,7 @@
    }
   },
   "collection-schema": {
-   "digest": "1117ae3bb6f37c220480ebacd4985ef7635cd20106e4e036bddd5ee38a96ab71",
+   "digest": "356832aed25ac7321030235de78dc653829186756260274209d99c79e414b38b",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -446,30 +412,28 @@
      "title": "collection-schema"
     },
     "description": "Describe the schema for a collection",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "responseBytesLimit": {
        "default": 1048576,
-       "description": "The maximum number of bytes to return in the response. This value is capped by the server's configured maximum and cannot be exceeded.",
        "type": "number"
       },
       "sampleSize": {
        "default": 50,
-       "description": "Number of documents to sample for schema inference",
        "type": "number"
       }
      },
@@ -482,7 +446,7 @@
     },
     "name": "collection-schema",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "fieldsCount": {
@@ -505,7 +469,7 @@
    }
   },
   "collection-storage-size": {
-   "digest": "8eb743dd9a2a87cf9f2106f8ce0ee00e4c06ce618f3cddc8bcd5684810223265",
+   "digest": "0659adbc7bb56be6df9d8fc0d8780a2d2cbf4e675339dac604a9f056e0968213",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -518,20 +482,20 @@
      "title": "collection-storage-size"
     },
     "description": "Gets the size of the collection",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       }
      },
@@ -544,7 +508,7 @@
     },
     "name": "collection-storage-size",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "size": {
@@ -563,7 +527,7 @@
    }
   },
   "connect": {
-   "digest": "a75be293ed3237b0d53b1b9b4463917f38b796a14daeaa1725f00583dbbc9c12",
+   "digest": "e406f0c9723ec2eb9ed3d68b4c0a9e440d7366b3cc5cfdda1d6c2c53241ebc9d",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -576,16 +540,17 @@
      "title": "connect"
     },
     "description": "Connect to a MongoDB instance and get back a connectionId to pass to the other MongoDB tools. Each call establishes a new, independent connection \u2014 multiple connections can be active at the same time.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connectionName": {
-       "description": "Optional short label for the connection (stored slugified with a short suffix, e.g. \"staging\" becomes staging-<suffix>). Shown in connection listings; helpful for telling multiple connections apart.",
        "type": "string"
       },
       "connectionString": {
-       "description": "MongoDB connection string (in the mongodb:// or mongodb+srv:// format)",
        "type": "string"
       }
      },
@@ -596,7 +561,7 @@
     },
     "name": "connect",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connectionId": {
@@ -611,7 +576,7 @@
    }
   },
   "count": {
-   "digest": "52c0747e3fe914251f29b697227d5d1677b172f52e1bf922d3f26bdcdf5e24ea",
+   "digest": "42eba61668e3af1023f2637869a824b21f236123f407d18d4b5abb097b8bfe56",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -624,25 +589,24 @@
      "title": "count"
     },
     "description": "Gets the number of documents in a MongoDB collection using db.collection.count() and query as an optional filter parameter",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "query": {
        "additionalProperties": {},
-       "description": "A filter/query parameter. Allows users to filter the documents to count. Matches the syntax of the filter argument of db.collection.count().",
        "properties": {},
        "type": "object"
       }
@@ -656,11 +620,10 @@
     },
     "name": "count",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "count": {
-       "description": "The number of documents in the collection",
        "type": "number"
       }
      },
@@ -672,7 +635,7 @@
    }
   },
   "create-collection": {
-   "digest": "8701b56fdfb158f5069099efa2cac904a6c21bae8d2545ba54dffd7e93cd5aa5",
+   "digest": "3267e5558c3f9e563a9960ccbef22485994c731058124a6d3841e460a1733524",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -685,20 +648,20 @@
      "title": "create-collection"
     },
     "description": "Creates a new collection in a database. If the database doesn't exist, it will be created automatically.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       }
      },
@@ -711,7 +674,7 @@
     },
     "name": "create-collection",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
@@ -734,7 +697,7 @@
    }
   },
   "create-index": {
-   "digest": "385ab8e8883c8028bb34347499f87a95e5601718ace57c8277ae0e41f9602f94",
+   "digest": "c3796295360a33a25ebf131a6bfcfa263fc00b4ebe664fa39dd2ff31b8ccd48c",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -747,28 +710,26 @@
      "title": "create-index"
     },
     "description": "Create an index for a collection",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "definition": {
-       "description": "The index definition. Use 'classic' for standard indexes, 'vectorSearch' for vector search indexes, and 'search' for Atlas Search (lexical) indexes.",
        "items": {
-        "oneOf": [
+        "anyOf": [
          {
-          "description": "Definition for a MongoDB index (e.g. ascending/descending/geospatial/text).",
           "properties": {
            "keys": {
             "additionalProperties": {
@@ -801,10 +762,8 @@
                "const": "hashed",
                "type": "string"
               }
-             ],
-             "description": "The index key and its direction"
+             ]
             },
-            "description": "The index definition",
             "propertyNames": {
              "type": "string"
             },
@@ -822,18 +781,14 @@
           "type": "object"
          },
          {
-          "description": "Definition for a Vector Search index.",
           "properties": {
            "fields": {
-            "description": "Definitions for the vector, autoEmbed and filter fields to index, one definition per document. Use 'vector' when user specifies a dedicated field that could contain vector embeddings. Use 'autoEmbed' when user wants MongoDB to automatically generate and manage embeddings internally from a text field (no separate embeddings field). Use 'filter' for additional fields to filter on. At least one 'vector' or 'autoEmbed' type field definition is required.",
             "items": {
-             "oneOf": [
+             "anyOf": [
               {
                "additionalProperties": false,
-               "description": "Definition for a field that will be used for pre-filtering results.",
                "properties": {
                 "path": {
-                 "description": "Name of the field to index. For nested fields, use dot notation to specify path to embedded fields",
                  "type": "string"
                 },
                 "type": {
@@ -849,22 +804,16 @@
               },
               {
                "additionalProperties": false,
-               "description": "Definition for a field that contains vector embeddings. Use this type when the field you're indexing is supposed to store vector embeddings or when the user have specified one of the relevant parameters.",
                "properties": {
                 "numDimensions": {
                  "default": 1024,
-                 "description": "Number of vector dimensions that MongoDB Vector Search enforces at index-time and query-time",
-                 "maximum": 8192,
-                 "minimum": 1,
                  "type": "number"
                 },
                 "path": {
-                 "description": "Name of the field containing vector embeddings as arrays of numbers. This must be a dedicated embeddings field, separate from any source text field, if any. For nested fields, use dot notation to specify path to embedded fields.",
                  "type": "string"
                 },
                 "quantization": {
                  "default": "none",
-                 "description": "Type of automatic vector quantization for your vectors. Use this setting only if your embeddings are float or double vectors.",
                  "enum": [
                   "none",
                   "scalar",
@@ -874,7 +823,6 @@
                 },
                 "similarity": {
                  "default": "euclidean",
-                 "description": "Vector similarity function to use to search for top K-nearest neighbors. You can set this field only for vector-type fields.",
                  "enum": [
                   "cosine",
                   "euclidean",
@@ -895,17 +843,14 @@
               },
               {
                "additionalProperties": false,
-               "description": "Definition for a field containing source text from which embeddings will be automatically generated and managed by MongoDB at indexing time. Use this type when you want MongoDB to handle all embedding generation and storage internally. If the user specifies a dedicated field name for storing embeddings, use 'vector' type instead.",
                "properties": {
                 "modality": {
-                 "description": "The data type / modality of the source content in the indexed field. Currently only 'text' is supported.",
                  "enum": [
                   "text"
                  ],
                  "type": "string"
                 },
                 "model": {
-                 "description": "Voyage embedding model to use for automatically generating embeddings from the source text in the indexed field.",
                  "enum": [
                   "voyage-4",
                   "voyage-4-large",
@@ -915,7 +860,6 @@
                  "type": "string"
                 },
                 "path": {
-                 "description": "Name of the field containing the source text from which embeddings will be automatically generated by MongoDB. This should be the text field itself, NOT a separate embeddings field containing the vector embeddings. For nested fields, use dot notation to specify the path to embedded fields.",
                  "type": "string"
                 },
                 "type": {
@@ -933,7 +877,6 @@
               }
              ]
             },
-            "minItems": 1,
             "type": "array"
            },
            "type": {
@@ -949,16 +892,13 @@
          },
          {
           "additionalProperties": {},
-          "description": "Definition for an Atlas Search (lexical) index. Use this only if user explicitly asked for creating an Atlas search index or simply a search index.\n\nThis definition also accepts the following top-level fields, which are forwarded as-is and are not exhaustively typed here:\n- `analyzers`: array of custom analyzer definitions, e.g. `{ name: 'myAnalyzer', tokenizer: { type: 'standard' }, tokenFilters: [{ type: 'lowercase' }], charFilters: [{ type: 'htmlStrip' }] }`. Reference a custom analyzer by its `name` from a field's `analyzer`/`searchAnalyzer` option, instead of a built-in `lucene.*` analyzer. Tokenizer types include `standard`, `keyword`, `whitespace`, `nGram`, `edgeGram`, `regexSplit`, `regexCaptureGroup`, `uaxUrlEmail`. Token filter types include `lowercase`, `stopword`, `snowballStemming`, `asciiFolding`, `nGram`, `shingle`, `trim`, among others.\n- `synonyms`: array of synonym mappings, e.g. `{ name: 'mySynonyms', source: { collection: 'synonymsCollectionName' }, analyzer: 'lucene.standard' }`. The `analyzer` should match the analyzer used on the field(s) being searched.\n- `storedSource`: controls which fields are stored on search nodes for fast retrieval without a round trip to the database. `true` stores all fields, `false` (default) stores none, `{ include: ['fieldA', 'fieldB'] }` stores only the listed fields, `{ exclude: ['fieldC'] }` stores all except the listed fields.\n- `typeSets`: array of named field-type sets for use with `mappings.dynamic`, e.g. `{ name: 'myTypeSet', types: [{ type: 'string' }, { type: 'number' }] }`, to restrict dynamic mapping to only the listed types instead of every dynamically indexable type.\n",
           "properties": {
            "analyzer": {
             "default": "lucene.standard",
-            "description": "The analyzer to use for the index. Can be one of the built-in lucene analyzers (`lucene.standard`, `lucene.simple`, `lucene.whitespace`, `lucene.keyword`), a language-specific analyzer, such as `lucene.cjk` or `lucene.czech`, or a custom analyzer defined by name in `analyzers`.",
             "type": "string"
            },
            "mappings": {
             "additionalProperties": {},
-            "description": "Document describing the index to create. `fields` is required and must define at least one field when `dynamic` is `false` (the default). When `dynamic` is `true` or a typeSet object, `fields` may still be provided to index additional fields explicitly.",
             "properties": {
              "dynamic": {
               "anyOf": [
@@ -969,7 +909,6 @@
                 "additionalProperties": false,
                 "properties": {
                  "typeSet": {
-                  "description": "Name of a type set defined in this index's `typeSets`.",
                   "type": "string"
                  }
                 },
@@ -979,16 +918,11 @@
                 "type": "object"
                }
               ],
-              "default": false,
-              "description": "Enables or disables dynamic mapping of fields for this index. If set to true, Atlas Search recursively indexes all dynamically indexable fields. If set to false, you must specify individual fields to index using mappings.fields. Can also be set to `{ typeSet: '<name>' }` to reference a named entry in this index's `typeSets`, restricting dynamic mapping to only the field types listed in that type set."
+              "default": false
              },
              "fields": {
-              "additionalProperties": {
-               "description": "The field index definition. It must contain the field type (e.g. `{ type: 'string' }`), as well as any additional options for that field type (e.g. `analyzer`). Field types include `autocomplete`, `boolean`, `date`, `dateFacet`, `document`, `embeddedDocuments`, `geo`, `number`, `numberFacet`, `objectId`, `string`, `stringFacet`, `token`, `uuid`. Provide an array of field definitions instead of a single object to index the same field as multiple types, e.g. `[{ type: 'string' }, { type: 'autocomplete' }]`."
-              },
-              "description": "The field mapping definitions. If `dynamic` is set to `false`, this is required.",
+              "additionalProperties": {},
               "propertyNames": {
-               "description": "The field name",
                "type": "string"
               },
               "type": "object"
@@ -1011,8 +945,7 @@
               "type": "string"
              }
             ],
-            "default": "1",
-            "description": "Specifies the number of sub-indexes to create if the document count exceeds two billion. If omitted, defaults to 1."
+            "default": "1"
            },
            "type": {
             "const": "search",
@@ -1030,7 +963,6 @@
        "type": "array"
       },
       "name": {
-       "description": "The name of the index",
        "type": "string"
       }
      },
@@ -1044,7 +976,7 @@
     },
     "name": "create-index",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
@@ -1076,7 +1008,7 @@
    }
   },
   "db-stats": {
-   "digest": "a2af85c65d261fb00e6f50ca5f891c1708d28176bb5b3a9820fe20f88cf786ba",
+   "digest": "cbbe696d66f421ca7fa1510e8686a19b5d9b364f15a28c71ec98a84d766d81c8",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -1089,16 +1021,17 @@
      "title": "db-stats"
     },
     "description": "Returns statistics that reflect the use state of a single database",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       }
      },
@@ -1110,7 +1043,7 @@
     },
     "name": "db-stats",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "stats": {
@@ -1129,7 +1062,7 @@
    }
   },
   "delete-many": {
-   "digest": "83c499c31673e766664a1ab52d24a869b741111a27893f418f59b4e7c8af5e6e",
+   "digest": "39d87e3fc0740376997080cec609ea332c2ea6043eae4384467a91fab747c9f7",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -1142,25 +1075,24 @@
      "title": "delete-many"
     },
     "description": "Removes all documents that match the filter from a MongoDB collection",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "filter": {
        "additionalProperties": {},
-       "description": "The query filter, specifying the deletion criteria. Matches the syntax of the filter argument of db.collection.deleteMany()",
        "properties": {},
        "type": "object"
       }
@@ -1174,7 +1106,7 @@
     },
     "name": "delete-many",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
@@ -1197,7 +1129,7 @@
    }
   },
   "disconnect": {
-   "digest": "656b052c56c5e3b858ec1f930996d7e3bc96071c525642dbf381d8731de2fd8d",
+   "digest": "9a546a3f359dc6e84a835027e24712f142cf7534b216b927cb8ea43bf40b6507",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -1210,12 +1142,14 @@
      "title": "disconnect"
     },
     "description": "Close a MongoDB connection and revoke its connectionId.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connectionId": {
-       "description": "The connectionId to disconnect.",
        "type": "string"
       }
      },
@@ -1226,7 +1160,7 @@
     },
     "name": "disconnect",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "outcome": {
@@ -1245,7 +1179,7 @@
    }
   },
   "drop-collection": {
-   "digest": "2f5278988d5624d5043b2d6500481c5c9f75feb82d63248b30c48823d59111d8",
+   "digest": "0b2d21baf77ab30f5b45b0bbedcbfbc335a0b5b7367a45916bc86bf9432096f1",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -1258,20 +1192,20 @@
      "title": "drop-collection"
     },
     "description": "Removes a collection or view from the database. The method also removes any indexes associated with the dropped collection.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       }
      },
@@ -1284,7 +1218,7 @@
     },
     "name": "drop-collection",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
@@ -1307,7 +1241,7 @@
    }
   },
   "drop-database": {
-   "digest": "65344936756dbd46f212e13e31aafa57c5aad352c144c41075f6d786000246bc",
+   "digest": "46ce11ccc2d97ad830eca10b20d17792f61d772c202e04bc8be884d2fe1326af",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -1320,16 +1254,17 @@
      "title": "drop-database"
     },
     "description": "Removes the specified database, deleting the associated data files",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       }
      },
@@ -1341,7 +1276,7 @@
     },
     "name": "drop-database",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "database": {
@@ -1360,7 +1295,7 @@
    }
   },
   "drop-index": {
-   "digest": "a77d9856af6035c3be5fb7c8635c1676ba22b92a868ac3729dbd1d2a3333c985",
+   "digest": "ca4e2266b177d21fa730d73f0931f09b150aa4c41102768ed47fd095f7cfc845",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -1373,29 +1308,26 @@
      "title": "drop-index"
     },
     "description": "Drop an index for the provided database and collection.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "indexName": {
-       "description": "The name of the index to be dropped.",
-       "minLength": 1,
        "type": "string"
       },
       "type": {
-       "description": "The type of index to be deleted. Use 'classic' for standard indexes and 'search' for atlas search and vector search indexes.",
        "enum": [
         "classic",
         "search"
@@ -1414,7 +1346,7 @@
     },
     "name": "drop-index",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
@@ -1441,7 +1373,7 @@
    }
   },
   "explain": {
-   "digest": "8933205c83c974629f7cb5ebf07d8336434788a7ee0c8277b1993cfea5b1bc48",
+   "digest": "264a0af53ea20454e01fc71dcc9d79778981100cdd02db9dd632a95362427657",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -1454,32 +1386,30 @@
      "title": "explain"
     },
     "description": "Returns statistics describing the execution of the winning plan chosen by the query optimizer for the evaluated method",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "method": {
-       "description": "The method and its arguments to run",
        "items": {
-        "oneOf": [
+        "anyOf": [
          {
           "properties": {
            "arguments": {
             "properties": {
              "pipeline": {
-              "description": "An array of aggregation stages to execute.\n\nIf the user has asked for a vector search, `$vectorSearch` **MUST** be the first stage\nof the pipeline (or the first stage of a `$unionWith` sub-pipeline only when explicitly\ncombining unrelated result sets \u2014 for hybrid full-text + vector search, use `$rankFusion`\nor `$scoreFusion` instead, see below).\n\nIf the user has asked for lexical/Atlas search, use `$search` instead of `$text`.\n### Usage Rules for `$vectorSearch`\n- **Index Type Detection:**\n  Use the collection-indexes tool to determine if the target field has a classic vector index (type: 'vector') or an auto-embed index (type: 'autoEmbed').\n- **Classic Vector Search (type: 'vector'):**\n  Use 'queryVector' with embeddings as an array of numbers.\n- **Auto-Embed Vector Search (type: 'autoEmbed'):**\n  Use 'query' - MongoDB automatically generates embeddings at query time. Do NOT use 'queryVector' or 'embeddingParameters' for auto-embed indexes.\n- **Unset embeddings:**\n  Unless the user explicitly requests the embeddings, add an `$unset` stage **at the end of the pipeline** to remove the embedding field and avoid context limits. **The $unset stage in this situation is mandatory**.\n- **Pre-filtering:**\n  If the user requests additional filtering, include filters in `$vectorSearch.filter` only for pre-filter fields in the vector index.\n  NEVER include fields in $vectorSearch.filter that are not part of the vector index.\n- **Post-filtering:**\n  For all remaining filters, add a $match stage after $vectorSearch.\n- If unsure which fields are filterable, use the collection-indexes tool to determine valid prefilter fields.\n- If no requested filters are valid prefilters, omit the filter key from $vectorSearch.\n\n### Usage Rules for `$search`\n- Include the index name, unless you know for a fact there's a default index. If unsure, use the collection-indexes tool to determine the index name.\n- The `$search` stage supports multiple operators, such as 'autocomplete', 'text', 'geoWithin', and others. Choose the appropriate operator based on the user's query. If unsure of the exact syntax, consult the MongoDB Atlas Search documentation, which can be found here: https://www.mongodb.com/docs/atlas/atlas-search/operators-and-collectors/\n\n### Usage Rules for `$rankFusion` and `$scoreFusion` (Hybrid Search)\nUse these stages when the user wants to combine full-text (`$search`) and vector\n(`$vectorSearch`) retrieval into a single fused result set. **Prefer native\nfusion over a `$unionWith` + `$group` workaround** \u2014 the workaround averages\nincompatible score scales and produces wrong rankings.\n\n**Which stage to use:**\n- `$rankFusion` (MongoDB 8.0+) \u2014 Reciprocal Rank Fusion. The recommended default.\n  Normalizes scores across incompatible scales automatically. No score tuning needed.\n- `$scoreFusion` (MongoDB 8.2+) \u2014 Score-based fusion. Use when the user needs explicit\n  per-pipeline weights, score normalisation (sigmoid / minMaxScaler), or a custom\n  combination expression.\n\n**Construction rules:**\n- `$rankFusion` / `$scoreFusion` MUST be the first stage of the top-level pipeline.\n- Sub-pipelines go inside `input.pipelines` as a named map (not an array). Each name\n  must be non-empty, must not start with `$`, and must not contain `.` or null bytes.\n- Allowed stages inside sub-pipelines: `$search`, `$vectorSearch`, `$match`, `$sort`,\n  `$geoNear`, `$skip`, `$limit`. `$project` and `$unset` are NOT allowed inside sub-pipelines.\n- Do field shaping (`$project` / `$unset`) only AFTER the fusion stage, at the root.\n- Both a vectorSearch (or autoEmbed) index AND a search (lexical) index must exist on\n  the collection. Use the collection-indexes tool to confirm both before running a hybrid query.\n- Add a `$limit` stage after the fusion stage to cap the final result set.\n- Add `$unset` at the end to remove embedding fields and avoid context bloat.\n\n### Usage Rules for `$rerank` (Native Reranking)\nUse this stage when the user wants to reorder a set of candidate documents using a cross-encoder reranker model.\n\n**Construction rules:**\n- `$rerank` can be any stage in the pipeline on an Atlas cluster running MongoDB 8.3 or higher.\n- It is recommended to use `$rerank` after a sorted pipeline, e.g. `$search`, `$vectorSearch`, `$rankFusion`, `$scoreFusion`, or [`$match`, `$sort`].\n- $rerank must be enabled via the Native Reranking Project Setting\n- Set `numDocsToRerank` as the number of documents passed into `$rerank`. This will also limit the number of documents returned by `$rerank`\n- Set `path` as a field name or an array of field names that exist in all documents. Use `$match` or `$set` before `$rerank` to validate no fields are missing.\n- Add `$addFields` after `$rerank` to retrieve the reranker score.\n\n**`$rerank` example (recommended default):**\n```javascript\n[\n  {\n    $match: {\n      description: { $exists: true },\n      name: { $exists: true }\n    }\n  },\n  {\n    $sort: {\n      lastUpdated: -1\n    }\n  },\n  {\n    $rerank: {\n      query: {\n        text: \"query text including instructions\"\n      },\n      model: \"rerank-2.5\",\n      numDocsToRerank: 100,\n      path: [\"description\", \"name\"]\n    }\n  },\n  {\n    $addFields: {\n      rerankScore: { $meta: \"score\" }\n    }\n  }\n]\n```\n",
               "items": {
                "anyOf": [
                 {
@@ -1487,41 +1417,30 @@
                   "$vectorSearch": {
                    "anyOf": [
                     {
-                     "description": "Classic vector search using 'queryVector'. Use this when the indexed field has a classic vector index (type: 'vector'). Note to LLM: Use the collection-indexes tool to verify the target field has a classic vector index before using 'queryVector'.",
                      "properties": {
                       "exact": {
                        "default": false,
-                       "description": "When true, uses an ENN algorithm, otherwise uses ANN. Using ENN is not compatible with numCandidates, in that case, numCandidates must be left empty.",
                        "type": "boolean"
                       },
                       "filter": {
                        "additionalProperties": {},
-                       "description": "MQL filter that can only use filter fields from the index definition. Note to LLM: If unsure, use the `collection-indexes` tool to learn which fields can be used for filtering.",
                        "properties": {},
                        "type": "object"
                       },
                       "index": {
-                       "description": "Name of the index, as retrieved from the `collection-indexes` tool.",
                        "type": "string"
                       },
                       "limit": {
                        "default": 10,
-                       "exclusiveMinimum": 0,
-                       "maximum": 9007199254740991,
-                       "type": "integer"
+                       "type": "number"
                       },
                       "numCandidates": {
-                       "description": "Number of candidates for the ANN algorithm. Mandatory when exact is false.",
-                       "exclusiveMinimum": 0,
-                       "maximum": 9007199254740991,
-                       "type": "integer"
+                       "type": "number"
                       },
                       "path": {
-                       "description": "Field, in dot notation, where to search. There must be a vector search index for that field.",
                        "type": "string"
                       },
                       "queryVector": {
-                       "description": "The vector embeddings to search for when using classic vector search indexes (type: 'vector'). Provide embeddings as an array of numbers. Use this for classic vector indexes. For auto-embed indexes (type: 'autoEmbed'), use 'query' instead.",
                        "items": {
                         "type": "number"
                        },
@@ -1536,31 +1455,24 @@
                      "type": "object"
                     },
                     {
-                     "description": "Auto-embed vector search using 'query'. Use this when the indexed field has an auto-embed index (type: 'autoEmbed'). Note to LLM: Use the collection-indexes tool to verify the target field has an auto-embed index before using 'query'.",
                      "properties": {
                       "exact": {
                        "default": false,
-                       "description": "When true, uses an ENN algorithm, otherwise uses ANN. Using ENN is not compatible with numCandidates, in that case, numCandidates must be left empty.",
                        "type": "boolean"
                       },
                       "filter": {
                        "additionalProperties": {},
-                       "description": "MQL filter that can only use filter fields from the index definition. Note to LLM: If unsure, use the `collection-indexes` tool to learn which fields can be used for filtering.",
                        "properties": {},
                        "type": "object"
                       },
                       "index": {
-                       "description": "Name of the index, as retrieved from the `collection-indexes` tool.",
                        "type": "string"
                       },
                       "limit": {
                        "default": 10,
-                       "exclusiveMinimum": 0,
-                       "maximum": 9007199254740991,
-                       "type": "integer"
+                       "type": "number"
                       },
                       "model": {
-                       "description": "The embedding model to use for generating embeddings from the query text. If not specified, defaults to the model configured in the auto-embed index definition.",
                        "enum": [
                         "voyage-4",
                         "voyage-4-large",
@@ -1570,20 +1482,14 @@
                        "type": "string"
                       },
                       "numCandidates": {
-                       "description": "Number of candidates for the ANN algorithm. Mandatory when exact is false.",
-                       "exclusiveMinimum": 0,
-                       "maximum": 9007199254740991,
-                       "type": "integer"
+                       "type": "number"
                       },
                       "path": {
-                       "description": "Field, in dot notation, where to search. There must be a vector search index for that field.",
                        "type": "string"
                       },
                       "query": {
-                       "description": "The query to search for when using auto-embed indexes (type: 'autoEmbed'). MongoDB will automatically generate embeddings for the text at query time. Use this for auto-embed indexes, not 'queryVector'.",
                        "properties": {
                         "text": {
-                         "description": "The text query to search for.",
                          "type": "string"
                         }
                        },
@@ -1640,18 +1546,15 @@
             "properties": {
              "filter": {
               "additionalProperties": {},
-              "description": "The query filter, matching the syntax of the query argument of db.collection.find()",
               "properties": {},
               "type": "object"
              },
              "limit": {
               "default": 10,
-              "description": "The maximum number of documents to return",
               "type": "number"
              },
              "projection": {
               "additionalProperties": {},
-              "description": "The projection, matching the syntax of the projection argument of db.collection.find()",
               "properties": {},
               "type": "object"
              },
@@ -1693,10 +1596,8 @@
                  ],
                  "type": "object"
                 }
-               ],
-               "description": "The sort key and its direction"
+               ]
               },
-              "description": "A document, describing the sort order, matching the syntax of the sort argument of cursor.sort(). The keys of the object are the fields to sort on, while the values are the sort directions (1 for ascending, -1 for descending).",
               "propertyNames": {
                "type": "string"
               },
@@ -1722,7 +1623,6 @@
             "properties": {
              "query": {
               "additionalProperties": {},
-              "description": "A filter/query parameter. Allows users to filter the documents to count. Matches the syntax of the filter argument of db.collection.count().",
               "properties": {},
               "type": "object"
              }
@@ -1746,7 +1646,6 @@
       },
       "verbosity": {
        "default": "queryPlanner",
-       "description": "The verbosity of the explain plan, defaults to queryPlanner. If the user wants to know how fast is a query in execution time, use executionStats. It supports all verbosities as defined in the MongoDB Driver.",
        "enum": [
         "queryPlanner",
         "queryPlannerExtended",
@@ -1766,7 +1665,7 @@
     },
     "name": "explain",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "explainResult": {
@@ -1804,7 +1703,7 @@
    }
   },
   "export": {
-   "digest": "5fcb1d9482b35cb189b4656373325af18d61d8ab7afaf31bc7d0e2bbae46dad7",
+   "digest": "61b8179c086eab70bff8bd1bd1fe331fb725540e51dd9d8ad57ca0c34e9dabe9",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -1817,34 +1716,31 @@
      "title": "export"
     },
     "description": "Export a query or aggregation results in the specified EJSON format.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "exportTarget": {
-       "description": "The export target along with its arguments.",
        "items": {
-        "oneOf": [
+        "anyOf": [
          {
           "properties": {
            "arguments": {
-            "description": "The arguments for 'find' operation.",
             "properties": {
              "filter": {
               "additionalProperties": {},
-              "description": "The query filter, matching the syntax of the query argument of db.collection.find()",
               "properties": {},
               "type": "object"
              },
@@ -1853,7 +1749,6 @@
              },
              "projection": {
               "additionalProperties": {},
-              "description": "The projection, matching the syntax of the projection argument of db.collection.find()",
               "properties": {},
               "type": "object"
              },
@@ -1895,10 +1790,8 @@
                  ],
                  "type": "object"
                 }
-               ],
-               "description": "The sort key and its direction"
+               ]
               },
-              "description": "A document, describing the sort order, matching the syntax of the sort argument of cursor.sort(). The keys of the object are the fields to sort on, while the values are the sort directions (1 for ascending, -1 for descending).",
               "propertyNames": {
                "type": "string"
               },
@@ -1909,7 +1802,6 @@
            },
            "name": {
             "const": "find",
-            "description": "The literal name 'find' to represent a find cursor as target.",
             "type": "string"
            }
           },
@@ -1922,10 +1814,8 @@
          {
           "properties": {
            "arguments": {
-            "description": "The arguments for 'aggregate' operation.",
             "properties": {
              "pipeline": {
-              "description": "An array of aggregation stages to execute.\n\nIf the user has asked for a vector search, `$vectorSearch` **MUST** be the first stage\nof the pipeline (or the first stage of a `$unionWith` sub-pipeline only when explicitly\ncombining unrelated result sets \u2014 for hybrid full-text + vector search, use `$rankFusion`\nor `$scoreFusion` instead, see below).\n\nIf the user has asked for lexical/Atlas search, use `$search` instead of `$text`.\n### Usage Rules for `$vectorSearch`\n- **Index Type Detection:**\n  Use the collection-indexes tool to determine if the target field has a classic vector index (type: 'vector') or an auto-embed index (type: 'autoEmbed').\n- **Classic Vector Search (type: 'vector'):**\n  Use 'queryVector' with embeddings as an array of numbers.\n- **Auto-Embed Vector Search (type: 'autoEmbed'):**\n  Use 'query' - MongoDB automatically generates embeddings at query time. Do NOT use 'queryVector' or 'embeddingParameters' for auto-embed indexes.\n- **Unset embeddings:**\n  Unless the user explicitly requests the embeddings, add an `$unset` stage **at the end of the pipeline** to remove the embedding field and avoid context limits. **The $unset stage in this situation is mandatory**.\n- **Pre-filtering:**\n  If the user requests additional filtering, include filters in `$vectorSearch.filter` only for pre-filter fields in the vector index.\n  NEVER include fields in $vectorSearch.filter that are not part of the vector index.\n- **Post-filtering:**\n  For all remaining filters, add a $match stage after $vectorSearch.\n- If unsure which fields are filterable, use the collection-indexes tool to determine valid prefilter fields.\n- If no requested filters are valid prefilters, omit the filter key from $vectorSearch.\n\n### Usage Rules for `$search`\n- Include the index name, unless you know for a fact there's a default index. If unsure, use the collection-indexes tool to determine the index name.\n- The `$search` stage supports multiple operators, such as 'autocomplete', 'text', 'geoWithin', and others. Choose the appropriate operator based on the user's query. If unsure of the exact syntax, consult the MongoDB Atlas Search documentation, which can be found here: https://www.mongodb.com/docs/atlas/atlas-search/operators-and-collectors/\n\n### Usage Rules for `$rankFusion` and `$scoreFusion` (Hybrid Search)\nUse these stages when the user wants to combine full-text (`$search`) and vector\n(`$vectorSearch`) retrieval into a single fused result set. **Prefer native\nfusion over a `$unionWith` + `$group` workaround** \u2014 the workaround averages\nincompatible score scales and produces wrong rankings.\n\n**Which stage to use:**\n- `$rankFusion` (MongoDB 8.0+) \u2014 Reciprocal Rank Fusion. The recommended default.\n  Normalizes scores across incompatible scales automatically. No score tuning needed.\n- `$scoreFusion` (MongoDB 8.2+) \u2014 Score-based fusion. Use when the user needs explicit\n  per-pipeline weights, score normalisation (sigmoid / minMaxScaler), or a custom\n  combination expression.\n\n**Construction rules:**\n- `$rankFusion` / `$scoreFusion` MUST be the first stage of the top-level pipeline.\n- Sub-pipelines go inside `input.pipelines` as a named map (not an array). Each name\n  must be non-empty, must not start with `$`, and must not contain `.` or null bytes.\n- Allowed stages inside sub-pipelines: `$search`, `$vectorSearch`, `$match`, `$sort`,\n  `$geoNear`, `$skip`, `$limit`. `$project` and `$unset` are NOT allowed inside sub-pipelines.\n- Do field shaping (`$project` / `$unset`) only AFTER the fusion stage, at the root.\n- Both a vectorSearch (or autoEmbed) index AND a search (lexical) index must exist on\n  the collection. Use the collection-indexes tool to confirm both before running a hybrid query.\n- Add a `$limit` stage after the fusion stage to cap the final result set.\n- Add `$unset` at the end to remove embedding fields and avoid context bloat.\n\n### Usage Rules for `$rerank` (Native Reranking)\nUse this stage when the user wants to reorder a set of candidate documents using a cross-encoder reranker model.\n\n**Construction rules:**\n- `$rerank` can be any stage in the pipeline on an Atlas cluster running MongoDB 8.3 or higher.\n- It is recommended to use `$rerank` after a sorted pipeline, e.g. `$search`, `$vectorSearch`, `$rankFusion`, `$scoreFusion`, or [`$match`, `$sort`].\n- $rerank must be enabled via the Native Reranking Project Setting\n- Set `numDocsToRerank` as the number of documents passed into `$rerank`. This will also limit the number of documents returned by `$rerank`\n- Set `path` as a field name or an array of field names that exist in all documents. Use `$match` or `$set` before `$rerank` to validate no fields are missing.\n- Add `$addFields` after `$rerank` to retrieve the reranker score.\n\n**`$rerank` example (recommended default):**\n```javascript\n[\n  {\n    $match: {\n      description: { $exists: true },\n      name: { $exists: true }\n    }\n  },\n  {\n    $sort: {\n      lastUpdated: -1\n    }\n  },\n  {\n    $rerank: {\n      query: {\n        text: \"query text including instructions\"\n      },\n      model: \"rerank-2.5\",\n      numDocsToRerank: 100,\n      path: [\"description\", \"name\"]\n    }\n  },\n  {\n    $addFields: {\n      rerankScore: { $meta: \"score\" }\n    }\n  }\n]\n```\n",
               "items": {
                "anyOf": [
                 {
@@ -1933,41 +1823,30 @@
                   "$vectorSearch": {
                    "anyOf": [
                     {
-                     "description": "Classic vector search using 'queryVector'. Use this when the indexed field has a classic vector index (type: 'vector'). Note to LLM: Use the collection-indexes tool to verify the target field has a classic vector index before using 'queryVector'.",
                      "properties": {
                       "exact": {
                        "default": false,
-                       "description": "When true, uses an ENN algorithm, otherwise uses ANN. Using ENN is not compatible with numCandidates, in that case, numCandidates must be left empty.",
                        "type": "boolean"
                       },
                       "filter": {
                        "additionalProperties": {},
-                       "description": "MQL filter that can only use filter fields from the index definition. Note to LLM: If unsure, use the `collection-indexes` tool to learn which fields can be used for filtering.",
                        "properties": {},
                        "type": "object"
                       },
                       "index": {
-                       "description": "Name of the index, as retrieved from the `collection-indexes` tool.",
                        "type": "string"
                       },
                       "limit": {
                        "default": 10,
-                       "exclusiveMinimum": 0,
-                       "maximum": 9007199254740991,
-                       "type": "integer"
+                       "type": "number"
                       },
                       "numCandidates": {
-                       "description": "Number of candidates for the ANN algorithm. Mandatory when exact is false.",
-                       "exclusiveMinimum": 0,
-                       "maximum": 9007199254740991,
-                       "type": "integer"
+                       "type": "number"
                       },
                       "path": {
-                       "description": "Field, in dot notation, where to search. There must be a vector search index for that field.",
                        "type": "string"
                       },
                       "queryVector": {
-                       "description": "The vector embeddings to search for when using classic vector search indexes (type: 'vector'). Provide embeddings as an array of numbers. Use this for classic vector indexes. For auto-embed indexes (type: 'autoEmbed'), use 'query' instead.",
                        "items": {
                         "type": "number"
                        },
@@ -1982,31 +1861,24 @@
                      "type": "object"
                     },
                     {
-                     "description": "Auto-embed vector search using 'query'. Use this when the indexed field has an auto-embed index (type: 'autoEmbed'). Note to LLM: Use the collection-indexes tool to verify the target field has an auto-embed index before using 'query'.",
                      "properties": {
                       "exact": {
                        "default": false,
-                       "description": "When true, uses an ENN algorithm, otherwise uses ANN. Using ENN is not compatible with numCandidates, in that case, numCandidates must be left empty.",
                        "type": "boolean"
                       },
                       "filter": {
                        "additionalProperties": {},
-                       "description": "MQL filter that can only use filter fields from the index definition. Note to LLM: If unsure, use the `collection-indexes` tool to learn which fields can be used for filtering.",
                        "properties": {},
                        "type": "object"
                       },
                       "index": {
-                       "description": "Name of the index, as retrieved from the `collection-indexes` tool.",
                        "type": "string"
                       },
                       "limit": {
                        "default": 10,
-                       "exclusiveMinimum": 0,
-                       "maximum": 9007199254740991,
-                       "type": "integer"
+                       "type": "number"
                       },
                       "model": {
-                       "description": "The embedding model to use for generating embeddings from the query text. If not specified, defaults to the model configured in the auto-embed index definition.",
                        "enum": [
                         "voyage-4",
                         "voyage-4-large",
@@ -2016,20 +1888,14 @@
                        "type": "string"
                       },
                       "numCandidates": {
-                       "description": "Number of candidates for the ANN algorithm. Mandatory when exact is false.",
-                       "exclusiveMinimum": 0,
-                       "maximum": 9007199254740991,
-                       "type": "integer"
+                       "type": "number"
                       },
                       "path": {
-                       "description": "Field, in dot notation, where to search. There must be a vector search index for that field.",
                        "type": "string"
                       },
                       "query": {
-                       "description": "The query to search for when using auto-embed indexes (type: 'autoEmbed'). MongoDB will automatically generate embeddings for the text at query time. Use this for auto-embed indexes, not 'queryVector'.",
                        "properties": {
                         "text": {
-                         "description": "The text query to search for.",
                          "type": "string"
                         }
                        },
@@ -2071,7 +1937,6 @@
            },
            "name": {
             "const": "aggregate",
-            "description": "The literal name 'aggregate' to represent an aggregation cursor as target.",
             "type": "string"
            }
           },
@@ -2086,12 +1951,10 @@
        "type": "array"
       },
       "exportTitle": {
-       "description": "A short description to uniquely identify the export.",
        "type": "string"
       },
       "jsonExportFormat": {
        "default": "relaxed",
-       "description": "The format to be used when exporting collection data as EJSON with default being relaxed.\nrelaxed: A string format that emphasizes readability and interoperability at the expense of type preservation. That is, conversion from relaxed format to BSON can lose type information.\ncanonical: A string format that emphasizes type preservation at the expense of readability and interoperability. That is, conversion from canonical to BSON will generally preserve type information except in certain specific cases.",
        "enum": [
         "relaxed",
         "canonical"
@@ -2112,7 +1975,7 @@
    }
   },
   "find": {
-   "digest": "dfbcbf0e9acb3ad6dbe3285244514a1683f6256a2953d6c3f69fd273c7f0ac91",
+   "digest": "70222f9ff66be94ea7a29e4ee8fe401716882714d72ad83f7ecb4b0ab5ae744c",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2125,42 +1988,38 @@
      "title": "find"
     },
     "description": "Run a find query against a MongoDB collection",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "filter": {
        "additionalProperties": {},
-       "description": "The query filter, matching the syntax of the query argument of db.collection.find()",
        "properties": {},
        "type": "object"
       },
       "limit": {
        "default": 10,
-       "description": "The maximum number of documents to return",
        "type": "number"
       },
       "projection": {
        "additionalProperties": {},
-       "description": "The projection, matching the syntax of the projection argument of db.collection.find()",
        "properties": {},
        "type": "object"
       },
       "responseBytesLimit": {
        "default": 1048576,
-       "description": "The maximum number of bytes to return in the response. This value is capped by the server's configured maximum and cannot be exceeded.",
        "type": "number"
       },
       "sort": {
@@ -2201,10 +2060,8 @@
           ],
           "type": "object"
          }
-        ],
-        "description": "The sort key and its direction"
+        ]
        },
-       "description": "A document, describing the sort order, matching the syntax of the sort argument of cursor.sort(). The keys of the object are the fields to sort on, while the values are the sort directions (1 for ascending, -1 for descending).",
        "propertyNames": {
         "type": "string"
        },
@@ -2220,11 +2077,10 @@
     },
     "name": "find",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "appliedLimits": {
-       "description": "The limits applied to the find query",
        "items": {
         "enum": [
          "config.maxDocumentsPerQuery",
@@ -2236,12 +2092,10 @@
        "type": "array"
       },
       "documents": {
-       "description": "The documents returned by the find query",
        "items": {},
        "type": "array"
       },
       "queryResultsCount": {
-       "description": "The total number of documents returned by the find query",
        "type": "number"
       }
      },
@@ -2254,7 +2108,7 @@
    }
   },
   "insert-many": {
-   "digest": "391fc55ea2659bd42630f9fc695aa20fe0f32ad4e709bc381d813aafd683be99",
+   "digest": "e87706d274ef52c9e98f7387b8455a33483f8ef0db0b994615b7137c422e3216",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2267,27 +2121,25 @@
      "title": "insert-many"
     },
     "description": "Insert an array of documents into a MongoDB collection. If the list of documents is above com.mongodb/maxRequestPayloadBytes, consider inserting them in batches.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "documents": {
-       "description": "The array of documents to insert, matching the syntax of the document argument of db.collection.insertMany().",
        "items": {
         "additionalProperties": {},
-        "description": "An individual MongoDB document",
         "properties": {},
         "type": "object"
        },
@@ -2304,7 +2156,7 @@
     },
     "name": "insert-many",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
@@ -2332,7 +2184,7 @@
    }
   },
   "list-collections": {
-   "digest": "71b59a75f13a95a4719efe066afb216590119630bd59fa3cdb0e96bf3ea09a5a",
+   "digest": "6fac586b07c0875ca35e5710b86d2dd644b363bd5fe38aaea4268d751dd2fe52",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2345,16 +2197,17 @@
      "title": "list-collections"
     },
     "description": "List all collections for a given database",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       }
      },
@@ -2366,7 +2219,7 @@
     },
     "name": "list-collections",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collections": {
@@ -2397,7 +2250,7 @@
    }
   },
   "list-connections": {
-   "digest": "d37ede6732b2c987d69bf56be09280467ffb504037f978e89a382890e784d8f4",
+   "digest": "0cb7f4c619a798aaff48dd125c098c255cf1471799af6f5481860aa2c1ac8e32",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2410,15 +2263,18 @@
      "title": "list-connections"
     },
     "description": "List the active MongoDB connections and their connectionIds. Use this to find a connectionId established earlier.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {},
      "type": "object"
     },
     "name": "list-connections",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connections": {
@@ -2481,7 +2337,7 @@
    }
   },
   "list-databases": {
-   "digest": "c43b264d3dc91f48974ac3ab5f231cdf9f80c66f1cb2bcc6b2b8cc786c9a1f5f",
+   "digest": "812e0564209dabe04dd388e6315c72e4d911243a6a871a7677b88c6d3aa205d9",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2494,12 +2350,14 @@
      "title": "list-databases"
     },
     "description": "List all databases for a MongoDB connection",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       }
      },
@@ -2510,7 +2368,7 @@
     },
     "name": "list-databases",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "databases": {
@@ -2545,7 +2403,7 @@
    }
   },
   "list-knowledge-sources": {
-   "digest": "ae54f7e01c1930942c7d5dcab4b0485fa684c9f714995aae9e368b67ca37a557",
+   "digest": "082c43ad8760b5456d19d861c7928be9990837d644f38d50a11aaf4d0ad8a7e6",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2558,8 +2416,11 @@
      "title": "list-knowledge-sources"
     },
     "description": "List available data sources in the MongoDB Assistant knowledge base. Use this to explore available data sources or to find search filter parameters to use in search-knowledge.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {},
      "type": "object"
@@ -2568,7 +2429,7 @@
    }
   },
   "mongodb-logs": {
-   "digest": "fce18b23cfc933544be40ffdb1b0dd8691e783ad88704a4907c51956f76eaee2",
+   "digest": "6bf27d438cea112bc83c6529d0f497cc16fab4fc8fb4688635b7211a7ee5209a",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2581,24 +2442,22 @@
      "title": "mongodb-logs"
     },
     "description": "Returns the most recent logged mongod events",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "limit": {
        "default": 50,
-       "description": "The maximum number of log entries to return.",
-       "maximum": 1024,
-       "minimum": 1,
-       "type": "integer"
+       "type": "number"
       },
       "type": {
        "default": "global",
-       "description": "The type of logs to return. Global returns all recent log entries, while startupWarnings returns only warnings and errors from when the process started.",
        "enum": [
         "global",
         "startupWarnings"
@@ -2613,7 +2472,7 @@
     },
     "name": "mongodb-logs",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "logs": {
@@ -2639,7 +2498,7 @@
    }
   },
   "rename-collection": {
-   "digest": "59ec010c6672ce320ef8e9fdd47a264e470bbb0524c6b7550a748528e444c348",
+   "digest": "38429f6bf03c9c0e7ce64c3cac00db6dd978dcb9229bdbc3c1b0cf8a81fe2a20",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2652,29 +2511,27 @@
      "title": "rename-collection"
     },
     "description": "Renames a collection in a MongoDB database",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "dropTarget": {
        "default": false,
-       "description": "If true, drops the target collection if it exists",
        "type": "boolean"
       },
       "newName": {
-       "description": "The new name for the collection",
        "type": "string"
       }
      },
@@ -2688,7 +2545,7 @@
     },
     "name": "rename-collection",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "database": {
@@ -2715,7 +2572,7 @@
    }
   },
   "search-knowledge": {
-   "digest": "95e4feef713eb22c995a720125ed209669a13d5ee71f4d887fc96cb2808a81d1",
+   "digest": "09800980005c944995445a8a46262157c695605044aa71758aa86474e195c9cc",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2728,20 +2585,20 @@
      "title": "search-knowledge"
     },
     "description": "Search for information in the MongoDB Assistant knowledge base. This includes official documentation, curated expert guidance, and other resources provided by MongoDB. Supports filtering by data source and version.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "dataSources": {
-       "description": "A list of one or more data sources to limit the search to. You can specify a specific version of a data source by providing the version label. If not provided, the latest version of all data sources will be searched. Available data sources and their versions can be listed by calling the list-knowledge-sources tool.",
        "items": {
         "properties": {
          "name": {
-          "description": "The name of the data source",
           "type": "string"
          },
          "versionLabel": {
-          "description": "The version label of the data source",
           "type": "string"
          }
         },
@@ -2754,13 +2611,9 @@
       },
       "limit": {
        "default": 5,
-       "description": "The maximum number of results to return",
-       "maximum": 100,
-       "minimum": 1,
        "type": "number"
       },
       "query": {
-       "description": "A natural language query to search for in the MongoDB Assistant knowledge base. This should be a single question or a topic that is relevant to the user's MongoDB use case.",
        "type": "string"
       }
      },
@@ -2773,7 +2626,7 @@
    }
   },
   "update-many": {
-   "digest": "c07434a1335a18f537c2b9bb368aebe1c31df2e0109a97dd56209322e4dbc4d3",
+   "digest": "7db436bd339bddd9b557981f333cad2e01682144b6bb09bafcc7433215a20153",
    "raw": {
     "_meta": {
      "com.mongodb/maxRequestPayloadBytes": 52428800,
@@ -2786,36 +2639,33 @@
      "title": "update-many"
     },
     "description": "Updates all documents that match the specified filter for a collection. If the list of documents is above com.mongodb/maxRequestPayloadBytes, consider updating them in batches.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
     "inputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
-       "description": "Collection name",
        "type": "string"
       },
       "connectionId": {
-       "description": "The connection to run the operation against. Use the id returned by one of the connect tools.",
        "type": "string"
       },
       "database": {
-       "description": "Database name",
        "type": "string"
       },
       "filter": {
        "additionalProperties": {},
-       "description": "The selection criteria for the update, matching the syntax of the filter argument of db.collection.updateOne()",
        "properties": {},
        "type": "object"
       },
       "update": {
        "additionalProperties": {},
-       "description": "An update document describing the modifications to apply using update operator expressions",
        "properties": {},
        "type": "object"
       },
       "upsert": {
-       "description": "Controls whether to insert a new document if no documents match the filter",
        "type": "boolean"
       }
      },
@@ -2829,7 +2679,7 @@
     },
     "name": "update-many",
     "outputSchema": {
-     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$schema": "http://json-schema.org/draft-07/schema#",
      "additionalProperties": false,
      "properties": {
       "collection": {
@@ -2863,5 +2713,5 @@
    }
   }
  },
- "version": "3.0.4"
+ "version": "2.1.2"
 }
