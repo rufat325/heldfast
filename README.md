@@ -1,8 +1,8 @@
 # MCP server tool changes
 
-Last change observed 2026-09-23T15:59:41+00:00. Built by `research/feed/watch.py` on the `main` branch. Watching 9409 npm servers from the official MCP registry (154 daily, the rest weekly) and 18576 hosted endpoints (daily).
+Last change observed 2026-09-23T16:31:39+00:00. Built by `research/feed/watch.py` on the `main` branch. Watching 9409 npm servers from the official MCP registry (154 daily, the rest weekly) and 18576 hosted endpoints (daily).
 
-273 releases that changed a tool definition (27 observed live, 246 from the [churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); 3 where `mcp-pin wrap --drift graded` would refuse something.
+292 releases that changed a tool definition (46 observed live, 246 from the [churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); 3 where `mcp-pin wrap --drift graded` would refuse something.
 
 Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, with the words that moved: [events/](events).
 
@@ -10,6 +10,25 @@ Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, w
 
 | published | server | release | tools | grade |
 |---|---|---|---|---|
+| 2026-09-23 | `remote/io.github.Zachary-1012/trendhub` | 2026-09-23T160817389968 -> 2026-09-23T163139983068 | 1 changed | quiet |
+| 2026-09-23 | `remote/io.github.samuelzcom/chauffeur-booking` | 2026-09-23T160721741416 -> 2026-09-23T163039393391 | 2 changed | quiet |
+| 2026-09-23 | `remote/se.sistaminuten/travel-search` | 2026-09-23T161035228547 -> 2026-09-23T163012319667 | 1 changed | quiet |
+| 2026-09-23 | `remote/com.contrie/contrie` | 2026-09-23T161023106259 -> 2026-09-23T163000060309 | 6 changed, 2 added (every tool) | quiet |
+| 2026-09-23 | `remote/com.topologyindex/topology-index` | 2026-09-23T160955285193 -> 2026-09-23T162928237593 | 2 changed | quiet |
+| 2026-09-23 | `remote/com.movingplace/mcp` | 2026-09-23T160551065945 -> 2026-09-23T162856454253 | 16 added | quiet |
+| 2026-09-23 | `remote/ai.justdomain/just-domain` | 2026-09-23T160544682145 -> 2026-09-23T162849111317 | 1 changed | quiet |
+| 2026-09-23 | `remote/com.crossingkeyintelligence/crossingkey-mcp` | 2026-09-23T160526958346 -> 2026-09-23T162830430270 | 1 removed | quiet |
+| 2026-09-23 | `remote/io.github.kaattaallaa-sketch/agentobserver` | 2026-09-23T160444414604 -> 2026-09-23T162740746670 | 3 changed | quiet |
+| 2026-09-23 | `remote/io.github.tettertotter/fundinglandscape` | 2026-09-23T160512178842 -> 2026-09-23T162431083692 | 2 changed | quiet |
+| 2026-09-23 | `remote/io.github.Abracadabrastartup/deusproof-mcp` | 2026-09-23T160445271513 -> 2026-09-23T162358972819 | 2 changed | quiet |
+| 2026-09-23 | `remote/io.github.ciinkwia/agent-tool-finder` | 2026-09-23T160325242897 -> 2026-09-23T162354856908 | 13 added | quiet |
+| 2026-09-23 | `remote/press.gps/gps-public-data` | 2026-09-23T160439684217 -> 2026-09-23T162352256990 | 1 changed | quiet |
+| 2026-09-23 | `remote/com.revdoku/revdoku` | 2026-09-23T160305435853 -> 2026-09-23T162331498764 | 2 changed | quiet |
+| 2026-09-23 | `remote/io.github.X-PACT/pdao-agent-exchange` | 2026-09-23T160017651632 -> 2026-09-23T162218078046 | 2 changed, 5 added | quiet |
+| 2026-09-23 | `remote/com.aidesignblueprint/blueprint` | 2026-09-23T160033830108 -> 2026-09-23T162145207504 | 1 changed | quiet |
+| 2026-09-23 | `postfast-mcp` | 0.6.1 -> 0.6.2 | 2 changed | quiet |
+| 2026-09-23 | `@readystack/vsix-publish-lint` | 1.0.4 -> 1.0.6 | 1 changed | quiet |
+| 2026-09-23 | `gdharness` | 1.0.22 -> 1.0.23 | 2 changed | quiet |
 | 2026-09-23 | `@mobilenext/mobile-mcp` | 1.0.4 -> 1.0.5 | 32 changed (every tool) | quiet |
 | 2026-09-23 | `@togglhq/mcp` | 1.11.39 -> 1.11.40 | 9 changed, 1 removed | quiet |
 | 2026-09-23 | `firecrawl-mcp` | 3.25.3 -> 3.25.4 | 2 changed | quiet |
@@ -51,22 +70,3 @@ Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, w
 | 2026-09-22 | `agent-device` | 0.21.8 -> 0.21.9 | 3 changed | quiet |
 | 2026-09-22 | `githits` | 0.20.0 -> 0.21.0 | 4 changed | quiet |
 | 2026-09-22 | `premiere-pro-mcp` | 1.16.4 -> 1.17.0 | 9 changed, 3 added | quiet |
-| 2026-09-22 | `ssh-mcp` | 2.9.1 -> 2.10.0 | 5 changed | quiet |
-| 2026-09-22 | `firecrawl-mcp` | 3.25.1 -> 3.25.2 | 3 changed | quiet |
-| 2026-09-22 | `hermoso` | 0.1.268 -> 0.1.269 | 6 changed | quiet |
-| 2026-09-22 | `aiterm-mcp` | 0.37.10 -> 0.38.0 | 6 changed | quiet |
-| 2026-09-22 | `firecrawl-mcp` | 3.25.0 -> 3.25.1 | 3 changed | quiet |
-| 2026-09-22 | `firecrawl-mcp` | 3.24.0 -> 3.25.0 | 25 changed, 2 added (every tool) | quiet |
-| 2026-09-22 | `hermoso` | 0.1.265 -> 0.1.267 | 1 changed | quiet |
-| 2026-09-21 | `hermoso` | 0.1.264 -> 0.1.265 | 40 changed | quiet |
-| 2026-09-21 | `@dbx-app/mcp-server` | 0.4.92 -> 0.4.93 | 2 changed | quiet |
-| 2026-09-21 | `@getbourdon/mcp-server` | 0.7.0 -> 0.8.0 | 7 added | quiet |
-| 2026-09-21 | `@postman/postman-mcp-server` | 2.12.3 -> 2.13.0 | 4 changed | quiet |
-| 2026-09-21 | `@sap-ux/fiori-mcp-server` | 1.12.7 -> 1.12.9 | 2 changed | review |
-| 2026-09-21 | `@alisaitteke/photoshop-mcp` | 1.7.17 -> 1.7.18 | 9 changed, 6 added | quiet |
-| 2026-09-21 | `@cloudbase/cloudbase-mcp` | 2.34.5 -> 2.34.6 | 4 changed | quiet |
-| 2026-09-21 | `agent-device` | 0.21.7 -> 0.21.8 | 1 changed, 1 added | quiet |
-| 2026-09-21 | `@shipstatic/mcp` | 1.12.4 -> 2.0.0 | 4 changed | quiet |
-| 2026-09-21 | `sbuilder-mcp` | 0.62.0 -> 0.63.0 | 2 changed, 1 added | quiet |
-| 2026-09-21 | `@qase/mcp-server` | 2.5.1 -> 2.6.0 | 1 changed, 3 added | quiet |
-| 2026-09-21 | `@cap-js/mcp-server` | 0.0.5 -> 0.0.6 | 1 changed | quiet |
