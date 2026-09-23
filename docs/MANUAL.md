@@ -78,6 +78,7 @@ mcp-pin doctor                       # same job as scan
 mcp-pin ci                           # fail the PR on MCPA014/015; never launches
 mcp-pin check                        # verify .mcp-pin.lock, launch nothing
 mcp-pin approve --probe              # write .mcp-pin.lock
+mcp-pin approve --from-feed          # ...from the drift feed's measurement, launching nothing
 mcp-pin inspect                      # what is configured, no judgement
 mcp-pin rules                        # list rules
 mcp-pin explain MCPA015              # describe one rule in full
@@ -1318,6 +1319,47 @@ Not: download a server, probe it on the workstation, now it is trusted. Pinning 
 sandboxing. `--probe` and `guard` run the child; confine that child with the OS. The lock
 is one layer, next to least-privilege credentials and server-side authorization.
 
+### Without probing here (`approve --from-feed`)
+
+The isolate step is the one people skip. For the servers most people run, it has already
+been done: the [drift feed](CHURN.md#it-keeps-going) launches the most-downloaded
+registry servers in a container with no capabilities and no credentials, and keeps every
+catalogue it reads. `--from-feed` records that catalogue instead of launching anything:
+
+```bash
+mcp-pin approve --from-feed
+```
+
+```
+mcp-pin: claude-code:files: 14 tool(s) from the feed's measurement of @modelcontextprotocol/server-filesystem@2026.8.31
+mcp-pin: claude-code:memory: not recorded from the feed -- @modelcontextprotocol/server-memory has no exact version pinned ...
+```
+
+What it records, and what it will not:
+
+- **Only an exact npm version.** `npx -y pkg@1.2.3`, yes. `npx -y pkg`, `@latest`, `^1.2`:
+  no -- those run whatever was published last, which no earlier measurement stands for.
+  PyPI launches and local scripts are left alone. Pin the version, or use `--probe`.
+- **Only a version the feed measured.** Anything else is named and left as it was; an
+  earlier approval of it is carried forward, not erased.
+- **The feed at one commit.** The branch is resolved to a commit when the approval starts,
+  the catalogue is read at that commit, and the lock entry records it (`status` shows it).
+  `--feed URL` reads a mirror or a copy you host instead.
+- **Fingerprinted here.** The feed stores the tools as the server sent them, not digests,
+  and they go through the same parser `--probe` uses. Tested against the golden digest
+  vectors, and against the real filesystem server through `wrap`: 14 of 14 matched.
+- **Not with `--probe`, not with `--safe`.** It replaces the first, and it reads GitHub,
+  which the second promises not to.
+
+What it trusts: the feed's measurement stands in for your probe, the way your probe
+stands in for the server's word. What it does not change: `wrap` and `gateway` compare the
+live server with the lock, so a catalogue that is not what the server really says is
+refused at the call site -- a wrong feed fails as refusals, not as a pass. If a server was
+measured with different arguments than yours and its tools depend on them, that is what
+you will see, and `approve --probe` is the fix. Instructions, prompts and resources are not
+in the feed; only tools are pinned this way. And the first version is still the version you
+approve: the content rules' verdict on the feed's catalogue is printed before it is written.
+
 ## What it doesn't do
 
 - Doesn't call tools, only `initialize` and `tools/list` (and whatever `guard`
@@ -1374,7 +1416,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1301 tests, stdlib unittest, nothing to install.
+1315 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

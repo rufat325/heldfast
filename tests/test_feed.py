@@ -186,6 +186,29 @@ class TestPublishing(unittest.TestCase):
             fh.write("{not json")
         self.assertEqual(1, quiet(watch.verify, SimpleNamespace(data=self.data)))
 
+    def test_catalogues_are_written_whole_and_accepted(self) -> None:
+        """What `approve --from-feed` reads: the wire objects, not digests."""
+        s = snap("1.0.2", tool("read", APPROVED))
+        watch.write_catalogue(self.data, s, ["--stdio"], measured_at="t")
+        path = os.path.join(self.data, "catalogues", "pkg", "1.0.2.json")
+        with open(path, encoding="utf-8") as fh:
+            body = json.load(fh)
+        self.assertEqual([tool("read", APPROVED)], body["tools"])
+        self.assertEqual(["--stdio"], body["args"])
+        self.assertEqual(0, quiet(watch.verify, SimpleNamespace(data=self.data)))
+
+    def test_a_version_cannot_name_a_path(self) -> None:
+        for version in ("../1.0.0", ".hidden", "1.0/0", ""):
+            with self.subTest(version):
+                with self.assertRaises(ValueError):
+                    watch.write_catalogue(self.data, dict(snap("1.0.1"), version=version),
+                                          [], measured_at="t")
+        path = os.path.join(self.data, "catalogues", "pkg", ".hidden.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        self.assertEqual(1, quiet(watch.verify, SimpleNamespace(data=self.data)))
+
     def test_a_package_name_cannot_leave_the_state_folder(self) -> None:
         for name in ("../../etc/passwd", "..", ".hidden", "a b", "a\b"):
             with self.subTest(name):

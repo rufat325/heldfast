@@ -118,6 +118,17 @@ def _register_approve(sub: argparse._SubParsersAction) -> None:
              "critical-graded change, where --yes is not enough; a digest or "
              "command change still needs --yes",
     )
+    approve.add_argument(
+        "--from-feed", action="store_true",
+        help="record each pinned npm server's tools from the drift feed's "
+             "measurement of that exact version, instead of launching it here "
+             "(--probe); servers the feed has not measured are left as they were",
+    )
+    approve.add_argument(
+        "--feed", metavar="URL", default=None,
+        help="read the feed from this base URL instead of the `feed` branch "
+             "of rufat325/mcp-pin (a mirror, or a copy you host)",
+    )
 
 
 def _register_inspect(sub: argparse._SubParsersAction) -> None:

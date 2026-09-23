@@ -490,6 +490,54 @@ def _commit_lock(lock: Lock, previous: Lock, *, yes: bool,
     return EXIT_OK
 
 
+def _collect_feed(out: Collected, base: str | None) -> bool:
+    """Tools for each pinned npm server, from the feed's measurement of it.
+
+    False when the feed itself cannot be read: an approval that silently
+    recorded nothing would look like one that recorded everything.
+    """
+    from .feedlock import FeedError, lookup, package_args, resolve
+
+    try:
+        feed = resolve(base)
+        found = 0
+        for spec in out.servers:
+            if spec.disabled:
+                continue
+            got = lookup(spec, feed)
+            if isinstance(got, str):
+                print(f"mcp-pin: {spec.identity()}: not recorded from the feed -- {got}",
+                      file=sys.stderr)
+                continue
+            found += 1
+            out.tools.extend(got.tools)
+            out.probe_status[spec.identity()] = (
+                f"from feed: {got.package}@{got.version}, measured "
+                f"{got.measured_at[:10]} ({feed.source})")
+            print(f"mcp-pin: {spec.identity()}: {len(got.tools)} tool(s) from the "
+                  f"feed's measurement of {got.package}@{got.version}", file=sys.stderr)
+            if package_args(spec) != got.args:
+                print(f"         measured with arguments {got.args}, configured with "
+                      f"{package_args(spec)}; if they change the tools, wrap will "
+                      f"refuse the difference", file=sys.stderr)
+    except FeedError as exc:
+        print(f"mcp-pin: the feed could not be read: {exc}", file=sys.stderr)
+        return False
+    out.probed = found > 0
+    _warn_feed_content(out)
+    return True
+
+
+def _warn_feed_content(out: Collected) -> None:
+    """The first version from the feed is the version you approve. Say what
+    the content rules make of it before it is written, since nothing here
+    launched it and the reviewer has not otherwise seen it."""
+    ctx = AuditContext(servers=out.servers, tools=out.tools)
+    for f in run_rules(ctx):
+        if f.severity >= Severity.HIGH and f.rule_id in ("MCPA010", "MCPA011", "MCPA012"):
+            print(f"mcp-pin: {f.severity.label} {f.rule_id} {f.evidence}", file=sys.stderr)
+
+
 def cmd_approve(args: argparse.Namespace) -> int:
     lock_path = _resolve_lock_path(args)
     try:
@@ -498,12 +546,22 @@ def cmd_approve(args: argparse.Namespace) -> int:
         print(f"mcp-pin: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    from_feed = bool(getattr(args, "from_feed", False))
+    if from_feed and (args.probe or getattr(args, "safe", False)):
+        print("mcp-pin: --from-feed replaces --probe, and it reads the feed over "
+              "the network, which --safe promises not to do; pass it alone",
+              file=sys.stderr)
+        return EXIT_ERROR
+
     data = collect(args)
     if data.errors and args.verbose:
         for err in data.errors:
             print(f"  warning: {err}", file=sys.stderr)
 
-    if not args.probe:
+    if from_feed:
+        if not _collect_feed(data, getattr(args, "feed", None)):
+            return EXIT_ERROR
+    elif not args.probe:
         print(
             "mcp-pin: approving without --probe records configuration only.\n"
             "           Tool descriptions are the thing a rug pull changes, so an\n"

@@ -26,6 +26,9 @@ other three read and write JSON and run nothing.
 Layout under DIR:
   watchlist.json           which packages, and the rule that chose them
   state/<package>.json     the last catalogue seen for each package
+  catalogues/<package>/<version>.json
+                           every catalogue measured, whole: what
+                           `mcp-pin approve --from-feed` pins
   events/YYYY-MM.jsonl     one line per release that changed something
   feed.json, feed.xml      the latest events, as JSON and as Atom
   README.md                the same, for a person
@@ -56,9 +59,14 @@ README_EVENTS = 60
 # anywhere else does not move the digest either.
 FIELDS = ("description", "title", "inputSchema", "outputSchema", "annotations", "icons")
 SAFE_NAME = re.compile(r"^[A-Za-z0-9@._\-]+$")
+SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+\-]*$")
 ALLOWED = re.compile(
     r"^(?:watchlist\.json|feed\.json|feed\.xml|README\.md|"
-    r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl)$")
+    r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
+    r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json)$")
+# What measure.py asks for in `initialize`. Recorded with each catalogue: a
+# server may describe its tools differently to a different protocol version.
+MEASURED_PROTOCOL = "2025-06-18"
 MAX_FILE = 20 * 1024 * 1024
 MAX_TOTAL = 400 * 1024 * 1024
 # XML 1.0 has no representation for these, and a description can contain any
@@ -137,6 +145,28 @@ def diff(before: dict, after: dict, observed_at: str) -> dict | None:
 
 # -- storage ---------------------------------------------------------------
 
+def write_catalogue(data: str, snap: dict, args: list, measured_at: str) -> None:
+    """The whole catalogue for one version, as `tools/list` returned it.
+
+    This is what `mcp-pin approve --from-feed` pins, so it is the raw wire
+    objects, not the digests: the client fingerprints them itself, with the
+    same code `--probe` uses, rather than trusting a digest it was handed.
+    """
+    version = str(snap["version"])
+    if not SAFE_VERSION.match(version):
+        raise ValueError(f"version outside the safe set: {version!r}")
+    folder = os.path.join(data, "catalogues", safe(snap["package"]))
+    os.makedirs(folder, exist_ok=True)
+    body = {"package": snap["package"], "version": version,
+            "published": snap.get("published", ""), "measured_at": measured_at,
+            "protocol": MEASURED_PROTOCOL, "args": list(args or []),
+            "tools": [t["raw"] for _, t in sorted(snap["tools"].items())]}
+    path = os.path.join(folder, version + ".json")
+    with open(path + ".tmp", "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(body, fh, indent=1, sort_keys=True)
+    os.replace(path + ".tmp", path)
+
+
 def load_state(data: str, package: str) -> dict | None:
     path = os.path.join(data, "state", safe(package) + ".json")
     if not os.path.exists(path):
@@ -206,6 +236,9 @@ def seed(args: argparse.Namespace) -> int:
         snaps = [snapshot(r["package"], v, r["versions"][v]["published"],
                           [s["raw"] for s in r["versions"][v]["tools"].values()])
                  for v in order]
+        for sn in snaps:
+            write_catalogue(args.data, sn, r.get("args") or row.get("args") or [],
+                            measured_at=sample["taken_at"])
         for a, b in zip(snaps, snaps[1:]):
             event = diff(a, b, observed_at=b["published"])
             if event:
@@ -257,6 +290,7 @@ def check_one(data: str, row: dict) -> dict | None:
         print(f"  {package}@{version}: {why}", flush=True)
         return None
     after = snapshot(package, version, published, tools)
+    write_catalogue(data, after, tail, measured_at=now())
     event = diff(state, after, observed_at=now()) if state.get("version") else None
     after["checked_at"] = now()
     save_state(data, package, after)
