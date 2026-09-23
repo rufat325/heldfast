@@ -41,6 +41,17 @@ class Signal(NamedTuple):
     note: str
 
 
+# A negated instruction however it is typed: "do not", "don't" with either
+# apostrophe (models and word processors write the typographic one), "never",
+# the modal forms, and "under no circumstances should you".
+_NOT = (r"(?:do\s+not|don['\N{RIGHT SINGLE QUOTATION MARK}]t|never|"
+        r"(?:must|should|shall)\s+(?:not|never)|"
+        r"(?:mustn|shouldn)['\N{RIGHT SINGLE QUOTATION MARK}]t|"
+        r"(?:under\s+no\s+circumstances|at\s+no\s+point)\s+(?:should|must|may|will)\s+you)")
+_WHO = r"(?:the\s+|a\s+)?(?:user|human|operator|anyone|them)"
+# What an instruction calls itself when it asks not to be passed on.
+_SELF = r"(?:steps?|instructions?|notes?|directives?|calls?|actions?|tool\s+calls?)"
+
 SIGNALS: list[Signal] = [
     Signal(
         "concealment",
@@ -52,22 +63,56 @@ SIGNALS: list[Signal] = [
             # tell the user their deposit has been sent" -- and flagging those
             # taught the reader to ignore this rule. Concealment says what the
             # user must not learn: about this step, that you did it, what or
-            # which or when, or nothing at all.
-            r"\b(?:do\s+not|don't|never)\s+(?:tell|inform|notify|alert|let)\s+(?:the\s+|a\s+)?"
-            r"(?:user|human|operator|anyone|them)\s+(?:about|of|know|you\b|that\s+(?:you|this|"
-            r"it|we)\b|what|which|when|where|how|why|anything)|"
-            r"\b(?:do\s+not|don't|never)\s+(?:tell|inform|notify|alert)\s+(?:the\s+|a\s+)?"
-            r"(?:user|human|operator|anyone|them)\s*[.;!]|"
-            r"\b(?:do\s+not|don't|never)\s+(?:mention|reveal|disclose|show|display|report|"
-            r"explain)\s+(?:this|that|it|these|those|any\s+of\s+this|the\s+(?:above|"
-            r"instructions?|step|call|request|action))\b[^.\n]{0,40}?\b(?:to|with)\s+"
-            r"(?:the\s+|a\s+)?(?:user|human|operator|anyone|them)\b|"
+            # which or when, or nothing at all. "What to read" and "which to
+            # pick" are advice, not secrets.
+            r"\b" + _NOT + r"\s+(?:tell|inform|notify|alert|let)\s+" + _WHO + r"\s+(?:about|of|"
+            r"know|you\b|that\s+(?:you|this|it|we)\b|"
+            r"(?:what|which)(?!\s+(?:(?!(?:you|we|it|they|he|she|i)\b)\w+\s+)?to\s)|"
+            r"when|where|how|why|anything)|"
+            r"\b" + _NOT + r"\s+(?:tell|inform|notify|alert)\s+" + _WHO +
+            r"\s*(?:[.;!]|,\s*(?:just|simply|only)\b)|"
+            r"\b" + _NOT + r"\s+(?:mention|reveal|disclose|show|display|report|explain)\s+"
+            r"(?:this|that|it|these|those|any\s+of\s+this|the\s+(?:above|instructions?|step|"
+            r"call|request|action))\b[^.\n]{0,40}?\b(?:to|with)\s+" + _WHO + r"\b|"
+            # The same instruction in its other word orders. Narrowing the
+            # rule above for precision first dropped these: a red-team pass
+            # the day it shipped found it catching 3 of 23 rewordings that the
+            # looser rule had caught 14 of. None of the orders below matches
+            # anything in the registry corpus.
+            r"\b" + _NOT + r"\s+(?:mention|reveal|disclose|report|explain|admit|show|display|say)"
+            r"\s+to\s+" + _WHO + r"\s+(?:that\s+(?:you|this|it|we)\b|about\b|what\b|which\b|"
+            r"when\b|where\b|how\b|why\b|anything\b)|"
+            r"\b" + _NOT + r"\s+(?:mention|reveal|disclose|admit|acknowledge)\s+that\s+you\b|"
+            r"\b" + _NOT + r"\s+(?:show|give|display|read)\s+" + _WHO + r"\s+(?:(?:this|these|"
+            r"those)\s+(?:instructions?|notes?|messages?|steps?|directives?|descriptions?)\b|"
+            r"the\s+above\b|(?:this|these|it)\s*[.;!,)])|"
+            r"\b" + _NOT + r"\s+let\s+" + _WHO + r"\s+(?:see|read|notice|find\s+out|learn)\s+"
+            r"(?:this|these|it|that|the\s+above|what|which|how|about)\b|"
+            # An instruction asking not to be repeated, which no tool needs.
+            r"\b" + _NOT + r"\s+(?:include|repeat|quote|acknowledge|mention|reference|reveal|"
+            r"disclose|expose|discuss|explain|summari[sz]e|output|print|echo)\s+(?:this|these|"
+            r"the\s+above|any\s+of\s+(?:this|these|the\s+above))\s+(?:instructions?|notes?|"
+            r"directives?|guidance)\b|"
+            r"\byour\s+(?:response|reply|answer|output|message|summary)\s+(?:should|must)\s+"
+            r"(?:not|never)\s+(?:mention|include|reference|reveal|disclose|contain)\s+(?:this|"
+            r"these|the\s+above|any\s+of\s+(?:this|these))\s+" + _SELF + r"\b|"
+            r"\bomit\s+(?:any\s+)?(?:mention|reference)\s+(?:of|to)\s+(?:this|these|the\s+above)"
+            r"\s+" + _SELF + r"\b|"
             # "Without asking the user" is about consent, not concealment, and
             # real tools say it of harmless things (polling, form defaults).
+            # "Without the user's awareness" is left out as well: the one
+            # registry tool that says it lists it under WHEN NOT TO CALL.
             r"\bwithout\s+(?:telling|informing|notifying|alerting)\s+"
             r"(?:the\s+)?(?:user|human|operator|owner|anyone|them)\b|"
-            r"\b(?:keep|hide)\s+(?:this|it|that)\s+(?:(?:secret|hidden|confidential|quiet)\s+)?"
-            r"from\s+(?:the\s+)?(?:user|human|operator|anyone)\b|"
+            r"\bwithout\s+(?:the\s+)?(?:user|human|operator|owner)"
+            r"(?:['\N{RIGHT SINGLE QUOTATION MARK}]s|s['\N{RIGHT SINGLE QUOTATION MARK}])?\s+"
+            r"(?:knowing|noticing|knowledge|realizing|realising)\b|"
+            r"\b(?:keep|hide|conceal|withhold)\s+(?:this|it|that|these|those)(?:\s+" + _SELF +
+            r")?\s+(?:(?:secret|hidden|confidential|quiet)\s+)?from\s+(?:the\s+)?(?:user|human|"
+            r"operator|anyone)\b|"
+            # "Keep this secret" is the instruction's own; "warn them to keep
+            # it secret" is advice to the user about their own key.
+            r"\bkeep\s+(?:this|these)\s+(?:" + _SELF + r"\s+)?(?:secret|hidden|confidential)\b|"
             r"\bdo\s+not\s+(?:log|record)\s+(?:this|the|any)\s+(?:call|request|action|step|"
             r"invocation|interaction|conversation)\b|"
             # Politely and passively phrased concealment. Found by writing the
@@ -79,8 +124,21 @@ SIGNALS: list[Signal] = [
             r"(?:mention|mentioning|telling|informing|disclosing|revealing|"
             r"reporting|notifying)\b[^.\n]{0,40}\b(?:the\s+)?"
             r"(?:user|human|operator|anyone|them)\b|"
+            r"\b(?:refrain\s+from|avoid)\s+letting\s+" + _WHO + r"\s+(?:know|see|find\s+out|"
+            r"notice)\b|"
+            r"\b(?:user|human|operator|owner)s?\s+(?:must|should|shall)\s+(?:not|never)\s+"
+            r"(?:know|find\s+out|learn|notice|be\s+(?:told|informed|made\s+aware))\b|"
+            r"\b(?:user|human|operator|owner)s?\s+never\s+finds?\s+out\b|"
+            r"\b(?:user|human|operator|owner)s?\s+(?:does\s+not|need\s+not|"
+            r"(?:doesn|needn)['\N{RIGHT SINGLE QUOTATION MARK}]t)\s+(?:need\s+to\s+)?be\s+"
+            r"(?:told|informed|notified|made\s+aware)\s+(?:about|of)\s+(?:this|these|it|that|"
+            r"the\s+above)\b|"
             # "must not be shown as one", "should not be reported as a gain":
-            # the passive form conceals only when it names the reader.
+            # the passive form conceals only when it names the reader, or when
+            # what must not be mentioned is the instruction itself.
+            r"\b(?:this|these|that|those|the\s+above)\s+" + _SELF + r"\s+(?:should|must|is\s+to|"
+            r"are\s+to|will)\s+(?:not|never)\s+be\s+(?:mentioned|disclosed|revealed|reported|"
+            r"shown|displayed|logged|explained|surfaced|shared)\b|"
             r"\b(?:should|must)\s+not\s+be\s+"
             r"(?:mentioned|disclosed|revealed|reported|shown|logged)\s+to\s+(?:the\s+)?"
             r"(?:user|human|operator|anyone)\b",
