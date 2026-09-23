@@ -364,3 +364,46 @@ class TestHosted(unittest.TestCase):
         self.assertEqual(first, self._state_bytes())
         self._read((None, "HTTP 500"))
         self.assertIn(b"HTTP 500", self._state_bytes())
+
+
+class TestIsolation(unittest.TestCase):
+    """One server's failure is that server's result, never the shard's."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.data = self._tmp.name
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_an_unexpected_exception_is_recorded_and_contained(self) -> None:
+        """http.client.IncompleteRead is not an OSError; it ended a shard of
+        4,600 endpoints on the first full run."""
+        import http.client
+
+        def boom(data, row):
+            raise http.client.IncompleteRead(b"partial")
+
+        row = {"package": "remote/io.example/flaky", "url": "https://x/mcp"}
+        self.assertIsNone(quiet(watch.isolated, boom, self.data, row))
+        state = watch.load_state(self.data, row["package"])
+        self.assertEqual("error: IncompleteRead", state["attempted"]["why"])
+
+    def test_a_shard_finishes_when_some_servers_raise(self) -> None:
+        rows = [{"package": f"remote/io.example/s{i}", "kind": "remote", "url": f"https://x/{i}"}
+                for i in range(6)]
+        os.makedirs(self.data, exist_ok=True)
+        with open(os.path.join(self.data, "watchlist.json"), "w", encoding="utf-8") as fh:
+            json.dump({"packages": rows}, fh)
+
+        def flaky(url, timeout=20.0):
+            if url.endswith(("/1", "/4")):
+                raise RuntimeError("malformed answer")
+            return [tool("read", APPROVED)], None
+
+        args = SimpleNamespace(data=self.data, only=[], shard="0/1", day="", jobs=3,
+                               label="remote-0")
+        with mock.patch.object(watch, "measure_remote", side_effect=flaky):
+            self.assertEqual(0, quiet(watch.check_remote, args))
+        versions = [watch.load_state(self.data, r["package"]).get("version") for r in rows]
+        self.assertEqual(4, sum(1 for v in versions if v))

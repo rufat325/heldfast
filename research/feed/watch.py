@@ -499,11 +499,37 @@ def _selected(args: argparse.Namespace, kind: str) -> list:
     return [r for r in rows if in_shard(r, shard) and (kind == "remote" or due(r, day))]
 
 
+def isolated(fn, data: str, row: dict, *extra: object) -> dict | None:
+    """Run one server's check so that nothing it does can stop the others.
+
+    Thousands of servers means every malformed answer the HTTP client can be
+    handed, and some of those are not the exceptions anyone thinks to catch
+    (http.client.IncompleteRead is not an OSError). One of them ended a shard
+    of 4,600 endpoints on the first full run. Now it is that server's result:
+    logged with its type, and recorded where the server's state can hold it.
+    """
+    try:
+        return fn(data, row, *extra)
+    except Exception as exc:  # noqa: BLE001 -- the point is not to choose
+        why = f"error: {type(exc).__name__}"
+        print(f"  {row.get('package')}: {why}: {str(exc)[:200]}", flush=True)
+        try:
+            state = load_state(data, row["package"]) or {"package": row["package"], "tools": {}}
+            if (state.get("attempted") or {}).get("why") != why:
+                state["attempted"] = {"version": state.get("version") or now()[:10],
+                                      "at": now(), "why": why}
+                save_state(data, row["package"], state)
+        except (OSError, ValueError):
+            pass
+        return None
+
+
 def check(args: argparse.Namespace) -> int:
     rows = _selected(args, "npm")
     budget = Budget(args.budget)
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        events = [e for e in pool.map(lambda r: check_one(args.data, r, budget), rows) if e]
+        events = [e for e in pool.map(lambda r: isolated(check_one, args.data, r, budget), rows)
+                  if e]
     write_incoming(args.data, args.label, events)
     print(f"checked {len(rows)} npm server(s); {len(events)} new event(s)")
     return 0
@@ -513,6 +539,7 @@ def check(args: argparse.Namespace) -> int:
 
 def measure_remote(url: str, timeout: float = 20.0) -> tuple[list | None, str | None]:
     """(raw tools, None) or (None, why), over Streamable HTTP. Runs nothing."""
+    import http.client
     import urllib.error
     from mcp_pin.probe import SESSION_HEADER, _initialize_params, _post_jsonrpc, post_rpc
     try:
@@ -525,7 +552,7 @@ def measure_remote(url: str, timeout: float = 20.0) -> tuple[list | None, str | 
                                              "method": "tools/list", "params": {}}, timeout)
     except urllib.error.HTTPError as exc:
         return None, f"HTTP {exc.code}"
-    except (urllib.error.URLError, OSError, ValueError) as exc:
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:
         return None, type(exc).__name__
     tools = (listed.get("result") or {}).get("tools") if isinstance(listed, dict) else None
     if not isinstance(tools, list):
@@ -566,7 +593,8 @@ def check_remote_one(data: str, row: dict) -> dict | None:
 def check_remote(args: argparse.Namespace) -> int:
     rows = _selected(args, "remote")
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        events = [e for e in pool.map(lambda r: check_remote_one(args.data, r), rows) if e]
+        events = [e for e in pool.map(lambda r: isolated(check_remote_one, args.data, r), rows)
+                  if e]
     write_incoming(args.data, args.label, events)
     print(f"checked {len(rows)} hosted endpoint(s); {len(events)} new event(s)")
     return 0
