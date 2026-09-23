@@ -79,6 +79,7 @@ mcp-pin ci                           # fail the PR on MCPA014/015; never launche
 mcp-pin check                        # verify .mcp-pin.lock, launch nothing
 mcp-pin approve --probe              # write .mcp-pin.lock
 mcp-pin approve --from-feed          # ...from the drift feed's measurement, launching nothing
+mcp-pin updates                      # newer releases of your pinned servers, and what they change
 mcp-pin inspect                      # what is configured, no judgement
 mcp-pin rules                        # list rules
 mcp-pin explain MCPA015              # describe one rule in full
@@ -1360,6 +1361,40 @@ you will see, and `approve --probe` is the fix. Instructions, prompts and resour
 in the feed; only tools are pinned this way. And the first version is still the version you
 approve: the content rules' verdict on the feed's catalogue is printed before it is written.
 
+### Keeping pins current (`updates`)
+
+A pin that never moves goes stale, and every bump is a fresh approval. `updates` says,
+before you bump, which pinned servers have a newer release the feed has measured, and what
+approving it would change:
+
+```
+$ mcp-pin updates
+  claude-code:sentry   @sentry/mcp-server 0.36.0 -> 0.39.0  quiet
+      3 newer release(s) measured, 3 of them changed tools; the lock would see 2 added, 7 changed, 15 removed
+  claude-code:files    @modelcontextprotocol/server-filesystem@2026.8.31  up to date
+  claude-code:memory   not checked: ... has no exact version pinned ...
+
+1 quiet update(s): `mcp-pin updates --apply` bumps the config and re-approves them from the feed.
+```
+
+**quiet** and **review** are `approve`'s grades, not new ones: the newest catalogue is
+recorded into a lock of its own and compared with your entry by the same review code, so
+quiet is what `approve --yes` would write and review is a critical change that
+`--yes-tool NAME` has to name. `--format json` gives the same as data.
+
+`--apply` takes the quiet updates and nothing else:
+
+- it rewrites `"pkg@old"` to `"pkg@new"` in the config file, only where that exact string
+  occurs once -- comments and formatting survive; an ambiguous edit is left to you;
+- it re-approves those servers from the feed, with the new launch command and the new
+  version's registry hash (the old one is never carried forward);
+- if the lock would change for any server it was not asked to bump -- because something
+  else in the config moved since your last approval -- it puts the config back and writes
+  nothing. Run `approve` for those first.
+
+A review update is listed with the tools that need reading. Bump it yourself, then
+`mcp-pin approve --from-feed` prints the diff and asks for `--yes-tool` by name.
+
 ## What it doesn't do
 
 - Doesn't call tools, only `initialize` and `tools/list` (and whatever `guard`
@@ -1416,7 +1451,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1317 tests, stdlib unittest, nothing to install.
+1328 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

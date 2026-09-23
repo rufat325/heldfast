@@ -131,6 +131,28 @@ def _register_approve(sub: argparse._SubParsersAction) -> None:
     )
 
 
+def _register_updates(sub: argparse._SubParsersAction) -> None:
+    updates = sub.add_parser(
+        "updates",
+        help="newer releases the drift feed has measured for your pinned servers",
+        description=(
+            "For each server pinned to an exact npm version, report whether the "
+            "drift feed has measured a newer release and what approving it would "
+            "change: quiet (approve --yes would take it) or review (a critical "
+            "change a person must name). --apply bumps the quiet ones in the "
+            "config and re-approves them from the feed, and nothing else."
+        ),
+    )
+    _add_scan_arguments(updates)
+    updates.add_argument("--apply", action="store_true",
+                         help="bump each quiet update in its config file and "
+                              "re-approve it from the feed")
+    updates.add_argument("--feed", metavar="URL", default=None,
+                         help="read the feed from this base URL instead of the "
+                              "`feed` branch of rufat325/mcp-pin")
+    updates.add_argument("-f", "--format", choices=("text", "json"), default="text")
+
+
 def _register_inspect(sub: argparse._SubParsersAction) -> None:
     inspect_p = sub.add_parser(
         "inspect",
@@ -521,6 +543,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_scan(sub)
     _register_approve(sub)
+    _register_updates(sub)
     _register_inspect(sub)
     _register_rules(sub)
     _register_explain(sub)

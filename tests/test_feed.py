@@ -186,6 +186,22 @@ class TestPublishing(unittest.TestCase):
             fh.write("{not json")
         self.assertEqual(1, quiet(watch.verify, SimpleNamespace(data=self.data)))
 
+    def test_render_is_deterministic_so_a_quiet_day_commits_nothing(self) -> None:
+        names = ("index.json", "feed.json", "feed.xml", "README.md")
+        first = {n: self._read(n) for n in names}
+        quiet(watch.render, SimpleNamespace(data=self.data))
+        self.assertEqual(first, {n: self._read(n) for n in names})
+
+    def test_the_index_lists_versions_and_events_without_text(self) -> None:
+        watch.write_catalogue(self.data, snap("1.0.1", tool("read", APPROVED)), [], "t")
+        watch.write_catalogue(self.data, snap("1.0.2", tool("read", APPROVED)), [], "t")
+        quiet(watch.render, SimpleNamespace(data=self.data))
+        pkg = json.loads(self._read("index.json"))["packages"]["pkg"]
+        self.assertEqual(["1.0.1", "1.0.2"], [v["version"] for v in pkg["versions"]])
+        self.assertEqual([("1.0.1", "1.0.2")], [(e["from"], e["to"]) for e in pkg["events"]])
+        self.assertNotIn("script", self._read("index.json"))
+        self.assertEqual(0, quiet(watch.verify, SimpleNamespace(data=self.data)))
+
     def test_catalogues_are_written_whole_and_accepted(self) -> None:
         """What `approve --from-feed` reads: the wire objects, not digests."""
         s = snap("1.0.2", tool("read", APPROVED))

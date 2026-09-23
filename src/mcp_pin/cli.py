@@ -538,6 +538,112 @@ def _warn_feed_content(out: Collected) -> None:
             print(f"mcp-pin: {f.severity.label} {f.rule_id} {f.evidence}", file=sys.stderr)
 
 
+def cmd_updates(args: argparse.Namespace) -> int:
+    from . import updates as up
+    from .feedlock import FeedError, resolve
+
+    if args.probe or getattr(args, "safe", False):
+        print("mcp-pin: updates reads the feed, which --safe promises not to do, "
+              "and launches nothing, so --probe has no meaning here",
+              file=sys.stderr)
+        return EXIT_ERROR
+    lock_path = _resolve_lock_path(args)
+    try:
+        previous = Lock.load(lock_path)
+    except ValueError as exc:
+        print(f"mcp-pin: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    data = collect(args)
+    try:
+        feed = resolve(getattr(args, "feed", None))
+        found = up.check(data.servers, previous, feed)
+    except FeedError as exc:
+        print(f"mcp-pin: the feed could not be read: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    if args.format == "json":
+        print(json.dumps({"feed": feed.source, "servers": [u.to_dict() for u in found]},
+                         indent=2))
+    else:
+        sys.stdout.write(up.render(found, feed.source))
+    if not args.apply:
+        return EXIT_OK
+    return _apply_updates(args, previous, [u for u in found if u.grade == "quiet"], feed)
+
+
+def _apply_updates(args: argparse.Namespace, previous: Lock, todo: list,
+                   feed: object) -> int:
+    """Bump the config for each quiet update, then re-approve just those.
+
+    Every config edit is undone if the approval does not go through, in
+    reverse order so two servers in one file come back as they were.
+    """
+    from .updates import rewrite_config
+
+    if not todo:
+        print("mcp-pin: no quiet update to apply", file=sys.stderr)
+        return EXIT_OK
+    specs, edits, applied = {}, [], []
+    for spec in collect(args).servers:
+        specs[spec.identity()] = spec
+    for u in todo:
+        path = Path(specs[u.identity].source)
+        original = rewrite_config(path, f"{u.package}@{u.current}", f"{u.package}@{u.latest}")
+        if original is None:
+            print(f"mcp-pin: {u.identity}: \"{u.package}@{u.current}\" does not occur "
+                  f"exactly once in {path}; left for you to bump", file=sys.stderr)
+            continue
+        edits.append((path, original))
+        applied.append(u.identity)
+    code = EXIT_ERROR
+    try:
+        code = _reapprove(args, previous, set(applied), feed) if applied else EXIT_OK
+    finally:
+        if code != EXIT_OK:
+            for path, original in reversed(edits):
+                path.write_bytes(original.encode("utf-8"))
+            if edits:
+                print("mcp-pin: config restored; nothing was bumped", file=sys.stderr)
+    return code
+
+
+def _reapprove(args: argparse.Namespace, previous: Lock, applied: set, feed: object) -> int:
+    """Record the bumped servers from the feed and nothing else."""
+    from .feedlock import lookup
+    from .review import changes
+
+    data = collect(args)
+    for spec in data.servers:
+        if spec.identity() not in applied:
+            continue
+        got = lookup(spec, feed)
+        if isinstance(got, str):
+            print(f"mcp-pin: {spec.identity()}: {got}", file=sys.stderr)
+            return EXIT_ERROR
+        data.tools.extend(got.tools)
+        data.probe_status[spec.identity()] = (
+            f"from feed: {got.package}@{got.version}, measured "
+            f"{got.measured_at[:10]} ({feed.source})")
+    lock = Lock(path=_resolve_lock_path(args))
+    lock.record(data.servers, data.tools, data.skills, prompts=data.prompts,
+                resources=data.resources, instructions=data.instructions,
+                previous=previous, probe_status=data.probe_status)
+    lock.merge_unprobed(previous)
+    for ident in applied:
+        # The old version's tarball hash is not this version's. Stamped fresh
+        # below, or reported missing -- never carried forward.
+        for key in ("integrity", "artifact_urls"):
+            lock.servers.get(ident, {}).pop(key, None)
+    for miss in _stamp_integrity(lock, [s for s in data.servers if s.identity() in applied]):
+        print(f"mcp-pin: no registry hash recorded for {miss}", file=sys.stderr)
+    foreign = sorted({c.identity for c in changes(previous, lock)} - applied)
+    if foreign:
+        print("mcp-pin: the lock would also change for " + ", ".join(foreign) +
+              ", which --apply was not asked to bump; run `mcp-pin approve` to review "
+              "those first", file=sys.stderr)
+        return EXIT_ERROR
+    return _commit_lock(lock, previous, yes=True)
+
+
 def cmd_approve(args: argparse.Namespace) -> int:
     lock_path = _resolve_lock_path(args)
     try:
@@ -946,6 +1052,7 @@ def _serve() -> int:
 
 _COMMANDS = {
     "approve": cmd_approve,
+    "updates": cmd_updates,
     "inspect": cmd_inspect,
     "rules": cmd_rules,
     "explain": cmd_explain,

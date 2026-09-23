@@ -29,6 +29,8 @@ mcp-pin wrap --name files -- npx -y @modelcontextprotocol/server-filesystem@2026
 For a popular server pinned to an exact version, `mcp-pin approve --from-feed` records
 the tools from [the drift feed](docs/CHURN.md#it-keeps-going)'s measurement of that
 version instead of launching it on your machine. [How it works, and what it trusts](docs/MANUAL.md#without-probing-here-approve---from-feed).
+`mcp-pin updates` then shows which pinned servers have newer releases and whether
+taking each is quiet or needs review; `--apply` bumps the quiet ones.
 
 Commit `.mcp-pin.lock`. From then on, one file is checked in three places:
 
@@ -296,7 +298,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1317 tests, stdlib unittest, nothing to install.
+1328 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

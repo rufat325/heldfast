@@ -30,6 +30,7 @@ Layout under DIR:
                            every catalogue measured, whole: what
                            `mcp-pin approve --from-feed` pins
   events/YYYY-MM.jsonl     one line per release that changed something
+  index.json               per package: measured versions and events, no text
   feed.json, feed.xml      the latest events, as JSON and as Atom
   README.md                the same, for a person
 """
@@ -61,7 +62,7 @@ FIELDS = ("description", "title", "inputSchema", "outputSchema", "annotations", 
 SAFE_NAME = re.compile(r"^[A-Za-z0-9@._\-]+$")
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+\-]*$")
 ALLOWED = re.compile(
-    r"^(?:watchlist\.json|feed\.json|feed\.xml|README\.md|"
+    r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|"
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
     r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json)$")
 # What measure.py asks for in `initialize`. Recorded with each catalogue: a
@@ -331,13 +332,49 @@ def flagged(event: dict) -> list:
     return out
 
 
+def index(data: str, events: list) -> dict:
+    """Every measured version and every event, per package, in one small file.
+
+    What `mcp-pin updates` reads: which releases the feed has a catalogue
+    for, and what each one changed, without fetching hundreds of catalogues
+    to find out. Sizes and counts only -- the catalogues and events carry
+    the text.
+    """
+    out: dict = {}
+    folder = os.path.join(data, "catalogues")
+    for pkg_dir in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        for name in sorted(os.listdir(os.path.join(folder, pkg_dir))):
+            with open(os.path.join(folder, pkg_dir, name), encoding="utf-8") as fh:
+                body = json.load(fh)
+            entry = out.setdefault(body["package"], {"versions": [], "events": []})
+            entry["versions"].append({"version": body["version"],
+                                      "published": body.get("published", ""),
+                                      "tools": len(body.get("tools") or [])})
+    for e in events:
+        out.setdefault(e["package"], {"versions": [], "events": []})["events"].append({
+            "from": e["from"], "to": e["to"], "published": e["published"],
+            "grade": e["grade"], "changed": len(e["changed"]),
+            "added": len(e["added"]), "removed": len(e["removed"])})
+    for entry in out.values():
+        entry["versions"].sort(key=lambda v: (v["published"], v["version"]))
+        entry["events"].sort(key=lambda v: (v["published"], v["to"]))
+    return {"packages": out}
+
+
 def render(args: argparse.Namespace) -> int:
+    """Write the derived files. Deterministic: the same events give the same
+    bytes, so a day on which no watched server changed anything is a day on
+    which the publishing job finds nothing to commit. Timestamps come from the
+    events, not from the clock."""
     events = sorted(all_events(args.data), key=lambda e: (e["published"], e["package"]),
                     reverse=True)
-    generated = now()
+    generated = max((e["observed_at"] for e in events), default="")
+    with open(os.path.join(args.data, "index.json"), "w", encoding="utf-8",
+              newline="\n") as fh:
+        json.dump(index(args.data, events), fh, indent=1, sort_keys=True)
     with open(os.path.join(args.data, "feed.json"), "w", encoding="utf-8",
               newline="\n") as fh:
-        json.dump({"generated_at": generated, "events": events[:FEED_EVENTS]}, fh, indent=1)
+        json.dump({"updated_at": generated, "events": events[:FEED_EVENTS]}, fh, indent=1)
     with open(os.path.join(args.data, "feed.xml"), "w", encoding="utf-8",
               newline="\n") as fh:
         fh.write(atom(events[:FEED_EVENTS], generated))
@@ -388,7 +425,7 @@ def readme(events: list, generated: str, data: str) -> str:
     review = [e for e in events if e["grade"] == "review"]
     lines = [
         "# MCP server tool changes", "",
-        f"Generated {generated} by `research/feed/watch.py` on the `main` branch. "
+        f"Last change observed {generated}. Built by `research/feed/watch.py` on the `main` branch. "
         f"Watching {watched} servers: the 150 most-downloaded npm stdio servers in the "
         "official MCP registry, and the four `@modelcontextprotocol` servers.", "",
         f"{len(events)} releases that changed a tool definition "
