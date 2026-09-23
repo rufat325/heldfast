@@ -1,0 +1,1176 @@
+{
+ "checked_at": "2026-09-23T04:20:24+00:00",
+ "package": "@mobilenext/mobile-mcp",
+ "published": "2026-09-13T20:23:35.507Z",
+ "tools": {
+  "mobile_allocate_remote_device": {
+   "digest": "9b5ce6738038783e58b3d38f0db03eedccdb6e2b96c8be6c445535f3aabaa111",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Reserve a physical device from the remote cloud fleet for exclusive use, returning a device identifier usable with the other mobile_* tools. Unlike local devices, a remote device is a shared and billed resource borrowed for the session - only call this after the user has explicitly asked to use a remote/cloud device, never speculatively or as a fallback when a local device isn't found. Requires mobile_login_to_cloud_provider to have been called first; if this fails with an authentication error, call that tool then retry. Use mobile_list_remote_devices first to see which names and versions actually exist in the fleet before filtering by them. Release the device with mobile_release_remote_device once the whole task is finished - releasing wipes the device's state, so do not release and reallocate between steps of the same task just to be tidy.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "name": {
+       "description": "Filter by device name/model. Supports a trailing * for prefix match (e.g. \"iPhone*\"), or an exact name (e.g. \"iPhone 16\").",
+       "type": "string"
+      },
+      "platform": {
+       "description": "The platform to allocate a device for",
+       "enum": [
+        "ios",
+        "android"
+       ],
+       "type": "string"
+      },
+      "timeoutSeconds": {
+       "description": "Seconds to wait for allocation when wait is true. Defaults to 900 (15 minutes). Only relevant when wait is true.",
+       "exclusiveMinimum": 0,
+       "maximum": 9007199254740991,
+       "type": "integer"
+      },
+      "type": {
+       "description": "Device type filter. Currently only \"real\" (physical devices) is supported by the fleet.",
+       "enum": [
+        "real"
+       ],
+       "type": "string"
+      },
+      "version": {
+       "description": "Filter by OS version. Supports comparison prefixes >=, >, <=, < (e.g. \">=18\"), or an exact version (e.g. \"18.6.2\"). Multiple values are ANDed together.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "wait": {
+       "description": "If true, block until the device has finished allocating and is ready to use, up to timeoutSeconds. If false/omitted, this returns as soon as the reservation is made, but the device may not be immediately ready.",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "platform"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_allocate_remote_device",
+    "title": "Allocate Remote Device"
+   }
+  },
+  "mobile_batch_commands": {
+   "digest": "cff3ab8cdd18ad32ec84c859d115d2f9d9b913deb955a16304ff8b3b5a76fd01",
+   "raw": {
+    "annotations": {
+     "destructiveHint": true,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Run multiple tools in sequence in a single call, e.g. click, type, click, type. Use this to fill forms or perform multi-step flows without round-trips. The device argument is applied to every step unless a step provides its own.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "listElementsAtEnd": {
+       "description": "Run mobile_list_elements_on_screen after the last step and include its result. Defaults to false",
+       "type": "boolean"
+      },
+      "steps": {
+       "description": "Tools to run, in order",
+       "items": {
+        "properties": {
+         "arguments": {
+          "additionalProperties": {},
+          "description": "Arguments for the tool, same as calling it directly",
+          "propertyNames": {
+           "type": "string"
+          },
+          "type": "object"
+         },
+         "name": {
+          "description": "Tool name, e.g. mobile_click_on_screen_at_coordinates",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "arguments"
+        ],
+        "type": "object"
+       },
+       "minItems": 1,
+       "type": "array"
+      },
+      "stopOnError": {
+       "description": "Stop at the first failing step. Defaults to true",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "device",
+      "steps"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_batch_commands",
+    "title": "Batch Commands"
+   }
+  },
+  "mobile_click_on_screen_at_coordinates": {
+   "digest": "a0a0c18dc6e9a4ac6496398a9a235fdb3ed33ca456fa6f0d9bc59ebb0ef28746",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Click on the screen, either at x,y coordinates or on an element by its ref (e.g. \"@e5\") from the latest mobile_list_elements_on_screen result. Prefer ref when the element is listed.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "ref": {
+       "description": "Element ref from mobile_list_elements_on_screen, e.g. \"@e5\". Takes precedence over x,y",
+       "type": "string"
+      },
+      "x": {
+       "description": "The x coordinate to click on the screen, in pixels. Required unless ref is given",
+       "minimum": 0,
+       "type": "number"
+      },
+      "y": {
+       "description": "The y coordinate to click on the screen, in pixels. Required unless ref is given",
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_click_on_screen_at_coordinates",
+    "title": "Click Screen"
+   }
+  },
+  "mobile_clipboard": {
+   "digest": "e75d7add5bfc1cdf39ec3cf46a5c89ebccff75f9070d90a61d7764b65efc959f",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": false,
+     "readOnlyHint": false
+    },
+    "description": "Read or replace the device clipboard. Pass text to set the clipboard, omit it to read the current clipboard.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "text": {
+       "description": "Text to place on the clipboard. Omit to read the clipboard instead.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_clipboard",
+    "title": "Clipboard"
+   }
+  },
+  "mobile_double_tap_on_screen": {
+   "digest": "cedd6f6b99d22c83065a7a88ce49901db4d7963f88643735db13eb51f98b549f",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Double-tap on the screen at given x,y coordinates.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "x": {
+       "description": "The x coordinate to double-tap, in pixels",
+       "minimum": 0,
+       "type": "number"
+      },
+      "y": {
+       "description": "The y coordinate to double-tap, in pixels",
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "device",
+      "x",
+      "y"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_double_tap_on_screen",
+    "title": "Double Tap Screen"
+   }
+  },
+  "mobile_get_crash": {
+   "digest": "66322af8802302e7663d1e0a17f728011e12cca73fb4599765d84653b7fc4cbb",
+   "raw": {
+    "annotations": {
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "Get the full content of a crash report by its ID. Use mobile_list_crashes to find available crash IDs.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "id": {
+       "description": "The crash report ID to retrieve",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device",
+      "id"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_get_crash",
+    "title": "Get Crash Report"
+   }
+  },
+  "mobile_get_device_logs": {
+   "digest": "d62e2aae41698aba648c8d4f356d810c2c45a06d2a116bd4457afcfbb0c26f22",
+   "raw": {
+    "annotations": {
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "Collect live device logs (logcat on Android, unified log on iOS) as one JSON object per line. Only logs emitted after the call starts are captured, so trigger the behavior you want to observe right before or during the call. Stops after `limit` entries or after 30 seconds of silence. Each line of a stack trace counts as one entry, so filter by process or tag to avoid filling the limit with noise. Start with a small limit (20-50) for a quick look. For large captures, pass `saveTo` to write logs to a file and only the entry count is returned.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "filter": {
+       "default": [],
+       "description": "Filters, ANDed together. key=value includes, key!=value excludes. Keys: pid, process, tag, level, subsystem, category, message. Example: [\"tag=ActivityManager\", \"level=Error\", \"process!=SpringBoard\"]",
+       "items": {
+        "pattern": "^(pid|process|tag|level|subsystem|category|message)!?=.+$",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "limit": {
+       "default": 100,
+       "description": "Stop after this many log entries",
+       "maximum": 10000,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "saveTo": {
+       "description": "Path to write the logs to instead of returning them. Filename must end with .log, .txt, or .jsonl",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_get_device_logs",
+    "title": "Get Device Logs"
+   }
+  },
+  "mobile_get_foreground_app": {
+   "digest": "9e56efdc627f7dc100190d38889b715f1293d246821dd48354ef57aa793e2a76",
+   "raw": {
+    "annotations": {
+     "openWorldHint": false,
+     "readOnlyHint": true
+    },
+    "description": "Get the app currently in the foreground on the device. Use this to verify which app or screen you are on before interacting with it.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_get_foreground_app",
+    "title": "Get Foreground App"
+   }
+  },
+  "mobile_get_orientation": {
+   "digest": "d2a51abd8bfbca6c50df6fa533255891b5abd3fabab12f4f5a7a223f0312a577",
+   "raw": {
+    "annotations": {
+     "openWorldHint": false,
+     "readOnlyHint": true
+    },
+    "description": "Get the current screen orientation of the device",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_get_orientation",
+    "title": "Get Orientation"
+   }
+  },
+  "mobile_get_screen_size": {
+   "digest": "1434fea6964f5583fafedd97ac0ab782bed28071d8a4bfafd5e79d7e74667837",
+   "raw": {
+    "annotations": {
+     "openWorldHint": false,
+     "readOnlyHint": true
+    },
+    "description": "Get the screen size of the mobile device in pixels",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_get_screen_size",
+    "title": "Get Screen Size"
+   }
+  },
+  "mobile_install_app": {
+   "digest": "54eb04f6e0645ce1a78bf0903bf346b3d587511124f8184642c2d5c9c73a9671",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": false,
+     "readOnlyHint": false
+    },
+    "description": "Install an app on mobile device",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "path": {
+       "description": "The path to the app file to install. For iOS simulators, provide a .zip file or a .app directory. For Android provide an .apk file. For iOS real devices provide an .ipa file",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device",
+      "path"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_install_app",
+    "title": "Install App"
+   }
+  },
+  "mobile_launch_app": {
+   "digest": "66bf982693bd88f306fcab29d2f0be6542dd9c5d32c5ee1859a934401cb504bf",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Launch an app on mobile device. Use this to open a specific app. You can find the package name of the app by calling list_apps_on_device.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "locale": {
+       "description": "Comma-separated BCP 47 locale tags to launch the app with (e.g., fr-FR,en-GB)",
+       "type": "string"
+      },
+      "packageName": {
+       "description": "The package name of the app to launch",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device",
+      "packageName"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_launch_app",
+    "title": "Launch App"
+   }
+  },
+  "mobile_list_apps": {
+   "digest": "ecc764ebd7f83a0c7b059b13e00713cc98d2beb16cecdcc287b3a128e6f77230",
+   "raw": {
+    "annotations": {
+     "openWorldHint": false,
+     "readOnlyHint": true
+    },
+    "description": "List all the installed apps on the device",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_list_apps",
+    "title": "List Apps"
+   }
+  },
+  "mobile_list_available_devices": {
+   "digest": "8df84775c1c6792f8b99f01696f13d15ff749ed04021cc2a3ffd30d9b1ab3c1e",
+   "raw": {
+    "annotations": {
+     "openWorldHint": false,
+     "readOnlyHint": true
+    },
+    "description": "List all available devices. This includes both physical mobile devices and mobile simulators and emulators. It returns both Android and iOS devices. These are local devices already connected to this machine, ready to use immediately at no cost - for devices from the shared remote cloud fleet, use mobile_list_remote_devices instead.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {},
+     "type": "object"
+    },
+    "name": "mobile_list_available_devices",
+    "title": "List Devices"
+   }
+  },
+  "mobile_list_crashes": {
+   "digest": "f2691dcc38e6358e992b8c2222554ffff6330b47bac37a253e21b3322d9777d9",
+   "raw": {
+    "annotations": {
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "List crash reports available on the device",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_list_crashes",
+    "title": "List Crash Reports"
+   }
+  },
+  "mobile_list_elements_on_screen": {
+   "digest": "ae8d63343420774727f5eb8fe83c7a79de84aee052ee12f681291b24743906de",
+   "raw": {
+    "annotations": {
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "List elements on screen with their ref, coordinates, and display text or accessibility label. Use the ref with mobile_click_on_screen_at_coordinates. Refs and coordinates stay valid as long as the screen does not change; re-list only after navigation or a layout change.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "format": {
+       "description": "Output format. \"text\" (default) is one compact line per element, \"json\" is a json array",
+       "enum": [
+        "text",
+        "json"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_list_elements_on_screen",
+    "title": "List Screen Elements"
+   }
+  },
+  "mobile_list_remote_devices": {
+   "digest": "6b00d7dd3ca12d3664b8c0b1086898a24ff976d07e33d6b670c78a7e7d49de6a",
+   "raw": {
+    "annotations": {
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "List the catalog of device models (make, platform, OS version) available to reserve from the remote cloud device fleet. This is different from mobile_list_available_devices, which lists real devices and simulators/emulators already connected to this local machine and ready to use immediately at no cost. Remote devices live in a shared cloud fleet: they are not usable until reserved with mobile_allocate_remote_device, and reserving one may be a limited/billed resource. Requires mobile_login_to_cloud_provider to have been called first; if this fails with an authentication error, call that tool then retry.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {},
+     "type": "object"
+    },
+    "name": "mobile_list_remote_devices",
+    "title": "List Remote Devices"
+   }
+  },
+  "mobile_login_to_cloud_provider": {
+   "digest": "ddfa03416877fb5c998a5e2b97f6038b4da86bac172ff3dd08b0dfc1858c119c",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Start authenticating this machine with the remote device cloud provider. This is required once before mobile_list_remote_devices or mobile_allocate_remote_device will work; if either of those fails with an authentication error, call this tool and then retry. This starts a browser-based device-code login and returns quickly with a URL and a one-time code - it does NOT wait for the login to complete. Show the URL and code to the user verbatim and ask them to open the URL and enter the code in their own browser. The login keeps running in the background after this tool returns; once the user confirms they've completed it, retry the remote devices tool that originally failed. Only call this after the user has explicitly asked to connect to, log into, or use remote/cloud devices - never call it speculatively, since it interrupts the user to act in their browser.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {},
+     "type": "object"
+    },
+    "name": "mobile_login_to_cloud_provider",
+    "title": "Login to Cloud Provider"
+   }
+  },
+  "mobile_long_press_on_screen_at_coordinates": {
+   "digest": "f091eb42299696878866abf9beb7eb89364d83e8e564111ded38bf577f617bdc",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Long press on the screen at given x,y coordinates. If long pressing on an element, use the mobile_list_elements_on_screen tool to find the coordinates.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "duration": {
+       "description": "Duration of the long press in milliseconds. Defaults to 500ms.",
+       "maximum": 10000,
+       "minimum": 1,
+       "type": "number"
+      },
+      "x": {
+       "description": "The x coordinate to long press on the screen, in pixels",
+       "minimum": 0,
+       "type": "number"
+      },
+      "y": {
+       "description": "The y coordinate to long press on the screen, in pixels",
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "device",
+      "x",
+      "y"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_long_press_on_screen_at_coordinates",
+    "title": "Long Press Screen"
+   }
+  },
+  "mobile_open_url": {
+   "digest": "a96b95ebfb6a7ceed71b0816dded490c87914ba04698637467ecf2d88429465b",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Open a URL in browser on device",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "url": {
+       "description": "The URL to open",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device",
+      "url"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_open_url",
+    "title": "Open URL"
+   }
+  },
+  "mobile_press_button": {
+   "digest": "005b7552d11da4f8885ef713e0cf796309c2ca08b73f335be93b3e10bc24847d",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Press a button on device",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "button": {
+       "description": "The button to press. Supported buttons: BACK (android only), HOME, VOLUME_UP, VOLUME_DOWN, ENTER, DPAD_CENTER (android tv only), DPAD_UP (android tv only), DPAD_DOWN (android tv only), DPAD_LEFT (android tv only), DPAD_RIGHT (android tv only)",
+       "type": "string"
+      },
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device",
+      "button"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_press_button",
+    "title": "Press Button"
+   }
+  },
+  "mobile_release_remote_device": {
+   "digest": "fe32e5bf03c7d3cf7a8e295f3cfb8bfc998f3105ed013d750aec1e975a482d14",
+   "raw": {
+    "annotations": {
+     "destructiveHint": true,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Release a device previously reserved with mobile_allocate_remote_device back to the remote cloud fleet so it becomes available to others. Releasing is destructive to the device's state: apps installed, files pushed, and any other changes made during this session are lost, and a later mobile_allocate_remote_device call may take time and could return a different physical unit. Only release once the whole task is finished - if there is more work to do on the same device shortly, keep holding it rather than releasing and reallocating.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to release back to the remote fleet",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_release_remote_device",
+    "title": "Release Remote Device"
+   }
+  },
+  "mobile_save_screenshot": {
+   "digest": "b4fad92202bbff1af6941889926ce9e7f0dd5c84adc8c8581fb1dacafa709fb2",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": false,
+     "readOnlyHint": false
+    },
+    "description": "Save a screenshot of the mobile device to a file",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "maxSize": {
+       "description": "Maximum width/height in pixels, keeping aspect ratio. Omit for full size.",
+       "exclusiveMinimum": 0,
+       "maximum": 9007199254740991,
+       "type": "integer"
+      },
+      "saveTo": {
+       "description": "The path to save the screenshot to. Filename must end with .png, .jpg, or .jpeg",
+       "type": "string"
+      },
+      "scale": {
+       "description": "Scale factor (0.0-1.0). Ignored if maxSize is provided.",
+       "exclusiveMinimum": 0,
+       "maximum": 1,
+       "type": "number"
+      }
+     },
+     "required": [
+      "device",
+      "saveTo"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_save_screenshot",
+    "title": "Save Screenshot"
+   }
+  },
+  "mobile_set_location": {
+   "digest": "a67289c86640422fd4f423b26aaa234da98e5b5d66da312941c132c2e9dc8749",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": false,
+     "readOnlyHint": false
+    },
+    "description": "Override the GPS location reported by the device, or clear the override to restore the real location. Omit latitude and longitude to clear.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "latitude": {
+       "description": "Latitude in decimal degrees, e.g. 37.7749. Omit together with longitude to clear the override.",
+       "maximum": 90,
+       "minimum": -90,
+       "type": "number"
+      },
+      "longitude": {
+       "description": "Longitude in decimal degrees, e.g. -122.4194. Omit together with latitude to clear the override.",
+       "maximum": 180,
+       "minimum": -180,
+       "type": "number"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_set_location",
+    "title": "Set Location"
+   }
+  },
+  "mobile_set_orientation": {
+   "digest": "1c9aba2b54a0f7d0e1f5a85272dd518eb872282711b091f84e4c239501cac52d",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": false,
+     "readOnlyHint": false
+    },
+    "description": "Change the screen orientation of the device",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "orientation": {
+       "description": "The desired orientation",
+       "enum": [
+        "portrait",
+        "landscape"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "device",
+      "orientation"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_set_orientation",
+    "title": "Set Orientation"
+   }
+  },
+  "mobile_start_screen_recording": {
+   "digest": "d4f28a2d96b26c313415a1d7c955733c95ae035df3ec9b787da301f6b97aec5c",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": false,
+     "readOnlyHint": false
+    },
+    "description": "Start recording the screen of a mobile device. The recording runs in the background until stopped with mobile_stop_screen_recording. Returns the path where the recording will be saved.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "output": {
+       "description": "The file path to save the recording to. Filename must end with .mp4. If not provided, a temporary path will be used.",
+       "type": "string"
+      },
+      "timeLimit": {
+       "description": "Maximum recording duration in seconds. The recording will stop automatically after this time.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_start_screen_recording",
+    "title": "Start Screen Recording"
+   }
+  },
+  "mobile_stop_screen_recording": {
+   "digest": "f67a79be01c18991ffa894e48a5e0f7eb9b28bcb37001e39ea132f4fd3b4b7b4",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": false,
+     "readOnlyHint": false
+    },
+    "description": "Stop an active screen recording on a mobile device. Returns the file path, size, and approximate duration of the recording.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_stop_screen_recording",
+    "title": "Stop Screen Recording"
+   }
+  },
+  "mobile_swipe_on_screen": {
+   "digest": "a467d46361524dd822dfe6fcb59da4f5e4b94bd17599a81ee248da9e30312a8e",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Swipe on the screen",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "direction": {
+       "description": "The direction to swipe",
+       "enum": [
+        "up",
+        "down",
+        "left",
+        "right"
+       ],
+       "type": "string"
+      },
+      "distance": {
+       "description": "The distance to swipe in pixels. Defaults to 400 pixels for iOS or 30% of screen dimension for Android",
+       "type": "number"
+      },
+      "x": {
+       "description": "The x coordinate to start the swipe from, in pixels. If not provided, uses center of screen",
+       "minimum": 0,
+       "type": "number"
+      },
+      "y": {
+       "description": "The y coordinate to start the swipe from, in pixels. If not provided, uses center of screen",
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "device",
+      "direction"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_swipe_on_screen",
+    "title": "Swipe Screen"
+   }
+  },
+  "mobile_take_screenshot": {
+   "digest": "da04fdf241309391c00c236328e0e10165a28930e0c06dc58b8464c13b943ca2",
+   "raw": {
+    "annotations": {
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "Take a screenshot of the mobile device. Use this to understand what's on screen, if you need to press an element that is available through view hierarchy then you must list elements on screen instead. The screenshot is usually smaller than the screen, so when the device reports its screen size the result also states how to convert positions in the screenshot into screen coordinates before tapping. Do not cache this result.",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "maxSize": {
+       "description": "Maximum width/height in pixels, keeping aspect ratio. Defaults to 1024.",
+       "exclusiveMinimum": 0,
+       "maximum": 9007199254740991,
+       "type": "integer"
+      },
+      "scale": {
+       "description": "Scale factor (0.0-1.0). Ignored if maxSize is provided.",
+       "exclusiveMinimum": 0,
+       "maximum": 1,
+       "type": "number"
+      }
+     },
+     "required": [
+      "device"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_take_screenshot",
+    "title": "Take Screenshot"
+   }
+  },
+  "mobile_terminate_app": {
+   "digest": "fbee5294f07d7a1506faa22a4ba96ef749bb4c624553725dd4d3604e0648294b",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": false,
+     "readOnlyHint": false
+    },
+    "description": "Stop and terminate an app on mobile device",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "packageName": {
+       "description": "The package name of the app to terminate",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device",
+      "packageName"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_terminate_app",
+    "title": "Terminate App"
+   }
+  },
+  "mobile_type_keys": {
+   "digest": "4521ee1373346461705fe7c4696e01d0c3c31687c973498611744387dc687062",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Type text into the focused element",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      },
+      "submit": {
+       "description": "Whether to submit the text. If true, the text will be submitted as if the user pressed the enter key.",
+       "type": "boolean"
+      },
+      "text": {
+       "description": "The text to type",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device",
+      "text",
+      "submit"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_type_keys",
+    "title": "Type Text"
+   }
+  },
+  "mobile_uninstall_app": {
+   "digest": "aac958b9aec02390353288b63751567ad35fe02933b793f87ba64394bf525cfa",
+   "raw": {
+    "annotations": {
+     "destructiveHint": true,
+     "openWorldHint": false,
+     "readOnlyHint": false
+    },
+    "description": "Uninstall an app from mobile device",
+    "execution": {
+     "taskSupport": "forbidden"
+    },
+    "inputSchema": {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "properties": {
+      "bundle_id": {
+       "description": "Bundle identifier (iOS) or package name (Android) of the app to be uninstalled",
+       "type": "string"
+      },
+      "device": {
+       "description": "The device identifier to use. Use mobile_list_available_devices to find which devices are available to you.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "device",
+      "bundle_id"
+     ],
+     "type": "object"
+    },
+    "name": "mobile_uninstall_app",
+    "title": "Uninstall App"
+   }
+  }
+ },
+ "version": "1.0.4"
+}

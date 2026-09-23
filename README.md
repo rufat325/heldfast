@@ -1,0 +1,72 @@
+# MCP server tool changes
+
+Generated 2026-09-23T04:22:27+00:00 by `research/feed/watch.py` on the `main` branch. Watching 154 servers: the 150 most-downloaded npm stdio servers in the official MCP registry, and the four `@modelcontextprotocol` servers.
+
+246 releases that changed a tool definition (0 observed live, 246 from the [churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); 3 where `mcp-pin wrap --drift graded` would refuse something.
+
+Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, with the words that moved: [events/](events).
+
+`quiet`: a graded pin forwards every changed tool (new tools still need approval). `review`: a change introduced an agent-directed instruction, hidden character, credential path or look-alike letter. Review means read it, not that it is hostile.
+
+| published | package | release | tools | grade |
+|---|---|---|---|---|
+| 2026-09-22 | `@togglhq/mcp` | 1.11.28 → 1.11.29 | 8 changed | quiet |
+| 2026-09-22 | `agent-device` | 0.21.11 → 0.21.12 | 1 changed | quiet |
+| 2026-09-22 | `gdharness` | 1.0.11 → 1.0.12 | 6 changed | quiet |
+| 2026-09-22 | `@togglhq/mcp` | 1.11.26 → 1.11.27 | 8 changed | quiet |
+| 2026-09-22 | `tokportal-mcp` | 1.17.0 → 1.17.1 | 2 changed | quiet |
+| 2026-09-22 | `tokportal-mcp` | 1.16.0 → 1.17.0 | 5 changed, 1 added | quiet |
+| 2026-09-22 | `@sap-ux/fiori-mcp-server` | 1.12.13 → 1.13.0 | 2 changed | quiet |
+| 2026-09-22 | `gdharness` | 1.0.10 → 1.0.11 | 5 changed | quiet |
+| 2026-09-22 | `ssh-mcp` | 2.10.0 → 2.11.0 | 1 changed | quiet |
+| 2026-09-22 | `gdharness` | 1.0.9 → 1.0.10 | 1 changed | quiet |
+| 2026-09-22 | `@alisaitteke/photoshop-mcp` | 1.7.19 → 1.7.20 | 2 changed | quiet |
+| 2026-09-22 | `agent-device` | 0.21.8 → 0.21.9 | 3 changed | quiet |
+| 2026-09-22 | `githits` | 0.20.0 → 0.21.0 | 4 changed | quiet |
+| 2026-09-22 | `premiere-pro-mcp` | 1.16.4 → 1.17.0 | 9 changed, 3 added | quiet |
+| 2026-09-22 | `ssh-mcp` | 2.9.1 → 2.10.0 | 5 changed | quiet |
+| 2026-09-22 | `firecrawl-mcp` | 3.25.1 → 3.25.2 | 3 changed | quiet |
+| 2026-09-22 | `hermoso` | 0.1.268 → 0.1.269 | 6 changed | quiet |
+| 2026-09-22 | `aiterm-mcp` | 0.37.10 → 0.38.0 | 6 changed | quiet |
+| 2026-09-22 | `firecrawl-mcp` | 3.25.0 → 3.25.1 | 3 changed | quiet |
+| 2026-09-22 | `firecrawl-mcp` | 3.24.0 → 3.25.0 | 25 changed, 2 added (every tool) | quiet |
+| 2026-09-22 | `hermoso` | 0.1.265 → 0.1.267 | 1 changed | quiet |
+| 2026-09-21 | `hermoso` | 0.1.264 → 0.1.265 | 40 changed | quiet |
+| 2026-09-21 | `@dbx-app/mcp-server` | 0.4.92 → 0.4.93 | 2 changed | quiet |
+| 2026-09-21 | `@getbourdon/mcp-server` | 0.7.0 → 0.8.0 | 7 added | quiet |
+| 2026-09-21 | `@postman/postman-mcp-server` | 2.12.3 → 2.13.0 | 4 changed | quiet |
+| 2026-09-21 | `@sap-ux/fiori-mcp-server` | 1.12.7 → 1.12.9 | 2 changed | review |
+| 2026-09-21 | `@alisaitteke/photoshop-mcp` | 1.7.17 → 1.7.18 | 9 changed, 6 added | quiet |
+| 2026-09-21 | `@cloudbase/cloudbase-mcp` | 2.34.5 → 2.34.6 | 4 changed | quiet |
+| 2026-09-21 | `agent-device` | 0.21.7 → 0.21.8 | 1 changed, 1 added | quiet |
+| 2026-09-21 | `@shipstatic/mcp` | 1.12.4 → 2.0.0 | 4 changed | quiet |
+| 2026-09-21 | `sbuilder-mcp` | 0.62.0 → 0.63.0 | 2 changed, 1 added | quiet |
+| 2026-09-21 | `@qase/mcp-server` | 2.5.1 → 2.6.0 | 1 changed, 3 added | quiet |
+| 2026-09-21 | `@cap-js/mcp-server` | 0.0.5 → 0.0.6 | 1 changed | quiet |
+| 2026-09-21 | `premiere-pro-mcp` | 1.16.3 → 1.16.4 | 6 changed | quiet |
+| 2026-09-21 | `screenpipe-mcp` | 0.19.4 → 0.20.0 | 1 changed, 2 added | quiet |
+| 2026-09-20 | `@dbx-app/mcp-server` | 0.4.91 → 0.4.92 | 2 changed, 3 added | quiet |
+| 2026-09-20 | `@shipstatic/mcp` | 1.12.3 → 1.12.4 | 1 changed | quiet |
+| 2026-09-20 | `mcp-local-rag` | 0.18.6 → 0.19.0 | 1 changed | quiet |
+| 2026-09-20 | `@cloudbase/cloudbase-mcp` | 2.34.4 → 2.34.5 | 6 changed, 1 removed | quiet |
+| 2026-09-20 | `sbuilder-mcp` | 0.61.1 → 0.62.0 | 10 changed | quiet |
+| 2026-09-19 | `obsidian-mcp-server` | 3.5.3 → 3.5.4 | 3 changed | quiet |
+| 2026-09-19 | `@piotr-agier/google-drive-mcp` | 2.10.0 → 2.11.0 | 46 changed, 8 added | quiet |
+| 2026-09-19 | `@dbx-app/mcp-server` | 0.4.90 → 0.4.91 | 1 changed | quiet |
+| 2026-09-19 | `@dangahagan/weather-mcp` | 1.31.2 → 1.31.3 | 1 changed | quiet |
+| 2026-09-19 | `appium-mcp` | 1.94.1 → 1.94.2 | 1 changed | quiet |
+| 2026-09-19 | `@yawlabs/postgres-mcp` | 0.13.2 → 0.13.3 | 1 changed | quiet |
+| 2026-09-18 | `@playwright/mcp` | 0.0.81 → 0.0.82 | 1 added, 2 removed | quiet |
+| 2026-09-18 | `@alisaitteke/photoshop-mcp` | 1.7.16 → 1.7.17 | 1 changed, 1 added | quiet |
+| 2026-09-18 | `@imgly/codesign-mcp` | 0.3.4 → 0.3.5 | 1 changed | quiet |
+| 2026-09-18 | `@mozilla/firefox-devtools-mcp` | 0.10.2 → 0.10.3 | 2 changed, 1 added, 1 removed | quiet |
+| 2026-09-18 | `@qase/mcp-server` | 2.5.0 → 2.5.1 | 14 changed (every tool) | quiet |
+| 2026-09-18 | `githits` | 0.19.0 → 0.20.0 | 13 changed (every tool) | quiet |
+| 2026-09-18 | `@getbourdon/mcp-server` | 0.6.0 → 0.7.0 | 1 added | quiet |
+| 2026-09-17 | `claude-flow` | 3.42.3 → 3.42.4 | 1 changed | quiet |
+| 2026-09-17 | `@trusty-squire/mcp` | 1.1.14 → 1.1.15 | 1 changed | quiet |
+| 2026-09-17 | `premiere-pro-mcp` | 1.16.0 → 1.16.1 | 4 changed, 8 added | quiet |
+| 2026-09-17 | `@shipstatic/mcp` | 1.12.1 → 1.12.2 | 5 changed | quiet |
+| 2026-09-17 | `@brave/brave-search-mcp-server` | 2.1.3 → 2.1.4 | 1 changed | quiet |
+| 2026-09-17 | `@qase/mcp-server` | 2.4.1 → 2.5.0 | 1 changed | quiet |
+| 2026-09-17 | `@browserstack/mcp-server` | 1.4.0 → 1.4.1 | 3 changed | quiet |

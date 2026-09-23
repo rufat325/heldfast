@@ -1,0 +1,1568 @@
+{
+ "checked_at": "2026-09-23T04:22:17+00:00",
+ "package": "@qase/mcp-server",
+ "published": "2026-09-21T08:07:53.867Z",
+ "tools": {
+  "qase_api": {
+   "digest": "d73be7ec8dea7e0895bd0ca61afc06dcf7b7b966162f38b35bd5a81a5f5ee793",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Call any Qase REST endpoint directly, for the few things no dedicated tool covers. Pass the HTTP method, a path starting with /v1/, and an optional body or query. See developers.qase.io for the reference. Prefer a dedicated tool wherever one exists: they normalize enums, validate arguments before spending a round trip, and shape the response for a model. This one hands back whatever the API returns. It sends JSON only and cannot upload files \u2014 multipart uploads go through qase_attachment_upload. A DELETE through this tool asks for confirmation the same way the dedicated delete tools do. Cost: one API call, typically 0.3-1.5s depending on the endpoint. No caching, no pagination help, no retries beyond the client defaults.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "body": {
+       "additionalProperties": {},
+       "description": "Request body for POST/PUT/PATCH",
+       "type": "object"
+      },
+      "method": {
+       "default": "GET",
+       "description": "HTTP method",
+       "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+       ],
+       "type": "string"
+      },
+      "path": {
+       "description": "API path starting with /v1/ (e.g., \"/v1/project/DEMO/run\")",
+       "minLength": 1,
+       "type": "string"
+      },
+      "query": {
+       "additionalProperties": {
+        "type": "string"
+       },
+       "description": "Query parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "path"
+     ],
+     "type": "object"
+    },
+    "name": "qase_api",
+    "title": "Call Qase API"
+   }
+  },
+  "qase_attachment_upload": {
+   "digest": "637df7c9c6f1d4024badee14f3326ce1c918e6b361f40dcaecece72776f2e230",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Upload a file and get back the hash that other tools reference it by \u2014 screenshots, logs, HAR files, videos. Pass `file_base64` with the base64-encoded bytes, or `file_path` with an absolute path; `filename` with its extension is always required. Use `file_base64` unless the server runs on the same machine as the file: a remote server, the hosted connector included, cannot see your filesystem, and `file_path` will simply not find the file. The returned hash is what goes in the `attachments` field of qase_case_upsert, qase_result_record, qase_defect_upsert or qase_triage_defect \u2014 uploading alone attaches nothing, the hash has to be passed on. This is the only tool that sends multipart/form-data, which is why qase_api cannot send them. Upload once and reuse the hash rather than re-uploading the same evidence per case. Cost: one API call per file, dominated by file size rather than round trip \u2014 well under a second for a screenshot, seconds for a video. Base64 inflates the payload by about a third.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "file": {
+       "description": "Deprecated: prefer file_base64 or file_path, which say which one you mean. Accepts either an absolute path to an existing file or base64 content.",
+       "type": "string"
+      },
+      "file_base64": {
+       "description": "File content, base64 encoded. Use this whenever the server is not on the same machine as the file \u2014 including the hosted connector, where it is the only option.",
+       "type": "string"
+      },
+      "file_path": {
+       "description": "Absolute path to a file on the machine running THIS server. Only usable for a local stdio server; a remote server cannot see your filesystem \u2014 send file_base64 instead.",
+       "type": "string"
+      },
+      "filename": {
+       "description": "Original filename with extension",
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "filename"
+     ],
+     "type": "object"
+    },
+    "name": "qase_attachment_upload",
+    "title": "Upload attachment"
+   }
+  },
+  "qase_case_bulk_create": {
+   "digest": "df3fd522a31b2c29483e57b0ad09ba37f013220c6aca5d0a6fddec56d633d9cf",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Create up to 100 test cases in one request \u2014 the batch form of qase_case_upsert, and the right tool whenever more than one case is being written. Takes a list of cases with the same fields and the same enum handling as qase_case_upsert: labels (\"high\", \"blocker\") or numeric IDs both work, steps classic or Gherkin. The batch is validated as a whole, so an invalid item means nothing is created, and each item is then reported individually. Returns the IDs in the order submitted. This creates only; to change an existing case use qase_case_upsert with its `id`. Cost: one API call regardless of batch size. Ten cases measured 1.2s here against 5.6s as ten separate qase_case_upsert calls \u2014 four times faster and one tenth of the calls. Split larger imports across several calls.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "cases": {
+       "description": "Test cases to create, 1 to 100 per call",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "attachments": {
+          "description": "Attachment hashes from qase_attachment_upload",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "automation": {
+          "description": "Automation status (label, slug, or numeric ID: 0=Manual / is-not-automated, 1=To be automated, 2=Automated)",
+          "type": "string"
+         },
+         "behavior": {
+          "description": "Behavior label or numeric ID",
+          "type": "string"
+         },
+         "custom_field": {
+          "additionalProperties": {},
+          "description": "Custom field values keyed by field ID, e.g. { \"12\": \"value\" }",
+          "type": "object"
+         },
+         "description": {
+          "description": "Free-form description of what the case covers",
+          "type": "string"
+         },
+         "is_flaky": {
+          "description": "Is flaky label or numeric ID (0=No, 1=Yes). A boolean is accepted too.",
+          "type": "string"
+         },
+         "layer": {
+          "description": "Layer label or numeric ID",
+          "type": "string"
+         },
+         "milestone_id": {
+          "description": "ID of the milestone the case belongs to",
+          "exclusiveMinimum": 0,
+          "type": "integer"
+         },
+         "postconditions": {
+          "description": "State to restore or verify after the steps run",
+          "type": "string"
+         },
+         "preconditions": {
+          "description": "State the system must be in before the steps run",
+          "type": "string"
+         },
+         "priority": {
+          "description": "Priority label or numeric ID (0=not set, 1=high, 2=medium, 3=low)",
+          "type": "string"
+         },
+         "severity": {
+          "description": "Severity label or numeric ID",
+          "type": "string"
+         },
+         "status": {
+          "description": "Status label or numeric ID",
+          "type": "string"
+         },
+         "steps": {
+          "description": "Ordered test steps; omit for a case without steps",
+          "items": {
+           "additionalProperties": false,
+           "properties": {
+            "action": {
+             "description": "Step action (classic steps). Not needed when `shared` is set.",
+             "type": "string"
+            },
+            "attachments": {
+             "description": "Attachment hashes from qase_attachment_upload",
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "data": {
+             "description": "Test data",
+             "type": "string"
+            },
+            "expected_result": {
+             "description": "Expected result",
+             "type": "string"
+            },
+            "shared": {
+             "description": "Hash of an existing shared step to insert at this position, from `qase_shared_step_upsert`. The step then reuses that shared step instead of defining its own content, so `action` can be omitted. Reading the case back reports the link as `shared_step_hash`.",
+             "type": "string"
+            },
+            "shared_step_hash": {
+             "description": "Alias for `shared` \u2014 the name used when reading a case. Sent to the API as `shared`.",
+             "type": "string"
+            },
+            "steps": {
+             "description": "Nested substeps. Same structure as parent steps, supports further nesting.",
+             "items": {
+              "additionalProperties": true,
+              "properties": {
+               "action": {
+                "description": "Step action (classic steps). Not needed when `shared` is set.",
+                "type": "string"
+               },
+               "attachments": {
+                "description": "Attachment hashes from qase_attachment_upload",
+                "items": {
+                 "type": "string"
+                },
+                "type": "array"
+               },
+               "data": {
+                "description": "Test data",
+                "type": "string"
+               },
+               "expected_result": {
+                "description": "Expected result",
+                "type": "string"
+               },
+               "shared": {
+                "description": "Hash of an existing shared step to insert at this position, from `qase_shared_step_upsert`. The step then reuses that shared step instead of defining its own content, so `action` can be omitted. Reading the case back reports the link as `shared_step_hash`.",
+                "type": "string"
+               },
+               "shared_step_hash": {
+                "description": "Alias for `shared` \u2014 the name used when reading a case. Sent to the API as `shared`.",
+                "type": "string"
+               },
+               "value": {
+                "description": "Gherkin scenario text (when steps_type is \"gherkin\")",
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "value": {
+             "description": "Gherkin scenario text (when steps_type is \"gherkin\")",
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         "steps_type": {
+          "description": "How steps are written: \"classic\" action/expected pairs, or \"gherkin\" scenario text",
+          "enum": [
+           "classic",
+           "gherkin"
+          ],
+          "type": "string"
+         },
+         "suite_id": {
+          "description": "ID of the suite that holds the case",
+          "exclusiveMinimum": 0,
+          "type": "integer"
+         },
+         "tags": {
+          "description": "Tag names, e.g. [\"smoke\", \"billing\"]",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "title": {
+          "description": "Test case title",
+          "maxLength": 255,
+          "minLength": 1,
+          "type": "string"
+         },
+         "type": {
+          "description": "Type label or numeric ID",
+          "type": "string"
+         }
+        },
+        "required": [
+         "title"
+        ],
+        "type": "object"
+       },
+       "maxItems": 100,
+       "minItems": 1,
+       "type": "array"
+      },
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "cases"
+     ],
+     "type": "object"
+    },
+    "name": "qase_case_bulk_create",
+    "title": "Bulk create test cases"
+   }
+  },
+  "qase_case_upsert": {
+   "digest": "852ed1abcade08103d0d0f86e8a8a280d81ee09bfce4269b579e248cb607b7b2",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Create or update a single test case. With `id` it updates that case, without `id` it creates a new one. Enum fields (priority, severity, type, layer, behavior, automation, is_flaky) accept either a label such as \"high\" or \"blocker\" or the project's numeric ID \u2014 the server normalizes both. Steps can be classic action/expected pairs or Gherkin, and may reference shared steps by hash. Writing more than one case? Use qase_case_bulk_create instead: it takes a list and sends one request. If the project has \"Test case review\" enabled, direct writes may need to go through a review \u2014 run qase_discover_tools with \"review\" for those tools. Cost: one API call, about 0.6s to create and 0.4s to update. Ten sequential calls measured 5.6s against 1.2s for one qase_case_bulk_create writing the same ten, so a loop is roughly four times slower.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "attachments": {
+       "description": "Attachment hashes from qase_attachment_upload",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "automation": {
+       "description": "Automation status (label, slug, or numeric ID: 0=Manual / is-not-automated, 1=To be automated, 2=Automated)",
+       "type": "string"
+      },
+      "behavior": {
+       "description": "Behavior label or numeric ID",
+       "type": "string"
+      },
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "custom_field": {
+       "additionalProperties": {},
+       "description": "Custom field values keyed by field ID, e.g. { \"12\": \"value\" }",
+       "type": "object"
+      },
+      "description": {
+       "description": "Free-form description of what the case covers",
+       "type": "string"
+      },
+      "id": {
+       "description": "Case ID \u2014 if provided, updates the case; if omitted, creates a new one",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "is_flaky": {
+       "description": "Is flaky label or numeric ID (0=No, 1=Yes). A boolean is accepted too.",
+       "type": "string"
+      },
+      "layer": {
+       "description": "Layer label or numeric ID",
+       "type": "string"
+      },
+      "milestone_id": {
+       "description": "ID of the milestone the case belongs to",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "postconditions": {
+       "description": "State to restore or verify after the steps run",
+       "type": "string"
+      },
+      "preconditions": {
+       "description": "State the system must be in before the steps run",
+       "type": "string"
+      },
+      "priority": {
+       "description": "Priority label or numeric ID (0=not set, 1=high, 2=medium, 3=low)",
+       "type": "string"
+      },
+      "severity": {
+       "description": "Severity label or numeric ID",
+       "type": "string"
+      },
+      "status": {
+       "description": "Status label or numeric ID",
+       "type": "string"
+      },
+      "steps": {
+       "description": "Ordered test steps; omit for a case without steps",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "action": {
+          "description": "Step action (classic steps). Not needed when `shared` is set.",
+          "type": "string"
+         },
+         "attachments": {
+          "description": "Attachment hashes from qase_attachment_upload",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "data": {
+          "description": "Test data",
+          "type": "string"
+         },
+         "expected_result": {
+          "description": "Expected result",
+          "type": "string"
+         },
+         "shared": {
+          "description": "Hash of an existing shared step to insert at this position, from `qase_shared_step_upsert`. The step then reuses that shared step instead of defining its own content, so `action` can be omitted. Reading the case back reports the link as `shared_step_hash`.",
+          "type": "string"
+         },
+         "shared_step_hash": {
+          "description": "Alias for `shared` \u2014 the name used when reading a case. Sent to the API as `shared`.",
+          "type": "string"
+         },
+         "steps": {
+          "description": "Nested substeps. Same structure as parent steps, supports further nesting.",
+          "items": {
+           "additionalProperties": true,
+           "properties": {
+            "action": {
+             "description": "Step action (classic steps). Not needed when `shared` is set.",
+             "type": "string"
+            },
+            "attachments": {
+             "description": "Attachment hashes from qase_attachment_upload",
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "data": {
+             "description": "Test data",
+             "type": "string"
+            },
+            "expected_result": {
+             "description": "Expected result",
+             "type": "string"
+            },
+            "shared": {
+             "description": "Hash of an existing shared step to insert at this position, from `qase_shared_step_upsert`. The step then reuses that shared step instead of defining its own content, so `action` can be omitted. Reading the case back reports the link as `shared_step_hash`.",
+             "type": "string"
+            },
+            "shared_step_hash": {
+             "description": "Alias for `shared` \u2014 the name used when reading a case. Sent to the API as `shared`.",
+             "type": "string"
+            },
+            "value": {
+             "description": "Gherkin scenario text (when steps_type is \"gherkin\")",
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         "value": {
+          "description": "Gherkin scenario text (when steps_type is \"gherkin\")",
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "steps_type": {
+       "description": "How steps are written: \"classic\" action/expected pairs, or \"gherkin\" scenario text",
+       "enum": [
+        "classic",
+        "gherkin"
+       ],
+       "type": "string"
+      },
+      "suite_id": {
+       "description": "ID of the suite that holds the case",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "tags": {
+       "description": "Tag names, e.g. [\"smoke\", \"billing\"]",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": {
+       "description": "Test case title",
+       "maxLength": 255,
+       "minLength": 1,
+       "type": "string"
+      },
+      "type": {
+       "description": "Type label or numeric ID",
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "title"
+     ],
+     "type": "object"
+    },
+    "name": "qase_case_upsert",
+    "title": "Create or update test case"
+   }
+  },
+  "qase_ci_report": {
+   "digest": "94ce72ac7a0c03481f175cb1de4f8d9a1fe64bef443f9cba878e41ea7356e1f7",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Report a whole CI run in one call: creates the run, records every result, and completes it. This is the tool for a pipeline that has just finished \u2014 it replaces qase_run_upsert, then qase_result_record, then qase_run_complete, and leaves no half-open run behind if the agent stops early. Each result needs a numeric `case_id` plus a status, and may carry duration, comment, stacktrace and attachment hashes. Use qase_result_record instead when the run already exists and results arrive in stages; use qase_run_upsert when you need the run left open. A batch larger than 200 is split across requests for you, up to 2000 results in one report. Cost: one tool call covering three API operations, plus one extra request per 200 results. A run with two results measured about 0.7s, against roughly 1.5s for the same work as three separate calls, and it grows with the number of results rather than with the number of round trips.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "complete": {
+       "default": true,
+       "description": "Complete the run after recording results (default: true)",
+       "type": "boolean"
+      },
+      "environment_id": {
+       "description": "ID of the environment the build ran against",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "is_autotest": {
+       "default": true,
+       "description": "Mark as automated run (default: true)",
+       "type": "boolean"
+      },
+      "results": {
+       "description": "Test results to record, 1 to 2000 per call",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "attachments": {
+          "description": "Attachment hashes from qase_attachment_upload",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "case_id": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+         },
+         "comment": {
+          "type": "string"
+         },
+         "defect": {
+          "type": "boolean"
+         },
+         "stacktrace": {
+          "type": "string"
+         },
+         "status": {
+          "enum": [
+           "passed",
+           "failed",
+           "blocked",
+           "skipped",
+           "invalid"
+          ],
+          "type": "string"
+         },
+         "time_ms": {
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "required": [
+         "case_id",
+         "status"
+        ],
+        "type": "object"
+       },
+       "maxItems": 2000,
+       "minItems": 1,
+       "type": "array"
+      },
+      "title": {
+       "description": "Run title (e.g., \"CI Build #1234\")",
+       "maxLength": 255,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "title",
+      "results"
+     ],
+     "type": "object"
+    },
+    "name": "qase_ci_report",
+    "outputSchema": {
+     "properties": {
+      "results_recorded": {
+       "description": "Number of results recorded",
+       "type": "integer"
+      },
+      "run_id": {
+       "description": "Created run ID",
+       "type": "integer"
+      },
+      "run_status": {
+       "enum": [
+        "active",
+        "complete",
+        "complete_failed"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "run_id",
+      "run_status",
+      "results_recorded"
+     ],
+     "type": "object"
+    },
+    "title": "Report CI results"
+   }
+  },
+  "qase_defect_upsert": {
+   "digest": "5e30cd64226d8ddeba35fb208066da2557a513a98304c765a9f860cfba6412b9",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Create or update a defect \u2014 a tracked problem found by testing. Without `id` it creates, with `id` it updates. Creating one requires `title`, `actual_result` and `severity`; the API rejects a defect missing any of the three. Severity is given as a label (\"blocker\", \"critical\", \"major\", \"normal\", \"minor\", \"trivial\") and the server maps it to the workspace's numeric ID, custom options included. Status is a label too (\"open\", \"in_progress\", \"resolved\", \"invalid\") and passes through as written; setting it to \"resolved\" on an existing defect goes through the dedicated resolve endpoint. When the defect comes from a specific test failure, use qase_triage_defect instead. The API has no way to attach runs or results to a defect, so reference the failing results in the text rather than expecting a link. Find existing defects with qql_search before filing a duplicate. Cost: one API call, about 0.5s, plus a cached lookup of the severity options.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "actual_result": {
+       "description": "What actually happened \u2014 required when creating a defect",
+       "type": "string"
+      },
+      "attachments": {
+       "description": "Attachment hashes from qase_attachment_upload",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "custom_field": {
+       "additionalProperties": {},
+       "description": "Custom field values keyed by field ID, e.g. { \"12\": \"value\" }",
+       "type": "object"
+      },
+      "id": {
+       "description": "Defect ID \u2014 if provided, updates; if omitted, creates",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "severity": {
+       "description": "How bad the defect is \u2014 required when creating a defect",
+       "enum": [
+        "undefined",
+        "blocker",
+        "critical",
+        "major",
+        "normal",
+        "minor",
+        "trivial"
+       ],
+       "type": "string"
+      },
+      "status": {
+       "description": "Set to \"resolved\" to resolve the defect",
+       "enum": [
+        "open",
+        "in_progress",
+        "resolved",
+        "invalid"
+       ],
+       "type": "string"
+      },
+      "tags": {
+       "description": "Tag names, e.g. [\"regression\", \"payments\"]",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": {
+       "description": "Defect title",
+       "maxLength": 255,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "title"
+     ],
+     "type": "object"
+    },
+    "name": "qase_defect_upsert",
+    "title": "Create or update defect"
+   }
+  },
+  "qase_discover_tools": {
+   "digest": "a96692c63aea21208adaa557c7e29a7d39c561b9cbdff6fed362047bbcc2223f",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": true,
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "Find and switch on tools that are hidden by default. Only core tools appear in the tool list; deletes, test plans, milestones, environments, shared steps and parameters, external issue links, case reviews, and project and custom-field management all exist but stay hidden until discovered. Search by what you are trying to do \u2014 \"delete\", \"milestone\", \"plan\", \"review\", \"custom field\" \u2014 and matching tools are activated and become callable. Every word in the query must appear in a tool's name or description, so prefer two or three words over a sentence. Activation is announced to your client with notifications/tools/list_changed: if a tool listed as activated here is still absent from your tool list, your client did not act on that notification \u2014 call the same endpoint through qase_api rather than reporting the capability as missing. Never conclude a capability is missing without searching here first. Cost: no API call, matching happens in memory, about 3ms. Free to call as often as needed.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "activate": {
+       "default": true,
+       "description": "If true (default), found tools are activated and become available for use",
+       "type": "boolean"
+      },
+      "category": {
+       "description": "Filter by tool category",
+       "enum": [
+        "read",
+        "write",
+        "delete",
+        "composite",
+        "all"
+       ],
+       "type": "string"
+      },
+      "query": {
+       "description": "Search query to find tools by name or description. Examples: \"delete\", \"milestone\", \"attachment\", \"suite\"",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "name": "qase_discover_tools",
+    "outputSchema": {
+     "properties": {
+      "activated": {
+       "description": "Number of newly activated tools",
+       "type": "integer"
+      },
+      "found": {
+       "description": "Number of matching tools",
+       "type": "integer"
+      },
+      "tools": {
+       "items": {
+        "properties": {
+         "description": {
+          "type": "string"
+         },
+         "destructive": {
+          "type": "boolean"
+         },
+         "name": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "found",
+      "activated",
+      "tools"
+     ],
+     "type": "object"
+    },
+    "title": "Discover more tools"
+   }
+  },
+  "qase_get": {
+   "digest": "fcc41898757504d849041b69b8e8a5149db45ede61de101d8b7017115c8f83f7",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": true,
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "Fetch one known record by type and ID: case, suite, run, result, plan, defect, milestone, environment, shared_step, shared_parameter, configuration, attachment, author, user, review, or custom_field. `code` is required for project-scoped entities and can be omitted for global ones (user, author, attachment, custom_field). Narrow the payload with `fields`, or pass [\"*\"] for everything. Use this only when you already know the ID and want a single record. For several records, for anything filtered or cross-project, or when you are about to call this in a loop, use qql_search instead \u2014 one search returns the whole page at once. Cost: one API call, 0.3-0.5s. Ten of these in sequence measured 5.3s against 1.2s for a single qql_search returning the same ten records, so a loop over IDs is roughly four times slower and ten times more calls.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Project code (required for most entities)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "entity": {
+       "description": "Entity type to fetch",
+       "enum": [
+        "case",
+        "suite",
+        "run",
+        "result",
+        "plan",
+        "defect",
+        "milestone",
+        "environment",
+        "shared_step",
+        "shared_parameter",
+        "configuration",
+        "attachment",
+        "author",
+        "user",
+        "review",
+        "custom_field"
+       ],
+       "type": "string"
+      },
+      "fields": {
+       "description": "Optional field projection \u2014 only return these top-level fields. Pass [\"*\"] for all fields.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "id": {
+       "anyOf": [
+        {
+         "description": "Entity ID (positive integer)",
+         "exclusiveMinimum": 0,
+         "type": "integer"
+        },
+        {
+         "description": "Hash identifier",
+         "maxLength": 255,
+         "minLength": 1,
+         "type": "string"
+        }
+       ],
+       "description": "Entity ID (number) or hash (string)"
+      },
+      "include": {
+       "description": "Comma-separated list of related entities to include in the response. Cases and runs already request their external issue links by default (\"external_issues\" / \"external_issue\"); pass this only to override that.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "entity",
+      "id"
+     ],
+     "type": "object"
+    },
+    "name": "qase_get",
+    "title": "Get record"
+   }
+  },
+  "qase_project_context": {
+   "digest": "75124a2ea9c3448803524dbaaef91699615cc113facd80e89e2828fe9d06851d",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": true,
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "Seed everything about a project in one call: project details, the full suite tree, milestones, environments, custom fields, and users. This is the first call to make when starting work on a project \u2014 it replaces six separate list calls and gives the model the metadata it needs to build any later query. Each collection returns its first 100 entities; the `coverage` field reports { total, loaded, truncated } per collection, so check it before assuming a list is complete, and pass `full: true` to page through everything. For a single record you already have the ID for, qase_get is cheaper; for filtered or cross-project questions, use qql_search. Cost: six API calls behind one tool call, 0.5-1.3s cold, and 16-48KB of response depending on project size. Cached for 5 minutes, so repeat calls inside that window return in about 5ms. `full: true` costs one extra call per 100 entities and can return thousands of items.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "full": {
+       "description": "Page through every suite, milestone, environment, custom field, and user instead of fetching only the first 100 of each (default: false). Use this when a collection is reported as truncated and you need the complete set \u2014 it costs one API call per 100 entities and can return thousands of items, so prefer the targeted list tools or qql_search when you only need a subset.",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "code"
+     ],
+     "type": "object"
+    },
+    "name": "qase_project_context",
+    "outputSchema": {
+     "properties": {
+      "coverage": {
+       "description": "Per-collection completeness: each of suites, milestones, environments, custom_fields, and users maps to { total, loaded, truncated }. When truncated is true the list holds only the first `loaded` of `total` entities \u2014 re-call with full: true for the rest.",
+       "type": "object"
+      },
+      "custom_fields": {
+       "description": "Custom fields list",
+       "type": "object"
+      },
+      "environments": {
+       "description": "Environments list",
+       "type": "object"
+      },
+      "milestones": {
+       "description": "Milestones list",
+       "type": "object"
+      },
+      "project": {
+       "description": "Project details",
+       "type": "object"
+      },
+      "suites": {
+       "description": "Suites list with entities array",
+       "type": "object"
+      },
+      "users": {
+       "description": "Team members list",
+       "type": "object"
+      }
+     },
+     "required": [
+      "project",
+      "suites",
+      "milestones",
+      "environments",
+      "coverage"
+     ],
+     "type": "object"
+    },
+    "title": "Project context"
+   }
+  },
+  "qase_regression_run": {
+   "digest": "f098520e5820eb15fc5e5087f2520700181c44d47703a7ef245749d470fcdd11",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Build and start a test run from a suite, a test plan, or an explicit list of case IDs, in one step. Use it to launch a regression cycle without first querying for cases and then creating a run around them \u2014 give it the source and it resolves the cases itself. For a run you assemble by hand, use qase_run_upsert and pass the case IDs. For a pipeline that has already finished and just needs its results filed, use qase_ci_report instead: this tool opens a run, it does not close one. Cost: two API calls behind one tool call \u2014 resolving the source, then creating the run \u2014 roughly 1s, growing with the number of cases the source resolves to.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "description": {
+       "description": "What this regression run covers",
+       "type": "string"
+      },
+      "environment_id": {
+       "description": "ID of the environment the run executes against",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "include_cases": {
+       "description": "Explicit case IDs to include",
+       "items": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "type": "array"
+      },
+      "milestone_id": {
+       "description": "ID of the milestone the run belongs to",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "plan_id": {
+       "description": "Create run from an existing test plan",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "suite_ids": {
+       "description": "Include cases from these suites",
+       "items": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "type": "array"
+      },
+      "title": {
+       "description": "Run title",
+       "maxLength": 255,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "title"
+     ],
+     "type": "object"
+    },
+    "name": "qase_regression_run",
+    "outputSchema": {
+     "properties": {
+      "cases_added": {
+       "description": "Number of cases added to the run",
+       "type": "integer"
+      },
+      "run": {
+       "description": "Full run entity",
+       "type": "object"
+      },
+      "run_id": {
+       "description": "Created run ID",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "run_id",
+      "cases_added"
+     ],
+     "type": "object"
+    },
+    "title": "Build regression run"
+   }
+  },
+  "qase_result_record": {
+   "digest": "3e2ccafc5f8bc056edcf41d5f0d335a4539f92a70b35c4e7b4a93d1c152944fa",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Record up to 200 results into an existing run. A case says what should be tested; a result says what happened when it ran \u2014 status, duration, comment, stacktrace, attachments \u2014 so a result always needs a run to live in. Pass several results in one call rather than calling once per test: the tool takes a list and sends them together. 200 is the ceiling for one call, and a longer list is refused before anything is written \u2014 split it into consecutive calls rather than dropping the tail. If the run does not exist yet and this is a finished CI job, qase_ci_report is the single call that creates the run, records the results and completes it, and it splits a larger batch for you. Status is a label, one of \"passed\", \"failed\", \"blocked\", \"skipped\" or \"invalid\" \u2014 unlike the case enums, numeric IDs are not accepted here. Cost: one API call for the whole list, about 0.5s for a small batch, growing with payload rather than with the number of results.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "results": {
+       "description": "Results to record, 1 to 200 per call",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "attachments": {
+          "description": "Attachment hashes from qase_attachment_upload",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "case_id": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+         },
+         "comment": {
+          "type": "string"
+         },
+         "custom_field": {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         "defect": {
+          "type": "boolean"
+         },
+         "stacktrace": {
+          "type": "string"
+         },
+         "status": {
+          "enum": [
+           "passed",
+           "failed",
+           "blocked",
+           "skipped",
+           "invalid"
+          ],
+          "type": "string"
+         },
+         "steps": {
+          "items": {
+           "additionalProperties": false,
+           "properties": {
+            "attachments": {
+             "description": "Attachment hashes from qase_attachment_upload",
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "comment": {
+             "type": "string"
+            },
+            "position": {
+             "minimum": 0,
+             "type": "integer"
+            },
+            "status": {
+             "enum": [
+              "passed",
+              "failed",
+              "blocked",
+              "skipped"
+             ],
+             "type": "string"
+            }
+           },
+           "required": [
+            "position",
+            "status"
+           ],
+           "type": "object"
+          },
+          "type": "array"
+         },
+         "time_ms": {
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "required": [
+         "status"
+        ],
+        "type": "object"
+       },
+       "maxItems": 200,
+       "minItems": 1,
+       "type": "array"
+      },
+      "run_id": {
+       "description": "Run ID to record results into",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "code",
+      "run_id",
+      "results"
+     ],
+     "type": "object"
+    },
+    "name": "qase_result_record",
+    "title": "Record test results"
+   }
+  },
+  "qase_run_complete": {
+   "digest": "0020fede5091c6c3fda5e4508eb024cf74bf54e2c378a7519287be8a005b80cf",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": true,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Mark a test run as complete so it reports as finished rather than in progress. Call it once the results are in; a run left open keeps showing as running and skews dashboards and any \"is the release ready\" question asked later. Note that completing does not seal the run: the API still accepts results recorded into it afterwards, and they change its counts, so completion is a reporting state rather than a lock. If the results are all in hand at once, qase_ci_report does this as its final step and you do not need this call. Cost: one API call, about 0.4s.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "id": {
+       "description": "Entity ID (positive integer)",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "code",
+      "id"
+     ],
+     "type": "object"
+    },
+    "name": "qase_run_complete",
+    "title": "Complete test run"
+   }
+  },
+  "qase_run_upsert": {
+   "digest": "d4cdaa4aea6b5ef001cae15d8cd8eecfa278cd22eb74f8a69c2916b63f430c13",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Create or update a test run. Without `id` it opens a new run; with `id` it updates that one. A run is the container results are recorded into, so open it before calling qase_result_record. Optionally scope it to a milestone, an environment, a plan, or an explicit list of case IDs. To build a run from a suite or plan without listing cases yourself, use qase_regression_run. For a CI job that has already finished, use qase_ci_report instead \u2014 it opens the run, files the results and closes it in one call, so no half-finished run is left behind. Cost: one API call, about 0.5s.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "cases": {
+       "description": "Case IDs to include",
+       "items": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "type": "array"
+      },
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "custom_field": {
+       "additionalProperties": {},
+       "description": "Custom field values keyed by field ID, e.g. { \"12\": \"value\" }",
+       "type": "object"
+      },
+      "description": {
+       "description": "What this run covers",
+       "type": "string"
+      },
+      "end_time": {
+       "description": "RFC3339 end time",
+       "type": "string"
+      },
+      "environment_id": {
+       "description": "ID of the environment the run executes against",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "id": {
+       "description": "Run ID \u2014 if provided, this is an update (note: Qase API has limited run update support)",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "is_autotest": {
+       "description": "True when the run is produced by automation rather than a person",
+       "type": "boolean"
+      },
+      "milestone_id": {
+       "description": "ID of the milestone the run belongs to",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "plan_id": {
+       "description": "Test plan to base run on",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "start_time": {
+       "description": "RFC3339 start time",
+       "type": "string"
+      },
+      "tags": {
+       "description": "Tag names, e.g. [\"nightly\", \"smoke\"]",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": {
+       "description": "Run title",
+       "maxLength": 255,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "title"
+     ],
+     "type": "object"
+    },
+    "name": "qase_run_upsert",
+    "title": "Create or update test run"
+   }
+  },
+  "qase_suite_upsert": {
+   "digest": "e0c9519283d793f9d587828bee652c4eb5ffeb9a99e3af42fb0c782d8db2063d",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Create or update a test suite \u2014 the folder cases live in. Without `id` it creates, with `id` it updates. Nest a suite by passing `parent_id`; the whole existing tree comes back from qase_project_context, so read that first rather than guessing at parent IDs. Building a deep tree means one call per node, so create parents before children and reuse the IDs returned. Cost: one API call, about 0.5s.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "description": {
+       "description": "What this suite groups \u2014 shown under the suite title in the tree",
+       "type": "string"
+      },
+      "id": {
+       "description": "Suite ID \u2014 if provided, updates; if omitted, creates",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "parent_id": {
+       "description": "Parent suite ID for nesting",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "preconditions": {
+       "description": "Setup every case in this suite assumes, inherited by its child suites",
+       "type": "string"
+      },
+      "title": {
+       "description": "Suite title",
+       "maxLength": 255,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "title"
+     ],
+     "type": "object"
+    },
+    "name": "qase_suite_upsert",
+    "title": "Create or update suite"
+   }
+  },
+  "qase_triage_defect": {
+   "digest": "ac86bbb56f2b3bd5b7caf9bdaa31f1297f7bae2b3419cdc8f032ed13be21a9f0",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": false,
+     "openWorldHint": true,
+     "readOnlyHint": false
+    },
+    "description": "Create a defect from a test failure, with the failure context written into it. Requires title, actual_result and severity \u2014 the API rejects a defect missing any of the three. Note: the API offers no way to attach existing runs or results to a defect. The runs and results seen on a defect in the UI are populated by the test runner when it reports a result as a defect, so there is nothing to pass here for that \u2014 reference the failing results inside actual_result instead, and do not expect a link to appear. For a defect unrelated to a test failure use qase_defect_upsert. Cost: one API call, about 0.5s. Triaging a whole run means one call per defect, so cluster identical failures and file one defect per distinct cause rather than one per failed test.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "actual_result": {
+       "description": "Observed behavior. Required by the API",
+       "type": "string"
+      },
+      "attachments": {
+       "description": "Attachment hashes from qase_attachment_upload",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "code": {
+       "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+       "maxLength": 10,
+       "minLength": 2,
+       "pattern": "^[A-Z0-9_]+$",
+       "type": "string"
+      },
+      "custom_field": {
+       "additionalProperties": {},
+       "description": "Custom field values keyed by field ID, e.g. { \"12\": \"value\" }",
+       "type": "object"
+      },
+      "description": {
+       "description": "Extra context beyond the observed behavior",
+       "type": "string"
+      },
+      "severity": {
+       "description": "Required by the API",
+       "enum": [
+        "undefined",
+        "blocker",
+        "critical",
+        "major",
+        "normal",
+        "minor",
+        "trivial"
+       ],
+       "type": "string"
+      },
+      "tags": {
+       "description": "Tag names, e.g. [\"regression\", \"payments\"]",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": {
+       "description": "Defect title",
+       "maxLength": 255,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "title",
+      "severity",
+      "actual_result"
+     ],
+     "type": "object"
+    },
+    "name": "qase_triage_defect",
+    "outputSchema": {
+     "properties": {
+      "defect": {
+       "description": "Full defect entity",
+       "type": "object"
+      },
+      "defect_id": {
+       "description": "Created defect ID",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "defect_id"
+     ],
+     "type": "object"
+    },
+    "title": "Triage failure into defect"
+   }
+  },
+  "qql_help": {
+   "digest": "c4f10f6b93afb4104e10b25b600a84d2b1c1f54b9177b319fdacece6b0f563b7",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": true,
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "Read the QQL reference before writing a query. Pass a `topic`: overview, syntax, entities, operators, functions, examples, aggregation, or enumValues. `entities` lists the fields each entity actually exposes, and `enumValues` gives the accepted values for status, priority, severity and the rest \u2014 both matter, because QQL rejects a query naming an attribute that does not exist on the entity rather than ignoring it, and the field names differ from those in the write tools. Read this once per session before the first qql_search rather than guessing and retrying. Cost: no API call, static text, about 2ms. Free to call, and cheaper than one rejected query.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "topic": {
+       "description": "Which section to return (required \u2014 one section per call):\n- overview: what QQL is, overall query structure, subscription requirement\n- syntax: structure, ordering, custom fields, case-sensitivity, boolean and date fields\n- entities: the fields available on each entity \u2014 field names are NOT uniform across entities, so read this before writing a query against an unfamiliar one\n- operators: comparison, matching, set, null, and logical operators\n- functions: currentUser, activeUsers, and the now/startOf*/endOf* date functions\n- examples: ready-made queries for common questions\n- aggregation: SELECT (COUNT/MIN/MAX/AVG/SUM/FIRST/LAST), GROUP BY, HAVING \u2014 use this to count or summarise instead of paging through rows\n- enumValues: the valid values for priority, severity, and the per-entity status fields",
+       "enum": [
+        "overview",
+        "syntax",
+        "entities",
+        "operators",
+        "functions",
+        "examples",
+        "aggregation",
+        "enumValues"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "topic"
+     ],
+     "type": "object"
+    },
+    "name": "qql_help",
+    "title": "QQL syntax help"
+   }
+  },
+  "qql_search": {
+   "digest": "8abaa6b67a69f5961b59b1adc9e98aa3a914a0d39316a8c6a6a21dd5a4d5666c",
+   "raw": {
+    "annotations": {
+     "destructiveHint": false,
+     "idempotentHint": true,
+     "openWorldHint": true,
+     "readOnlyHint": true
+    },
+    "description": "Search any entity with Qase Query Language: filtering, cross-project queries, sorting, and aggregation. This is the right tool for every question that is not \"give me this one record by ID\" \u2014 \"cases without automation\", \"results that failed this week\", \"open blockers across projects\" \u2014 and the right way to fetch many records at once instead of looping over qase_get. Call qql_help first for the syntax, the fields available per entity, and the enum values; a query naming an unknown attribute is rejected outright. Use qase_get instead when you already know the entity and its ID and want just that one. Cost: one API call. 0.5-0.9s for pages up to 50 records; a page of 100 measured 0.9-2.8s depending on how much each record carries. Prefer one search over N single fetches: the same ten records cost 1.2s here against 5.3s as ten qase_get calls.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "limit": {
+       "description": "Maximum number of results to return (default: 10, max: 100)",
+       "exclusiveMinimum": 0,
+       "maximum": 100,
+       "type": "integer"
+      },
+      "offset": {
+       "description": "Number of results to skip for pagination",
+       "minimum": 0,
+       "type": "integer"
+      },
+      "query": {
+       "description": "QQL query expression. Examples:\n- entity = \"case\" and project = \"DEMO\" and status = \"Actual\"\n- entity = \"defect\" and severity = \"blocker\" and status = \"open\"\n- entity = \"result\" and status = \"failed\" and ended >= now(\"-7d\")\n- entity = \"run\" and milestone ~ \"Sprint 12\"\nSee QQL documentation for full syntax and examples.",
+       "maxLength": 2000,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "query"
+     ],
+     "type": "object"
+    },
+    "name": "qql_search",
+    "outputSchema": {
+     "properties": {
+      "entities": {
+       "description": "Matching entities",
+       "items": {
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "total": {
+       "description": "Total matching entities",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "total",
+      "entities"
+     ],
+     "type": "object"
+    },
+    "title": "Search with QQL"
+   }
+  }
+ },
+ "version": "2.6.0"
+}
