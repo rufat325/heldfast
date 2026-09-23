@@ -14,12 +14,15 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tests"))
 
+from fake_advisories import FakeEcosystem  # noqa: E402
 from mcp_pin import feedlock  # noqa: E402
 from mcp_pin.cli import main  # noqa: E402
 
@@ -78,6 +81,7 @@ class Base(unittest.TestCase):
         self.config = self.dir / ".mcp.json"
         self.config.write_text(CONFIG, encoding="utf-8")
         self.feed = FakeFeed(self.versions)
+        self.eco = FakeEcosystem()
         code, err = self.run_cli("approve", "--from-feed")
         self.assertEqual(0, code, err)
 
@@ -88,7 +92,7 @@ class Base(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.object(feedlock, "get_json", self.feed), \
                 mock.patch("mcp_pin.integrity.get_json", return_value=None), \
-                redirect_stdout(out), redirect_stderr(err):
+                self.eco.active(), redirect_stdout(out), redirect_stderr(err):
             code = main([*argv, str(self.dir), "--no-user-configs", "--no-skills"])
         self.stdout = out.getvalue()
         return code, err.getvalue()
@@ -135,6 +139,95 @@ class TestReview(Base):
         code, err = self.run_cli("updates", "--apply")
         self.assertEqual(0, code, err)
         self.assertEqual(before, self.config.read_bytes())
+
+
+class TestScreen(Base):
+    """What the ecosystem knows about a release outranks how still its tools are.
+
+    Every malicious MCP release so far changed code and left the tool text
+    alone, so each of these is a release whose tools compare equal to the one
+    before it -- exactly the update that would otherwise be called quiet.
+    """
+    versions = {"1.0.0": V1, "1.1.0": V2, "1.2.0": V2}
+
+    def apply(self) -> tuple[int, str, str]:
+        code, err = self.run_cli("updates", "--apply")
+        return code, err, self.config.read_text(encoding="utf-8")
+
+    def test_a_release_reported_as_malware_is_passed_over_for_the_one_before(self) -> None:
+        self.eco.advisories[("pkg", "1.2.0")] = ["MAL-2025-47604"]
+        inv = self.report()["inv"]
+        self.assertEqual(("1.2.0", "1.1.0", "quiet"), (inv["latest"], inv["target"], inv["grade"]))
+        self.assertIn("1.2.0: reported as malware (MAL-2025-47604)", inv["passed_over"])
+        code, err, text = self.apply()
+        self.assertEqual(0, code, err)
+        self.assertIn('"pkg@1.1.0"', text)
+
+    def test_when_every_newer_release_is_malware_it_is_blocked(self) -> None:
+        for v in ("1.1.0", "1.2.0"):
+            self.eco.advisories[("pkg", v)] = ["MAL-2026-4069"]
+        self.assertEqual("blocked", self.report()["inv"]["grade"])
+        self.run_cli("updates")
+        self.assertIn("BLOCKED", self.stdout)
+        code, err, text = self.apply()
+        self.assertIn('"pkg@1.0.0"', text)
+
+    def test_a_release_pulled_from_npm_is_passed_over(self) -> None:
+        self.eco.pulled.add(("pkg", "1.2.0"))
+        inv = self.report()["inv"]
+        self.assertEqual("1.1.0", inv["target"])
+        self.assertIn("no longer on npm", inv["passed_over"][0])
+
+    def test_a_young_release_waits(self) -> None:
+        young = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+        for v in ("1.1.0", "1.2.0"):
+            self.eco.published[("pkg", v)] = young
+        inv = self.report()["inv"]
+        self.assertEqual(("waiting", ""), (inv["grade"], inv["target"]))
+        code, err, text = self.apply()
+        self.assertIn('"pkg@1.0.0"', text)
+        code, err = self.run_cli("updates", "--format", "json", "--min-age", "0")
+        self.assertEqual("quiet", json.loads(self.stdout)["servers"][0]["grade"])
+
+    def test_a_release_that_adds_an_install_script_is_review(self) -> None:
+        self.eco.hooks[("pkg", "1.2.0")] = {"preinstall": "node setup_bun.js"}
+        inv = self.report()["inv"]
+        self.assertEqual(("1.2.0", "review"), (inv["target"], inv["grade"]))
+        self.assertIn("adds an install script", " ".join(inv["concerns"]))
+        self.assertIn("setup_bun.js", " ".join(inv["concerns"]))
+        code, err, text = self.apply()
+        self.assertIn('"pkg@1.0.0"', text)
+
+    def test_an_install_script_the_pinned_release_already_ran_is_not_news(self) -> None:
+        for v in ("1.0.0", "1.2.0"):
+            self.eco.hooks[("pkg", v)] = {"postinstall": "node build.js"}
+        self.assertEqual("quiet", self.report()["inv"]["grade"])
+
+    def test_any_other_advisory_on_the_release_is_review(self) -> None:
+        self.eco.advisories[("pkg", "1.2.0")] = ["GHSA-xxxx-yyyy-zzzz"]
+        inv = self.report()["inv"]
+        self.assertEqual(("1.2.0", "review"), (inv["target"], inv["grade"]))
+
+    def test_without_advisories_nothing_is_quiet(self) -> None:
+        self.eco.down = True
+        inv = self.report()["inv"]
+        self.assertEqual("review", inv["grade"])
+        self.assertIn("could not be checked", inv["concerns"][0])
+        code, err, text = self.apply()
+        self.assertIn('"pkg@1.0.0"', text)
+
+    def test_a_pinned_release_reported_as_malware_fails_the_command(self) -> None:
+        self.eco.advisories[("pkg", "1.0.0")] = ["MAL-2025-190909"]
+        code, err = self.run_cli("updates")
+        self.assertEqual(1, code, err)
+        self.assertIn("MALWARE: pkg@1.0.0, which this config runs", self.stdout)
+        code, err = self.run_cli("updates", "--format", "json")
+        self.assertEqual(1, code)
+        self.assertIn("MAL-2025-190909", json.loads(self.stdout)["servers"][0]["alarm"])
+
+    def test_quiet_says_what_it_does_not_mean(self) -> None:
+        self.run_cli("updates")
+        self.assertIn("Nobody has read its code", self.stdout)
 
 
 class TestApply(Base):

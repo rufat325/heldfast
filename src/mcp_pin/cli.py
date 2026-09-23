@@ -494,9 +494,11 @@ def _collect_feed(out: Collected, base: str | None) -> bool:
     """Tools for each pinned npm server, from the feed's measurement of it.
 
     False when the feed itself cannot be read: an approval that silently
-    recorded nothing would look like one that recorded everything.
+    recorded nothing would look like one that recorded everything. False too
+    when a release is reported as malware, or that could not be asked.
     """
-    from .feedlock import FeedError, lookup, package_args, resolve
+    from .advisories import AdvisoryError, known, malware
+    from .feedlock import FeedError, lookup, package_args, pinned, resolve
 
     try:
         feed = resolve(base)
@@ -504,6 +506,17 @@ def _collect_feed(out: Collected, base: str | None) -> bool:
         for spec in out.servers:
             if spec.disabled:
                 continue
+            # Every pinned npm release, measured by the feed or not: an approval
+            # of a config that runs known malware is not one to write.
+            want = pinned(spec)
+            bad = [] if isinstance(want, str) else malware(
+                known(want[0], [want[1]]).get(want[1], []))
+            if bad:
+                print(f"mcp-pin: {spec.identity()}: {want[0]}@{want[1]} is reported as "
+                      f"malware ({', '.join(bad)}); nothing approved. Remove it from the "
+                      f"config and rotate what the machine running it could reach.",
+                      file=sys.stderr)
+                return False
             got = lookup(spec, feed)
             if isinstance(got, str):
                 print(f"mcp-pin: {spec.identity()}: not recorded from the feed -- {got}",
@@ -522,6 +535,10 @@ def _collect_feed(out: Collected, base: str | None) -> bool:
                       f"refuse the difference", file=sys.stderr)
     except FeedError as exc:
         print(f"mcp-pin: the feed could not be read: {exc}", file=sys.stderr)
+        return False
+    except AdvisoryError as exc:
+        print(f"mcp-pin: advisories could not be checked ({exc}); nothing approved "
+              f"from the feed without them", file=sys.stderr)
         return False
     out.probed = found > 0
     _warn_feed_content(out)
@@ -556,18 +573,22 @@ def cmd_updates(args: argparse.Namespace) -> int:
     data = collect(args)
     try:
         feed = resolve(getattr(args, "feed", None))
-        found = up.check(data.servers, previous, feed)
+        found = up.check(data.servers, previous, feed, min_age=args.min_age)
     except FeedError as exc:
         print(f"mcp-pin: the feed could not be read: {exc}", file=sys.stderr)
         return EXIT_ERROR
     if args.format == "json":
-        print(json.dumps({"feed": feed.source, "servers": [u.to_dict() for u in found]},
-                         indent=2))
+        print(json.dumps({"feed": feed.source, "min_age_days": args.min_age,
+                          "servers": [u.to_dict() for u in found]}, indent=2))
     else:
-        sys.stdout.write(up.render(found, feed.source))
+        sys.stdout.write(up.render(found, feed.source, args.min_age))
+    # A pinned release reported as malware fails the command, --apply or not:
+    # a scheduled job that exits 0 over it is a job nobody reads.
+    alarmed = EXIT_FINDINGS if any(u.alarm for u in found) else EXIT_OK
     if not args.apply:
-        return EXIT_OK
-    return _apply_updates(args, previous, [u for u in found if u.grade == "quiet"], feed)
+        return alarmed
+    code = _apply_updates(args, previous, [u for u in found if u.grade == "quiet"], feed)
+    return code if code != EXIT_OK else alarmed
 
 
 def _apply_updates(args: argparse.Namespace, previous: Lock, todo: list,
@@ -587,7 +608,7 @@ def _apply_updates(args: argparse.Namespace, previous: Lock, todo: list,
         specs[spec.identity()] = spec
     for u in todo:
         path = Path(specs[u.identity].source)
-        original = rewrite_config(path, f"{u.package}@{u.current}", f"{u.package}@{u.latest}")
+        original = rewrite_config(path, f"{u.package}@{u.current}", f"{u.package}@{u.target}")
         if original is None:
             print(f"mcp-pin: {u.identity}: \"{u.package}@{u.current}\" does not occur "
                   f"exactly once in {path}; left for you to bump", file=sys.stderr)

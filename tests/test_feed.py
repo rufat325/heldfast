@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -364,6 +365,121 @@ class TestHosted(unittest.TestCase):
         self.assertEqual(first, self._state_bytes())
         self._read((None, "HTTP 500"))
         self.assertIn(b"HTTP 500", self._state_bytes())
+
+
+class TestAdmit(unittest.TestCase):
+    """A shard's upload is taken only for the servers that shard was given.
+
+    Every measuring shard runs other people's code in a container that can
+    write the whole feed checkout. Without this, one package measured in one
+    shard could rewrite any other server's public record.
+    """
+
+    DAY = "2026-09-23"
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self.data, self.deltas, self.into = (str(root / n) for n in ("feed", "deltas", "into"))
+        names = [f"pkg-{i}" for i in range(64)]
+        shard = lambda n: next(i for i in range(16) if watch.in_shard({"package": n}, (i, 16)))  # noqa: E731
+        self.mine = names[0]
+        self.index = shard(self.mine)
+        self.theirs = next(n for n in names if shard(n) != self.index)
+        rows = [{"package": n, "kind": "npm", "tier": "daily"} for n in names]
+        os.makedirs(self.data)
+        with open(os.path.join(self.data, "watchlist.json"), "w", encoding="utf-8") as fh:
+            json.dump({"packages": rows}, fh)
+        self.upload = os.path.join(self.deltas, f"feed-delta-npm-{self.index}")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def measured(self, package: str, label: str | None = None, **state: object) -> None:
+        """What a shard writes after measuring `package`: catalogue, state, event."""
+        after = watch.snapshot(package, "1.1.0", "2026-09-23T00:00:00Z", [tool("read", REWORDED)])
+        watch.write_catalogue(self.upload, after, [], measured_at="2026-09-23T06:00:00Z")
+        watch.save_state(self.upload, package, dict(after, **state))
+        before = watch.snapshot(package, "1.0.0", "2026-09-01T00:00:00Z", [tool("read", APPROVED)])
+        event = watch.diff(before, after, "2026-09-23T06:00:00Z")
+        watch.write_incoming(self.upload, label or f"npm-{self.index}", [event])
+
+    def admit(self) -> list[str]:
+        args = SimpleNamespace(data=self.data, deltas=self.deltas, into=self.into, day=self.DAY,
+                               npm_shards=16, remote_shards=4)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(0, watch.admit(args))
+        taken = []
+        for base, _dirs, files in os.walk(self.into):
+            taken += [os.path.relpath(os.path.join(base, f), self.into).replace(os.sep, "/")
+                      for f in files]
+        self.log = out.getvalue()
+        return sorted(taken)
+
+    def test_its_own_servers_are_taken(self) -> None:
+        self.measured(self.mine)
+        self.assertEqual([f"catalogues/{self.mine}/1.1.0.json.gz",
+                          f"incoming/npm-{self.index}.jsonl", f"state/{self.mine}.json"],
+                         self.admit())
+        self.assertEqual(0, quiet(watch.verify, SimpleNamespace(data=self.into)))
+
+    def test_a_server_given_to_another_shard_refuses_the_whole_upload(self) -> None:
+        self.measured(self.mine)
+        self.measured(self.theirs)
+        self.assertEqual([], self.admit())
+        self.assertIn("a server this shard was not given", self.log)
+
+    def test_a_record_under_its_own_name_that_says_it_is_another_server(self) -> None:
+        self.measured(self.mine)
+        state = os.path.join(self.upload, "state", f"{self.mine}.json")
+        with open(state, encoding="utf-8") as fh:
+            body = json.load(fh)
+        body["package"] = self.theirs
+        with open(state, "w", encoding="utf-8") as fh:
+            json.dump(body, fh)
+        self.assertEqual([], self.admit())
+
+    def test_the_watchlist_and_the_history_are_not_a_shards_to_write(self) -> None:
+        for rel in ("watchlist.json", "index.json", "events/2026-09.jsonl"):
+            with self.subTest(rel):
+                self.measured(self.mine)
+                path = os.path.join(self.upload, *rel.split("/"))
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write("{}\n")
+                self.assertEqual([], self.admit())
+                os.remove(path)
+
+    def test_events_under_another_shards_label_or_about_another_server(self) -> None:
+        self.measured(self.mine, label="npm-99")
+        self.assertEqual([], self.admit())
+        shutil.rmtree(self.upload)
+        self.measured(self.mine)
+        other = watch.diff(watch.snapshot(self.theirs, "1", "t", [tool("read", APPROVED)]),
+                           watch.snapshot(self.theirs, "2", "t", [tool("read", REWORDED)]), "t")
+        watch.write_incoming(self.upload, f"npm-{self.index}", [other])
+        self.assertEqual([], self.admit())
+
+    def test_a_weekly_server_not_due_that_day_is_not_taken(self) -> None:
+        with open(os.path.join(self.data, "watchlist.json"), "w", encoding="utf-8") as fh:
+            json.dump({"packages": [{"package": self.mine, "kind": "npm", "tier": "weekly"}]}, fh)
+        row = {"package": self.mine, "tier": "weekly"}
+        week = [watch.date.fromordinal(watch.date(2026, 9, 7).toordinal() + d) for d in range(7)]
+        on = next(d for d in week if watch.due(row, d))
+        off = next(d for d in week if not watch.due(row, d)
+                   and not watch.due(row, watch.date.fromordinal(d.toordinal() - 1)))
+        self.measured(self.mine)
+        self.DAY = off.isoformat()
+        self.assertEqual([], self.admit())
+        self.DAY = on.isoformat()
+        self.assertNotEqual([], self.admit())
+
+    def test_an_upload_that_is_not_a_measuring_shards(self) -> None:
+        self.upload = os.path.join(self.deltas, "feed-delta-publish-0")
+        self.measured(self.mine)
+        self.assertEqual([], self.admit())
+        self.assertIn("not a measuring shard", self.log)
 
 
 class TestIsolation(unittest.TestCase):

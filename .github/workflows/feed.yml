@@ -12,9 +12,11 @@
 #   measure-remote  4 shards. Reads hosted endpoints' tool lists over HTTPS.
 #                   Nothing is executed; same isolation anyway.
 #   publish         The only job that can write, and it runs nothing a server
-#                   wrote: it checks every uploaded file against the names,
-#                   sizes and formats the feed produces (with the verifier from
-#                   main), folds the events, renders, verifies again, commits.
+#                   wrote: it takes each shard's upload only for the servers
+#                   the feed branch's watchlist gave that shard, checks every
+#                   file against the names, sizes and formats the feed produces
+#                   (with the code from main), folds the events, renders,
+#                   verifies again, commits.
 #   sync            Weekly. Rebuilds the watchlist from the registry. Reads
 #                   JSON, launches nothing, writes only watchlist.json.
 name: feed
@@ -186,16 +188,20 @@ jobs:
         with:
           ref: feed
           path: feed-data
+      # One folder per shard, not merged: a shard's upload is admitted or
+      # refused on its own, before anything from it reaches the feed.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: feed-delta-*
-          merge-multiple: true
-          path: incoming-delta
+          path: deltas
+
+      - name: Take each shard's upload only for the servers it was given
+        run: |
+          mkdir -p deltas incoming-delta
+          python3 tool/research/feed/watch.py admit --data feed-data --deltas deltas --into incoming-delta
 
       - name: Verify what the measuring jobs produced
-        run: |
-          mkdir -p incoming-delta
-          python3 tool/research/feed/watch.py verify --data incoming-delta
+        run: python3 tool/research/feed/watch.py verify --data incoming-delta
 
       - name: Merge, fold, render, verify
         run: |

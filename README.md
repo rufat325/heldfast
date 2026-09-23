@@ -30,7 +30,10 @@ For a popular server pinned to an exact version, `mcp-pin approve --from-feed` r
 the tools from [the drift feed](docs/CHURN.md#it-keeps-going)'s measurement of that
 version instead of launching it on your machine. [How it works, and what it trusts](docs/MANUAL.md#without-probing-here-approve---from-feed).
 `mcp-pin updates` then shows which pinned servers have newer releases and whether
-taking each is quiet or needs review; `--apply` bumps the quiet ones, and the
+taking each is quiet or needs review. A release reported as malware, pulled from npm,
+or under 14 days old is never proposed, one that adds an install script needs review,
+and a pinned release reported as malware fails the command: every malicious MCP release
+so far changed code, not tool text. `--apply` bumps the quiet ones, and the
 [`updates` action](docs/MANUAL.md#on-a-schedule-rufat325mcp-pinupdates) does it as a
 weekly pull request.
 
@@ -302,7 +305,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1348 tests, stdlib unittest, nothing to install.
+1368 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

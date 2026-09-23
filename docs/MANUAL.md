@@ -1374,13 +1374,40 @@ $ mcp-pin updates
   claude-code:files    @modelcontextprotocol/server-filesystem@2026.8.31  up to date
   claude-code:memory   not checked: ... has no exact version pinned ...
 
-1 quiet update(s): `mcp-pin updates --apply` bumps the config and re-approves them from the feed.
+1 quiet update(s): no tool change is critical, no advisory names the release, it adds no
+install script, and it is at least 14 days old. Nobody has read its code. ...
 ```
 
-**quiet** and **review** are `approve`'s grades, not new ones: the newest catalogue is
-recorded into a lock of its own and compared with your entry by the same review code, so
-quiet is what `approve --yes` would write and review is a critical change that
-`--yes-tool NAME` has to name. `--format json` gives the same as data.
+**quiet** and **review** start as `approve`'s grades: the catalogue is recorded into a
+lock of its own and compared with your entry by the same review code, so a critical tool
+change is review, one `--yes-tool NAME` has to name. `--format json` gives the same as data.
+
+**What the tool text cannot show.** Every malicious MCP server release found so far
+changed code and left the tools alone: postmark-mcp 1.0.16 copied every email it sent to
+its author, the Shai-Hulud npm worms put an install hook into releases of Postman's,
+Browserbase's and AntV's official servers, and a scanner that promised your code never
+left the machine uploaded it. Each would have compared equal to the release before it.
+So before a release is graded, `updates` asks OSV (`api.osv.dev`, which carries the
+OpenSSF malicious-package reports and GitHub's advisories) and the npm registry about it:
+
+- a release **reported as malware**, or **pulled from npm**, is never proposed; the next
+  older newer release is considered instead, and if none is left the server is **blocked**;
+- a release younger than `--min-age` days (default 14) is not proposed yet: every one of
+  those five was reported within nine days, the worm releases within one. If only young
+  releases are newer, the server is **waiting**;
+- a release that an advisory names, or that **adds or changes an install script**
+  (`preinstall`, `install`, `postinstall`, which run before any tool is listed), is
+  **review**, however still its tools are;
+- if OSV or npm cannot be asked, nothing is quiet.
+
+**If the release you are pinned to is reported as malware**, that is printed first, as
+`MALWARE:`, and `updates` exits 1 -- with or without `--apply`. Remove it, and rotate every
+credential the machine that ran it could reach. `approve --from-feed` refuses such a
+release outright.
+
+Quiet therefore means: no tool change is critical, nothing public names the release, it
+installs the way the pinned one did, and it has been out long enough to have been named
+if it were malicious. It does not mean anybody read the code.
 
 `--apply` takes the quiet updates and nothing else:
 
@@ -1417,10 +1444,11 @@ jobs:
 ```
 
 Quiet updates are applied and opened as one pull request on the `mcp-pin/updates`
-branch, updated in place on later runs. Updates that need review are listed in one issue
-with the tools to read; nothing is applied for them. The job summary carries the full
-report either way. Inputs: `path` (where the config and lock are), `apply`, `open-pr`,
-`open-issue`, `branch`, `token`.
+branch, updated in place on later runs. Updates that need review, and servers whose every
+newer release is blocked, are listed in one issue; nothing is applied for them. If a
+pinned release is reported as malware, the issue opens with that and the job fails. The
+job summary carries the full report either way. Inputs: `path` (where the config and lock
+are), `apply`, `min-age`, `open-pr`, `open-issue`, `branch`, `token`.
 
 Pin the action to a commit SHA. mcp-pin is installed from that same commit, so the SHA
 pins the code that edits your config. Inputs reach the shell as environment variables,
@@ -1485,7 +1513,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1348 tests, stdlib unittest, nothing to install.
+1368 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

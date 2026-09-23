@@ -11,9 +11,13 @@
 #         - uses: rufat325/mcp-pin/updates@<sha>
 #
 # For each server pinned to an exact npm version, it asks the drift feed what
-# newer releases changed. Quiet updates -- what `approve --yes` would write --
-# are applied and opened as one pull request. Updates that need review are
-# listed in one issue, with the tools to read; nothing is applied for them.
+# newer releases changed, and OSV and the npm registry what is known about
+# them. A release reported as malware, pulled from npm, or younger than
+# min-age days is never proposed; one that adds an install script needs
+# review. Quiet updates -- no critical tool change, and nothing public
+# names the release -- are applied and opened as one pull request. The rest are
+# listed in one issue; nothing is applied for them. If a pinned release is
+# itself reported as malware, the issue says so first and the job fails.
 #
 # mcp-pin is installed from this action's own commit, so pinning the action
 # to a SHA pins the code that runs. Inputs reach the shell as environment
@@ -32,6 +36,9 @@ inputs:
   apply:
     description: Apply quiet updates to the working tree ("false" only reports)
     default: "true"
+  min-age:
+    description: Propose only releases at least this many days old
+    default: "14"
   open-pr:
     description: Open or update a pull request with the applied updates
     default: "true"
@@ -52,6 +59,15 @@ outputs:
   review:
     description: Number of updates that need review
     value: ${{ steps.check.outputs.review }}
+  waiting:
+    description: Number of servers whose newer releases are younger than min-age
+    value: ${{ steps.check.outputs.waiting }}
+  blocked:
+    description: Number of servers whose every newer release is reported as malware or pulled
+    value: ${{ steps.check.outputs.blocked }}
+  malware:
+    description: Number of pinned releases reported as malware
+    value: ${{ steps.check.outputs.malware }}
   pull-request:
     description: URL of the pull request, if one was opened or updated
     value: ${{ steps.pr.outputs.url }}
@@ -74,15 +90,24 @@ runs:
       shell: bash
       env:
         TARGET: ${{ inputs.path }}
+        MIN_AGE: ${{ inputs.min-age }}
       run: |
         set -euo pipefail
-        mcp-pin updates "$TARGET" --no-user-configs --no-skills --format json > "$RUNNER_TEMP/updates.json"
-        mcp-pin updates "$TARGET" --no-user-configs --no-skills > "$RUNNER_TEMP/updates.txt"
+        # Exit 1 means a pinned release is reported as malware. That is
+        # reported below and fails the job at the end, after the issue is open.
+        rc=0
+        mcp-pin updates "$TARGET" --no-user-configs --no-skills --min-age "$MIN_AGE" \
+          --format json > "$RUNNER_TEMP/updates.json" || rc=$?
+        if [ "$rc" -gt 1 ]; then exit "$rc"; fi
+        mcp-pin updates "$TARGET" --no-user-configs --no-skills --min-age "$MIN_AGE" \
+          > "$RUNNER_TEMP/updates.txt" || true
         python - "$RUNNER_TEMP/updates.json" >> "$GITHUB_OUTPUT" <<'PY'
         import json, sys
         servers = json.load(open(sys.argv[1], encoding="utf-8"))["servers"]
-        print(f"quiet={sum(s['grade'] == 'quiet' for s in servers)}")
-        print(f"review={sum(s['grade'] == 'review' for s in servers)}")
+        for grade in ("quiet", "review", "waiting", "blocked"):
+            print(f"{grade}={sum(s['grade'] == grade for s in servers)}")
+        print(f"malware={sum(bool(s.get('alarm')) for s in servers)}")
+        print(f"attention={sum(s['grade'] in ('review', 'blocked') or bool(s.get('alarm')) for s in servers)}")
         PY
         {
           echo '## mcp-pin updates'
@@ -96,7 +121,11 @@ runs:
       shell: bash
       env:
         TARGET: ${{ inputs.path }}
-      run: mcp-pin updates --apply "$TARGET" --no-user-configs --no-skills
+        MIN_AGE: ${{ inputs.min-age }}
+      run: |
+        rc=0
+        mcp-pin updates --apply "$TARGET" --no-user-configs --no-skills --min-age "$MIN_AGE" || rc=$?
+        if [ "$rc" -gt 1 ]; then exit "$rc"; fi
 
     - name: Open or update the pull request
       id: pr
@@ -122,7 +151,7 @@ runs:
         git push --force origin "$BRANCH"
         {
           echo 'Servers pinned to an exact version whose newer release the [drift feed](https://github.com/rufat325/mcp-pin/tree/feed) has measured.'
-          echo 'Each change here is **quiet**: one `mcp-pin approve --yes` would write. Updates that need review are not in this PR.'
+          echo 'Each change here is **quiet**: no tool change is critical (one `mcp-pin approve --yes` would write), no advisory in OSV names the release, it adds no install script, and it has been published long enough for a malicious release to have been reported. Nobody has read its code. Updates that need review are not in this PR.'
           echo
           echo '```'
           cat "$RUNNER_TEMP/updates.txt"
@@ -137,16 +166,22 @@ runs:
         echo "url=$url" >> "$GITHUB_OUTPUT"
 
     - name: Open or update the review issue
-      if: steps.check.outputs.review != '0' && inputs.open-issue == 'true'
+      if: steps.check.outputs.attention != '0' && inputs.open-issue == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
+        MALWARE: ${{ steps.check.outputs.malware }}
       run: |
         set -euo pipefail
         title="mcp-pin: MCP server updates to review"
         {
-          echo 'These pinned servers have a newer release with a change `approve --yes` would not write: a tool gained text the review grades critical.'
-          echo 'Read the tools named below, then bump the version and run `mcp-pin approve --from-feed`, which prints the diff and asks for `--yes-tool NAME`.'
+          if [ "$MALWARE" != "0" ]; then
+            echo '> [!CAUTION]'
+            echo '> A release this configuration runs is reported as malware (see MALWARE below). Remove it, and rotate every credential the machines running it could reach.'
+            echo
+          fi
+          echo 'These pinned servers need a person: a newer release changes a tool in a way `approve --yes` would not write, an advisory names it, it adds an install script, or every newer release was reported as malware or pulled.'
+          echo 'Read what is named below. To take a release, bump the version and run `mcp-pin approve --from-feed`, which prints the diff and asks for `--yes-tool NAME` where a change is critical.'
           echo
           echo '```'
           cat "$RUNNER_TEMP/updates.txt"
@@ -158,3 +193,10 @@ runs:
         else
           gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue.md" >/dev/null
         fi
+
+    - name: Fail on a pinned release reported as malware
+      if: steps.check.outputs.malware != '0'
+      shell: bash
+      run: |
+        echo "::error::a pinned MCP server release is reported as malware; see the job summary"
+        exit 1

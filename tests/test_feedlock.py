@@ -21,7 +21,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tests"))
 
+from fake_advisories import FakeEcosystem  # noqa: E402
 from mcp_pin import feedlock  # noqa: E402
 from mcp_pin.cli import main  # noqa: E402
 from mcp_pin.guard import Guard  # noqa: E402
@@ -133,6 +135,7 @@ class TestApprove(unittest.TestCase):
         self.dir = Path(self._tmp.name)
         (self.dir / ".mcp.json").write_text(json.dumps(self.CONFIG), encoding="utf-8")
         self.fake = FakeFeed({("pkg", "1.0.0"): catalogue("pkg", "1.0.0", [READ])})
+        self.eco = FakeEcosystem()
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -141,7 +144,7 @@ class TestApprove(unittest.TestCase):
         err = io.StringIO()
         with mock.patch.object(feedlock, "get_json", self.fake), \
                 mock.patch("mcp_pin.integrity.get_json", return_value=None), \
-                redirect_stdout(io.StringIO()), redirect_stderr(err):
+                self.eco.active(), redirect_stdout(io.StringIO()), redirect_stderr(err):
             code = main(["approve", "--from-feed", *extra, str(self.dir),
                          "--no-user-configs", "--no-skills"])
         return code, err.getvalue()
@@ -198,6 +201,30 @@ class TestApprove(unittest.TestCase):
         code, err = self._approve()
         self.assertEqual(2, code)
         self.assertIn("could not be read", err)
+
+    def test_a_release_reported_as_malware_is_not_approved(self) -> None:
+        self.eco.advisories[("pkg", "1.0.0")] = ["MAL-2025-0001"]
+        code, err = self._approve()
+        self.assertEqual(2, code)
+        self.assertIn("reported as malware (MAL-2025-0001)", err)
+        self.assertFalse((self.dir / ".mcp-pin.lock").exists())
+
+    def test_malware_the_feed_never_measured_is_refused_too(self) -> None:
+        config = json.loads(json.dumps(self.CONFIG))
+        config["mcpServers"]["scan"] = {"command": "npx", "args": ["-y", "evil-scan@1.0.0"]}
+        (self.dir / ".mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        self.eco.advisories[("evil-scan", "1.0.0")] = ["MAL-2026-4675"]
+        code, err = self._approve()
+        self.assertEqual(2, code)
+        self.assertIn("evil-scan@1.0.0 is reported as malware", err)
+        self.assertFalse((self.dir / ".mcp-pin.lock").exists())
+
+    def test_without_advisories_nothing_is_approved_from_the_feed(self) -> None:
+        self.eco.down = True
+        code, err = self._approve()
+        self.assertEqual(2, code)
+        self.assertIn("advisories could not be checked", err)
+        self.assertFalse((self.dir / ".mcp-pin.lock").exists())
         self.assertFalse((self.dir / ".mcp-pin.lock").exists())
 
 

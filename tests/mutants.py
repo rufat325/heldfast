@@ -2050,6 +2050,68 @@ g = Guard("svc", lock, quiet=True)
 FAIL_OPEN = called(g, "Read one invoice, by id.")
 """,
     ),
+    Mutant(
+        id="updates-malware-proposed",
+        theorem="T-UPDATES",
+        path="advisories.py",
+        original="""    bad = malware(ids)
+    if bad:
+        return f"reported as malware ({', '.join(bad)})"
+""",
+        replacement="",
+        harm=("A release OSV reports as malware is proposed, and --apply writes "
+              "it into the config because no tool change is critical."),
+        probe="""from datetime import datetime, timedelta, timezone
+from mcp_pin import advisories as a
+old = datetime(2020, 1, 1, tzinfo=timezone.utc)
+a.known = lambda p, vs: {v: (["MAL-2025-47604"] if v == "2.0.0" else []) for v in vs}
+a.releases = lambda p: {v: a.Release(True, old, {}) for v in ("1.0.0", "2.0.0")}
+FAIL_OPEN = a.screen("pkg", "1.0.0", ["2.0.0"]).target == "2.0.0"
+""",
+    ),
+    Mutant(
+        id="updates-young-release-proposed",
+        theorem="T-UPDATES",
+        path="advisories.py",
+        original="""    if age < min_age:
+        return (f"published {int(age)} day(s) ago; proposed once it is {min_age} days old, "
+                f"after the time malicious releases have taken to be reported")
+""",
+        replacement="",
+        harm=("A release published an hour ago is proposed, before anyone has "
+              "had the time it takes to report a malicious one."),
+        probe="""from datetime import datetime, timedelta, timezone
+from mcp_pin import advisories as a
+old = datetime(2020, 1, 1, tzinfo=timezone.utc)
+fresh = datetime.now(timezone.utc) - timedelta(hours=1)
+a.known = lambda p, vs: {v: [] for v in vs}
+a.releases = lambda p: {"1.0.0": a.Release(True, old, {}), "2.0.0": a.Release(True, fresh, {})}
+FAIL_OPEN = a.screen("pkg", "1.0.0", ["2.0.0"]).target == "2.0.0"
+""",
+    ),
+    Mutant(
+        id="updates-install-hook-quiet",
+        theorem="T-UPDATES",
+        path="advisories.py",
+        original="""    for hook, command in sorted(after.hooks.items()):
+        if old.get(hook) != command:
+            verb = "changes" if hook in old else "adds"
+            out.append(f"{target} {verb} an install script, which runs on install before "
+                       f"any tool is listed: {hook}: {command[:120]}")
+""",
+        replacement="",
+        harm=("A release that adds a preinstall hook -- how the Shai-Hulud worms "
+              "ran -- is quiet because its tools did not change."),
+        probe="""from datetime import datetime, timedelta, timezone
+from mcp_pin import advisories as a
+old = datetime(2020, 1, 1, tzinfo=timezone.utc)
+a.known = lambda p, vs: {v: [] for v in vs}
+a.releases = lambda p: {"1.0.0": a.Release(True, old, {}),
+                        "2.0.0": a.Release(True, old, {"preinstall": "node setup_bun.js"})}
+seen = a.screen("pkg", "1.0.0", ["2.0.0"])
+FAIL_OPEN = seen.target == "2.0.0" and not seen.concerns
+""",
+    ),
 )
 
 

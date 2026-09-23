@@ -31,6 +31,9 @@ because they can change without any release to announce it.
   watch.py fold         --data DIR                  incoming/ -> events/
   watch.py render       --data DIR                  index.json, feed.*, README.md
   watch.py verify       --data DIR                  refuse anything unexpected
+  watch.py admit        --data DIR --deltas DIR --into DIR
+                                                    take each shard's upload only
+                                                    for the servers it was given
 
 `check` downloads and runs published npm packages, exactly as measure.py
 does, and for the same reason it belongs in research/feed/Dockerfile. The
@@ -56,6 +59,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -796,6 +800,119 @@ def verify(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+# -- admit -----------------------------------------------------------------
+
+# The shard counts of the measuring jobs in .github/workflows/feed.yml.
+NPM_SHARDS, REMOTE_SHARDS = 16, 4
+_DELTA = re.compile(r"^feed-delta-(npm|remote)-(\d+)$")
+
+
+def _foreign(root: str, owned: dict[str, str], label: str) -> list[str]:
+    """Every file in one shard's upload that is not about a server it was given.
+
+    `owned` maps each file-system name to its package. A state file or a
+    catalogue must sit under an owned name and say, inside, that it is that
+    package; the one events file must carry the shard's label and only events
+    about owned packages. Anything else -- the watchlist, the index, another
+    shard's events -- is not a measuring job's to write.
+    """
+    problems = []
+    for base, _dirs, files in os.walk(root):
+        for name in files:
+            full = os.path.join(base, name)
+            rel = os.path.relpath(full, root).replace(os.sep, "/")
+            parts = rel.split("/")
+            try:
+                if os.path.islink(full):
+                    why = "symbolic link"
+                elif len(parts) == 2 and parts[0] == "state" and rel.endswith(".json"):
+                    why = _owns_state(full, owned.get(parts[1][:-len(".json")]))
+                elif len(parts) == 3 and parts[0] == "catalogues" and rel.endswith(".json.gz"):
+                    why = _owns_catalogue(full, owned.get(parts[1]),
+                                          parts[2][:-len(".json.gz")])
+                elif rel == f"incoming/{label}.jsonl":
+                    why = _owns_events(full, set(owned.values()))
+                else:
+                    why = "not a file a measuring job writes"
+            except (ValueError, UnicodeDecodeError, OSError, EOFError) as exc:
+                why = f"unreadable: {exc}"
+            if why:
+                problems.append(f"{rel}: {why}")
+    return problems
+
+
+def _owns_state(full: str, package: str | None) -> str | None:
+    if package is None:
+        return "a server this shard was not given"
+    with open(full, encoding="utf-8") as fh:
+        body = json.load(fh)
+    return None if isinstance(body, dict) and body.get("package") == package \
+        else f"does not say it is {package}"
+
+
+def _owns_catalogue(full: str, package: str | None, version: str) -> str | None:
+    if package is None:
+        return "a server this shard was not given"
+    body = read_gz(full)
+    if not isinstance(body, dict) or body.get("package") != package \
+            or str(body.get("version")) != version:
+        return f"does not say it is {package}@{version}"
+    return None
+
+
+def _owns_events(full: str, packages: set[str]) -> str | None:
+    with open(full, encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            event = json.loads(line)
+            if not isinstance(event, dict) or event.get("package") not in packages:
+                return "an event about a server this shard was not given"
+    return None
+
+
+def admit(args: argparse.Namespace) -> int:
+    """Take each shard's upload only for the servers that shard was given.
+
+    `verify` checks that what arrives is shaped like feed data; it cannot see
+    whose data it is. Every measuring shard runs other people's code in a
+    container that can write the whole feed checkout, so without this one
+    package measured anywhere could rewrite any server's catalogue, state or
+    history, or the watchlist itself. Ownership is recomputed here from the
+    feed branch's own watchlist -- not from anything a shard uploaded -- and an
+    upload with one file outside it is refused whole: that shard's day is lost,
+    not the feed. Servers measured side by side in one shard can still write
+    each other's records; the isolate is per shard, not per server.
+    """
+    rows = load_watchlist(args.data)
+    today = date.fromisoformat(args.day) if args.day else datetime.now(timezone.utc).date()
+    # A shard started before midnight measured the day before's servers.
+    days = (today, date.fromordinal(today.toordinal() - 1))
+    os.makedirs(args.into, exist_ok=True)
+    taken = refused = 0
+    for name in sorted(os.listdir(args.deltas)) if os.path.isdir(args.deltas) else []:
+        m = _DELTA.match(name)
+        of = {"npm": args.npm_shards, "remote": args.remote_shards}.get(m.group(1)) if m else 0
+        if not m or int(m.group(2)) >= of:
+            print(f"::warning::refused upload {name!r}: not a measuring shard's")
+            refused += 1
+            continue
+        kind, index = m.group(1), int(m.group(2))
+        owned = {safe(r["package"]): r["package"] for r in rows
+                 if r.get("kind", "npm") == kind and in_shard(r, (index, of))
+                 and (kind == "remote" or any(due(r, d) for d in days))}
+        problems = _foreign(os.path.join(args.deltas, name), owned, f"{kind}-{index}")
+        if problems:
+            for p in problems[:20]:
+                print(f"::warning::refused upload {name}: {p}")
+            refused += 1
+            continue
+        shutil.copytree(os.path.join(args.deltas, name), args.into, dirs_exist_ok=True)
+        taken += 1
+    print(f"admit: {taken} upload(s) taken, {refused} refused")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
@@ -814,9 +931,17 @@ def main() -> int:
                        help="launch at most this many servers (0: no limit)")
     for name in ("sync", "fold", "render", "verify"):
         sub.add_parser(name).add_argument("--data", required=True)
+    a = sub.add_parser("admit")
+    a.add_argument("--data", required=True, help="the feed branch checkout (its watchlist)")
+    a.add_argument("--deltas", required=True, help="one folder per shard's upload")
+    a.add_argument("--into", required=True, help="where the admitted uploads are merged")
+    a.add_argument("--day", default="", help="YYYY-MM-DD the shards ran (default today)")
+    a.add_argument("--npm-shards", type=int, default=NPM_SHARDS)
+    a.add_argument("--remote-shards", type=int, default=REMOTE_SHARDS)
     args = ap.parse_args()
     return {"seed": seed, "sync": sync, "check": check, "check-remote": check_remote,
-            "fold": fold, "render": render, "verify": verify}[args.command](args)
+            "fold": fold, "render": render, "verify": verify,
+            "admit": admit}[args.command](args)
 
 
 if __name__ == "__main__":

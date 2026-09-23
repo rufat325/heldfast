@@ -139,8 +139,11 @@ def _register_updates(sub: argparse._SubParsersAction) -> None:
             "For each server pinned to an exact npm version, report whether the "
             "drift feed has measured a newer release and what approving it would "
             "change: quiet (approve --yes would take it) or review (a critical "
-            "change a person must name). --apply bumps the quiet ones in the "
-            "config and re-approves them from the feed, and nothing else."
+            "change a person must name). Every release is screened first: one "
+            "reported as malware (OSV), pulled from npm, or younger than --min-age "
+            "days is not proposed, and one that adds an install script is review. "
+            "A pinned release reported as malware exits 1. --apply bumps the quiet "
+            "ones in the config and re-approves them from the feed, and nothing else."
         ),
     )
     _add_scan_arguments(updates)
@@ -150,6 +153,9 @@ def _register_updates(sub: argparse._SubParsersAction) -> None:
     updates.add_argument("--feed", metavar="URL", default=None,
                          help="read the feed from this base URL instead of the "
                               "`feed` branch of rufat325/mcp-pin")
+    updates.add_argument("--min-age", type=int, default=14, metavar="DAYS",
+                         help="propose only releases at least this old (default 14; "
+                              "every malicious MCP release so far was reported within 9)")
     updates.add_argument("-f", "--format", choices=("text", "json"), default="text")
 
 
