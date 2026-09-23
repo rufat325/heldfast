@@ -277,9 +277,12 @@ class TestSelfConsistency(unittest.TestCase):
         finally:
             srv.ALLOW_PATH_SCAN = original
         self.assertIn("check_coverage", {d["name"] for d in definitions})
+        # With the annotations: MCPA021/022 read those claims on other
+        # servers, so this server's own claims go through them too.
         tools = [
             ToolSpec(server="mcp-pin", name=d["name"], description=d["description"],
-                     input_schema=d.get("inputSchema", {}))
+                     input_schema=d.get("inputSchema", {}),
+                     annotations=d.get("annotations", {}))
             for d in definitions
         ]
         findings = run_rules(AuditContext(servers=[spec], tools=tools))
@@ -288,6 +291,68 @@ class TestSelfConsistency(unittest.TestCase):
             "mcp-pin's own MCP server fails mcp-pin:\n"
             + "\n".join(f"  {f.rule_id} {f.evidence}" for f in findings),
         )
+
+    def test_every_tool_declares_all_four_hints(self) -> None:
+        """A directory reviewing this server flagged the missing hints, and it
+        was right: a client left to guess treats a read-only tool as one that
+        may write."""
+        original = srv.ALLOW_PATH_SCAN
+        srv.ALLOW_PATH_SCAN = True
+        try:
+            definitions = srv._tool_definitions()
+        finally:
+            srv.ALLOW_PATH_SCAN = original
+        for d in definitions:
+            with self.subTest(d["name"]):
+                self.assertEqual({"readOnlyHint": True, "destructiveHint": False,
+                                  "idempotentHint": True, "openWorldHint": False},
+                                 d.get("annotations"))
+
+    def test_the_hints_are_true_no_tool_connects_or_launches(self) -> None:
+        """openWorldHint false and readOnlyHint true are promises. Every tool
+        runs here with sockets and processes made to fail loudly."""
+        import socket
+        import subprocess
+        original = srv.ALLOW_PATH_SCAN
+        srv.ALLOW_PATH_SCAN = True
+        config = json.dumps({"mcpServers": {
+            "files": {"command": "npx",
+                      "args": ["-y", "@modelcontextprotocol/server-filesystem@2026.8.31"]}}})
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".mcp.json").write_text(config, encoding="utf-8")
+            calls = {
+                "check_config": lambda: srv.tool_check_config({"config": config}),
+                "list_rules": lambda: srv.tool_list_rules({}),
+                "explain_rule": lambda: srv.tool_explain_rule({"rule_id": "MCPA015"}),
+                "scan_path": lambda: srv.tool_scan_path({"path": tmp}),
+                "check_coverage": lambda: srv.tool_check_coverage({"path": tmp}),
+            }
+            # Recorded, not raised: a tool that caught the exception and carried
+            # on would otherwise pass this test having tried anyway.
+            attempts: list[str] = []
+
+            def refuse(what: str):
+                def stub(*_a, **_k):
+                    attempts.append(what)
+                    raise OSError(f"{what} refused by the test")
+                return stub
+
+            real_connect, real_popen = socket.socket.connect, subprocess.Popen
+            socket.socket.connect = refuse("connect")
+            subprocess.Popen = refuse("process")
+            try:
+                for name, call in calls.items():
+                    with self.subTest(name):
+                        call()
+                        self.assertEqual([], attempts)
+            finally:
+                socket.socket.connect, subprocess.Popen = real_connect, real_popen
+                srv.ALLOW_PATH_SCAN = original
+        srv.ALLOW_PATH_SCAN = True
+        try:
+            self.assertEqual({d["name"] for d in srv._tool_definitions()}, set(calls))
+        finally:
+            srv.ALLOW_PATH_SCAN = original
 
     def test_descriptions_carry_no_invisible_characters(self) -> None:
         from mcp_pin.rules.poisoning import invisible_runs

@@ -60,7 +60,29 @@ SERVER_INFO = {"name": "mcp-pin", "version": __version__}
 ALLOW_PATH_SCAN = os.environ.get("MCP_PIN_ALLOW_PATH_SCAN", "").lower() in ("1", "true", "yes")
 
 
+# What every tool here is, stated in the spec's own terms. A client uses these
+# to decide whether a call needs the user's approval, so they are claims this
+# server has to keep: nothing writes, nothing deletes, the same input gives the
+# same answer, and nothing reaches outside this machine -- no tool opens a
+# socket or starts a process, and tests/test_server.py fails if one does.
+# mcp-pin's own rules (MCPA021, MCPA022) read these claims on other servers;
+# this one declares all four rather than leaving a client to guess.
+READ_ONLY = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+
+
 def _tool_definitions() -> list[dict[str, Any]]:
+    tools = _declared_tools()
+    for tool in tools:
+        tool["annotations"] = dict(READ_ONLY)
+    return tools
+
+
+def _declared_tools() -> list[dict[str, Any]]:
     tools = [
         {
             "name": "check_config",

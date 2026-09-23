@@ -266,7 +266,7 @@ A runner that must not pass on "could not see" wants
 high rather than a note. An air-gapped runner will fail on it, which is the
 point: silence there is indistinguishable from a pass.
 
-Inputs are in [action.yml](action.yml). Private reports: [SECURITY.md](SECURITY.md).
+Inputs are in [action.yml](action.yml). Private reports: [SECURITY.md](SECURITY.md). What it sends where: [PRIVACY.md](PRIVACY.md).
 Rules: [docs/rules.md](docs/rules.md). `mcp-pin explain MCPA015` prints one.
 
 ## What it doesn't do
@@ -296,7 +296,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1315 tests, stdlib unittest, nothing to install.
+1317 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable
