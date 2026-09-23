@@ -40,7 +40,9 @@ With no lock, `wrap` will not start the server. That is not trust on first use.
 registry, nearly half of all releases change a tool ([we measured it](docs/CHURN.md)).
 `--drift graded` lets a change through when it introduced nothing aimed at the
 agent, and still blocks one that did. It is opt-in; the default blocks every
-change.
+change. The measuring keeps going: every new release of those servers is
+recorded on the [`feed` branch](https://github.com/rufat325/mcp-pin/tree/feed),
+with an Atom feed to subscribe to.
 
 **It is one layer: a pin, not a sandbox.** `approve --probe` starts your
 configured servers to read their tools, so isolate that step -- a container, a
@@ -290,7 +292,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1283 tests, stdlib unittest, nothing to install.
+1299 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

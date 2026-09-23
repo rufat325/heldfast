@@ -1,0 +1,109 @@
+# The drift feed: which of the most-used MCP servers changed a tool
+# definition, release by release. research/feed/watch.py does the work; the
+# record lives on the `feed` branch (README.md, feed.xml, events/).
+#
+# Two jobs, because one of them runs other people's code:
+#
+#   measure  -- read-only token, credentials not persisted in the checkout,
+#               servers launched inside research/feed/Dockerfile with no
+#               capabilities. Produces files and nothing else.
+#   publish  -- the only job that can write. It runs nothing from the
+#               servers: it checks the files against the names, sizes and
+#               formats the feed writes, then commits them to `feed`.
+name: feed
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["research/feed/**", ".github/workflows/feed.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feed
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: feed
+          path: feed-data
+          persist-credentials: false
+
+      - name: Build the isolate
+        run: docker build -f research/feed/Dockerfile -t mcp-pin-feed .
+
+      # Two servers at a time. Six in parallel took down the workstation the
+      # churn study first ran on; a runner is disposable, but the numbers are
+      # comparable only if the load is.
+      - name: Measure new releases
+        run: |
+          docker run --rm --cap-drop ALL --security-opt no-new-privileges \
+            --memory 6g --cpus 2 --pids-limit 2048 --user "$(id -u):$(id -g)" \
+            -v "$PWD/feed-data:/data" mcp-pin-feed check --data /data --jobs 2
+
+      - name: Render
+        run: python3 research/feed/watch.py render --data feed-data
+
+      - name: Verify
+        run: python3 research/feed/watch.py verify --data feed-data
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: feed-data
+          path: feed-data
+          include-hidden-files: false
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    needs: measure
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      # The verifier comes from main, not from anything the measuring job wrote.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          path: tool
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: feed
+          path: feed-data
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: feed-data
+          path: incoming
+
+      - name: Verify what the measuring job produced
+        run: python3 tool/research/feed/watch.py verify --data incoming
+
+      - name: Commit to the feed branch
+        run: |
+          set -euo pipefail
+          rsync -a --delete --exclude .git incoming/ feed-data/
+          cd feed-data
+          git config user.name "mcp-pin feed"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no new releases changed anything"
+            exit 0
+          fi
+          git commit -q -m "feed: $(date -u +%Y-%m-%d)"
+          git push origin HEAD:feed

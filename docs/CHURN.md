@@ -159,6 +159,21 @@ property of the schema, which is why `suspicious.py` reads those too and why a
 pin that hashed only the top-level description would miss where a careful
 attacker would write.
 
+## It keeps going
+
+This was one run. [`research/feed/watch.py`](../research/feed/watch.py)
+repeats it every day for the same servers: when one publishes a stable
+release, it is launched in the same container, its catalogue is compared with
+the last one seen, and the release is recorded -- which tools changed, the
+words that moved, and whether `--drift graded` would refuse anything, graded
+against the full previous text rather than a lockfile's preview. The record
+starts from the releases measured here and lives on the
+[`feed` branch](https://github.com/rufat325/mcp-pin/tree/feed): a summary in
+its README, [an Atom feed](https://github.com/rufat325/mcp-pin/blob/feed/feed.xml)
+to subscribe to, and every event in `events/`. The workflow that runs it
+(`.github/workflows/feed.yml`) launches the servers in a job with a read-only
+token, and commits from a separate job that runs nothing the servers wrote.
+
 ## Limitations, in order of how much they matter
 
 1. **Only the popular head, and only npm over stdio.** 150 of 9,318 registry
