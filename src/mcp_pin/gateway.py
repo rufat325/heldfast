@@ -414,7 +414,8 @@ class Gateway:
                  deny_elicitation: bool = False,
                  isolate_env: bool = True,
                  share_env: set | None = None,
-                 require_integrity: bool = False) -> None:
+                 require_integrity: bool = False,
+                 drift: str = "block") -> None:
         self.lock = lock
         self.quiet = quiet
         self.trail = trail
@@ -436,7 +437,7 @@ class Gateway:
                     f"{spec.identity()} (not granted to {identity.name})")
                 continue
             guard = Guard(spec.identity(), lock, policy=policy, quiet=True,
-                          block_severity=block_severity,
+                          block_severity=block_severity, drift=drift,
                           allow_unapproved=allow_unapproved, dry_run=dry_run,
                           deny_sampling=deny_sampling,
                           deny_elicitation=deny_elicitation)
@@ -865,7 +866,7 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
         act_as: str | None = None, max_calls: int = 0,
         deny_sampling: bool = False, deny_elicitation: bool = False,
         isolate_env: bool = True, share_env: set | None = None,
-        require_integrity: bool = False) -> int:
+        require_integrity: bool = False, drift: str = "block") -> int:
     """Serve the gateway on stdio until the client goes away."""
     try:
         lock = Lock.load(lock_path)
@@ -890,14 +891,15 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
             trail = None
         else:
             trail.record("session_start", subject=act_as or "gateway",
-                         detail=f"policy={policy} budget={max_calls or 'none'}")
+                         detail=f"policy={policy} drift={drift} "
+                                f"budget={max_calls or 'none'}")
 
     gateway = Gateway(servers, lock, policy=policy, allow_unapproved=allow_unapproved,
                       dry_run=dry_run, quiet=quiet, timeout=timeout, trail=trail,
                       identity=identity, max_calls=max_calls,
                       deny_sampling=deny_sampling,
                       deny_elicitation=deny_elicitation,
-                      isolate_env=isolate_env, share_env=share_env,
+                      isolate_env=isolate_env, share_env=share_env, drift=drift,
                       require_integrity=require_integrity)
     if not gateway.backends:
         print("mcp-pin gateway: nothing approved to serve. Run "

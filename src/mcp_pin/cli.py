@@ -590,6 +590,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
         sign_command=getattr(args, "sign_command", None),
         share_env=set(getattr(args, "share_env", None) or []),
         isolate_env=bool(getattr(args, "isolate_env", False)),
+        drift=getattr(args, "drift", "block"),
     )
 
 
@@ -748,6 +749,7 @@ def cmd_gateway(args: argparse.Namespace) -> int:
         isolate_env=not args.no_isolate_env,
         share_env=set(args.share_env or []),
         require_integrity=bool(getattr(args, "require_integrity", False)),
+        drift=getattr(args, "drift", "block"),
     )
 
 

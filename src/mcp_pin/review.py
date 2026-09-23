@@ -11,12 +11,8 @@ from __future__ import annotations
 import difflib
 from dataclasses import dataclass
 
+from .driftgrade import CRITICAL_NEEDLES, introduced
 from .lockfile import Lock
-
-_CRITICAL_NEEDLES = (
-    "id_rsa", ".ssh/", ".aws/", "begin private", "ignore previous",
-    "exfiltrat", "~/.cursor", "do not tell the user",
-)
 
 
 @dataclass(frozen=True)
@@ -31,9 +27,24 @@ class Change:
 
 def grade(text: str) -> str:
     lowered = (text or "").lower()
-    if any(needle in lowered for needle in _CRITICAL_NEEDLES):
+    if any(needle in lowered for needle in CRITICAL_NEEDLES):
         return "critical"
     return "high"
+
+
+def grade_change(before: object, text: str) -> str:
+    """Grade a changed or added definition by what it brought with it.
+
+    Critical if the new text holds a critical word, as before, or if it
+    introduced any signal the approved text did not carry -- the same test
+    `guard --drift graded` applies at runtime, over the same recorded
+    preview. So a change graded mode would refuse is one `--yes` cannot
+    approve either; the two cannot drift apart.
+    """
+    if grade(text) == "critical":
+        return "critical"
+    recorded = before if isinstance(before, dict) else None
+    return "critical" if introduced(recorded, text) else "high"
 
 
 def word_diff(old: str, new: str) -> str:
@@ -152,7 +163,8 @@ def _named_map_changes(ident: str, kind: str, old: object, new: object) -> list[
     for name in sorted(set(new_map) - set(old_map)):
         meta = new_map[name] if isinstance(new_map[name], dict) else {}
         preview = str(meta.get("description_preview") or "")
-        out.append(Change(ident, kind, name, "", preview or "added", grade(preview)))
+        out.append(Change(ident, kind, name, "", preview or "added",
+                          grade_change(None, preview)))
     for name in sorted(set(old_map) - set(new_map)):
         out.append(Change(ident, kind, name, "removed", "", "high"))
     for name in sorted(set(old_map) & set(new_map)):
@@ -163,7 +175,7 @@ def _named_map_changes(ident: str, kind: str, old: object, new: object) -> list[
             continue
         old_p = str(a.get("description_preview") or "")
         new_p = str(b.get("description_preview") or "")
-        out.append(Change(ident, kind, name, old_p, new_p, grade(new_p)))
+        out.append(Change(ident, kind, name, old_p, new_p, grade_change(a, new_p)))
     return out
 
 

@@ -148,6 +148,11 @@ a one-line diff and a signal-bearing edit that refuses the call are two
 different products; only the second survives contact with a real upgrade
 cadence.
 
+That is now `guard --drift graded` ([MANUAL.md](MANUAL.md#upgrades-without-the-re-approval-treadmill---drift-graded)).
+Replayed over the 1,634 changed tool definitions in this study, using only
+what a lockfile records, it refuses 9 and forwards the rest; with the full
+approved text it would refuse 2. The default still refuses all 1,634.
+
 **Schemas matter as much as prose.** 669 input-schema changes -- new optional
 parameters, restated types. A description the model reads also lives in every
 property of the schema, which is why `suspicious.py` reads those too and why a

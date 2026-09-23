@@ -52,6 +52,7 @@ from .lifetime import bind_child, posix_preexec
 from .lockfile import DEFAULT_LOCK_NAME, Lock, launch_mismatch
 from .policy import Policy
 from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec, instructions_fingerprint
+from .driftgrade import describe, introduced, live_text
 from .rules import AuditContext, run_rules, scan_untrusted_text
 
 # What to do with a tool that is not approved, or whose definition changed.
@@ -130,12 +131,25 @@ class GuardStats:
     result_categories: list[str] = field(default_factory=list)
     tools_unapproved: list[str] = field(default_factory=list)
     tools_drifted: list[str] = field(default_factory=list)
+    # Changed tools forwarded under --drift graded because the change
+    # introduced no signal. Forwarded, not approved: the lock still records
+    # the old definition, and `status` still reports the drift.
+    tools_drift_accepted: list[str] = field(default_factory=list)
     findings_blocked: list[str] = field(default_factory=list)
     calls_denied: list[str] = field(default_factory=list)
     calls_would_deny: list[str] = field(default_factory=list)
     list_changed: list[str] = field(default_factory=list)
     internal_errors: list[str] = field(default_factory=list)
     non_json_lines: int = 0
+
+
+def _drift_mode(drift: str) -> str:
+    """What a tool whose fingerprint moved gets: refused ("block", the
+    default), or graded by what the change introduced ("graded"). An unknown
+    mode is an error rather than a quiet fall back to either one."""
+    if drift not in ("block", "graded"):
+        raise ValueError(f"unknown drift mode {drift!r}")
+    return drift
 
 
 class Guard:
@@ -146,7 +160,7 @@ class Guard:
                  deny_roots: bool = False,
                  result_policy: str = "annotate",
                  allow_unapproved: bool = False,
-                 dry_run: bool = False) -> None:
+                 dry_run: bool = False, drift: str = "block") -> None:
         self.server_name = server_name
         self.lock = lock
         self.policy = policy
@@ -159,6 +173,7 @@ class Guard:
         self.result_policy = result_policy
         self.allow_unapproved = allow_unapproved
         self.dry_run = dry_run
+        self.drift = _drift_mode(drift)
         # Set by run() so a denied server request can be answered without
         # the client ever seeing it.
         self.respond_to_server = None
@@ -170,6 +185,7 @@ class Guard:
         # server and therefore speaks for none of them.
         self.conflict: list[str] = []
         self._locked_tools = self._load_locked_tools()
+        self._locked_records = self._load_locked_records()
         # Distinct from self.policy, which is the block/strip/warn mode for
         # tool *definitions*. This one constrains tool *arguments*.
         self.call_policy = Policy.from_lock_entry(self._resolve_entry())
@@ -302,6 +318,14 @@ class Guard:
             }
         return {}
 
+    def _load_locked_records(self) -> dict[str, dict[str, Any]]:
+        """Approved name -> what the lock recorded about it, for grading."""
+        entry = self._resolve_entry()
+        tools = entry.get("tools") if entry is not None else None
+        if not isinstance(tools, dict):
+            return {}
+        return {name: meta for name, meta in tools.items() if isinstance(meta, dict)}
+
     def _load_locked_instructions(self) -> str | None:
         entry = self._resolve_entry()
         if entry is None:
@@ -397,8 +421,36 @@ class Guard:
             return "deny", "tool was not present at approval"
         if locked != tool.fingerprint():
             self.stats.tools_drifted.append(tool.name)
+            if self.drift == "graded":
+                return self._graded_verdict(tool)
             return "deny", "tool definition changed since approval"
         return "allow", "matches approved fingerprint"
+
+    def _graded_verdict(self, tool: ToolSpec) -> tuple[str, str]:
+        """A changed tool under --drift graded: forwarded only if it gained nothing.
+
+        A grading error refuses whatever --fail-open says. Fail-open is about
+        not breaking a connection that would otherwise have worked; without
+        grading this tool was refused, so refusing it is not a new failure.
+        """
+        try:
+            found = introduced(self._locked_records.get(tool.name), live_text(
+                tool.description, tool.title, tool.annotations,
+                tool.input_schema, tool.output_schema))
+        except Exception as exc:  # a grading bug must not forward the change
+            self.stats.internal_errors.append(f"drift grade raised: {exc}")
+            self.log(f"INTERNAL ERROR grading {tool.name}: {exc}")
+            return "deny", ("tool definition changed since approval, and grading "
+                            "the change failed; refusing rather than forwarding")
+        if found:
+            return "deny", ("tool definition changed since approval and the change "
+                            f"introduced {describe(found)}")
+        if tool.name not in self.stats.tools_drift_accepted:
+            self.stats.tools_drift_accepted.append(tool.name)
+            self.log(f"ALLOWED (drift=graded) {tool.name}: definition changed since "
+                     "approval; the change introduced no signal. Forwarded, not "
+                     "approved -- `mcp-pin approve --probe` pins it.")
+        return "allow", "definition changed; the change introduced no signal"
 
     def _refusal_result(self, message: dict[str, Any], name: str, reason: str) -> dict[str, Any]:
         # An error *result* rather than a JSON-RPC error: the model is shown
@@ -1170,6 +1222,9 @@ class Guard:
         bits = [f"{s.forwarded} messages", f"{s.tools_seen} tools"]
         if s.tools_drifted:
             bits.append(f"{len(s.tools_drifted)} drifted ({', '.join(s.tools_drifted)})")
+        if s.tools_drift_accepted:
+            bits.append(f"{len(s.tools_drift_accepted)} forwarded under --drift graded "
+                        f"({', '.join(s.tools_drift_accepted)})")
         if s.tools_unapproved:
             bits.append(f"{len(s.tools_unapproved)} unapproved")
         if s.findings_blocked:
@@ -1250,7 +1305,8 @@ def _open_trail(log_path: Path | None, name: str, policy: str,
         guard.log(f"audit log unavailable: {trail.failed}")
         return None
     trail.record("session_start", subject=name,
-                 detail=f"policy={policy} result_policy={result_policy}")
+                 detail=f"policy={policy} result_policy={result_policy} "
+                        f"drift={guard.drift}")
     guard.log(f"audit trail: {log_path}")
     return trail
 
@@ -1315,7 +1371,11 @@ def _announce_posture(guard: Guard, name: str, lock_path: Path,
         )
     else:
         guard.log(f"enforcing {len(guard._locked_tools)} approved tool(s) for {name!r} "
-                  f"(policy={policy})")
+                  f"(policy={policy}, drift={guard.drift})")
+        if guard.drift == "graded":
+            guard.log("drift=graded: a changed tool is forwarded when the change "
+                      "introduced no signal. That is a heuristic, not a pin; a "
+                      "rewrite phrased to miss every pattern is forwarded too.")
 
 
 def _child_env(share: set[str] | None, isolate: bool) -> tuple[dict[str, str], list[str]]:
@@ -1634,7 +1694,8 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         log_path: Path | None = None, allow_unapproved: bool = False,
         dry_run: bool = False, require_integrity: bool = False,
         sign_command: str | None = None, lock_was_explicit: bool = True,
-        share_env: set[str] | None = None, isolate_env: bool = False) -> int:
+        share_env: set[str] | None = None, isolate_env: bool = False,
+        drift: str = "block") -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("mcp-pin guard: no server command given", file=sys.stderr)
@@ -1650,7 +1711,8 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
                   block_severity=block_severity, quiet=quiet,
                   deny_sampling=deny_sampling, deny_elicitation=deny_elicitation,
                   deny_roots=deny_roots, result_policy=result_policy,
-                  allow_unapproved=allow_unapproved, dry_run=dry_run)
+                  allow_unapproved=allow_unapproved, dry_run=dry_run,
+                  drift=drift)
     trail = _open_trail(log_path, name, policy, result_policy, guard,
                         sign_command)
     _announce_lock(guard, lock_path, lock_was_explicit, argv)

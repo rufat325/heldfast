@@ -247,6 +247,11 @@ def _register_gateway(sub: argparse._SubParsersAction) -> None:
     gateway_p.add_argument("--lock", metavar="PATH", default=None)
     gateway_p.add_argument("--policy", choices=("block", "strip", "warn"),
                            default="block")
+    gateway_p.add_argument("--drift", choices=("block", "graded"), default="block",
+                           help="what to do with a tool whose definition changed since "
+                                "approval: refuse it (default), or forward it when "
+                                "the change introduced no attack signal -- a "
+                                "heuristic, not a pin")
     gateway_p.add_argument("--require-integrity", action="store_true",
                            help="refuse to start a backend whose recorded registry "
                                 "artifact cannot be verified locally")
@@ -359,6 +364,11 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
     guard_p.add_argument("--policy", choices=("block", "strip", "warn"), default="block",
                          help="what to do with a rejected tool: replace it with a blocked "
                               "stub (default), remove it, or allow it and log")
+    guard_p.add_argument("--drift", choices=("block", "graded"), default="block",
+                         help="what to do with a tool whose definition changed since "
+                              "approval: refuse it (default), or forward it when "
+                              "the change introduced no attack signal -- a "
+                              "heuristic, not a pin")
     guard_p.add_argument("--block-severity", default="critical",
                          choices=[s.label for s in Severity],
                          help="minimum content-rule severity that rejects a tool "

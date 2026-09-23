@@ -177,6 +177,15 @@ new text) must be named with `--yes-tool NAME`; `--yes` is not enough.
 `guard` pins tools, instructions, prompts and resources — whatever the lock
 recorded. A lock that never recorded prompts is not pretend-enforced.
 
+Servers change their tools often: across the 150 most-downloaded registry
+servers, a pin stops on 45% of upgrades ([docs/CHURN.md](docs/CHURN.md)).
+`--drift graded` forwards a changed tool when the change introduced nothing
+addressed to the agent -- no new instruction, hidden character, credential
+path or look-alike letter -- and refuses it, with what it gained, when it
+did. It is a heuristic and it is opt-in; the default still refuses every
+change. [docs/MANUAL.md](docs/MANUAL.md#upgrades-without-the-re-approval-treadmill---drift-graded)
+says what it does not catch.
+
 ```json
 {
   "mcpServers": {
@@ -261,7 +270,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1255 tests, stdlib unittest, nothing to install.
+1273 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable
