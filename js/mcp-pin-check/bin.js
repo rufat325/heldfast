@@ -31,7 +31,7 @@ function main(argv) {
     else if (args[i] === "--tool") toolArg = args[++i];
     else if (args[i] === "--golden") goldenArg = args[++i];
     else if (args[i] === "--version") {
-      process.stdout.write("mcp-pin-check 0.1.7\n");
+      process.stdout.write("mcp-pin-check 0.1.8\n");
       return 0;
     } else die("unknown argument " + args[i], 2);
   }
