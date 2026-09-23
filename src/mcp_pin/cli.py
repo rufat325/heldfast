@@ -605,7 +605,13 @@ def cmd_grade_drift(_args: argparse.Namespace) -> int:
     from .guard import _tool_from_wire
 
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
+        # Bytes, decoded as UTF-8 whatever the locale says. Text-mode stdin on
+        # Windows is the ANSI codepage, which turned a zero-width space from
+        # the hook into three ordinary letters: the hidden character this
+        # grades for, graded clean. Bytes that are not UTF-8 are an error,
+        # and an error is a refusal on the other side.
+        raw = sys.stdin.buffer.read().decode("utf-8")
+        payload = json.loads(raw or "{}")
         definition = payload.get("definition")
         if not isinstance(definition, dict):
             raise ValueError("no tool definition given")

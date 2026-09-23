@@ -119,7 +119,11 @@ def _graded_lock(tmp: Path) -> None:
 
 def _hook(tmp: Path, description: str, **env: str) -> str:
     """'allow' or the deny reason, for a live definition with `description`."""
-    merged = dict(os.environ, PYTHONPATH=str(ROOT / "src"), MCP_PIN_PYTHON=sys.executable)
+    # The grader runs with Windows' default text encoding on every platform.
+    # That is where a zero-width space from the hook was once read as three
+    # ordinary characters and graded clean, and only the Windows runners saw it.
+    merged = dict(os.environ, PYTHONPATH=str(ROOT / "src"), MCP_PIN_PYTHON=sys.executable,
+                  PYTHONIOENCODING="cp1252", PYTHONUTF8="0")
     merged.pop("MCP_PIN_DRIFT", None)
     merged.update(env)
     proc = subprocess.run(
@@ -219,6 +223,28 @@ class TestGradeDriftCommand(unittest.TestCase):
         self.assertEqual(0, proc.returncode, proc.stderr)
         kinds = [s["kind"] for s in json.loads(proc.stdout)["introduced"]]
         self.assertEqual(["signal:concealment"], kinds)
+
+    def test_utf8_is_read_as_utf8_whatever_the_locale(self) -> None:
+        payload = json.dumps({
+            "recorded": {"description_preview": APPROVED},
+            "definition": {"name": "read_invoice",
+                           "description": APPROVED.replace("its", "it\u200bs")},
+        }, ensure_ascii=False).encode("utf-8")
+        proc = subprocess.run(
+            [sys.executable, "-m", "mcp_pin", "grade-drift"], input=payload,
+            capture_output=True,
+            env=dict(os.environ, PYTHONPATH=str(ROOT / "src"),
+                     PYTHONIOENCODING="cp1252", PYTHONUTF8="0"))
+        self.assertEqual(0, proc.returncode, proc.stderr)
+        kinds = [s["kind"] for s in json.loads(proc.stdout)["introduced"]]
+        self.assertIn("hidden:zero-width character", kinds)
+
+    def test_bytes_that_are_not_utf8_are_an_error(self) -> None:
+        proc = subprocess.run(
+            [sys.executable, "-m", "mcp_pin", "grade-drift"], input=b"\xff\xfe{}",
+            capture_output=True, env=dict(os.environ, PYTHONPATH=str(ROOT / "src")))
+        self.assertEqual(2, proc.returncode)
+        self.assertEqual(b"", proc.stdout)
 
     def test_input_it_cannot_read_is_an_error_not_a_clean_answer(self) -> None:
         for bad in ("not json", "{}", '{"definition": "text"}'):
