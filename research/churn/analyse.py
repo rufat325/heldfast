@@ -1,9 +1,10 @@
 """Turn the measured catalogues into the numbers docs/CHURN.md reports.
 
 Every figure in that document comes out of this script. Run it against
-wide.json and the output should match what is published, or one of the two
+wide.json.gz and the output should match what is published, or one of the two
 is wrong.
 """
+import gzip
 import json
 import os
 import re
@@ -27,14 +28,23 @@ def classify(before, after):
 
 
 def main():
-    path = os.path.join(HERE, sys.argv[1] if len(sys.argv) > 1 else "wide.json")
-    with open(path, encoding="utf-8") as fh:
+    path = os.path.join(HERE, sys.argv[1] if len(sys.argv) > 1 else "wide.json.gz")
+    opener = gzip.open if path.endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as fh:
         blob = json.load(fh)
     data = blob["catalogues"]
+    published = {p: m.get("published") or {} for p, m in (blob.get("meta") or {}).items()}
 
     pairs = []
     for package, by_version in sorted(data.items()):
-        versions = sorted(by_version, key=vkey)
+        # Publish order when the data recorded it -- the order a user
+        # upgrading would have met the releases in, and the order
+        # suspicious.py compares them in. Older data has only version strings.
+        when = published.get(package) or {}
+        if all(v in when for v in by_version):
+            versions = sorted(by_version, key=lambda v: when[v])
+        else:
+            versions = sorted(by_version, key=vkey)
         for a, b in zip(versions, versions[1:]):
             A, B = by_version[a], by_version[b]
             carried = sorted(set(A) & set(B))
@@ -49,6 +59,8 @@ def main():
                 "added": len(set(B) - set(A)), "removed": len(set(A) - set(B)),
                 "kinds": kinds,
                 "wide": len(carried) > 1 and len(moved) == len(carried),
+                "described": any(A[n]["description"] != B[n]["description"]
+                                 for n in carried),
             })
 
     def report(rows, label):
@@ -79,6 +91,13 @@ def main():
               f"({100.0*iso_desc/carried:.2f}% of carried)")
         print(f"  tools added / removed ... {sum(r['added'] for r in rows)}"
               f" / {sum(r['removed'] for r in rows)}")
+        # What a user of a pin meets: not tool-versions but upgrades that stop.
+        stops = [r for r in rows if r["moved"] or r["added"] or r["removed"]]
+        worded = [r for r in rows if r["described"]]
+        print(f"  releases a pin stops on . {len(stops)} ({100.0*len(stops)/len(rows):.0f}%)"
+              f" in {len({r['package'] for r in stops})} packages")
+        print(f"  ...that edit a description {len(worded)} ({100.0*len(worded)/len(rows):.0f}%)"
+              f" in {len({r['package'] for r in worded})} packages")
 
     report(pairs, "All servers")
     report([r for r in pairs if r["official"]], "Official (@modelcontextprotocol)")
