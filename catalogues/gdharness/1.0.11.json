@@ -1,0 +1,1822 @@
+{
+ "args": [],
+ "measured_at": "2026-09-22T19:16:13+00:00",
+ "package": "gdharness",
+ "protocol": "2025-06-18",
+ "published": "2026-09-22T14:13:55.083Z",
+ "tools": [
+  {
+   "description": "Sets or removes a breakpoint through the editor's debug adapter. Needs the editor, not a running game: set them first, then editor_run, and the game stops where you asked. The editor keeps a breakpoint set this way for one play, so every breakpoint this server holds is sent again before each play editor_run starts, and the start answer lists them under breakpoints. The set is also kept in the project, for the server that comes after a reconnect: a breakpoint stays until it is removed here, whichever server set it. Every answer lists the whole set under held, and the breakpoints the user set in the editor's own gutter under setInEditor; setting one here never takes those away, and removing a line here clears it whoever set it. Godot clears every breakpoint in the editor when a debug session opens unless network/debug_adapter/sync_breakpoints is on, which the addon turns on as it loads; an editor running an older addon is said so under breakpointsAtRisk, here and in editor_status. Operations: set: set a breakpoint; remove: remove a breakpoint.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "line": {
+      "description": "One-based line.",
+      "type": "number"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "set",
+       "remove"
+      ],
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "scriptPath": {
+      "description": "Script file inside the project, such as \"scripts/player.gd\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "op",
+     "projectPath",
+     "scriptPath",
+     "line"
+    ],
+    "type": "object"
+   },
+   "name": "debug_breakpoint"
+  },
+  {
+   "description": "Continues or steps the debugged game through the editor's debug adapter, answering with the stack where it ended up. There is no pause and no step_out: Godot's adapter answers a pause by reporting the game stopped and leaving it running, and implements no stepOut at all, so hold the game where you want it with a breakpoint and step over or into from there. Operations: continue: resume after a breakpoint; step_over: run the current line; step_into: run the current line, stopping inside whatever it calls.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "continue",
+       "step_over",
+       "step_into"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "op"
+    ],
+    "type": "object"
+   },
+   "name": "debug_control"
+  },
+  {
+   "description": "Where the debugged game is stopped: the stack trace, what is in scope at a frame with the values, or the debug adapter's console output so far. A stop is reported by the editor's adapter only to the sessions connected when it happened, so a server that connected afterwards, which is every server after a reconnect, is shown a thread and no frames about a game still sitting at its breakpoint. That server asks the runtime instead: a held game accepts a connection and never answers, and the refusal then says held rather than running, and that the stack cannot be read from here. debug_control continue lets it go, and the next stop is one this session is told about, with its stack. Operations: stack: the stack trace; variables: locals, members and globals at a frame, with their values; output: console output captured through the debug adapter. Default stack.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "frameId": {
+      "description": "variables: which frame, from a stack answer. Default the innermost.",
+      "type": "number"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "stack",
+       "variables",
+       "output"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "debug_state"
+  },
+  {
+   "description": "The engine's ClassDB: find classes, read one in full, or walk an inheritance tree. Operations: query: classes matching a filter or category; info (needs className): methods, properties, signals and enums of one class, or one member of it by name; inheritance (needs className): ancestors and descendants of one class. Default query.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "category": {
+      "description": "query: limit to one family.",
+      "enum": [
+       "node",
+       "node2d",
+       "node3d",
+       "control",
+       "resource",
+       "physics",
+       "physics2d",
+       "physics3d",
+       "audio",
+       "animation",
+       "ui"
+      ],
+      "type": "string"
+     },
+     "className": {
+      "description": "info, inheritance: the class.",
+      "type": "string"
+     },
+     "filter": {
+      "description": "query: a substring of the class name.",
+      "type": "string"
+     },
+     "includeInherited": {
+      "description": "info: include inherited members. Default false.",
+      "type": "boolean"
+     },
+     "instantiableOnly": {
+      "description": "query: leave out abstract classes. Default false.",
+      "type": "boolean"
+     },
+     "member": {
+      "description": "info: one member by name, a method, property, signal, enum or constant, with its signature and which class declares it, looked for on the class and every ancestor. The whole of Control is seventy thousand characters; the question \"does this engine have it, and what does it take\" is this. A name nothing declares is refused with the members whose names contain it.",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "query",
+       "info",
+       "inheritance"
+      ],
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "projectPath"
+    ],
+    "type": "object"
+   },
+   "name": "editor_classes"
+  },
+  {
+   "description": "Opens the Godot editor on a project, in a window on this machine, or restarts the one already connected. An editor goes on serving the addon it read at startup, so restart is what puts a gdharness upgrade into effect; it saves open scenes on the way out and answers with the version that came back. Only an editor with a window can be restarted, because the engine hands back none of the arguments it was started with. editor_status says which editor is connected and whether it is holding an old addon. Opening a project is a save and so is closing one, which is the part that is not obvious from outside: the editor imports the project on open and writes project.godot back, and Godot writes only what differs from its own defaults, so a key named deliberately at its default value is dropped either way. A restart says which under settingsDropped in its own answer because it waits for the editor to return. An open cannot, since it answers as soon as the process exists and the save happens during the import minutes later, so editor_status carries that reading once the editor has connected. Nothing else will say a key went until something depends on one. A restart of an editor this server opened is a quit and then a launch, and this server can be ended between them, usually by the reconnect the restart was being taken for: the editor is gone and nothing replaces it. That is written down before the quit, so the next server says so under restartInterrupted in editor_status rather than waiting for an editor that is not coming, and open finishes it, saying so under finishesRestart. Operations: open (needs projectPath): open the editor on a project; restart: restart the connected editor and wait for it. Default open.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "open",
+       "restart"
+      ],
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "editor_launch"
+  },
+  {
+   "description": "What the project started by editor_run has printed, as entries with a severity: the errors and warnings the engine reported, each with where it happened, and everything else as info. For a run the editor plays the reports come from the game itself, through the runtime addon, since the editor's debugger relays what a game prints and not what it reports; a played game without the runtime addon answers here with its prints alone. Answers with the counts and the verdict as well as the entries. heldAt is three answers: null for a run this server knows is not held, running or over, an object for one it knows is held at a breakpoint, whether the adapter said so or the runtime did by accepting a connection and never answering, and absent with heldUnknown beside it for a server that connected to the debugger after the stop and has no runtime to ask, since the adapter reports a stop only to the sessions connected when it happened. A run that has quit still answers here, with running false and its exit code, until the next one starts. A run this server started also answers with transcript, the file both its streams are written to: uncapped, written while the run is going, and the thing to read or tail for a long run rather than the engine's own log, which every engine start rotates away. Read the file for output and this answer for state: endedBy says whether gdharness ended the run, and a transcript that has stopped growing is a run between prints rather than a run that is over. running is asked of the operating system whenever there is a process to ask about, which is every run this server started and every editor-played run whose game announced its runtime. For an editor-played run that never announced, there is no process id here and running is the editor's answer, which can lag: one measured elsewhere reported a game as playing for fifteen seconds after its process had been ended from outside. editor_status names that game under runtimes, which does not depend on the editor answering.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "contains": {
+      "description": "Only entries mentioning this text, matched against everything the run has printed rather than against the entries this answer would otherwise carry: a line is found however much was printed after it.",
+      "type": "string"
+     },
+     "cpu": {
+      "description": "Also answer with cpuSeconds, the processor time the run has used. Default false, because asking costs a subprocess. Worth it when elapsedMs is climbing and nothing is being printed: processor time standing still is a run that has stopped doing anything, rather than one that is slow.",
+      "type": "boolean"
+     },
+     "limit": {
+      "description": "The most entries to answer with, newest kept. Default 200, and omitted says how many matching entries that left out. A run long enough to pass it needs this raised, not just filtered: filtering narrows what counts as matching, and the newest of those is still all one answer carries.",
+      "type": "number"
+     },
+     "severity": {
+      "description": "The least severe entry to include. Default info, which is everything.",
+      "enum": [
+       "error",
+       "warning",
+       "info"
+      ],
+      "type": "string"
+     },
+     "sinceLastCall": {
+      "description": "Only entries this has not already answered with at this severity. Default false. Measured per severity floor and not across them, so polling for errors leaves the rest of the output for a later read rather than consuming it, and a read with contains is a search over the whole run and consumes nothing.",
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "editor_output"
+  },
+  {
+   "description": "Makes the running editor scan the project filesystem, so files written outside it are picked up. The scan is a change-detecting walk rather than an unconditional reparse, so a file another engine has already imported reads as settled and the walk does not look inside it: its class_name then stays out of the list the editor resolves against, however many times you scan. Any class in that state is named under unseenByEditor, which is what no check on disk can see, since the declaration and the cache are both correct there and only the editor disagrees. The cure is this call on its own, with no change to the declaring script: measured against a real editor on three platforms, with idle waits of the same length ruled out so the scan is credited rather than the time it takes, and reproduced in a second project against its own reproduction in 203ms. editor_launch restart also does it and costs a window, and project_import refresh_classes does not: it rewrites the cache and does not touch what the editor is holding. A scan writes .godot/global_script_class_cache.cfg from the list the editor is holding, so a class the editor cannot resolve goes out of that file with it. That is not a reason to refuse the scan, because on a class the editor has merely not walked yet the scan is the cure; what the answer does instead is name the loss under cacheLost and rebuild the cache from the files, naming what came back under cacheRestored, so no fresh engine, CI run or clone inherits the short file. An editor that lost classes is still holding the short list, so the note says to restart it before scanning again. The other direction is guarded the same way: a class the editor still holds for a script that was renamed or deleted comes back into the cache at a path that is not there, and the next engine to read it fails on \"Could not parse global class\" in whichever correct script shares the bare name, so the cache is rebuilt without it and the answer names it under cacheDropped; the editor goes on holding it until it is restarted, and every scan until then ends in that rebuild. A script or shader written outside the editor has no .uid sidecar until something imports it, and the scan writes one beside it, which a project that commits sidecars needs before the commit. Needs the editor connected.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "reloadScript": {
+      "description": "A script to recompile in the editor after the scan, for the half a scan does not reach: a script the editor has loaded keeps the copy it built, that copy is refreshed when one of its dependencies changes rather than when it changes itself, and a scan leaves it alone. Measured here, a built copy comes back without a method added to it while script_diagnostics on the same script reads clean in the same window, so the copy the editor built and whatever the analyser resolves types against are not known to be one thing: reload for the copy, and read the diagnostics as a separate answer rather than as this one confirmed. This recompiles into the same object, so the holders that kept the stale copy alive see the new one. The methods it has afterwards come back under reloadedMethods, because a reload that compiled nothing and answered OK is the failure worth catching.",
+      "type": "string"
+     },
+     "timeoutMs": {
+      "description": "How long to wait for the scan. Default 30000.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "projectPath"
+    ],
+    "type": "object"
+   },
+   "name": "editor_rescan"
+  },
+  {
+   "description": "The run: starting the project, stopping it, or booting it once to see whether it comes up clean. start keeps it running and collecting output until it quits or is stopped, windowed where there is a display and headless where there is not, unless headless says otherwise; only runtime_capture needs the window. A run that quits on its own is kept, so a scene that prints an answer and quits is start, then editor_output until running is false. What runs is a scene: a SceneTree script is not an entry point here, so put the script on the root of a scene of its own and name that in scene. args hands the game its own flags, the ones it reads with OS.get_cmdline_user_args(), and a run carrying any is started by this server rather than by the editor. check boots it headless for a few frames, waits for it to quit, and answers with the verdict: whether it came up, and every error and warning it printed on the way. A start waits for the game to become something the runtime_* tools can talk to and says which it is under runtime: listening with the port it took, or why not, so the first call after a start does not have to be made twice. When it is not listening, mayYetAnnounce says whether that is final: false is a runtime that is not coming, true is a game still on its way up, which editor_status will see and runtimeWaitMs waits longer for. A start this server made also answers with transcript, the file both the run's streams are written to, so a watch on it can be armed off the start rather than off a second call. Operations: start (needs projectPath): run the project until it quits or is stopped; stop: end the run and answer with what it printed last, naming the process ended under endedPid: for a run the editor plays, the number its game announced under, read at the stop rather than remembered, and the operating system hands a freed number to the next process, so it can equal the game before it. A game that started processes of its own keeps them unless andChildren says to end those too; check (needs projectPath): boot headless, quit after a few frames, and report the verdict; wait: wait for the run to end, then answer as editor_output does. Default start.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "andChildren": {
+      "description": "stop: also end what the game started for itself, with OS.create_process or otherwise, such as a bench's workers and whatever those started in turn. Only the processes under the run's, to any depth, that are games of this project are ended: announced as one, or this project's engine run with --path on this project by its command line, which is how a bench whose workers deliberately carry no runtime is reached. They are named under endedChildren, with what identified each under identifiedBy; any other process under the run is left and named under childrenLeft, and childrenUnknown is true when nothing could be listed, with the note saying whether the platform would not or the run has no process to list under. Default false, and the run's process is ended either way.",
+      "type": "boolean"
+     },
+     "args": {
+      "description": "The game's own arguments, what OS.get_cmdline_user_args() answers, such as [\"--level=2\"]. The separator is added here. A run with any is started by this server rather than by the editor, which fixes the game's command line when it opens the project, so the debug_* tools do not answer for it.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "env": {
+      "description": "Environment variables for this run alone, as a map of strings, over the server's own environment. Like savesIn, a run carrying any is started by this server rather than played by the editor. Names beginning with GDHARNESS_ are refused: they are this server's contract with the addon in the game, and the runtime directory is set here whatever the rest of the environment says, so a game that moves TEMP still announces where this server looks.",
+      "type": "object"
+     },
+     "frames": {
+      "description": "check: frames to run before quitting. Default 3.",
+      "type": "number"
+     },
+     "headless": {
+      "description": "start: force a window or no window.",
+      "type": "boolean"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "start",
+       "stop",
+       "check",
+       "wait"
+      ],
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "runtimeWaitMs": {
+      "description": "start: how long to wait for the game to announce its runtime before answering. Default 5000, or half as long again as the last boot of this project took when that is more, up to 60000: the server notes how long each game took to announce, so a project that boots slowly is waited for from its second start on without being asked to. What it waits for is the first frame, so everything the game does before drawing one is inside it, including work the args just asked for: a flag that simulates six years of game time before anything is drawn makes the announcement that late, on a project that announces promptly without it. Raise it for such a run rather than reading runtime listening false as a fault. 0 does not wait at all, which is the one to pass for a scene that announces nothing by construction, such as a bench that prints and quits.",
+      "type": "number"
+     },
+     "savesIn": {
+      "description": "An absolute directory for this run's user://, so a game that saves writes nowhere near the copy somebody plays: opening a save writes the one being left, and a game that autosaves writes on its own. Godot takes no flag for it, so this is the environment, and the run is started by this server rather than played by the editor, which cannot be given one. It does not have to exist: the engine makes it, and the Godot/app_userdata/<project> tree under it, measured on 4.7.2. On macOS the engine reads user:// off HOME and ignores it, also measured, and the answer says so under savesNote rather than leaving the caller to find out from the player's save list.",
+      "type": "string"
+     },
+     "scene": {
+      "description": "A scene to run instead of the main scene.",
+      "type": "string"
+     },
+     "timeoutMs": {
+      "description": "check: how long to give the boot before it is called hung. Default 60000. wait: how long to wait for the run to end before answering anyway. Default 600000.",
+      "type": "number"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "editor_run"
+  },
+  {
+   "description": "Whether the editor addon is connected, which Godot answers, whether the editor is playing something, and whether a game with the runtime addon is reachable. playingInEditor is null when the editor was not asked or did not answer, which is not the same as a no: with no editor connected there is nobody to ask, and an editor that does not serve the question is given a moment and then left. A game can be playing while this is null, so read it as unanswered rather than as nothing playing, and use processActive and runtimes, which come from elsewhere and do not depend on the editor answering. Each game under runtimes is pinged with a short wait, so one held at a breakpoint is listed as unreachable rather than making this call wait out the runtime timeout; for the run this server is reporting on, heldAt says whether that is what it is, with the same three answers editor_output gives. A game the editor played announces the editor under editorPid, and so does whatever that game started for itself; a game some other server started announces none, which is how the two are told apart when both are running from one project. When connected is false, mayYetConnect says whether that is final: the editor dials this server rather than the other way round and backs off between tries, so for the first half-minute after a server starts, false means \"not reached yet\" as often as it means \"no editor\". True is worth waiting out; false is an editor that is not there. False beside restartInterrupted is one that an editor_launch restart on a previous server asked to quit, where the launch half never ran because that server was ended in between, usually by the reconnect the restart was taken for; editor_launch open finishes it. listeningSince is when this server took the bridge port, which is what that window is measured from and what a caller wanting its own window should read. An editor this server opened counts for as long as its process lives, however far past that window the import runs, and awaitingLaunchedEditor names its pid so the two reasons for true are told apart. settingsDropped appears here once when the editor this server opened saved project.godot on its way in, which is the same reading editor_launch restart makes in its own answer. A game that has announced itself in a protocol this server does not speak is listed under unreadable rather than left out, with the protocol it speaks and whether the server or the addon is the older half. This happens during an upgrade that moves the runtime protocol, which most do not: installing replaces the addon on disk as soon as the pin moves, while a server that is already running stays on the version it started with, so the two speak different protocols until the server is reconnected. Those games are real and running, but no tool here can reach them until the halves match, so runtimes stays empty and runtimeConnected stays false. An upgrade that leaves the protocol alone opens no such window and this list stays empty through it.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+   },
+   "name": "editor_status"
+  },
+  {
+   "description": "What a resource depends on, or what depends on it.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "depth": {
+      "description": "forward: how many levels to follow. Default unlimited.",
+      "type": "number"
+     },
+     "direction": {
+      "description": "forward: what this resource loads, with cycles reported. reverse: every file that refers to it and how, a scene instancing it, a script extending, preloading or loading it, and for a script with a class_name every use of that name. Each reference carries a kind, and two of them are mentions rather than uses: doc is a name inside a ## documentation comment, which renaming would break in the generated docs, and comment is one in ordinary prose, which it would only make stale. summary.in_code is the count with both of those left out, which is the number to read when the question is whether anything still uses this. Default forward.",
+      "enum": [
+       "forward",
+       "reverse"
+      ],
+      "type": "string"
+     },
+     "fileTypes": {
+      "description": "reverse: extensions to look in.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "includeBuiltin": {
+      "description": "forward: include the engine's own res://. resources. Default false.",
+      "type": "boolean"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "resourcePath": {
+      "description": "File inside the project, such as \"sprites/hero.png\" or \"materials/steel.tres\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "projectPath",
+     "resourcePath"
+    ],
+    "type": "object"
+   },
+   "name": "project_dependencies"
+  },
+  {
+   "description": "Export presets and exports. Operations: list: the presets in export_presets.cfg; run (needs preset, outputPath): export with a preset.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "debug": {
+      "description": "run: a debug export. Default false.",
+      "type": "boolean"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "list",
+       "run"
+      ],
+      "type": "string"
+     },
+     "outputPath": {
+      "description": "Where the export is written, inside the project. The directory is created if it is not there: Godot's command-line exporter refuses a missing one with \"The given export path doesn't exist\", which reads as a wrong path in the preset.",
+      "type": "string"
+     },
+     "preset": {
+      "description": "Preset name from export_presets.cfg.",
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "op",
+     "projectPath"
+    ],
+    "type": "object"
+   },
+   "name": "project_export"
+  },
+  {
+   "description": "The import pipeline: what needs importing, how a resource is imported, reimports, UIDs, and the global class list the editor and the engine read. Operations: status: which resources are outdated or failed, or one resource with resourcePath; options (needs resourcePath): the import options of one resource; set_options (needs resourcePath, options): change import options; reimport: reimport one resource, or everything modified without resourcePath; uid (needs resourcePath): the UID of one file; refresh_uids: import the project so every script and shader has its .uid sidecar, and name under uidsCreated the ones this made and under stillWithoutUid the ones the engine would not import: it writes no scene and no script, so a project whose sidecars are all present is left untouched; refresh_classes: rewrite .godot/global_script_class_cache.cfg from the class_name declarations on disk, and name under unseenByEditor any class the editor open on this project still cannot resolve: rewriting the file does not reach the list a running editor loaded, so \"added: []\" means the file was already right rather than that nothing is wrong. A class the cache held after the last rebuild and had lost when this one began is named under lostSinceLastRebuild: the editor wrote the file without it in between, on a save or a scan, and will again until restarted.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "force": {
+      "description": "reimport: reimport even what is current. Default false.",
+      "type": "boolean"
+     },
+     "includeUpToDate": {
+      "description": "status: list resources that are current as well. Default false.",
+      "type": "boolean"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "status",
+       "options",
+       "set_options",
+       "reimport",
+       "uid",
+       "refresh_uids",
+       "refresh_classes"
+      ],
+      "type": "string"
+     },
+     "options": {
+      "additionalProperties": true,
+      "description": "set_options: import options keyed as the .import file spells them, {\"compress/mode\": 1}.",
+      "type": "object"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "reimport": {
+      "description": "set_options: reimport afterwards. Default true.",
+      "type": "boolean"
+     },
+     "resourcePath": {
+      "description": "File inside the project, such as \"sprites/hero.png\" or \"materials/steel.tres\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "op",
+     "projectPath"
+    ],
+    "type": "object"
+   },
+   "name": "project_import"
+  },
+  {
+   "description": "What a project is: its name and main scene from project.godot, the Godot that answers, and how many scenes, scripts and assets it holds, with optional sections on top.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "detail": {
+      "description": "full adds what to do about it to every validation finding. Default summary.",
+      "enum": [
+       "summary",
+       "full"
+      ],
+      "type": "string"
+     },
+     "include": {
+      "description": "Extra sections: registered autoloads, addons and whether each is enabled, export presets, the audio bus layout, a health report, or export validation.",
+      "items": {
+       "enum": [
+        "autoloads",
+        "plugins",
+        "export_presets",
+        "audio_buses",
+        "health",
+        "validation"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "preset": {
+      "description": "For validation: the export preset to validate against.",
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "projectPath"
+    ],
+    "type": "object"
+   },
+   "name": "project_info"
+  },
+  {
+   "description": "Searches text or a regular expression across project files and returns file paths with line numbers. What the engine steps over is not searched: directories spelled with a dot, node_modules, and any directory holding a .gdignore. A vendored engine or an export directory is therefore absent from the results rather than matching the code you are looking for in a copy nobody runs.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "caseSensitive": {
+      "description": "Default false.",
+      "type": "boolean"
+     },
+     "fileTypes": {
+      "description": "Extensions to search, such as [\"gd\", \"tscn\"]. Default: every text file.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "maxResults": {
+      "description": "Default 100.",
+      "type": "number"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "query": {
+      "description": "The text or pattern to find.",
+      "type": "string"
+     },
+     "regex": {
+      "description": "Read the query as a regular expression. Default false.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "projectPath",
+     "query"
+    ],
+    "type": "object"
+   },
+   "name": "project_search"
+  },
+  {
+   "description": "Reads or writes project.godot: settings, autoloads, the main scene, input actions, plugins and audio buses. Operations: get: read one setting, or every setting under prefix; set (needs setting, value): write one setting; add_autoload (needs name, path): register an autoload singleton; remove_autoload (needs name): unregister an autoload; set_main_scene (needs scenePath): choose the scene the game starts in; add_input_action (needs actionName, events): register an input action and its events; enable_plugin (needs pluginName): enable an addon; disable_plugin (needs pluginName): disable an addon; add_audio_bus (needs busName): add an audio bus; set_audio_bus_effect (needs busIndex, effectIndex, effectType): add or configure an effect on a bus; set_audio_bus_volume (needs busIndex, volumeDb): set a bus volume.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "actionName": {
+      "description": "Input action name, such as \"jump\".",
+      "type": "string"
+     },
+     "busIndex": {
+      "description": "Audio bus index.",
+      "type": "number"
+     },
+     "busName": {
+      "description": "Audio bus name.",
+      "type": "string"
+     },
+     "deadzone": {
+      "description": "Input actions: analogue deadzone, 0 to 1. Default 0.5.",
+      "type": "number"
+     },
+     "effectIndex": {
+      "description": "Slot on the bus for the effect.",
+      "type": "number"
+     },
+     "effectType": {
+      "description": "Effect class, such as \"AudioEffectReverb\".",
+      "type": "string"
+     },
+     "enabled": {
+      "description": "Autoloads: register enabled. Default true.",
+      "type": "boolean"
+     },
+     "events": {
+      "description": "The events that trigger the action.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "alt": {
+         "description": "Keys: bind it with Alt held.",
+         "type": "boolean"
+        },
+        "axis": {
+         "description": "Joypad axes: the axis index.",
+         "type": "number"
+        },
+        "axisValue": {
+         "description": "Joypad axes: -1 or 1.",
+         "type": "number"
+        },
+        "button": {
+         "description": "Mouse: 1 left, 2 right, 3 middle. Joypad: the button index.",
+         "type": "number"
+        },
+        "ctrl": {
+         "description": "Keys: bind it with Ctrl held.",
+         "type": "boolean"
+        },
+        "keycode": {
+         "description": "Keys: the key name, such as \"Space\" or \"W\".",
+         "type": "string"
+        },
+        "shift": {
+         "description": "Keys: bind it with Shift held.",
+         "type": "boolean"
+        },
+        "type": {
+         "enum": [
+          "key",
+          "mouse_button",
+          "joypad_button",
+          "joypad_axis"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "type"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "from": {
+      "description": "get: where to read. Default disk, which starts a short-lived engine and reads project.godot, needs no editor and is what an automatic check can reproduce. editor asks the open editor instead, which costs no engine and answers what the editor holds, including changes nobody has saved. Asking for editor with none connected is refused rather than answered from disk, so an answer never means the other one quietly.",
+      "enum": [
+       "disk",
+       "editor"
+      ],
+      "type": "string"
+     },
+     "name": {
+      "description": "Autoload name.",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "get",
+       "set",
+       "add_autoload",
+       "remove_autoload",
+       "set_main_scene",
+       "add_input_action",
+       "enable_plugin",
+       "disable_plugin",
+       "add_audio_bus",
+       "set_audio_bus_effect",
+       "set_audio_bus_volume"
+      ],
+      "type": "string"
+     },
+     "parentBusIndex": {
+      "description": "Audio buses: the bus to send to. Default 0, Master.",
+      "type": "number"
+     },
+     "path": {
+      "description": "Autoload script or scene inside the project.",
+      "type": "string"
+     },
+     "pluginName": {
+      "description": "Folder name under addons/.",
+      "type": "string"
+     },
+     "prefix": {
+      "description": "get: answer with every setting whose name starts with this, and the type the engine registers for each, instead of one setting by name. \"debug/gdscript/warnings/\" answers the whole family. The type matters: a family of levels can hold a setting that is a bool, and writing a level over it looks like it worked.",
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "scenePath": {
+      "description": "Scene file inside the project, such as \"scenes/main.tscn\" or \"res://scenes/main.tscn\".",
+      "type": "string"
+     },
+     "setting": {
+      "description": "Setting path, such as \"display/window/size/viewport_width\".",
+      "type": "string"
+     },
+     "value": {
+      "description": "The value to write. Engine types may be tagged, {\"_type\": \"Vector2\", \"x\": 1, \"y\": 2}. \"\" writes an empty string."
+     },
+     "volumeDb": {
+      "description": "Bus volume in decibels.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "op",
+     "projectPath"
+    ],
+    "type": "object"
+   },
+   "name": "project_settings"
+  },
+  {
+   "description": "Runs the project's gdUnit4 tests headless and answers with every case that did not pass: where it is, and what the assertion said. Suites where everything passed are counted rather than listed, and an engine message keeps the frames above gdUnit4 rather than the twenty inside it, so a clean tier answers in a few lines. The class list is rebuilt first, so a suite written a moment ago is found, and the rebuild's answer is under classes: a class it puts back that the cache had after the last rebuild is named under classes.lostSinceLastRebuild, which is the editor writing its shorter list over the file on every save until restarted. On Windows and Linux the run gets a user:// of its own, so a suite that saves a game writes nowhere near the saves of the copy somebody plays. On macOS the engine reads user:// off HOME and the run writes where the player keeps theirs, which the answer says under savesNote rather than leaving to be found in a save list. A run that found nothing to run is never called a pass: gdUnit4 exits cleanly for one, so the answer says so and names the path it looked in. A run where nothing failed but nodes were left in the tree comes back under warnings, with the count per suite: gdUnit4 decides its verdict on those and keeps them out of its report, so they are read off what it printed. Needs gdUnit4 under addons/gdUnit4.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "failFast": {
+      "description": "Stop each suite at its first failing case. Default false: every case runs. With it on, the counts are of what ran, notRun says how many cases were left, and fixing what is named and running again finds the next one, which looks like a flaky tier and is not.",
+      "type": "boolean"
+     },
+     "ignore": {
+      "description": "Suites or cases to leave out, as \"suite_name\" or \"suite_name:test_name\".",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "path": {
+      "description": "A test directory or one suite file inside the project. Default test.",
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "timeoutMs": {
+      "description": "How long the run may take before it is killed. Default 600000.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "projectPath"
+    ],
+    "type": "object"
+   },
+   "name": "project_test"
+  },
+  {
+   "description": "Resource files: create any ClassDB resource as .tres, change one, write a shader, build a TileSet, or set a Theme colour or font size. A material is a create with resourceType StandardMaterial3D, ShaderMaterial or CanvasItemMaterial. Needs the editor connected. Operations: create (needs resourceType): a new resource of any class; modify (needs properties): set properties on an existing resource; create_shader (needs shaderType): a .gdshader file; create_tileset (needs sources): a TileSet from texture atlases; set_theme_color (needs controlType, colorName, color): a colour in a Theme; set_theme_font_size (needs controlType, fontSizeName, size): a font size in a Theme.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "code": {
+      "description": "create_shader: the shader source. Default: a minimal shader of that type.",
+      "type": "string"
+     },
+     "color": {
+      "additionalProperties": false,
+      "description": "set_theme_color: r, g and b from 0 to 1, with a optional and opaque by default.",
+      "properties": {
+       "a": {
+        "type": "number"
+       },
+       "b": {
+        "type": "number"
+       },
+       "g": {
+        "type": "number"
+       },
+       "r": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "r",
+       "g",
+       "b"
+      ],
+      "type": "object"
+     },
+     "colorName": {
+      "description": "set_theme_color: such as \"font_color\".",
+      "type": "string"
+     },
+     "controlType": {
+      "description": "Theme ops: the Control class, such as \"Button\".",
+      "type": "string"
+     },
+     "fontSizeName": {
+      "description": "set_theme_font_size: such as \"font_size\".",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "create",
+       "modify",
+       "create_shader",
+       "create_tileset",
+       "set_theme_color",
+       "set_theme_font_size"
+      ],
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "properties": {
+      "additionalProperties": true,
+      "description": "Properties to set, keyed by Godot property name. Vectors, colours and the like may be written as {\"x\": 1, \"y\": 2} or tagged {\"_type\": \"Vector2\", \"x\": 1, \"y\": 2}, which is the form a read answers with, so a value read off one node can be written straight to another.",
+      "type": "object"
+     },
+     "resourcePath": {
+      "description": "File inside the project, such as \"sprites/hero.png\" or \"materials/steel.tres\".",
+      "type": "string"
+     },
+     "resourceType": {
+      "description": "create: the resource class, such as \"PhysicsMaterial\" or \"StandardMaterial3D\".",
+      "type": "string"
+     },
+     "script": {
+      "description": "create: a script to attach, for custom resources.",
+      "type": "string"
+     },
+     "shaderType": {
+      "description": "create_shader.",
+      "enum": [
+       "canvas_item",
+       "spatial",
+       "particles",
+       "sky",
+       "fog"
+      ],
+      "type": "string"
+     },
+     "size": {
+      "description": "set_theme_font_size: pixels.",
+      "type": "number"
+     },
+     "sources": {
+      "description": "Atlas sources, one per texture.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "offset": {
+         "additionalProperties": false,
+         "properties": {
+          "x": {
+           "type": "number"
+          },
+          "y": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "x",
+          "y"
+         ],
+         "type": "object"
+        },
+        "separation": {
+         "additionalProperties": false,
+         "properties": {
+          "x": {
+           "type": "number"
+          },
+          "y": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "x",
+          "y"
+         ],
+         "type": "object"
+        },
+        "texture": {
+         "description": "File inside the project, such as \"sprites/hero.png\" or \"materials/steel.tres\".",
+         "type": "string"
+        },
+        "tileSize": {
+         "additionalProperties": false,
+         "properties": {
+          "x": {
+           "type": "number"
+          },
+          "y": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "x",
+          "y"
+         ],
+         "type": "object"
+        }
+       },
+       "required": [
+        "texture",
+        "tileSize"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "op",
+     "projectPath",
+     "resourcePath"
+    ],
+    "type": "object"
+   },
+   "name": "resource_edit"
+  },
+  {
+   "description": "A picture of the running game: the whole screen or one viewport, as an image. Needs the game running with a window. Operations: screenshot: the screen; viewport: one viewport's texture. Default screenshot.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "height": {
+      "description": "Scale the image to this height.",
+      "type": "number"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "screenshot",
+       "viewport"
+      ],
+      "type": "string"
+     },
+     "pid": {
+      "description": "Which game, when several are running from one project, such as a bench and its workers: its process id, as editor_status lists under runtimes. Without it the game this server started or plays is the one asked when it is among them, and the answer says so under answeredBy; with one game per project it is not needed at all.",
+      "type": "number"
+     },
+     "projectPath": {
+      "description": "Which game, when more than one is running: the project directory it was started from. The pick without it, in order: the game this server started or is playing when it is among those running, named under answeredBy where there was a choice; else the only game there is; else a refusal naming every game, which is what a machine running two projects at once gets. Not needed with one game, nor for a call to this server's own.",
+      "type": "string"
+     },
+     "viewportPath": {
+      "description": "viewport: the Viewport node. Default the root viewport.",
+      "type": "string"
+     },
+     "width": {
+      "description": "Scale the image to this width.",
+      "type": "number"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "runtime_capture"
+  },
+  {
+   "description": "Input to the running game: a whole click on a Control or a 3D node named by path, an item chosen out of a menu, typing into whatever has the focus, or a raw action, key, mouse button or mouse motion. All of it works headless, where the window is 64 by 64 and the GUI only takes what is inside it. Operations: click (needs nodePath): press and release on a Control, a frame apart, and answer with what was under the pointer and what became of the control: in_tree, removed or freed. A control out of sight inside a ScrollContainer is scrolled to first, and scrolled_into_view says whether the view moved. A 3D node is clicked where it is drawn, and landed then says the interface did not swallow the press; choose (needs nodePath): take an item out of a menu, by what it says or by where it is in the list. A menu's items are drawn rather than built, so there is nothing to click: the item takes the focus and Enter presses it, which is the engine's own path and needs no window. Answers with what was chosen and what the button in front of it shows now; action (needs action): press an action, or hold it; key (needs keycode): press a key, or hold it. Not for a menu a click has opened: an OptionButton or PopupMenu pops up as a window of its own that a key sent to the game never reaches, so an arrow moves nothing in it and Enter closes it with nothing chosen. choose is what selects there. The limit is that menu's own navigation, not windows in general: an embedded dialog whose owner reads keys in _input gets them, and a binding catcher up in one takes the key first time; text (needs text): type a string into the field being edited, a character at a time, and say what it landed in; mouse_click (needs x, y): one mouse button event at a position, carrying the buttons held once it has happened. A drag is a press held with pressed true, motions, and a release with pressed false. A wheel button is a whole step, press and release together as a mouse sends one, and the answer says released: a lone wheel press holds the viewport on the control that took it, so every click after it lands there; mouse_motion (needs x, y): move the mouse to a position, carrying the distance from where the last injected event put it unless relativeX and relativeY say otherwise, and the buttons held, so a control that drags moves under a run of these between a held mouse_click and its release.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "action: the InputMap action name. An engine dialog is not answered this way: AcceptDialog reads the Escape key itself and never asks the InputMap, so ui_cancel goes in and the question stays up. Dismiss one with key Escape, or click its button.",
+      "type": "string"
+     },
+     "alt": {
+      "description": "key: hold Alt with it. Default false.",
+      "type": "boolean"
+     },
+     "button": {
+      "description": "click, mouse_click: left, right, middle, wheel_up or wheel_down, or a button number. Default left.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "ctrl": {
+      "description": "key: hold Ctrl with it. Default false.",
+      "type": "boolean"
+     },
+     "doubleClick": {
+      "description": "click, mouse_click: default false.",
+      "type": "boolean"
+     },
+     "index": {
+      "description": "choose: the item to take, by where it is in the list, when text will not do.",
+      "type": "number"
+     },
+     "keycode": {
+      "description": "key: the key name, such as \"Space\" or \"A\", or its Godot keycode.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "nodePath": {
+      "description": "click: the Control to click, at its centre, or the 3D node to click, where it is drawn. choose: the PopupMenu, or the OptionButton or MenuButton in front of one.",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "click",
+       "choose",
+       "action",
+       "key",
+       "text",
+       "mouse_click",
+       "mouse_motion"
+      ],
+      "type": "string"
+     },
+     "pid": {
+      "description": "Which game, when several are running from one project, such as a bench and its workers: its process id, as editor_status lists under runtimes. Without it the game this server started or plays is the one asked when it is among them, and the answer says so under answeredBy; with one game per project it is not needed at all.",
+      "type": "number"
+     },
+     "pressed": {
+      "description": "action, key: leave it out and the press is a whole one, down and up a frame apart. true holds it down, false lets go of one being held. mouse_click is one raw event, so it is down unless you say false; a wheel button down is a whole step, since a wheel is never held.",
+      "type": "boolean"
+     },
+     "projectPath": {
+      "description": "Which game, when more than one is running: the project directory it was started from. The pick without it, in order: the game this server started or is playing when it is among those running, named under answeredBy where there was a choice; else the only game there is; else a refusal naming every game, which is what a machine running two projects at once gets. Not needed with one game, nor for a call to this server's own.",
+      "type": "string"
+     },
+     "relativeX": {
+      "description": "mouse_motion: the movement the event carries. Left out, it is the distance from where the last injected pointer event put the pointer, and none for the first; that is what a control that drags reads. Give it to send a motion the position does not show.",
+      "type": "number"
+     },
+     "relativeY": {
+      "description": "mouse_motion: as relativeX.",
+      "type": "number"
+     },
+     "replace": {
+      "description": "text: true writes over what the field already says, which is what filling one in means. Default false types at the caret, so a field reading 2.1 typed \"0.3\" at reads 2.10.3. The answer says what the field holds afterwards either way.",
+      "type": "boolean"
+     },
+     "shift": {
+      "description": "key: hold Shift with it. Default false.",
+      "type": "boolean"
+     },
+     "strength": {
+      "description": "action: 0 to 1. Default 1.",
+      "type": "number"
+     },
+     "text": {
+      "description": "text: what to type. A newline is Enter and a tab is Tab, a space is a space, and \"\" with replace empties the field. choose: the item to take, by what it says.",
+      "type": "string"
+     },
+     "x": {
+      "description": "mouse_click, mouse_motion: window pixels.",
+      "type": "number"
+     },
+     "y": {
+      "description": "mouse_click, mouse_motion: window pixels.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "op"
+    ],
+    "type": "object"
+   },
+   "name": "runtime_input"
+  },
+  {
+   "description": "Questions about the running game: what is written on the screen, the scene tree, the nodes matching a query, where one node is on screen, what one property reads, or the performance metrics. Needs the game running with the runtime addon. Operations: tree: the live scene tree; text: every line of text under nodePath, the values in its fields included, in the order somebody reads the screen, leaving out what is hidden and everything under it; find: the paths of every node matching className, script, namePattern, group or says, with property read off each, hidden ones included unless includeHidden says otherwise; rect (needs nodePath): one node's rectangle or position, in canvas and in window pixels. A 3D node answers with the point to aim at, which is the middle of what it draws rather than the origin it stands on, the rectangle it covers under covers, the camera that drew it, and behind_camera when it is not in front of one; property (needs nodePath, property): what one property reads on a node, or through the objects it holds, refusing a name nothing along the way has; metrics: frame time, memory, draw calls and the rest. Default tree.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "className": {
+      "description": "find: a native class, matching its subclasses too, or a class_name.",
+      "type": "string"
+     },
+     "depth": {
+      "description": "tree: levels to descend. Default 3.",
+      "type": "number"
+     },
+     "group": {
+      "description": "find: a group the node is in.",
+      "type": "string"
+     },
+     "includeHidden": {
+      "description": "text: read hidden nodes as well, for checking that something is not showing. Default false. find: default true, since a find means the node whether or not it is drawn; false answers with what the player can actually see, which is how a panel that keeps a label for every line and hides the ones that do not is read. A node counts as hidden when anything above it is, and how many matches were left out comes back under hidden.",
+      "type": "boolean"
+     },
+     "includeProperties": {
+      "description": "tree: include every stored property of each node. Default false, and one row of a form answered seventy-six thousand characters with it; properties names the few that are wanted.",
+      "type": "boolean"
+     },
+     "limit": {
+      "description": "find: the most nodes to answer with, default 100. text: the most lines, default 500, with omitted saying how many lines that left behind. A screen whose dialog sits under a long list is a screen read with omitted greater than zero, so raise this or point root at the dialog rather than reading the answer as what is on screen.",
+      "type": "number"
+     },
+     "metrics": {
+      "description": "metrics: which to read. Default all.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "namePattern": {
+      "description": "find: a case-insensitive glob on the node name, such as \"Enemy*\". Matched against the whole name, so a bare word finds only a node called exactly that; an answer of none says how many names contain it and what glob would have found them.",
+      "type": "string"
+     },
+     "nodePath": {
+      "description": "tree, find, text: where to start, default /root. rect: the node to place. property: the node to read.",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "tree",
+       "text",
+       "find",
+       "rect",
+       "property",
+       "metrics"
+      ],
+      "type": "string"
+     },
+     "pid": {
+      "description": "Which game, when several are running from one project, such as a bench and its workers: its process id, as editor_status lists under runtimes. Without it the game this server started or plays is the one asked when it is among them, and the answer says so under answeredBy; with one game per project it is not needed at all.",
+      "type": "number"
+     },
+     "projectPath": {
+      "description": "Which game, when more than one is running: the project directory it was started from. The pick without it, in order: the game this server started or is playing when it is among those running, named under answeredBy where there was a choice; else the only game there is; else a refusal naming every game, which is what a machine running two projects at once gets. Not needed with one game, nor for a call to this server's own.",
+      "type": "string"
+     },
+     "properties": {
+      "description": "tree: the properties to read off each node, by name, so the text of every label and button under a panel is one call: a node that has not got one leaves it out. Colons read through what a node holds, as property does for find.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "property": {
+      "description": "property: which one to read. find: read this one off every node matched, so a panel of labels is one call rather than one per label. Colons read through what a node holds, \"_game:clock:speed\", which is where a game keeps what is worth asking about. A number or a key steps into a list or a map, \"_game:run:roster:0:traits\", which is how the lists a game keeps its state in are walked: a roster, a board, an in-tray. A negative number counts from the end. A step written as a call, \"get_viewport():gui_get_focus_owner()\", calls a method that takes no arguments and walks into what it returned, which is how a question only a method answers is read in one call: which control holds the focus in the viewport this one is in. A step that is not there is named, and says what was there instead.",
+      "type": "string"
+     },
+     "says": {
+      "description": "find: part of what the node has written on it, case-insensitively, which is how a button is reached by the word on it rather than by a generated path. Its own text, so a row is found by the label in it, and hidden nodes match. A bare word is a contains; write a glob and it is one, matched against the whole of what the node says, the same as namePattern. A label with a line break is matched with the break in the words, and a backslash followed by n counts as one.",
+      "type": "string"
+     },
+     "script": {
+      "description": "find: the script file the node carries.",
+      "type": "string"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "runtime_inspect"
+  },
+  {
+   "description": "Sets a property or calls a method on a node in the running game. Needs the game running with the runtime addon. Operations: set (needs property, value): set a property, on a node or on an object it holds; call (needs method): call a method, on a node or on an object it holds, and return its result.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "args": {
+      "description": "call: the arguments, fitted to the method's parameter types.",
+      "type": "array"
+     },
+     "method": {
+      "description": "call: which one to call. Colons call through what a node holds, \"_game:run:advance\", the same way a property is written through them, a list or a map is stepped into by index or key, \"_game:run:roster:0:retire\", and a step written as a call walks through what a method taking no arguments returned, \"get_viewport():gui_get_focus_owner\".",
+      "type": "string"
+     },
+     "nodePath": {
+      "description": "Absolute node path, such as \"/root/Main/Player\".",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "set",
+       "call"
+      ],
+      "type": "string"
+     },
+     "pid": {
+      "description": "Which game, when several are running from one project, such as a bench and its workers: its process id, as editor_status lists under runtimes. Without it the game this server started or plays is the one asked when it is among them, and the answer says so under answeredBy; with one game per project it is not needed at all.",
+      "type": "number"
+     },
+     "projectPath": {
+      "description": "Which game, when more than one is running: the project directory it was started from. The pick without it, in order: the game this server started or is playing when it is among those running, named under answeredBy where there was a choice; else the only game there is; else a refusal naming every game, which is what a machine running two projects at once gets. Not needed with one game, nor for a call to this server's own.",
+      "type": "string"
+     },
+     "property": {
+      "description": "set: which one to write. Colons write through what a node holds, \"_game:run:day\", and a number or a key steps into a list or a map on the way, \"_game:run:roster:0:name\", a negative number counting from the end, and a step written as a call, \"get_viewport():gui_embed_subwindows\", walks through what a method taking no arguments returned. The answer reads back off the same holder, so a write a typed container refused shows as an unchanged value.",
+      "type": "string"
+     },
+     "value": {
+      "description": "set: the value, fitted to the property's type. \"\" writes an empty string."
+     }
+    },
+    "required": [
+     "op",
+     "nodePath"
+    ],
+    "type": "object"
+   },
+   "name": "runtime_invoke"
+  },
+  {
+   "description": "Lets the running game get on with it and answers when something has happened: a number of frames, a signal, a property reaching a value, or words appearing on a screen. Needs the game running with the runtime addon. Operations: frames (needs frames): let frames pass; signal (needs nodePath, signal): wait for a signal and answer with what it carried; until (needs nodePath): wait for a property to read as a value, or for words to appear under a node, and answer with what it found.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "frames": {
+      "description": "frames: how many to let pass, 1 to 600. More than that is refused.",
+      "type": "number"
+     },
+     "includeHidden": {
+      "description": "until, with says: count words on a hidden node too. Default false, since a wait for words is a wait for them to be shown: a button that exists hidden through a whole animation carries its words the whole time and satisfied the wait at once, and every wait on that screen fell back to counting frames.",
+      "type": "boolean"
+     },
+     "nodePath": {
+      "description": "signal, until: the node.",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "frames",
+       "signal",
+       "until"
+      ],
+      "type": "string"
+     },
+     "pid": {
+      "description": "Which game, when several are running from one project, such as a bench and its workers: its process id, as editor_status lists under runtimes. Without it the game this server started or plays is the one asked when it is among them, and the answer says so under answeredBy; with one game per project it is not needed at all.",
+      "type": "number"
+     },
+     "projectPath": {
+      "description": "Which game, when more than one is running: the project directory it was started from. The pick without it, in order: the game this server started or is playing when it is among those running, named under answeredBy where there was a choice; else the only game there is; else a refusal naming every game, which is what a machine running two projects at once gets. Not needed with one game, nor for a call to this server's own.",
+      "type": "string"
+     },
+     "property": {
+      "description": "until: the property name, or a colon path through what the node holds, \"_game:run:day\", read the way runtime_inspect property reads one, a step written as a call included. Walked again on every frame, so a holder the game replaces while the wait is on is followed.",
+      "type": "string"
+     },
+     "says": {
+      "description": "until: wait for these words to appear anywhere under nodePath instead of for a property, which is how a panel that rebuilds its labels is waited on at all: the labels are named afresh each redraw and the panel is what stays put. Case-insensitive, part of a line, on a node the player can see unless includeHidden says otherwise; a label with a line break is matched with the break in the words, and a backslash followed by n counts as one. Instead of, not as well as: a call carrying this and a property is refused, because they ask about different things and answering one of them silently is how a caller watches a screen believing they are watching a property.",
+      "type": "string"
+     },
+     "signal": {
+      "description": "signal: the signal name.",
+      "type": "string"
+     },
+     "timeoutMs": {
+      "description": "signal, until: how long to wait before answering anyway, 1 to 120000. Default 5000.",
+      "type": "number"
+     },
+     "value": {
+      "description": "until: the value to wait for, fitted to the property's type."
+     }
+    },
+    "required": [
+     "op"
+    ],
+    "type": "object"
+   },
+   "name": "runtime_wait"
+  },
+  {
+   "description": "Animations in an AnimationPlayer and states in an AnimationTree state machine. Needs the editor connected. Operations: create (needs playerNodePath, animationName): a new animation in an AnimationPlayer; add_track (needs playerNodePath, animationName, track): a property or method track with keyframes; add_state (needs animTreePath, stateName, animationName): a state playing an animation, in an AnimationTree; connect_states (needs animTreePath, fromState, toState): a transition between two states.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "advanceCondition": {
+      "description": "connect_states: the condition parameter that advances.",
+      "type": "string"
+     },
+     "animTreePath": {
+      "description": "The AnimationTree node.",
+      "type": "string"
+     },
+     "animationName": {
+      "description": "The animation in the player. add_state: the one that state plays.",
+      "type": "string"
+     },
+     "fromState": {
+      "description": "connect_states: the state the transition leaves.",
+      "type": "string"
+     },
+     "length": {
+      "description": "create: seconds. Default 1.",
+      "type": "number"
+     },
+     "loopMode": {
+      "description": "create: default none.",
+      "enum": [
+       "none",
+       "linear",
+       "pingpong"
+      ],
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "create",
+       "add_track",
+       "add_state",
+       "connect_states"
+      ],
+      "type": "string"
+     },
+     "playerNodePath": {
+      "description": "The AnimationPlayer node.",
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "scenePath": {
+      "description": "Scene file inside the project, such as \"scenes/main.tscn\" or \"res://scenes/main.tscn\".",
+      "type": "string"
+     },
+     "stateMachinePath": {
+      "description": "add_state: a nested state machine. Default the root.",
+      "type": "string"
+     },
+     "stateName": {
+      "description": "add_state: the state to add.",
+      "type": "string"
+     },
+     "step": {
+      "description": "create: keyframe snap in seconds. Default 0.1.",
+      "type": "number"
+     },
+     "toState": {
+      "description": "connect_states: the state it arrives at.",
+      "type": "string"
+     },
+     "track": {
+      "additionalProperties": false,
+      "description": "The track to add.",
+      "properties": {
+       "keyframes": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "args": {
+           "description": "For method tracks: the arguments to call with.",
+           "type": "array"
+          },
+          "time": {
+           "description": "Seconds from the start.",
+           "type": "number"
+          },
+          "value": {
+           "description": "For property tracks: the value at this time."
+          }
+         },
+         "required": [
+          "time"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "method": {
+        "description": "For method tracks: the method to call.",
+        "type": "string"
+       },
+       "nodePath": {
+        "description": "Target node, relative to the AnimationPlayer root.",
+        "type": "string"
+       },
+       "property": {
+        "description": "For property tracks: the property to animate.",
+        "type": "string"
+       },
+       "type": {
+        "enum": [
+         "property",
+         "method"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "type",
+       "nodePath",
+       "keyframes"
+      ],
+      "type": "object"
+     },
+     "transitionType": {
+      "description": "connect_states: default immediate.",
+      "enum": [
+       "immediate",
+       "sync",
+       "at_end"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "op",
+     "projectPath",
+     "scenePath"
+    ],
+    "type": "object"
+   },
+   "name": "scene_animation"
+  },
+  {
+   "description": "Creates a scene file, saves one, or saves a copy under a new path. Needs the editor connected. Operations: create: a new scene with one root node; save: save the scene as it is in the editor; save_as (needs newPath): save a copy under newPath. Default create.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "newPath": {
+      "description": "save_as: where the copy goes.",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "create",
+       "save",
+       "save_as"
+      ],
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "rootNodeType": {
+      "description": "create: the root node class. Default Node2D.",
+      "type": "string"
+     },
+     "scenePath": {
+      "description": "Scene file inside the project, such as \"scenes/main.tscn\" or \"res://scenes/main.tscn\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "projectPath",
+     "scenePath"
+    ],
+    "type": "object"
+   },
+   "name": "scene_create"
+  },
+  {
+   "description": "One node in a scene file: add, read, set, duplicate, reparent or delete it, or paint TileMap cells. Any ClassDB node type can be added, so a NavigationRegion2D, an AnimationTree or a Camera3D is an add with that nodeType and its properties. A property holding a Resource takes the res:// path of one, so a texture, a material or a theme is a set like any other. Needs the editor connected. Operations: add (needs nodeType, nodeName): add a node of any class; get (needs nodePath): read a node's properties; set (needs nodePath, properties): set properties on a node; duplicate (needs nodePath, newName): copy a node and its children; reparent (needs nodePath, newParentPath): move a node under another parent; delete (needs nodePath): remove a node and its children; set_tilemap_cells (needs nodePath, cells): place tiles in a TileMap.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "cells": {
+      "description": "Cells to place.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "alternativeTile": {
+         "type": "number"
+        },
+        "atlasCoords": {
+         "additionalProperties": false,
+         "properties": {
+          "x": {
+           "type": "number"
+          },
+          "y": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "x",
+          "y"
+         ],
+         "type": "object"
+        },
+        "coords": {
+         "additionalProperties": false,
+         "properties": {
+          "x": {
+           "type": "number"
+          },
+          "y": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "x",
+          "y"
+         ],
+         "type": "object"
+        },
+        "sourceId": {
+         "description": "TileSet source index.",
+         "type": "number"
+        }
+       },
+       "required": [
+        "coords",
+        "sourceId",
+        "atlasCoords"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "includeDefaults": {
+      "description": "get: include properties still at their default. Default false.",
+      "type": "boolean"
+     },
+     "layer": {
+      "description": "set_tilemap_cells: the TileMap layer. Default 0.",
+      "type": "number"
+     },
+     "newName": {
+      "description": "duplicate: the copy's name.",
+      "type": "string"
+     },
+     "newParentPath": {
+      "description": "reparent: the new parent.",
+      "type": "string"
+     },
+     "nodeName": {
+      "description": "add: the new node's name.",
+      "type": "string"
+     },
+     "nodePath": {
+      "description": "Node path from the scene root, such as \"Player/Sprite2D\". \".\" is the root.",
+      "type": "string"
+     },
+     "nodeType": {
+      "description": "add: the node class, such as \"CharacterBody2D\".",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "add",
+       "get",
+       "set",
+       "duplicate",
+       "reparent",
+       "delete",
+       "set_tilemap_cells"
+      ],
+      "type": "string"
+     },
+     "parentNodePath": {
+      "description": "add: where the node goes. Default the root. duplicate: where the copy goes.",
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "properties": {
+      "additionalProperties": true,
+      "description": "Properties to set, keyed by Godot property name. Vectors, colours and the like may be written as {\"x\": 1, \"y\": 2} or tagged {\"_type\": \"Vector2\", \"x\": 1, \"y\": 2}, which is the form a read answers with, so a value read off one node can be written straight to another.",
+      "type": "object"
+     },
+     "scenePath": {
+      "description": "Scene file inside the project, such as \"scenes/main.tscn\" or \"res://scenes/main.tscn\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "op",
+     "projectPath",
+     "scenePath"
+    ],
+    "type": "object"
+   },
+   "name": "scene_node"
+  },
+  {
+   "description": "Signal connections in a scene file. Needs the editor connected. Operations: connect (needs sourceNodePath, signalName, targetNodePath, methodName): connect a signal to a method; disconnect (needs sourceNodePath, signalName, targetNodePath, methodName): remove a connection; list: every connection in the scene.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "flags": {
+      "description": "connect: Object.ConnectFlags, such as 1 for deferred.",
+      "type": "number"
+     },
+     "methodName": {
+      "description": "The method on that node, called when it emits.",
+      "type": "string"
+     },
+     "nodePath": {
+      "description": "list: only connections involving this node.",
+      "type": "string"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "connect",
+       "disconnect",
+       "list"
+      ],
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "scenePath": {
+      "description": "Scene file inside the project, such as \"scenes/main.tscn\" or \"res://scenes/main.tscn\".",
+      "type": "string"
+     },
+     "signalName": {
+      "description": "The signal it emits, such as \"pressed\".",
+      "type": "string"
+     },
+     "sourceNodePath": {
+      "description": "The node that emits.",
+      "type": "string"
+     },
+     "targetNodePath": {
+      "description": "The node whose method is called.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "op",
+     "projectPath",
+     "scenePath"
+    ],
+    "type": "object"
+   },
+   "name": "scene_signal"
+  },
+  {
+   "description": "The nodes of a scene file: names, classes and hierarchy, with properties when asked. Needs the editor connected.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "depth": {
+      "description": "How many levels to descend. Default: all.",
+      "type": "number"
+     },
+     "includeProperties": {
+      "description": "Include each node's properties. Default false.",
+      "type": "boolean"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "scenePath": {
+      "description": "Scene file inside the project, such as \"scenes/main.tscn\" or \"res://scenes/main.tscn\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "projectPath",
+     "scenePath"
+    ],
+    "type": "object"
+   },
+   "name": "scene_tree"
+  },
+  {
+   "description": "Errors and warnings for a script from the editor's language server, and whether the script is clean. Needs the editor running. Diagnostics are checked against the project's own files, and the two that the files disprove are named rather than passed on: a member the class cache's file declares comes back under contradictedByTheFile, and a class this project declares that the diagnostic could not resolve comes back under typesTheEditorHasNotLoaded, with inTheClassCache saying whether a launched game would resolve it. staleAnalysis then says what to do, and for both states it is editor_rescan first: it asks the editor already running, starts nothing, and has cleared each in every reproduction measured. The one exception is named when it applies: an editor whose last scan wrote the class cache shorter than the file holds a list behind the files and writes it on every scan, so on that editor the rescan loads nothing and staleAnalysis says editor_launch restart instead. What follows differs: for a stale analysed type, editor_rescan with reloadScript recompiles the held copy and editor_launch restart is the last resort that costs a window; for a class missing from the cache, project_import refresh_classes rewrites the cache from disk at the cost of a short headless engine, which matters beside a running bench.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "scriptPath": {
+      "description": "Script file inside the project, such as \"scripts/player.gd\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "projectPath",
+     "scriptPath"
+    ],
+    "type": "object"
+   },
+   "name": "script_diagnostics"
+  },
+  {
+   "description": "Creates a GDScript file, or adds functions, variables and signals to one. Every declaration written carries a type. create loads what it wrote under the project's own warning settings and answers with parses; the engine's reasons for a refusal come back under engine_messages. Operations: create: a new script file; modify (needs modifications): add to an existing script.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "className": {
+      "description": "create: a class_name for the script.",
+      "type": "string"
+     },
+     "content": {
+      "description": "create: the whole file, instead of a template.",
+      "type": "string"
+     },
+     "extends": {
+      "description": "create: the base class. Default Node.",
+      "type": "string"
+     },
+     "modifications": {
+      "description": "Additions to make, in order.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "body": {
+         "description": "Functions: the body.",
+         "type": "string"
+        },
+        "defaultValue": {
+         "description": "Variables: the initial value, as written in GDScript.",
+         "type": "string"
+        },
+        "exportHint": {
+         "description": "Variables: the export hint, such as \"range(0, 100)\".",
+         "type": "string"
+        },
+        "isExport": {
+         "description": "Variables: add @export.",
+         "type": "boolean"
+        },
+        "isOnready": {
+         "description": "Variables: add @onready.",
+         "type": "boolean"
+        },
+        "name": {
+         "type": "string"
+        },
+        "params": {
+         "description": "Functions and signals: the parameter list, \"delta: float\".",
+         "type": "string"
+        },
+        "position": {
+         "description": "Functions: where to insert.",
+         "enum": [
+          "end",
+          "after_ready",
+          "after_init"
+         ],
+         "type": "string"
+        },
+        "returnType": {
+         "description": "Functions: the return type.",
+         "type": "string"
+        },
+        "type": {
+         "enum": [
+          "add_function",
+          "add_variable",
+          "add_signal"
+         ],
+         "type": "string"
+        },
+        "varType": {
+         "description": "Variables: the type annotation.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "type",
+        "name"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "create",
+       "modify"
+      ],
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "scriptPath": {
+      "description": "Script file inside the project, such as \"scripts/player.gd\".",
+      "type": "string"
+     },
+     "template": {
+      "description": "create: a starting shape.",
+      "enum": [
+       "singleton",
+       "state_machine",
+       "component",
+       "resource"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "op",
+     "projectPath",
+     "scriptPath"
+    ],
+    "type": "object"
+   },
+   "name": "script_edit"
+  },
+  {
+   "description": "What a script contains: its structure from the file, or symbols, completions and hover text from the editor's language server. Operations: structure: functions, variables, signals, class_name and extends, read from the file; symbols: document symbols from the language server; completion (needs line, character): completions at a position; hover (needs line, character): hover text at a position. Default structure.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "character": {
+      "description": "completion, hover: zero-based column.",
+      "type": "number"
+     },
+     "includeInherited": {
+      "description": "structure: also list what the script inherits, walking extends through the project's other scripts. Each such member carries inherited_from, the file declaring it, and the answer gains inherits_from, the chain that was walked. A name the script overrides is listed at both its lines rather than once. A native base is not walked, since it declares nothing in a file: editor_classes info answers for those. Default false.",
+      "type": "boolean"
+     },
+     "line": {
+      "description": "completion, hover: zero-based line.",
+      "type": "number"
+     },
+     "op": {
+      "description": "What to do.",
+      "enum": [
+       "structure",
+       "symbols",
+       "completion",
+       "hover"
+      ],
+      "type": "string"
+     },
+     "projectPath": {
+      "description": "Absolute path to the project directory, the one holding project.godot.",
+      "type": "string"
+     },
+     "scriptPath": {
+      "description": "Script file inside the project, such as \"scripts/player.gd\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "projectPath",
+     "scriptPath"
+    ],
+    "type": "object"
+   },
+   "name": "script_info"
+  }
+ ],
+ "version": "1.0.11"
+}

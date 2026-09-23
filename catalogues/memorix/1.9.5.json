@@ -1,0 +1,615 @@
+{
+ "args": [
+  "serve"
+ ],
+ "measured_at": "2026-09-22T19:16:13+00:00",
+ "package": "memorix",
+ "protocol": "2025-06-18",
+ "published": "2026-09-20T11:53:04.640Z",
+ "tools": [
+  {
+   "description": "Show CodeGraph Memory provider and index status for the current project.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {},
+    "type": "object"
+   },
+   "name": "memorix_codegraph_status",
+   "title": "CodeGraph Memory Status"
+  },
+  {
+   "description": "Build a prompt-ready working context pack for a coding task. Combines relevant memories, CodeGraph Memory facts, freshness warnings, suggested reads, and verification hints. After a complete memorix_project_context brief, provide purpose only when deliberately expanding beyond it.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "limit": {
+      "description": "Max active memories to inspect before code-ref filtering (default: 20)",
+      "exclusiveMinimum": 0,
+      "maximum": 100,
+      "type": "integer"
+     },
+     "purpose": {
+      "description": "Why this must expand beyond the latest Autopilot brief. Name the missing fact or the user's explicit request.",
+      "type": "string"
+     },
+     "task": {
+      "description": "Current coding task or question",
+      "type": "string"
+     }
+    },
+    "required": [
+     "task"
+    ],
+    "type": "object"
+   },
+   "name": "memorix_context_pack",
+   "title": "Context Pack"
+  },
+  {
+   "description": "Fetch full observation, mini-skill, or curated durable-memory details \u2014 includes source kind (explicit memory / hook trace / git evidence), value category, and cross-references (~500-1000 tokens each). Do not re-fetch content already covered by a complete memorix_project_context brief unless a specific fact is still missing or the user asks for deeper history; provide purpose when intentionally expanding. Always use memorix_search first to find relevant IDs, then fetch only what you need. Accepts typed refs from search results (e.g. \"obs:42\", \"skill:3\") and durable refs from a project brief (e.g. \"durable:<uuid>\") via the typedRefs field, or legacy numeric ids / object refs for backward compatibility.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "force": {
+      "description": "Use only when the user explicitly asks to read a record already represented in the latest Autopilot brief.",
+      "type": "boolean"
+     },
+     "ids": {
+      "description": "Observation IDs to fetch (legacy, from memorix_search results)",
+      "items": {
+       "type": "number"
+      },
+      "type": "array"
+     },
+     "purpose": {
+      "description": "Why this must expand beyond the latest Autopilot brief. Name the missing fact or the user's explicit request.",
+      "type": "string"
+     },
+     "refs": {
+      "description": "Explicit observation refs. Prefer this for global search results.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "id": {
+         "description": "Observation ID",
+         "type": "number"
+        },
+        "projectId": {
+         "description": "Project ID for global-search disambiguation",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "typedRefs": {
+      "description": "Typed memory refs from search results or a project brief, e.g. \"obs:42\", \"skill:3\", \"durable:<uuid>\", \"obs:42@org/proj\"",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "name": "memorix_detail",
+   "title": "Memory Details"
+  },
+  {
+   "description": "Use the controlled local media library for an explicit import, attachment, inspection, or MiniMax generation request. Assets stay outside the Git worktree and enter normal memory only when attach is explicitly true. Use the CLI for destructive removal, quota cleanup, and direct generation. MCP generation is disabled by default and requires MEMORIX_MCP_MEDIA_GENERATION=1 after the operator reviews provider billing.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "enum": [
+       "import",
+       "attach",
+       "list",
+       "show",
+       "derive-pdf",
+       "status",
+       "cancel"
+      ],
+      "type": "string"
+     },
+     "assetId": {
+      "description": "Controlled MediaAsset ID for attach/show.",
+      "type": "string"
+     },
+     "attach": {
+      "description": "Attach generated/imported output to normal project memory explicitly.",
+      "type": "boolean"
+     },
+     "jobId": {
+      "description": "Durable media job ID for status.",
+      "type": "string"
+     },
+     "kind": {
+      "description": "Optional asset list filter.",
+      "enum": [
+       "image",
+       "audio",
+       "video",
+       "document"
+      ],
+      "type": "string"
+     },
+     "limit": {
+      "description": "Maximum assets to list.",
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxChars": {
+      "description": "Bounded PDF extraction character limit.",
+      "maximum": 60000,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxPages": {
+      "description": "Bounded PDF extraction page limit.",
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "narrative": {
+      "description": "Short retrieval text when attaching an asset.",
+      "type": "string"
+     },
+     "path": {
+      "description": "Explicit local image/audio/video/PDF path for import.",
+      "type": "string"
+     },
+     "title": {
+      "description": "Observation title when attaching generated/imported output.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "memorix_media",
+   "title": "Manage Controlled Media"
+  },
+  {
+   "description": "Build a compact Memory Autopilot brief for the current coding task. Schedules Code Memory refresh when needed, includes Start here files, reliable code-bound memories, stale/suspect cautions, and verification hints. Use this at the start of a new coding turn or after switching tasks.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "agent": {
+      "description": "Optional target agent for compatible workflow selection.",
+      "enum": [
+       "windsurf",
+       "cursor",
+       "claude-code",
+       "codex",
+       "copilot",
+       "antigravity",
+       "gemini-cli",
+       "openclaw",
+       "hermes",
+       "omp",
+       "kiro",
+       "opencode",
+       "trae"
+      ],
+      "type": "string"
+     },
+     "format": {
+      "default": "prompt",
+      "description": "Output format. \"prompt\" is agent-ready; \"summary\" is human-readable; \"receipt\" is bounded JSON; \"json\" is detailed diagnostics.",
+      "enum": [
+       "prompt",
+       "summary",
+       "json",
+       "receipt"
+      ],
+      "type": "string"
+     },
+     "limit": {
+      "description": "Reserved for future source limits; current prompt stays compact by default.",
+      "type": "number"
+     },
+     "refresh": {
+      "default": "auto",
+      "description": "Code Memory refresh policy. auto refreshes only when missing or stale.",
+      "enum": [
+       "auto",
+       "always",
+       "never"
+      ],
+      "type": "string"
+     },
+     "task": {
+      "description": "Current coding task or question",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "memorix_project_context",
+   "title": "Memory Autopilot Project Context"
+  },
+  {
+   "description": "Mark observations as resolved (completed/no longer active). Resolved memories are hidden from default search but can still be found with status=\"all\". Use this to mark completed tasks, fixed bugs, or outdated information so they don't pollute future context.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "ids": {
+      "description": "Observation IDs to mark as resolved",
+      "items": {
+       "type": "number"
+      },
+      "type": "array"
+     },
+     "status": {
+      "default": "resolved",
+      "description": "Target status: \"resolved\" (default, completed/done) or \"archived\" (permanently hidden)",
+      "enum": [
+       "resolved",
+       "archived"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "ids"
+    ],
+    "type": "object"
+   },
+   "name": "memorix_resolve",
+   "title": "Resolve Memories"
+  },
+  {
+   "description": "Search project memory. Returns a compact index (~50-100 tokens/result). Do not use as a follow-up to a complete memorix_project_context brief unless a specific fact is still missing or the user asks for deeper history; provide purpose when intentionally expanding. Use memorix_detail to fetch full content for specific IDs. Use memorix_timeline to see chronological context. Searches across all observations stored from any IDE session \u2014 enabling cross-session and cross-agent context retrieval.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "force": {
+      "description": "Use only when the user explicitly asks to read a record already represented in the latest Autopilot brief.",
+      "type": "boolean"
+     },
+     "limit": {
+      "description": "Max results (default: 20)",
+      "type": "number"
+     },
+     "maxTokens": {
+      "description": "Token budget \u2014 trim results to fit (0 = unlimited)",
+      "type": "number"
+     },
+     "purpose": {
+      "description": "Why this must expand beyond the latest Autopilot brief. Name the missing fact or the user's explicit request.",
+      "type": "string"
+     },
+     "quality": {
+      "default": "balanced",
+      "description": "Retrieval profile: fast stays local, balanced uses configured embeddings, thorough explicitly permits optional LLM refinement.",
+      "enum": [
+       "fast",
+       "balanced",
+       "thorough"
+      ],
+      "type": "string"
+     },
+     "query": {
+      "description": "Search query (natural language or keywords)",
+      "type": "string"
+     },
+     "scope": {
+      "default": "project",
+      "description": "Search scope: \"project\" (default) only searches current project, \"global\" searches all projects",
+      "enum": [
+       "project",
+       "global"
+      ],
+      "type": "string"
+     },
+     "since": {
+      "description": "Only return observations created after this date (ISO 8601 or natural like \"2025-01-15\")",
+      "type": "string"
+     },
+     "source": {
+      "description": "Filter by memory source. \"git\" returns only commit-derived ground truth memories. Omit for all sources.",
+      "enum": [
+       "agent",
+       "git",
+       "manual"
+      ],
+      "type": "string"
+     },
+     "status": {
+      "default": "active",
+      "description": "Filter by memory status. \"active\" (default) shows current memories, \"all\" includes resolved/archived.",
+      "enum": [
+       "active",
+       "resolved",
+       "archived",
+       "all"
+      ],
+      "type": "string"
+     },
+     "type": {
+      "description": "Filter by observation type",
+      "enum": [
+       "session-request",
+       "gotcha",
+       "problem-solution",
+       "reasoning",
+       "how-it-works",
+       "what-changed",
+       "discovery",
+       "why-it-exists",
+       "decision",
+       "trade-off",
+       "probe"
+      ],
+      "type": "string"
+     },
+     "until": {
+      "description": "Only return observations created before this date (ISO 8601 or natural like \"2025-02-01\")",
+      "type": "string"
+     }
+    },
+    "required": [
+     "query"
+    ],
+    "type": "object"
+   },
+   "name": "memorix_search",
+   "title": "Search Memory"
+  },
+  {
+   "description": "Start a new coding session. Returns a compact continuation card with the latest handoff and a few memory references. Call this at the beginning of a session to track activity; retrieve a referenced memory only when it is relevant. Any previous active session for this project will be auto-closed. By default this is lightweight: it binds the project, opens a session, and avoids dumping full history into the new context. Coordination identity is opt-in via `joinTeam: true` or a separate `team_manage` join call.\n\nIMPORTANT for HTTP/control-plane mode: pass `projectRoot` with the absolute path to your workspace root (e.g., the directory open in your IDE). Memorix uses this to detect the git project and bind this session to the correct project context. Without it, project-scoped tools will be disabled.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "agent": {
+      "description": "Agent/IDE name (e.g., \"cursor\", \"windsurf\", \"claude-code\")",
+      "type": "string"
+     },
+     "agentType": {
+      "description": "Agent type used for optional coordination identity mapping (e.g., \"windsurf\", \"cursor\").",
+      "type": "string"
+     },
+     "instanceId": {
+      "description": "Stable instance ID for optional coordination identity across restarts. If omitted with joinTeam=true, Memorix derives a deterministic fallback from the project and agent identity.",
+      "type": "string"
+     },
+     "joinTeam": {
+      "description": "If true, also join orchestration coordination state for this session. Defaults to false.",
+      "type": "boolean"
+     },
+     "projectRoot": {
+      "description": "Absolute path to the workspace/project root directory (e.g., the folder open in your IDE). Memorix will detect the git project from this path and bind this session to it. Required for HTTP transport when multiple projects are open simultaneously or when rebinding an existing control-plane session.",
+      "type": "string"
+     },
+     "role": {
+      "description": "Explicit role override used only when joinTeam=true.",
+      "type": "string"
+     },
+     "sessionId": {
+      "description": "Custom session ID (auto-generated if omitted)",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "memorix_session_start",
+   "title": "Start Session"
+  },
+  {
+   "description": "Store a new observation/memory. Automatically indexed for search. Use type to classify: gotcha ([GOTCHA] critical pitfall), decision ([DECISION] architecture choice), problem-solution ([FIX] bug fix), how-it-works ([INFO] explanation), what-changed ([CHANGE] change), discovery ([DISCOVERY] insight), why-it-exists ([WHY] rationale), trade-off ([TRADEOFF] compromise), session-request ([SESSION] original goal). Project visibility is the default. Personal or team visibility requires an explicitly joined coordination identity. Set longTerm only when the caller explicitly wants an additional source-backed long-term candidate; it is never injected until an operator records a review through the CLI. For a read-only task, do not store unless the user explicitly asks to save a record.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "attachments": {
+      "description": "Safe public provenance references. They are stored as metadata for lexical retrieval; raw inline media is never stored.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "mimeType": {
+         "type": "string"
+        },
+        "modality": {
+         "enum": [
+          "image",
+          "audio",
+          "video",
+          "document"
+         ],
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "url": {
+         "description": "Public HTTPS provenance reference without query parameters or fragments. Memorix does not fetch this URL: attachment metadata is persisted and BM25-searchable, while observation vectors remain text-only.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "modality",
+        "url"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "concepts": {
+      "description": "Related concepts/keywords",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "entityName": {
+      "description": "The entity this observation belongs to (e.g., \"auth-module\", \"port-config\")",
+      "type": "string"
+     },
+     "facts": {
+      "description": "Structured facts (e.g., \"Default timeout: 60s\")",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "filesModified": {
+      "description": "Files involved",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "longTerm": {
+      "additionalProperties": false,
+      "description": "Optional explicit request to create a source-backed long-term candidate alongside this observation. Candidates are not automatically injected.",
+      "properties": {
+       "applicability": {
+        "description": "When this durable fact or procedure applies.",
+        "type": "string"
+       },
+       "kind": {
+        "description": "Cognitive kind for an additional long-term candidate.",
+        "enum": [
+         "episodic",
+         "semantic",
+         "procedural"
+        ],
+        "type": "string"
+       },
+       "scope": {
+        "default": "project",
+        "description": "Long-term scope. User capture is private source evidence and needs a bound agent identity.",
+        "enum": [
+         "project",
+         "user",
+         "team"
+        ],
+        "type": "string"
+       },
+       "tags": {
+        "description": "Small set of retrieval tags for the candidate.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "kind"
+      ],
+      "type": "object"
+     },
+     "narrative": {
+      "description": "Full description of the observation",
+      "type": "string"
+     },
+     "overrideReadOnly": {
+      "description": "Use only when the user explicitly asks to save memory during a read-only or no-modification task.",
+      "type": "boolean"
+     },
+     "progress": {
+      "additionalProperties": false,
+      "description": "Progress tracking for task/feature observations",
+      "properties": {
+       "completion": {
+        "description": "Completion percentage 0-100",
+        "type": "number"
+       },
+       "feature": {
+        "description": "Feature or task name",
+        "type": "string"
+       },
+       "status": {
+        "description": "Current status",
+        "enum": [
+         "in-progress",
+         "completed",
+         "blocked"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "feature",
+       "status"
+      ],
+      "type": "object"
+     },
+     "relatedCommits": {
+      "description": "Git commit hashes this memory relates to (links ground truth \u2194 reasoning)",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "relatedEntities": {
+      "description": "Other entity names this memory cross-references",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "title": {
+      "description": "Short descriptive title (~5-10 words)",
+      "type": "string"
+     },
+     "topicKey": {
+      "description": "Optional topic identifier for upserts (e.g., \"architecture/auth-model\"). If an observation with the same topicKey already exists in this project, it will be UPDATED instead of creating a new one. Use memorix_suggest_topic_key to generate a stable key. Good for evolving decisions, architecture docs, etc.",
+      "type": "string"
+     },
+     "type": {
+      "description": "Observation type for classification",
+      "enum": [
+       "session-request",
+       "gotcha",
+       "problem-solution",
+       "reasoning",
+       "how-it-works",
+       "what-changed",
+       "discovery",
+       "why-it-exists",
+       "decision",
+       "trade-off",
+       "probe"
+      ],
+      "type": "string"
+     },
+     "visibility": {
+      "description": "Retrieval scope. Project is the normal shared default; personal/team require memorix_session_start with joinTeam=true.",
+      "enum": [
+       "personal",
+       "project",
+       "team"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "entityName",
+     "type",
+     "title",
+     "narrative"
+    ],
+    "type": "object"
+   },
+   "name": "memorix_store",
+   "title": "Store Memory"
+  }
+ ],
+ "version": "1.9.5"
+}

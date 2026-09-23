@@ -1,0 +1,301 @@
+{
+ "args": [],
+ "measured_at": "2026-09-22T19:16:13+00:00",
+ "package": "@trazum/mcp",
+ "protocol": "2025-06-18",
+ "published": "2026-09-12T15:07:48.371Z",
+ "tools": [
+  {
+   "description": "Answers whether a prompt fits a maximum, and if not, whether optimising it would. maxTokens comes from the budgets block of trazum.config.json, matched against the prompt's path; read it yourself, since this server never opens a file. Without a budget somebody set there is nothing to check and this is not the tool to call. Offline and free: no model is called.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "level": {
+      "default": "safe",
+      "description": "safe leaves meaning untouched; aggressive also rewords, and wants reading",
+      "enum": [
+       "safe",
+       "aggressive"
+      ],
+      "type": "string"
+     },
+     "maxTokens": {
+      "description": "The budget. Required: a check with no maximum is not a check.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "prompt": {
+      "description": "The prompt text itself. This server never reads files.",
+      "maxLength": 400000,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "prompt",
+     "maxTokens"
+    ],
+    "type": "object"
+   },
+   "name": "check_prompt",
+   "title": "Check a prompt against a token budget"
+  },
+  {
+   "description": "Input and output price per million tokens, context window and cacheable minimum, for every model in the bundled catalogue.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "list_models",
+   "title": "Models Trazum can price, and their rates"
+  },
+  {
+   "description": "Applies Trazum's deterministic rules to a prompt and returns the shorter text, the token counts either side, what the difference is worth per month, and any advisories. Offline and free: no model is called.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "avgOutputTokens": {
+      "default": 500,
+      "maximum": 1000000,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "callsPerMonth": {
+      "default": 1000,
+      "description": "Used only to scale the figures",
+      "maximum": 1000000000,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "level": {
+      "default": "safe",
+      "description": "safe leaves meaning untouched; aggressive also rewords, and wants reading",
+      "enum": [
+       "safe",
+       "aggressive"
+      ],
+      "type": "string"
+     },
+     "model": {
+      "default": "claude-opus-5",
+      "description": "Model id used for pricing. Call list_models for what is known.",
+      "type": "string"
+     },
+     "prompt": {
+      "description": "The prompt text itself. This server never reads files.",
+      "maxLength": 400000,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "prompt"
+    ],
+    "type": "object"
+   },
+   "name": "optimize_prompt",
+   "title": "Optimise a prompt and price the difference"
+  },
+  {
+   "description": "States the month's measured position against every ceiling you pass: monthly budget, per-day limit, per-label limits. Measured from the log text alone, priced record by record, with the denominator on every figure \u2014 days measured against days elapsed. The distance line is division on the past, labelled as such, and absent under the seven-day floor, on an over, and on a zero rate: this tool never forecasts. Ceilings the log cannot measure are named with the reason instead of skipped. Pass the log text itself: this server never reads files, and session keys are never shown.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "limits": {
+      "description": "The limits policy from trazum.config.json \u2014 {\"dayUsd\": n, \"sessionUsd\": n, \"byLabel\": {\"name\": n}}. Validated like the config file itself.",
+      "type": "object"
+     },
+     "log": {
+      "description": "The usage log text, one JSON object per line. Never a file path.",
+      "maxLength": 2000000,
+      "minLength": 1,
+      "type": "string"
+     },
+     "monthlyUsd": {
+      "description": "The calendar-month budget, in dollars \u2014 spend.monthlyUsd from the config.",
+      "exclusiveMinimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "log"
+    ],
+    "type": "object"
+   },
+   "name": "position",
+   "title": "Where the month stands, measured \u2014 no forecast"
+  },
+  {
+   "description": "Reads a usage log \u2014 one JSON object per line, each with a \"model\" and the \"usage\" object the API returned \u2014 and says where the money went: the spend split, per label and per model, whether caching paid for itself, and which levers would actually move the bill. These are the provider's own billed token counts, not estimates. Pass the log text itself: this server never reads files. Add \"label\", \"session\" and \"ts\" fields to the records to unlock the per-workload findings, conversation growth, the period the log covers, and whether the cache TTL fits how fast the turns arrive; the session key is grouped by and never shown.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "label": {
+      "description": "Profile only the calls carrying this label \u2014 the drill-down once the full report named a suspect. A label matching nothing is an error naming the labels that exist.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "log": {
+      "description": "The usage log text, one JSON object per line. Never a file path.",
+      "maxLength": 2000000,
+      "minLength": 1,
+      "type": "string"
+     },
+     "previous_log": {
+      "description": "A previous usage log to compare against, as text \u2014 never a file path. Positive means the bill grew. Drivers of the change are named per label and per model, appeared and vanished workloads included; label/since/until filter both logs, so the comparison stays one workload and one period.",
+      "maxLength": 2000000,
+      "minLength": 1,
+      "type": "string"
+     },
+     "pricing_overlay": {
+      "description": "The same JSON document a --pricing overlay file holds, passed as text \u2014 never a file path. Adds models the bundled catalogue does not know and overrides prices for ones it does; every figure in the report, including what_if, is then priced under it, and the report says the overlay is in effect. Requires \"lastReviewed\" and a non-empty \"models\" object; a malformed overlay is an error naming the problem, never a report silently priced from the bundled table.",
+      "maxLength": 65536,
+      "minLength": 1,
+      "type": "string"
+     },
+     "since": {
+      "description": "Profile only calls at or after this moment: a UTC day (2026-08-14) or a full ISO 8601 timestamp. Calls with no \"ts\" cannot be placed and are excluded, counted out loud \u2014 never dropped silently.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "until": {
+      "description": "Profile only calls up to this moment; a bare date includes that whole UTC day. A window matching nothing is an error naming what the log does cover.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "what_if": {
+      "description": "Price these exact calls on another model id. The same token counts at a different rate card \u2014 multiplication, not advice: it says nothing about whether that model could do the work. Calls larger than that model's context window are named as impossible rather than priced as cheap, and spend already on that model stays out of the difference. An id this catalogue cannot price is an error, never silence.",
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "log"
+    ],
+    "type": "object"
+   },
+   "name": "profile_usage",
+   "title": "Where the money went, from a usage log"
+  },
+  {
+   "description": "Asks what a good prompt needs and assembles one from your answers. Call it with the answers you have; it returns the next question worth asking, what is still missing, and the prompt once the required answers are in. Nothing is generated \u2014 the questions are fixed and the words in the prompt are yours, so the same answers always produce the same text. An answer of null is a decline, which is an answer: it is recorded and the follow-up it would have opened is not asked. The draft carries what it costs (estimated, and it says so), whether it fits a budget you state, and what trazum optimize can still recover from it \u2014 which should be nothing. It does not claim the prompt is good: that is a judgement about text nobody has run.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "answers": {
+      "additionalProperties": {
+       "maxLength": 20000,
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "description": "What you know so far, keyed by question id. Start with {} to be asked the first one. A value of null declines that question. Unknown ids are refused rather than ignored.",
+      "type": "object"
+     },
+     "avgOutputTokens": {
+      "description": "Output tokens you expect back per call, for the same estimate.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "callsPerMonth": {
+      "description": "Calls per month, for the cost estimate. Nothing is priced without it.",
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "answers"
+    ],
+    "type": "object"
+   },
+   "name": "prompt_writer",
+   "title": "Interviews you, then writes the prompt"
+  },
+  {
+   "description": "Call this before making a model call, when a budget exists and you do not know whether this call fits inside it. Answers yes, no, or cannot-tell. Where the numbers come from: the ceilings are in trazum.config.json in the working directory (spend.maxUsd, spend.monthlyUsd, the limits block), and the spend so far is in the usage log the host already writes. Read both yourself and pass the figures: this server never opens a file. Without a ceiling somebody set the answer is cannot-tell, never a yes nobody measured. A refusal carries the cheaper ways to make the same call (a smaller model the prompt still fits in, a batch window), each priced for this call and each naming what it assumes. The budget consumed is measured from real billed usage you pass in; the cost of your call is an estimate of something that has not happened, and the answer keeps the two apart and says which the verdict rests on. Nothing is called and nothing is spent to produce this answer.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "batchEligible": {
+      "default": false,
+      "description": "Whether this work can wait for a batch window. Only you know that, so batch alternatives are offered only when you say so.",
+      "type": "boolean"
+     },
+     "consumedUsd": {
+      "description": "Measured spend so far, in dollars \u2014 from a bill, never a guess. Omit it and the answer is cannot-tell rather than a yes nobody measured.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "inputTokens": {
+      "description": "Input tokens the call would send, including anything cached.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "label": {
+      "description": "The workload this call belongs to, for the per-label ceiling.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "limitUsd": {
+      "description": "The budget this is judged against. Omit it and the answer is cannot-tell: this tool reports a position against a policy a human set, and never invents one.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "limits": {
+      "description": "The limits policy from trazum.config.json \u2014 {\"dayUsd\": n, \"sessionUsd\": n, \"byLabel\": {\"name\": n}}, positive dollars. Judged by the same function the gateway and trazum serve use, so the three doors cannot disagree. Validated like the config file: an unknown key or a non-positive ceiling is refused with the reason.",
+      "type": "object"
+     },
+     "model": {
+      "description": "Model id the call would go to. Call list_models for what is known.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "outputTokens": {
+      "default": 0,
+      "description": "Output tokens you expect back. Left at zero, the answer prices input only and says so by carrying the figure you gave.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "position": {
+      "additionalProperties": false,
+      "description": "Measured spend per scope, from your own usage log \u2014 never a guess. A scope you omit is unmeasured and its ceiling answers cannot-tell, not \"under\".",
+      "properties": {
+       "dayUsd": {
+        "minimum": 0,
+        "type": "number"
+       },
+       "labelUsd": {
+        "minimum": 0,
+        "type": "number"
+       },
+       "sessionUsd": {
+        "minimum": 0,
+        "type": "number"
+       }
+      },
+      "type": "object"
+     },
+     "session": {
+      "description": "The conversation this call belongs to, for the per-session ceiling. Used to judge and never echoed back.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "waive": {
+      "description": "The waive list from trazum.config.json \u2014 [{\"gate\": \"limits.sessionUsd\", \"reason\": \"...\", \"until\": \"YYYY-MM-DD\"}]. A waived ceiling still reports its measurement, but a crossed one answers yes with the waiver attached: the silence rides in the record. Validated like the config file.",
+      "type": "array"
+     }
+    },
+    "required": [
+     "model",
+     "inputTokens"
+    ],
+    "type": "object"
+   },
+   "name": "spend_guard",
+   "title": "May I spend this? \u2014 with the cheaper way if not"
+  }
+ ],
+ "version": "2.4.0"
+}

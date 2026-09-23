@@ -1,0 +1,499 @@
+{
+ "args": [
+  "-y",
+  "-p",
+  "pm-claude-skills",
+  "pm-claude-skills-mcp"
+ ],
+ "measured_at": "2026-09-22T19:16:13+00:00",
+ "package": "pm-claude-skills",
+ "protocol": "2025-06-18",
+ "published": "2026-08-16T21:26:54.680Z",
+ "tools": [
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Check colour contrast"
+   },
+   "description": "Compute the real WCAG 2.1 contrast ratio and APCA lightness contrast for a foreground/background pair, and return the nearest passing colour in the same hue. Use whenever a skill needs a contrast number \u2014 accessibility-audit, design-system-audit, design-handoff-brief, brand-guidelines, any Figma review. A ratio cannot be judged by eye: #777777 on white is 4.478 (fails AA) and #767676 is 4.542 (passes), and no amount of looking separates those. Deterministic arithmetic \u2014 no model call, no network.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "background": {
+      "description": "The colour it sits on, as a six-digit hex, e.g. \"#ffffff\".",
+      "type": "string"
+     },
+     "foreground": {
+      "description": "The text colour, as a six-digit hex, e.g. \"#8ab4f8\".",
+      "type": "string"
+     },
+     "level": {
+      "description": "The bar to clear. Defaults to AA (4.5:1), the legal standard in most jurisdictions.",
+      "enum": [
+       "AA",
+       "AA-large",
+       "AAA"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "foreground",
+     "background"
+    ],
+    "type": "object"
+   },
+   "name": "check_contrast",
+   "outputSchema": {
+    "properties": {
+     "apca": {
+      "description": "APCA Lc, signed. Positive is dark text on light.",
+      "type": "number"
+     },
+     "apcaUse": {
+      "description": "What APCA says this contrast is good enough for.",
+      "type": "string"
+     },
+     "grade": {
+      "description": "fail / aa-large / aa / aaa.",
+      "type": "string"
+     },
+     "nearestPassing": {
+      "description": "A close colour to the foreground that clears the level, holding the hue roughly steady. Null if it already passes. For an exact perceptual answer on saturated colours, run `npx notugly fix <fg> <bg>`, which walks OKLCh lightness instead of RGB.",
+      "type": "string"
+     },
+     "passes": {
+      "description": "Whether it clears the requested level.",
+      "type": "boolean"
+     },
+     "ratio": {
+      "description": "WCAG 2.1 contrast ratio, 1 to 21.",
+      "type": "number"
+     },
+     "says": {
+      "description": "A one-line summary suitable for pasting into an audit table.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ratio",
+     "passes",
+     "grade",
+     "says"
+    ],
+    "type": "object"
+   },
+   "title": "Check colour contrast"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get a skill"
+   },
+   "description": "Get the full instructions (the SKILL.md body) for one skill by name. Apply these instructions to the user's task.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "description": "The exact skill id, e.g. \"rice-prioritisation\" (from list_skills / search_skills).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "name": "get_skill",
+   "outputSchema": {
+    "properties": {
+     "instructions": {
+      "description": "The full SKILL.md body to apply to the task.",
+      "type": "string"
+     },
+     "name": {
+      "description": "The skill id.",
+      "type": "string"
+     },
+     "title": {
+      "description": "Human-readable title.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "instructions"
+    ],
+    "type": "object"
+   },
+   "title": "Get a skill"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get skill input schema"
+   },
+   "description": "Get the structured inputs a skill declares (parsed from its Required Inputs section) as a JSON-schema-shaped object \u2014 render a form or collect fields instead of sending a blob of free text. Pass the collected fields to run_skill as `inputs`.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "description": "The exact skill id (from list_skills / search_skills).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "name": "get_skill_inputs",
+   "outputSchema": {
+    "properties": {
+     "name": {
+      "description": "The skill id.",
+      "type": "string"
+     },
+     "schema": {
+      "description": "JSON-schema object: one string property per declared input; required lists the non-optional ones.",
+      "type": "object"
+     }
+    },
+    "required": [
+     "name",
+     "schema"
+    ],
+    "type": "object"
+   },
+   "title": "Get a skill's typed input schema"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get a workflow recipe"
+   },
+   "description": "Get one workflow recipe by id: the ordered list of skills to run and what each produces. Run each step in order with get_skill, carrying every output forward as context for the next.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "id": {
+      "description": "The workflow id, e.g. \"ship-a-feature\" (from list_workflows).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "type": "object"
+   },
+   "name": "get_workflow",
+   "outputSchema": {
+    "properties": {
+     "id": {
+      "description": "Recipe id.",
+      "type": "string"
+     },
+     "lifecycle": {
+      "description": "The lifecycle stages it spans.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Recipe name.",
+      "type": "string"
+     },
+     "steps": {
+      "description": "Ordered steps; run each with get_skill, carrying output forward.",
+      "items": {
+       "properties": {
+        "passes": {
+         "description": "What to carry forward to the next step.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "produces": {
+         "description": "What this step produces.",
+         "type": "string"
+        },
+        "skill": {
+         "description": "The skill id to run at this step.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "skill"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "summary": {
+      "description": "What the recipe accomplishes.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "steps"
+    ],
+    "type": "object"
+   },
+   "title": "Get a workflow recipe"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List skills"
+   },
+   "description": "List available professional skills (name, title, tier, one-line description). Optionally filter by maturity tier.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "tier": {
+      "description": "Optional. Only return skills in this maturity tier.",
+      "enum": [
+       "production",
+       "stable",
+       "experimental"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "list_skills",
+   "outputSchema": {
+    "properties": {
+     "count": {
+      "description": "Number of skills returned.",
+      "type": "integer"
+     },
+     "skills": {
+      "description": "The matching skills.",
+      "items": {
+       "properties": {
+        "description": {
+         "description": "One-line summary of what the skill does.",
+         "type": "string"
+        },
+        "name": {
+         "description": "The skill id (use with get_skill).",
+         "type": "string"
+        },
+        "tier": {
+         "description": "Maturity tier: production | stable | experimental.",
+         "type": "string"
+        },
+        "title": {
+         "description": "Human-readable title.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "title",
+        "description"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "count",
+     "skills"
+    ],
+    "type": "object"
+   },
+   "title": "List skills"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List workflow recipes"
+   },
+   "description": "List workflow recipes \u2014 named chains that run several skills in sequence, passing each output forward (e.g. ship-a-feature, close-the-quarter). Use when a task spans multiple steps end to end.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "list_workflows",
+   "outputSchema": {
+    "properties": {
+     "workflows": {
+      "description": "Available workflow recipes.",
+      "items": {
+       "properties": {
+        "id": {
+         "description": "Recipe id (use with get_workflow).",
+         "type": "string"
+        },
+        "lifecycle": {
+         "description": "The lifecycle stages it spans.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Recipe name.",
+         "type": "string"
+        },
+        "skills": {
+         "description": "The ordered skill ids in the chain.",
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "summary": {
+         "description": "What the recipe accomplishes.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "skills"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "workflows"
+    ],
+    "type": "object"
+   },
+   "title": "List workflow recipes"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Run a skill"
+   },
+   "description": "Execute a skill on the given input and return the finished artifact. Uses MCP sampling: the generation runs on the CLIENT's own model, so no API key is needed by this server. Falls back with a clear message if the client does not support sampling (use get_skill and apply it yourself instead).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "input": {
+      "description": "The user's input for the skill \u2014 the raw notes, brief, or task.",
+      "type": "string"
+     },
+     "inputs": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "Optional structured fields (from get_skill_inputs) \u2014 merged into the input as labeled lines.",
+      "type": "object"
+     },
+     "name": {
+      "description": "The skill to run (from list_skills / search_skills).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "name": "run_skill",
+   "title": "Run a skill (no API key \u2014 uses YOUR model via MCP sampling)"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Search skills"
+   },
+   "description": "Search skills by keyword across name, description, and body. Returns the best-matching skills, ranked.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "limit": {
+      "description": "Maximum number of results to return (default 10).",
+      "maximum": 50,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "query": {
+      "description": "Keywords describing the task, e.g. \"prioritise backlog\" or \"customer churn\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "query"
+    ],
+    "type": "object"
+   },
+   "name": "search_skills",
+   "outputSchema": {
+    "properties": {
+     "matches": {
+      "description": "Matching skills, best first.",
+      "items": {
+       "properties": {
+        "description": {
+         "description": "One-line summary of what the skill does.",
+         "type": "string"
+        },
+        "name": {
+         "description": "The skill id (use with get_skill).",
+         "type": "string"
+        },
+        "tier": {
+         "description": "Maturity tier: production | stable | experimental.",
+         "type": "string"
+        },
+        "title": {
+         "description": "Human-readable title.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "title",
+        "description"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "query": {
+      "description": "The query that was searched.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "query",
+     "matches"
+    ],
+    "type": "object"
+   },
+   "title": "Search skills"
+  }
+ ],
+ "version": "76.2.0"
+}

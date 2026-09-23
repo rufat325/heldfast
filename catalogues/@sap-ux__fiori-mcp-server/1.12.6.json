@@ -1,0 +1,992 @@
+{
+ "args": [],
+ "measured_at": "2026-09-22T19:16:13+00:00",
+ "package": "@sap-ux/fiori-mcp-server",
+ "protocol": "2025-06-18",
+ "published": "2026-09-17T09:58:42.289Z",
+ "tools": [
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "readOnlyHint": false,
+    "title": "Download OData Service Metadata"
+   },
+   "description": "Downloads the metadata (EDMX) of a specific OData service URL from a SAP system and saves it as metadata.xml.\n                    Note: this tool replaces the old 'fetch-service-metadata' functionality that was previously available via the 'execute_functionality' workflow \u2014 use this tool directly instead.\n\n                    Usage guidelines:\n                    - Use this before calling 'generate_fiori_app_odata' when the user provides a SAP system reference and a service path. \n                    - If a service name or technical id is provided instead of a service path DO NOT USE THIS TOOL. Instead use the Service Center MCP server tool to retrieve the service metadata and then pass it to 'generate_fiori_app_odata'.\n                    - If a service path is provided by the user, use it directly via servicePath parameter.\n                    - If the user provides a system name or host, use 'list_sap_systems' first to resolve it.\n                    - Pass the full URL as sapSystemQuery.\n                    - Returns host, servicePath, client, and metadataFilePath inside the result's parameters object.\n                    - Pass ALL returned fields directly into the service config of 'generate_fiori_app_odata'. Map the returned properties to the app config service property input to 'generate_fiori_app_odata'.\n                    - **Note:** This tool is only supported in VSCode. For SAP Business Application Studio, use the Service Center MCP server tool to retrieve the service metadata instead.\n                    **IMPORTANT**: On VSCode, if the service requires authentication and the system is not already stored, ask the user to store it first. Do not ask for credentials directly.\n                    **DO NOT use this tool to refresh or update service metadata in an existing Fiori application. Instead, invoke the ['sap-fiori-create-cli' skill's 'update service-metadata' section](../sap-fiori-create-cli/SKILL.md#update-service-metadata).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "appPath": {
+      "description": "Absolute path to an existing folder where metadata.xml will be written. The folder MUST exist before this tool is invoked \u2014 this tool does not create directories. If the caller is about to scaffold a new Fiori project, create the target folder first (e.g. mkdir -p <appPath>) and only then call this tool. Typically this is the same folder that will later be passed as the project target to generate_fiori_app_odata.",
+      "type": "string"
+     },
+     "sapSystemQuery": {
+      "description": "The name, host or a URL of the SAP system to fetch service metadata from.",
+      "type": "string"
+     },
+     "servicePath": {
+      "description": "The path to the SAP service to fetch metadata for. ONLY use this if the user provides an EXACT path (e.g., \"/sap/opu/odata/sap/ZUI_TRAVEL_O4/\"). DO NOT construct paths from service names. This parameter is required.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "appPath"
+    ],
+    "type": "object"
+   },
+   "name": "download_odata_service_metadata",
+   "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "appPath": {
+      "type": "string"
+     },
+     "changes": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "message": {
+      "type": "string"
+     },
+     "parameters": {
+      "additionalProperties": false,
+      "properties": {
+       "client": {
+        "description": "The SAP client. Pass as service.client to generate_fiori_app_odata.",
+        "type": "string"
+       },
+       "destination": {
+        "description": "The BTP destination name (BAS only). Pass as service.destination to generate_fiori_app_odata.",
+        "type": "string"
+       },
+       "host": {
+        "description": "The host URL of the OData service. Pass as service.host to generate_fiori_app_odata.",
+        "type": "string"
+       },
+       "metadataFilePath": {
+        "description": "Path to the saved metadata.xml. Pass as service.metadataFilePath to generate_fiori_app_odata.",
+        "type": "string"
+       },
+       "servicePath": {
+        "description": "The OData endpoint path. Pass as service.servicePath to generate_fiori_app_odata.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "host",
+       "servicePath",
+       "metadataFilePath"
+      ],
+      "type": "object"
+     },
+     "status": {
+      "type": "string"
+     },
+     "timestamp": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "message",
+     "parameters",
+     "appPath",
+     "changes",
+     "timestamp"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "readOnlyHint": false,
+    "title": "Execute Fiori Functionality"
+   },
+   "description": "**(Step 3 of 3)**\n                    Executes a specific functionality to modify an existing SAP Fiori application with provided parameters.\n                    This is the **final step** of the workflow and performs the actual modification.\n                    You MUST provide the exact parameter information obtained from get_functionality_details (Step 2).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "description": "Input object for executing a functionality. Only three top-level properties are allowed: \"functionalityId\", \"parameters\", and \"appPath\". All other dynamic or functionality-specific inputs must be included inside the \"parameters\" object. Do not place any additional fields at the root level.",
+    "properties": {
+     "appPath": {
+      "description": "Path to the Fiori application if one exists or to the current directory. Path should be an absolute path.",
+      "type": "string"
+     },
+     "functionalityId": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "items": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "number"
+          }
+         ]
+        },
+        "type": "array"
+       }
+      ],
+      "description": "The ID of the functionality to execute"
+     },
+     "parameters": {
+      "additionalProperties": {},
+      "description": "Parameters for the functionality execution",
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     }
+    },
+    "required": [
+     "functionalityId",
+     "parameters",
+     "appPath"
+    ],
+    "type": "object"
+   },
+   "name": "execute_functionality",
+   "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "appPath": {
+      "type": "string"
+     },
+     "changes": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "functionalityId": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "items": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "number"
+          }
+         ]
+        },
+        "type": "array"
+       }
+      ]
+     },
+     "message": {
+      "type": "string"
+     },
+     "parameters": {},
+     "status": {
+      "type": "string"
+     },
+     "timestamp": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "functionalityId",
+     "status",
+     "message",
+     "parameters",
+     "appPath",
+     "changes",
+     "timestamp"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Generate SAP Fiori App (CAP)"
+   },
+   "description": "Creates (generates) a new SAP Fiori UI application within an existing CAP project.\n                    To populate parameters, you **MUST** use the ***CDS MCP*** to search the model for service definitions, entities, associations, and UI annotations.\n                    As a fallback, only if no such tool is available, manually read and parse all .cds files in the projectPath.\n                    The configuration **MUST** be a valid JSON object matching the tool's inputSchema and based on the project files.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "description": "The configuration that will be used for the Application UI generation.\n            The configuration **MUST** be a valid JSON object corresponding to the inputSchema of the functionality.\n            For floorplan FF_SIMPLE (Basic/SAPUI5 Freestyle template), service and entityConfig are optional (data source may be \"None\").\n            For all other floorplans, service and entityConfig are required.",
+    "properties": {
+     "entityConfig": {
+      "additionalProperties": false,
+      "properties": {
+       "generateFormAnnotations": {
+        "default": true,
+        "description": "Whether to generate form annotations for the main entity if none exist.",
+        "type": "boolean"
+       },
+       "generateLROPAnnotations": {
+        "default": true,
+        "description": "Whether to generate LROP annotations for the main entity if none exist.",
+        "type": "boolean"
+       },
+       "mainEntity": {
+        "additionalProperties": false,
+        "properties": {
+         "entityName": {
+          "description": "The name of the main entity. EntitySet Name attribute in OData Metadata. Required for all floorplans except FF_SIMPLE.",
+          "examples": [
+           "SalesOrder",
+           "PurchaseOrderHeader",
+           "MyEntity"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "entityName"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "mainEntity",
+       "generateFormAnnotations",
+       "generateLROPAnnotations"
+      ],
+      "type": "object"
+     },
+     "floorplan": {
+      "anyOf": [
+       {
+        "const": "FE_LROP",
+        "description": "List Report Object Page (OData V2/V4).",
+        "type": "string"
+       },
+       {
+        "const": "FE_ALP",
+        "description": "Analytical List Page (OData V2/V4).",
+        "type": "string"
+       },
+       {
+        "const": "FE_OVP",
+        "description": "Overview Page (OData V2/V4).",
+        "type": "string"
+       },
+       {
+        "const": "FE_WORKLIST",
+        "description": "Worklist (OData V2/V4).",
+        "type": "string"
+       },
+       {
+        "const": "FE_FEOP",
+        "description": "Form Entry Object Page (OData V4 only).",
+        "type": "string"
+       },
+       {
+        "const": "FE_FPM",
+        "description": "Flexible Programming Model / Custom Page (OData V4 only).",
+        "type": "string"
+       },
+       {
+        "const": "FF_SIMPLE",
+        "description": "Basic (SAPUI5 Freestyle template) \u2014 data source is optional for this template, supports \"None\".",
+        "type": "string"
+       }
+      ]
+     },
+     "project": {
+      "additionalProperties": false,
+      "properties": {
+       "description": {
+        "type": "string"
+       },
+       "name": {
+        "description": "Must be lowercase with dashes, e.g., 'sales-order-management'.",
+        "pattern": "^[a-z0-9-]+$",
+        "type": "string"
+       },
+       "targetFolder": {
+        "description": "Absolute path to the project folder (projectPath).",
+        "type": "string"
+       },
+       "title": {
+        "type": "string"
+       },
+       "ui5Version": {
+        "default": "1.136.7",
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "description",
+       "targetFolder",
+       "ui5Version"
+      ],
+      "type": "object"
+     },
+     "service": {
+      "additionalProperties": false,
+      "properties": {
+       "capService": {
+        "additionalProperties": false,
+        "properties": {
+         "capType": {
+          "enum": [
+           "Node.js",
+           "Java"
+          ],
+          "type": "string"
+         },
+         "projectPath": {
+          "type": "string"
+         },
+         "serviceCdsPath": {
+          "description": "The path to the service cds file",
+          "examples": [
+           "srv/service.cds",
+           "srv/my-service.cds",
+           "path/to/srv/service.cds",
+           "path/to/srv/my-service.cds"
+          ],
+          "type": "string"
+         },
+         "serviceName": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "projectPath",
+         "serviceName",
+         "serviceCdsPath"
+        ],
+        "type": "object"
+       },
+       "servicePath": {
+        "description": "The odata endpoint as provided by the cds mcp or as fallback in case that tool is not available from the service cds file.",
+        "examples": [
+         "/odata/v4/<servicename>/",
+         "/odata/v4/MyRiskService/",
+         "/odata/v2/MyOdataV2Service/",
+         "/odata/v4/MyOdataV4Service/",
+         "/odata/v4/<relative '@path' annotation from service cds file>/",
+         "<absolute '@path' annotation from service cds file>/",
+         "/myAbsolutePathFromServiceCdsFile/"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "servicePath",
+       "capService"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "floorplan",
+     "project"
+    ],
+    "type": "object"
+   },
+   "name": "generate_fiori_app_cap"
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Generate SAP Fiori App (OData / non-CAP)"
+   },
+   "description": "Creates (generates) a new SAP Fiori UI application either within an existing CAP project or standalone. ALWAYS read ALL of the following instructions carefully before calling this tool.\n\n        \ud83d\udea8 CRITICAL - READ SCHEMA FIRST \ud83d\udea8\n        Before calling this tool, you MUST:\n        1. Examine the inputSchema below to understand the EXACT structure required\n        2. The input MUST match the schema type 'GeneratorConfigOData' with these TOP-LEVEL properties:\n           - floorplan (must be: 'FE_LROP', 'FE_OVP', 'FE_ALP', 'FE_WORKLIST', 'FE_FEOP', 'FE_FPM', 'FF_SIMPLE', required)\n           - project (object, required)\n           - service (object, optional)\n           - entityConfig (object, optional)\n        3. DO NOT create properties like \"config\", or any other structure - use ONLY the properties defined in inputSchema\n\n        Steps:\n        1. Construct the tool arguments.\n           - **IMPORTANT** ALWAYS use the app config schema defined by the type 'GeneratorConfigOData' to create the input structure. NEVER create an input in any other format.\n           - The input MUST use the exact property names defined in the inputSchema: floorplan, project, service, entityConfig.\n           - **ONLY** if the Service Center MCP is NOT available and the user provided a SAP system reference or URL with a **service path**, you **MUST** first call 'download_odata_service_metadata'.\n           - If the Service Center MCP is available and the user provided a **service name or technical service id**, you **MUST** call the Service Center MCP server tool to retrieve the metadata and properties required for the service property of the input. \n           - Use the data returned to provide the required values (host, servicePath, client, destination, metadataFilePath) directly in the service property of the input.\n           - If the Service Center MCP was used both host and destination **MUST** be passed in the service property of the input.\n           - If Fiori MCP 'download_odata_service_metadata' was used and returns a host URL \u2014 pass it as service.host. If the host is not provided, you **MUST** ask for it.\n           - **IMPORTANT**: On VSCode, if the service requires authentication and is not already stored, ask the user to store it first. Never ask for credentials directly.\n\n        2. Parse the metadata.xml to understand the data model (entities, associations).\n\n        3. Generate the application once the config is complete and valid.\n\n        Example of CORRECT input structure:\n        {\n          \"floorplan\": \"FE_LROP\",\n          \"project\": {\n            \"name\": \"my-travel-app\",\n            \"title\": \"My Travel App\",\n            \"description\": \"Travel management application\",\n            \"targetFolder\": \"/home/user/projects\",\n            \"ui5Version\": \"1.136.7\"\n          },\n          \"service\": {\n            \"host\": \"https://my-system.example.com\",\n            \"servicePath\": \"<full-odata-service-path>\",\n            \"client\": \"000\",\n            \"metadataFilePath\": \"/home/user/projects/metadata.xml\",\n            \"destination\": \"MY_DESTINATION\"\n          },\n          \"entityConfig\": {\n            \"mainEntity\": { \"entityName\": \"Travel\" },\n            \"generateFormAnnotations\": true,\n            \"generateLROPAnnotations\": true\n          }\n        }",
+   "inputSchema": {
+    "additionalProperties": false,
+    "description": "\ud83d\udea8 READ THIS SCHEMA BEFORE CALLING \ud83d\udea8\n\nThe configuration that will be used for the Application UI generation.\nThe configuration **MUST** be a valid JSON object corresponding to the inputSchema of the functionality.\n\nALLOWED TOP-LEVEL PROPERTIES (and ONLY these):\n- floorplan (required)\n- project (required)\n- service (optional)\n- entityConfig (optional)\n\nDO NOT ADD: \"config\", \"metadata\", \"NOTE\", or any other wrapper properties.\nDO NOT WRAP: Send these properties at the top level, not nested in another object.\n\nFor floorplan FF_SIMPLE (Basic/SAPUI5 Freestyle template), service and entityConfig are optional (data source may be \"None\").\nFor all other floorplans, service and entityConfig are required.",
+    "properties": {
+     "entityConfig": {
+      "additionalProperties": false,
+      "properties": {
+       "generateFormAnnotations": {
+        "default": true,
+        "description": "Whether to generate form annotations for the main entity if none exist.",
+        "type": "boolean"
+       },
+       "generateLROPAnnotations": {
+        "default": true,
+        "description": "Whether to generate LROP annotations for the main entity if none exist.",
+        "type": "boolean"
+       },
+       "mainEntity": {
+        "additionalProperties": false,
+        "properties": {
+         "entityName": {
+          "description": "The name of the main entity. EntitySet Name attribute in OData Metadata. Required for all floorplans except FF_SIMPLE.",
+          "examples": [
+           "SalesOrder",
+           "PurchaseOrderHeader",
+           "MyEntity"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "entityName"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "mainEntity",
+       "generateFormAnnotations",
+       "generateLROPAnnotations"
+      ],
+      "type": "object"
+     },
+     "floorplan": {
+      "anyOf": [
+       {
+        "const": "FE_LROP",
+        "description": "List Report Object Page (OData V2/V4).",
+        "type": "string"
+       },
+       {
+        "const": "FE_ALP",
+        "description": "Analytical List Page (OData V2/V4).",
+        "type": "string"
+       },
+       {
+        "const": "FE_OVP",
+        "description": "Overview Page (OData V2/V4).",
+        "type": "string"
+       },
+       {
+        "const": "FE_WORKLIST",
+        "description": "Worklist (OData V2/V4).",
+        "type": "string"
+       },
+       {
+        "const": "FE_FEOP",
+        "description": "Form Entry Object Page (OData V4 only).",
+        "type": "string"
+       },
+       {
+        "const": "FE_FPM",
+        "description": "Flexible Programming Model / Custom Page (OData V4 only).",
+        "type": "string"
+       },
+       {
+        "const": "FF_SIMPLE",
+        "description": "Basic (SAPUI5 Freestyle template) \u2014 data source is optional for this template, supports \"None\".",
+        "type": "string"
+       }
+      ]
+     },
+     "project": {
+      "additionalProperties": false,
+      "properties": {
+       "description": {
+        "type": "string"
+       },
+       "name": {
+        "description": "Must be lowercase with dashes, e.g., 'sales-order-management'.",
+        "pattern": "^[a-z0-9-]+$",
+        "type": "string"
+       },
+       "targetFolder": {
+        "description": "Absolute path to the project folder (projectPath).",
+        "type": "string"
+       },
+       "title": {
+        "type": "string"
+       },
+       "ui5Version": {
+        "default": "1.136.7",
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "description",
+       "targetFolder",
+       "ui5Version"
+      ],
+      "type": "object"
+     },
+     "service": {
+      "additionalProperties": false,
+      "properties": {
+       "client": {
+        "description": "The client to be used for the OData service.",
+        "type": "string"
+       },
+       "destination": {
+        "description": "The BTP destination name to be used for the OData service. This must be provided on SAP Business Application Studio.",
+        "type": "string"
+       },
+       "host": {
+        "description": "The host of the OData service. Must be an HTTPS endpoint. If the parameter is not provided, the agent should ask the user for it.",
+        "format": "uri",
+        "type": "string"
+       },
+       "metadataFilePath": {
+        "description": "Path to a local metadata.xml file.",
+        "type": "string"
+       },
+       "servicePath": {
+        "description": "\ud83d\udea8 DO NOT CONSTRUCT - This is provided by download_odata_service_metadata tool! The odata endpoint path returned from the metadata download tool. NEVER construct this yourself - always get it from download_odata_service_metadata output. Required for all floorplans except FF_SIMPLE.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "servicePath",
+       "host"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "floorplan",
+     "project"
+    ],
+    "type": "object"
+   },
+   "name": "generate_fiori_app_odata"
+  },
+  {
+   "annotations": {
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get Fiori Functionality Details"
+   },
+   "description": "**(Step 2 of 3)**\n                    Gets the required parameters and detailed information for a specific functionality to modify an existing SAP Fiori application.\n                    You MUST provide a functionalityId obtained from 'list_functionality' (Step 1).\n                    The output of this tool is required for the final step 'execute_functionality' (Step 3).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "appPath": {
+      "description": "Path to the Fiori application if one exists or to the current directory. Path should be an absolute path.",
+      "type": "string"
+     },
+     "functionalityId": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "items": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "number"
+          }
+         ]
+        },
+        "type": "array"
+       }
+      ],
+      "description": "The ID of the functionality to get details for"
+     }
+    },
+    "required": [
+     "appPath",
+     "functionalityId"
+    ],
+    "type": "object"
+   },
+   "name": "get_functionality_details",
+   "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "description": {
+      "type": "string"
+     },
+     "examples": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "functionalityId": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "items": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "number"
+          }
+         ]
+        },
+        "type": "array"
+       }
+      ],
+      "description": "Identifier to pass as the `functionalityId` parameter when calling `get_functionality_details` or `execute_functionality`"
+     },
+     "impact": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "pageName": {
+      "type": "string"
+     },
+     "parameters": {
+      "additionalProperties": {},
+      "properties": {
+       "description": {
+        "type": "string"
+       },
+       "properties": {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "additionalProperties": {},
+           "properties": {
+            "description": {
+             "type": "string"
+            },
+            "properties": {},
+            "type": {
+             "anyOf": [
+              {
+               "enum": [
+                "object",
+                "array",
+                "string",
+                "number",
+                "boolean",
+                "null",
+                "integer",
+                "any"
+               ],
+               "type": "string"
+              },
+              {
+               "items": {
+                "enum": [
+                 "object",
+                 "array",
+                 "string",
+                 "number",
+                 "boolean",
+                 "null",
+                 "integer",
+                 "any"
+                ],
+                "type": "string"
+               },
+               "type": "array"
+              }
+             ]
+            }
+           },
+           "type": "object"
+          },
+          {
+           "type": "boolean"
+          }
+         ]
+        },
+        "propertyNames": {
+         "type": "string"
+        },
+        "type": "object"
+       },
+       "type": {
+        "anyOf": [
+         {
+          "enum": [
+           "object",
+           "array",
+           "string",
+           "number",
+           "boolean",
+           "null",
+           "integer",
+           "any"
+          ],
+          "type": "string"
+         },
+         {
+          "items": {
+           "enum": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null",
+            "integer",
+            "any"
+           ],
+           "type": "string"
+          },
+          "type": "array"
+         }
+        ]
+       }
+      },
+      "type": "object"
+     },
+     "prerequisites": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "technicalDescription": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "functionalityId",
+     "name",
+     "description",
+     "parameters"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List Fiori Applications"
+   },
+   "description": "Scans a specified directory to find existing SAP Fiori applications that can be modified.\n                    This is an optional, preliminary tool.\n                    **Use this first ONLY if the target application's name or path is not already known.**\n                    The output can be used to ask the user for clarification before starting the main 3-step workflow.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "searchPath": {
+      "description": "Path to search for Fiori applications (defaults to current directory). If VSCode - list of VS Code workspace folder paths(`workspace.workspaceFolders`)",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "searchPath"
+    ],
+    "type": "object"
+   },
+   "name": "list_fiori_apps",
+   "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "applications": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "appPath": {
+         "description": "Absolute path to the Fiori application's root directory.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Name of the Fiori application. Usually derived from the `sap.app/id` field in the application's manifest.json.",
+         "type": "string"
+        },
+        "odataVersion": {
+         "description": "OData protocol version used by the application's main service.",
+         "type": "string"
+        },
+        "projectPath": {
+         "description": "Absolute path to the root directory of the project containing this Fiori application. For EDMXBackend (standalone) projects, this is the same as `appPath`. For CAP projects, this points to the CAP project root, which may contain multiple Fiori applications.",
+         "type": "string"
+        },
+        "projectType": {
+         "description": "Type of project the application belongs to.",
+         "enum": [
+          "EDMXBackend",
+          "CAPJava",
+          "CAPNodejs"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "appPath",
+        "projectPath",
+        "projectType",
+        "odataVersion"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "applications"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List Supported Fiori Modification Functionalities"
+   },
+   "description": "**(Step 1 of 3) \u2014 Use this to modify an existing SAP Fiori application.**\n                    Returns the complete list of supported modification operations for a given application, including:\n                    adding or deleting pages, creating controller extensions, and changing any Fiori Elements manifest property.\n                    This is the **first mandatory step** for modifying an existing app and requires a valid absolute path to a SAP Fiori application.\n                    You MUST use a functionalityId from this tool's output in 'get_functionality_details' (Step 2).\n                    You MUST NOT use a functionalityId as a tool name.\n                    Do not guess or assume functionalityIds \u2014 only use what this tool returns.\n                    **Note: If the target application is not known, use 'list_fiori_apps' first.**\n                    **Note: To generate a new app, use 'generate_fiori_app_odata' or 'generate_fiori_app_cap' instead.**\n                    If the functionality list does not cover your goal, use 'search_docs' as a fallback.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "appPath": {
+      "description": "Path to the root folder of the Fiori application (where package.json and ui5.yaml reside) if one exists or to the current directory. Path should be an absolute path.",
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "appPath"
+    ],
+    "type": "object"
+   },
+   "name": "list_functionality",
+   "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "applicationPath": {
+      "type": "string"
+     },
+     "functionalities": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "description": {
+         "type": "string"
+        },
+        "functionalityId": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "items": {
+            "anyOf": [
+             {
+              "type": "string"
+             },
+             {
+              "type": "number"
+             }
+            ]
+           },
+           "type": "array"
+          }
+         ],
+         "description": "Identifier to pass as the `functionalityId` parameter when calling `get_functionality_details` or `execute_functionality`"
+        }
+       },
+       "required": [
+        "functionalityId",
+        "description"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "applicationPath",
+     "functionalities"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List SAP Systems"
+   },
+   "description": "Lists all SAP systems from the user's environment. This tool should only be used if the Service Center MCP tool list systems is unavailable. \n                    **ALWAYS** use the Service Center MCP tool 'list_systems' first if it is available. This tool is a fallback for environments where the Service Center MCP tool is not available.\n                    Also use this tool when the user asks to 'list systems', 'list backends', or any equivalent phrasing.\n                    Use this tool when the user references a SAP system by name or when you need to discover available systems\n                    before calling 'download_odata_service_metadata' or generating a Fiori application.",
+   "inputSchema": {
+    "properties": {},
+    "type": "object"
+   },
+   "name": "list_sap_systems",
+   "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "systems": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "client": {
+         "description": "The SAP client",
+         "type": "string"
+        },
+        "name": {
+         "description": "The display name of the SAP system or destination.",
+         "type": "string"
+        },
+        "url": {
+         "description": "The host URL of the SAP system.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "url"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "systems"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "idempotentHint": true,
+    "openWorldHint": true,
+    "readOnlyHint": true,
+    "title": "Search in Fiori Documentation"
+   },
+   "description": "Searches code snippets of Fiori Elements, Annotations, SAPUI5, Fiori tools documentation for the given query. You MUST use this tool if you're unsure about Fiori APIs. Optionally returns only code blocks.",
+   "inputSchema": {
+    "properties": {
+     "maxResults": {
+      "default": 10,
+      "description": "Maximum number of results to return",
+      "type": "number"
+     },
+     "query": {
+      "description": "Search query",
+      "type": "string"
+     }
+    },
+    "required": [
+     "query"
+    ],
+    "type": "object"
+   },
+   "name": "search_docs"
+  }
+ ],
+ "version": "1.12.6"
+}

@@ -1,0 +1,904 @@
+{
+ "args": [],
+ "measured_at": "2026-09-22T19:16:13+00:00",
+ "package": "@hypothesi/tauri-mcp-server",
+ "protocol": "2025-06-18",
+ "published": "2026-08-28T22:57:02.329Z",
+ "tools": [
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Manage Tauri Session"
+   },
+   "description": "[Tauri Apps Only] Start/stop automation session to connect to a RUNNING Tauri app. Supports multiple concurrent app connections - each app runs on a unique port. The most recently connected app becomes the \"default\" app used when no appIdentifier is specified. Use action \"status\" to check connection state: returns single app format when 1 app connected, or array format with \"isDefault\" indicator when multiple apps connected. Action \"stop\" without appIdentifier stops ALL sessions; with appIdentifier stops only that app. The identifier field (e.g., \"com.example.myapp\") uniquely identifies each app. REQUIRED before using other webview_* or ipc_* tools. Connects via WebSocket to the MCP Bridge plugin in the Tauri app. For browser automation, use Chrome DevTools MCP instead. For Electron apps, this tool will NOT work.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "Action to perform: start or stop the session, or check status",
+      "enum": [
+       "start",
+       "stop",
+       "status"
+      ],
+      "type": "string"
+     },
+     "appIdentifier": {
+      "description": "App identifier (port number or bundle ID) to stop. Only used with action \"stop\". If omitted, stops all sessions.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "host": {
+      "description": "Host address to connect to (e.g., 192.168.1.100). Falls back to MCP_BRIDGE_HOST or TAURI_DEV_HOST env vars",
+      "type": "string"
+     },
+     "port": {
+      "description": "Port to connect to (default: 9223)",
+      "type": "number"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "driver_session"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get Setup Instructions"
+   },
+   "description": "Get instructions for setting up or updating the MCP Bridge plugin in a Tauri project. Call this tool when: (1) driver_session fails to connect, (2) you detect the plugin is not installed or outdated, or (3) the user asks about setup. Returns step-by-step guidance that you should follow to help the user configure their project. IMPORTANT: The instructions require you to examine the project first and ask for permission before making any changes.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "get_setup_instructions"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Emit Tauri Event"
+   },
+   "description": "[Tauri Apps Only] Emit a Tauri event to test event handlers. Requires active driver_session. Events are Tauri-specific (not DOM events). For browser DOM events, use Chrome DevTools MCP instead.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "eventName": {
+      "type": "string"
+     },
+     "payload": {}
+    },
+    "required": [
+     "eventName"
+    ],
+    "type": "object"
+   },
+   "name": "ipc_emit_event"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Execute Tauri IPC Command"
+   },
+   "description": "[Tauri Apps Only] Execute Tauri IPC commands (invoke Rust backend functions). Requires active driver_session. This is Tauri-specific IPC, not browser APIs. Plugin commands (plugin:mcp-bridge|*) are routed through the bridge; all other commands are executed via the webview using window.__TAURI_INTERNALS__.invoke, which keeps the application's Tauri capability rules in force. For Electron IPC or browser APIs, use appropriate tools for those frameworks.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "args": {},
+     "command": {
+      "type": "string"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\") for app commands",
+      "type": "string"
+     }
+    },
+    "required": [
+     "command"
+    ],
+    "type": "object"
+   },
+   "name": "ipc_execute_command"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get Tauri Backend State"
+   },
+   "description": "[Tauri Apps Only] Get Tauri backend state: app metadata, Tauri version, environment. Requires active driver_session. Use to verify you're connected to a Tauri app and get app info.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     }
+    },
+    "type": "object"
+   },
+   "name": "ipc_get_backend_state"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get Captured IPC Traffic"
+   },
+   "description": "[Tauri Apps Only] Get captured Tauri IPC traffic (requires ipc_monitor started). Shows captured commands (invoke calls) and events with arguments and responses. For browser network requests, use Chrome DevTools MCP instead.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "filter": {
+      "description": "Filter events by command name",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "ipc_get_captured"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Monitor Tauri IPC"
+   },
+   "description": "[Tauri Apps Only] Monitor Tauri IPC calls between frontend and Rust backend. Requires active driver_session. Captures invoke() calls made through window.__TAURI__.core. Bridge-internal commands (plugin:mcp-bridge|*) are excluded from capture. This is Tauri-specific; for browser network monitoring, use Chrome DevTools MCP.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "Action to perform: start or stop IPC monitoring",
+      "enum": [
+       "start",
+       "stop"
+      ],
+      "type": "string"
+     },
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "ipc_monitor"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List Mobile Devices"
+   },
+   "description": "[Tauri Mobile Apps Only] List Android emulators/devices and iOS simulators. Use for Tauri mobile development (tauri android dev, tauri ios dev). Not needed for desktop-only Tauri apps or web projects.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "list_devices"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Manage Tauri Window"
+   },
+   "description": "[Tauri Apps Only] Manage Tauri windows. Actions: \"list\" - List all windows with labels, titles, URLs, and state. \"info\" - Get detailed info for a window (size, position, title, focus, visibility). \"resize\" - Resize a window (requires width/height, uses logical pixels by default). \"focus\" - Focus a window (bring to front). \"minimize\" - Minimize a window. \"maximize\" - Maximize a window. Desktop-only actions (focus, minimize, maximize) require tauri-plugin-mcp-bridge 0.13.0+ and return a version error on older plugins. Requires active driver_session. For browser windows, use Chrome DevTools MCP instead.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "Action: \"list\" all windows, get \"info\" for one window, \"resize\" a window, \"focus\" a window, \"minimize\" a window, or \"maximize\" a window",
+      "enum": [
+       "list",
+       "info",
+       "resize",
+       "focus",
+       "minimize",
+       "maximize"
+      ],
+      "type": "string"
+     },
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "height": {
+      "description": "Height in pixels (required for \"resize\" action)",
+      "exclusiveMinimum": 0,
+      "type": "integer"
+     },
+     "logical": {
+      "default": true,
+      "description": "Use logical pixels (true, default) or physical pixels (false). Only for \"resize\"",
+      "type": "boolean"
+     },
+     "width": {
+      "description": "Width in pixels (required for \"resize\" action)",
+      "exclusiveMinimum": 0,
+      "type": "integer"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\"). Required for \"info\", optional for \"resize\", \"focus\", \"minimize\", \"maximize\"",
+      "type": "string"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "manage_window"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Read Logs"
+   },
+   "description": "[Tauri Apps Only] Read logs from various sources: \"console\" for webview JS logs, \"android\" for logcat, \"ios\" for simulator logs, \"system\" for desktop logs. Requires active driver_session for console logs. Use for debugging Tauri app issues at any level.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID for console logs. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "filter": {
+      "description": "Regex or keyword to filter logs",
+      "type": "string"
+     },
+     "level": {
+      "description": "Only return entries at this console level.",
+      "enum": [
+       "log",
+       "debug",
+       "info",
+       "warn",
+       "error"
+      ],
+      "type": "string"
+     },
+     "lines": {
+      "default": 50,
+      "exclusiveMinimum": 0,
+      "type": "integer"
+     },
+     "maxChars": {
+      "default": 20000,
+      "description": "Maximum characters in the response. Entries are truncated and the oldest are dropped to fit.",
+      "maximum": 100000,
+      "minimum": 500,
+      "type": "integer"
+     },
+     "maxCharsPerEntry": {
+      "default": 2000,
+      "description": "Maximum characters kept from each log entry.",
+      "maximum": 20000,
+      "minimum": 100,
+      "type": "integer"
+     },
+     "since": {
+      "description": "ISO timestamp to filter logs since (e.g. 2023-10-27T10:00:00Z)",
+      "type": "string"
+     },
+     "source": {
+      "description": "Log source: \"console\" for webview JS logs, \"android\" for logcat, \"ios\" for simulator, \"system\" for desktop",
+      "enum": [
+       "console",
+       "android",
+       "ios",
+       "system"
+      ],
+      "type": "string"
+     },
+     "windowId": {
+      "description": "Window label for console logs (defaults to \"main\")",
+      "type": "string"
+     }
+    },
+    "required": [
+     "source"
+    ],
+    "type": "object"
+   },
+   "name": "read_logs"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "DOM Snapshot"
+   },
+   "description": "[Tauri Apps Only] Get a structured DOM snapshot of a Tauri app's webview. Supports different snapshot types for AI consumption. The \"accessibility\" type returns a YAML representation of the accessibility tree similar to Playwright's aria snapshots, including roles, names, states, and element refs. Use this for understanding UI semantics, finding interactive elements, or accessibility testing. The \"structure\" type returns a YAML representation of the DOM hierarchy with element tag names, IDs, CSS classes, and data-testid attributes (if present). Use this for understanding page layout, debugging CSS selectors, or locating elements by class/ID. Use the optional selector parameter to scope the snapshot to a subtree. The selector supports CSS (default), XPath, and text content matching via the strategy parameter. Requires active driver_session. Targets the only connected app, or the default app if multiple are connected. Specify appIdentifier (port or bundle ID) to target a specific app.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "selector": {
+      "description": "Selector to scope the snapshot: CSS selector (default), XPath, text content, or ref ID. If omitted, snapshots entire document.",
+      "type": "string"
+     },
+     "strategy": {
+      "default": "css",
+      "description": "Selector strategy: \"css\" (default) for CSS selectors, \"xpath\" for XPath expressions, \"text\" to find elements by text content, with fallback to placeholder, aria-label, and title attributes. Ref IDs (e.g., \"ref=e3\") work with any strategy.",
+      "enum": [
+       "css",
+       "xpath",
+       "text"
+      ],
+      "type": "string"
+     },
+     "type": {
+      "description": "Snapshot type",
+      "enum": [
+       "accessibility",
+       "structure"
+      ],
+      "type": "string"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\")",
+      "type": "string"
+     }
+    },
+    "required": [
+     "type"
+    ],
+    "type": "object"
+   },
+   "name": "webview_dom_snapshot"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Execute JS in Tauri Webview"
+   },
+   "description": "[Tauri Apps Only] Execute JavaScript in a Tauri app's webview context. Requires active driver_session. Has access to window.__TAURI__. If you need a return value, it must be JSON-serializable. For functions that return values, use an IIFE: \"(() => { return 5; })()\" not \"() => { return 5; }\". Accepts an optional timeout parameter (milliseconds) for long-running scripts. Timeout errors will identify which layer timed out (transport, script self-race, or Rust eval). Targets the only connected app, or the default app if multiple are connected. Specify appIdentifier (port or bundle ID) to target a specific app. For browser JS execution, use Chrome DevTools MCP instead.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "args": {
+      "description": "Arguments to pass to the script",
+      "items": {},
+      "type": "array"
+     },
+     "script": {
+      "description": "JavaScript code to execute in the webview context. If returning a value, it must be JSON-serializable. For functions that return values, use IIFE syntax: \"(() => { return value; })()\" not \"() => { return value; }\"",
+      "type": "string"
+     },
+     "timeout": {
+      "description": "Execution timeout in milliseconds",
+      "exclusiveMinimum": 0,
+      "type": "integer"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\")",
+      "type": "string"
+     }
+    },
+    "required": [
+     "script"
+    ],
+    "type": "object"
+   },
+   "name": "webview_execute_js"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Find Element in Tauri Webview"
+   },
+   "description": "[Tauri Apps Only] Find elements in a running Tauri app's webview and return their geometry, text, accessible name, attributes, visibility, and optionally their computed styles. Supports CSS selectors (default), XPath expressions, and text content matching via the strategy parameter. The \"text\" strategy searches element text content (not just direct text nodes), prefers exact matches over substring matches, prefers innermost elements, and prefers interactive ancestors. Returns structured JSON with totalMatches, returned count, and array of matches each containing: nth index, ref ID, tag, trimmed text, accessible name, attributes, bounding rect, visibility, interactability, optional computed styles, and optional truncated outerHTML. Use this instead of webview_execute_js for querySelector, getBoundingClientRect, textContent, and getComputedStyle reads. Requires active driver_session. Targets the only connected app, or the default app if multiple are connected. Specify appIdentifier (port or bundle ID) to target a specific app. For browser pages or documentation sites, use Chrome DevTools MCP instead.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "includeHtml": {
+      "default": false,
+      "description": "Include outerHTML for each match, truncated to 2000 characters.",
+      "type": "boolean"
+     },
+     "limit": {
+      "default": 5,
+      "description": "Maximum number of matches to return. Total match count is always reported.",
+      "maximum": 50,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "nth": {
+      "description": "Zero-based index to pick one of several matching elements. Omit when the selector is unique. Required when a text selector matches more than one visible element.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "properties": {
+      "description": "Computed CSS properties to include for each match, e.g. [\"display\",\"opacity\",\"font-size\"].",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "selector": {
+      "description": "The selector to find: CSS selector (default), XPath expression, text content, or ref ID (e.g., \"ref=e3\"). Interpretation depends on strategy.",
+      "type": "string"
+     },
+     "strategy": {
+      "default": "css",
+      "description": "Selector strategy: \"css\" (default) for CSS selectors, \"xpath\" for XPath expressions, \"text\" to find elements by text content, with fallback to placeholder, aria-label, and title attributes. Ref IDs (e.g., \"ref=e3\") work with any strategy.",
+      "enum": [
+       "css",
+       "xpath",
+       "text"
+      ],
+      "type": "string"
+     },
+     "visibleOnly": {
+      "default": true,
+      "description": "Return only rendered elements. Set false to include display:none and off-screen nodes.",
+      "type": "boolean"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\")",
+      "type": "string"
+     }
+    },
+    "required": [
+     "selector"
+    ],
+    "type": "object"
+   },
+   "name": "webview_find_element"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get Pointed Element"
+   },
+   "description": "[Tauri Apps Only] Retrieves element metadata for an element the user previously pointed at via Alt+Shift+Click in the Tauri app. Returns the same rich metadata as webview_select_element (tag, id, classes, attributes, text, bounding rect, CSS selector, computed styles, parent chain) plus an annotated screenshot. The user must Alt+Shift+Click an element first before calling this tool. Requires active driver_session. Targets the only connected app, or the default app if multiple are connected. Specify appIdentifier (port or bundle ID) to target a specific app.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\")",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "webview_get_pointed_element"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Interact with Tauri Webview"
+   },
+   "description": "[Tauri Apps Only] Click, hover, right-click, scroll, swipe, focus, or perform gestures in a Tauri app webview. Supported actions: click, double-click, long-press, scroll, swipe, focus, hover, right-click. Supports CSS selectors (default), XPath, and text content matching via the strategy parameter. When using a text selector that matches multiple visible elements, you must provide the nth parameter to disambiguate, or the tool will throw an error listing the candidates. Requires active driver_session. For browser interaction, use Chrome DevTools MCP instead.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "Type of interaction to perform",
+      "enum": [
+       "click",
+       "double-click",
+       "long-press",
+       "scroll",
+       "swipe",
+       "focus",
+       "hover",
+       "right-click"
+      ],
+      "type": "string"
+     },
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "duration": {
+      "description": "Duration in ms for long-press or swipe (default: 500ms for long-press, 300ms for swipe)",
+      "type": "number"
+     },
+     "fromX": {
+      "description": "Starting X coordinate for swipe",
+      "type": "number"
+     },
+     "fromY": {
+      "description": "Starting Y coordinate for swipe",
+      "type": "number"
+     },
+     "nth": {
+      "description": "Zero-based index to pick one of several matching elements. Omit when the selector is unique. Required when a text selector matches more than one visible element.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "scrollX": {
+      "description": "Horizontal scroll amount in pixels (positive = right)",
+      "type": "number"
+     },
+     "scrollY": {
+      "description": "Vertical scroll amount in pixels (positive = down)",
+      "type": "number"
+     },
+     "selector": {
+      "description": "Element selector: CSS selector (default), XPath expression, text content, or ref ID (e.g., \"ref=e3\")",
+      "type": "string"
+     },
+     "strategy": {
+      "default": "css",
+      "description": "Selector strategy: \"css\" (default) for CSS selectors, \"xpath\" for XPath expressions, \"text\" to find elements by text content, with fallback to placeholder, aria-label, and title attributes. Ref IDs (e.g., \"ref=e3\") work with any strategy.",
+      "enum": [
+       "css",
+       "xpath",
+       "text"
+      ],
+      "type": "string"
+     },
+     "toX": {
+      "description": "Ending X coordinate for swipe",
+      "type": "number"
+     },
+     "toY": {
+      "description": "Ending Y coordinate for swipe",
+      "type": "number"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\")",
+      "type": "string"
+     },
+     "x": {
+      "description": "X coordinate for direct coordinate interaction",
+      "type": "number"
+     },
+     "y": {
+      "description": "Y coordinate for direct coordinate interaction",
+      "type": "number"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "webview_interact"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Keyboard Input in Tauri"
+   },
+   "description": "[Tauri Apps Only] Type text or send keyboard events in a Tauri app. The selector parameter (for \"type\" action) supports CSS selectors (default), XPath, and text content matching via the strategy parameter. Requires active driver_session. Targets the only connected app, or the default app if multiple are connected. Specify appIdentifier (port or bundle ID) to target a specific app. For browser keyboard input, use Chrome DevTools MCP instead.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "Keyboard action type: \"type\" for typing text into an element, \"press/down/up\" for key events",
+      "enum": [
+       "type",
+       "press",
+       "down",
+       "up"
+      ],
+      "type": "string"
+     },
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "key": {
+      "description": "Key to press (required for \"press/down/up\" actions, e.g., \"Enter\", \"a\", \"Escape\")",
+      "type": "string"
+     },
+     "modifiers": {
+      "description": "Modifier keys to hold",
+      "items": {
+       "enum": [
+        "Control",
+        "Alt",
+        "Shift",
+        "Meta"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "nth": {
+      "description": "Zero-based index to pick one of several matching elements. Omit when the selector is unique. Required when a text selector matches more than one visible element.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "selector": {
+      "description": "Element selector for element to type into (required for \"type\" action): CSS selector (default), XPath, text content, or ref ID",
+      "type": "string"
+     },
+     "strategy": {
+      "default": "css",
+      "description": "Selector strategy: \"css\" (default) for CSS selectors, \"xpath\" for XPath expressions, \"text\" to find elements by text content, with fallback to placeholder, aria-label, and title attributes. Ref IDs (e.g., \"ref=e3\") work with any strategy.",
+      "enum": [
+       "css",
+       "xpath",
+       "text"
+      ],
+      "type": "string"
+     },
+     "text": {
+      "description": "Text to type (required for \"type\" action)",
+      "type": "string"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\")",
+      "type": "string"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "webview_keyboard"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Screenshot Tauri Webview"
+   },
+   "description": "[Tauri Apps Only] Screenshot a running Tauri app's webview. Requires active driver_session. Captures only visible viewport. Targets the only connected app, or the default app if multiple are connected. Specify appIdentifier (port or bundle ID) to target a specific app. For browser screenshots, use Chrome DevTools MCP instead. For Electron apps, this will NOT work.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "allowScreenCapture": {
+      "default": false,
+      "description": "Allow an interactive OS screen-sharing permission prompt if native and html2canvas capture fail",
+      "type": "boolean"
+     },
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "filePath": {
+      "description": "File path to save the screenshot to instead of returning as base64",
+      "type": "string"
+     },
+     "format": {
+      "default": "jpeg",
+      "description": "Image format",
+      "enum": [
+       "png",
+       "jpeg"
+      ],
+      "type": "string"
+     },
+     "maxWidth": {
+      "description": "Maximum width in pixels. Images wider than this will be scaled down proportionally. Can also be set via TAURI_MCP_SCREENSHOT_MAX_WIDTH environment variable.",
+      "exclusiveMinimum": 0,
+      "type": "integer"
+     },
+     "quality": {
+      "default": 80,
+      "description": "JPEG quality (0-100, only for jpeg format)",
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\")",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "webview_screenshot"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Select Element (Visual Picker)"
+   },
+   "description": "[Tauri Apps Only] Activates an element picker overlay in the Tauri app. The user visually selects an element by clicking it, and the tool returns rich element metadata (tag, id, classes, attributes, text, bounding rect, CSS selector, computed styles, parent chain) plus an annotated screenshot with the element highlighted. Requires active driver_session. Targets the only connected app, or the default app if multiple are connected. Specify appIdentifier (port or bundle ID) to target a specific app.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "timeout": {
+      "default": 60000,
+      "description": "Timeout in ms for user to pick an element (5000-120000, default 60000)",
+      "maximum": 120000,
+      "minimum": 5000,
+      "type": "number"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\")",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "webview_select_element"
+  },
+  {
+   "annotations": {
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Wait for Condition in Tauri"
+   },
+   "description": "[Tauri Apps Only] Wait for elements, text, or IPC events in a Tauri app. When type is \"selector\", supports CSS (default), XPath, and text strategies via the strategy parameter. Requires active driver_session. Targets the only connected app, or the default app if multiple are connected. Specify appIdentifier (port or bundle ID) to target a specific app. For browser waits, use Chrome DevTools MCP instead.",
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "appIdentifier": {
+      "description": "App port or bundle ID to target. Defaults to the only connected app or the default app if multiple are connected.",
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "strategy": {
+      "default": "css",
+      "description": "Selector strategy (applies when type is \"selector\"): \"css\" (default), \"xpath\", or \"text\".",
+      "enum": [
+       "css",
+       "xpath",
+       "text"
+      ],
+      "type": "string"
+     },
+     "timeout": {
+      "default": 5000,
+      "description": "Timeout in milliseconds (default: 5000ms)",
+      "type": "number"
+     },
+     "type": {
+      "description": "What to wait for",
+      "enum": [
+       "selector",
+       "text",
+       "ipc-event"
+      ],
+      "type": "string"
+     },
+     "value": {
+      "description": "Selector, text content, or IPC event name to wait for",
+      "type": "string"
+     },
+     "windowId": {
+      "description": "Window label to target (defaults to \"main\")",
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "value"
+    ],
+    "type": "object"
+   },
+   "name": "webview_wait_for"
+  }
+ ],
+ "version": "0.13.0"
+}

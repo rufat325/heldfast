@@ -1,0 +1,800 @@
+{
+ "args": [],
+ "measured_at": "2026-09-22T19:16:13+00:00",
+ "package": "@putervision/vision-memory-mcp",
+ "protocol": "2025-06-18",
+ "published": "2026-09-10T22:33:19.026Z",
+ "tools": [
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "readOnlyHint": false
+   },
+   "description": "Ingest screenshot(s) via base64 or file path, check the visual state cache, and return state details. On cache miss, generates perceptual hashes (dHash/aHash), CLIP embeddings, and persists a new visual state entry. Use this tool AFTER capturing a screenshot and BEFORE invoking vision LLMs to avoid redundant token spend. For batch ingestion, pass an `items` array instead of a single screenshot/file_path.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "accessibility_tree": {
+      "description": "Optional JSON string representing the simplified AX tree",
+      "type": "string"
+     },
+     "description": {
+      "description": "Optional human/agent-provided description of the screen",
+      "type": "string"
+     },
+     "file_path": {
+      "description": "Absolute path to a local image file (single mode). Use instead of screenshot to avoid base64 overhead",
+      "type": "string"
+     },
+     "force_refresh": {
+      "description": "Bypass L1/L2 cache and force new ingestion",
+      "type": "boolean"
+     },
+     "git_branch": {
+      "description": "Override the active git branch",
+      "type": "string"
+     },
+     "items": {
+      "description": "Batch mode: array of 1\u201320 screenshot items to ingest/analyze. When provided, screenshot/file_path params are ignored.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "accessibility_tree": {
+         "type": "string"
+        },
+        "description": {
+         "type": "string"
+        },
+        "file_path": {
+         "type": "string"
+        },
+        "screenshot": {
+         "type": "string"
+        },
+        "source_url": {
+         "type": "string"
+        },
+        "tags": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        }
+       },
+       "type": "object"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "type": "array"
+     },
+     "response_format": {
+      "description": "Response verbosity. compact omits internal fields like hashes, vectors, AX trees. Default: compact",
+      "enum": [
+       "compact",
+       "full"
+      ],
+      "type": "string"
+     },
+     "screenshot": {
+      "description": "Base64-encoded image string (single mode)",
+      "type": "string"
+     },
+     "source_url": {
+      "description": "Optional app/page path or URL where captured",
+      "type": "string"
+     },
+     "tags": {
+      "description": "Optional classification tags",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "trace_id": {
+      "description": "Optional session_id or trace_id for correlation with state-memory-mcp",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "analyze_screenshot",
+   "title": "Analyze & Cache Screenshot"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "readOnlyHint": true
+   },
+   "description": "Compare two visual states structurally (dHash, CLIP vector, JSON diff, layout delta) or two video trajectories (keyframe similarity, divergence point). Provide state_a_id/state_b_id for state comparison, or video_a_id/video_b_id for video trajectory comparison.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "response_format": {
+      "enum": [
+       "compact",
+       "full"
+      ],
+      "type": "string"
+     },
+     "state_a_id": {
+      "description": "ID of visual state A (state comparison mode)",
+      "type": "string"
+     },
+     "state_b_id": {
+      "description": "ID of visual state B (state comparison mode)",
+      "type": "string"
+     },
+     "video_a_id": {
+      "description": "First video ID (video comparison mode)",
+      "type": "string"
+     },
+     "video_b_id": {
+      "description": "Second video ID (video comparison mode)",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "compare_states",
+   "title": "Compare Visual States or Video Trajectories"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "readOnlyHint": false
+   },
+   "description": "Package keyframe IDs, dHash/CLIP fingerprints, OCR snippets, and linked state-memory node IDs into an immutable, cryptographically hashable evidence pack for compliance and audit trails.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "keyframe_state_ids": {
+      "description": "Array of keyframe visual state IDs",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "linked_state_memory_nodes": {
+      "additionalProperties": false,
+      "description": "State memory node IDs linked to this visual evidence pack",
+      "properties": {
+       "blocker_ids": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "decision_ids": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "observation_ids": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "task_ids": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "type": "object"
+     },
+     "source_video_id": {
+      "description": "Optional source video ID",
+      "type": "string"
+     }
+    },
+    "required": [
+     "keyframe_state_ids"
+    ],
+    "type": "object"
+   },
+   "name": "create_evidence_pack",
+   "title": "Create Evidence Pack"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "readOnlyHint": true
+   },
+   "description": "Export visual state transition trajectories. Formats: \"json\" (raw state steps), \"llava\" / \"qwen2_vl\" (VLM fine-tuning datasets), \"joint\" (interleaved workflow events correlated by session/trace ID for state-memory-mcp).",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "format": {
+      "description": "Export format (default: json)",
+      "enum": [
+       "json",
+       "llava",
+       "qwen2_vl",
+       "joint"
+      ],
+      "type": "string"
+     },
+     "git_branch": {
+      "description": "Optional git branch filter",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Maximum number of states to export (default: 50)",
+      "type": "number"
+     },
+     "trace_id": {
+      "description": "Optional trace ID / session ID filter (used with joint format)",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "export_trajectories",
+   "title": "Export Visual Trajectories"
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "readOnlyHint": false
+   },
+   "description": "Purge a specific visual state, its vector embeddings, and perceptual hashes from storage for privacy or memory reset.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "state_id": {
+      "description": "ID of visual state to purge",
+      "type": "string"
+     }
+    },
+    "required": [
+     "state_id"
+    ],
+    "type": "object"
+   },
+   "name": "forget_state",
+   "title": "Forget Visual State"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "readOnlyHint": true
+   },
+   "description": "Trace historical pathways from current state to a target state or state matching description via BFS over the transition graph.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "from_state_id": {
+      "description": "ID of starting state (defaults to most recently accessed state)",
+      "type": "string"
+     },
+     "max_hops": {
+      "description": "BFS search limit",
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "response_format": {
+      "enum": [
+       "compact",
+       "full"
+      ],
+      "type": "string"
+     },
+     "to_description": {
+      "description": "Description match of target state",
+      "type": "string"
+     },
+     "to_state_id": {
+      "description": "ID of target state",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "get_navigation_paths",
+   "title": "Find UI Navigation Path"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "readOnlyHint": true
+   },
+   "description": "Fetch aggregated visual context: recent states, frequently accessed states, active transitions, and memory stats. Call this at session start to orient before performing UI actions.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "include_frequent": {
+      "description": "Count of frequent states",
+      "maximum": 20,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "include_recent": {
+      "description": "Count of recent states",
+      "maximum": 20,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "response_format": {
+      "enum": [
+       "compact",
+       "full"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "get_session_context",
+   "title": "Get Session Context"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "readOnlyHint": false
+   },
+   "description": "Manage visual memory snapshots. Actions: \"save\" creates a named checkpoint of current states; \"diff\" compares two snapshots for visual drift/regression; \"export\" serializes a snapshot to a portable JSON archive; \"restore\" imports a snapshot from an exported archive.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "Snapshot operation to perform",
+      "enum": [
+       "save",
+       "diff",
+       "export",
+       "restore"
+      ],
+      "type": "string"
+     },
+     "archive_json": {
+      "description": "JSON string of exported SnapshotArchive (required for restore)",
+      "type": "string"
+     },
+     "description": {
+      "description": "Notes describing snapshot context (used with save)",
+      "type": "string"
+     },
+     "name": {
+      "description": "Snapshot name (required for save, export)",
+      "type": "string"
+     },
+     "snapshot_a_name": {
+      "description": "Base snapshot name (required for diff)",
+      "type": "string"
+     },
+     "snapshot_b_name": {
+      "description": "Target snapshot name to compare against (required for diff)",
+      "type": "string"
+     },
+     "state_memory_milestone_id": {
+      "description": "Optional state-memory milestone ID to correlate",
+      "type": "string"
+     },
+     "state_memory_snapshot_id": {
+      "description": "Optional state-memory snapshot ID to correlate",
+      "type": "string"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "manage_snapshot",
+   "title": "Manage Visual Snapshots"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "readOnlyHint": false
+   },
+   "description": "Manage WebM, MP4, and GIF video recordings in visual memory. Actions: \"ingest\" extracts keyframes, deduplicates, and builds sequence transitions; \"search\" queries stored video recordings by keyword/category/tags; \"timeline\" retrieves the chronological keyframe timeline for a specific video_id.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "Action to perform: 'ingest', 'search', or 'timeline'",
+      "enum": [
+       "ingest",
+       "search",
+       "timeline"
+      ],
+      "type": "string"
+     },
+     "category": {
+      "description": "Video category (e.g. playwright_test, bug_repro)",
+      "type": "string"
+     },
+     "file_path": {
+      "description": "Absolute file path to video file (for 'ingest')",
+      "type": "string"
+     },
+     "fps": {
+      "description": "Frame sampling rate per second for 'ingest' (default: 1.0)",
+      "type": "number"
+     },
+     "limit": {
+      "description": "Max search results (default: 20)",
+      "type": "number"
+     },
+     "query": {
+      "description": "Search query string (required for 'search')",
+      "type": "string"
+     },
+     "scene_threshold": {
+      "description": "Scene change detection threshold 0.0-1.0 (default: 0.2)",
+      "type": "number"
+     },
+     "source_agent": {
+      "description": "Source agent identifier",
+      "type": "string"
+     },
+     "tags": {
+      "description": "Array of classification tags",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "trace_id": {
+      "description": "Trace or session correlation ID",
+      "type": "string"
+     },
+     "video_data": {
+      "description": "Base64 encoded video buffer (for 'ingest')",
+      "type": "string"
+     },
+     "video_id": {
+      "description": "Video record ID to retrieve timeline (required for 'timeline')",
+      "type": "string"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "manage_video",
+   "title": "Manage Video Memory"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "readOnlyHint": false
+   },
+   "description": "Manage Visual Spec baseline contracts (Visual SDD). Actions: \"set\" registers a screenshot or design mockup as baseline, \"verify\" tests a live UI screenshot against a baseline, \"list\" returns all registered visual specs.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "Action to perform: 'set', 'verify', or 'list'",
+      "enum": [
+       "set",
+       "verify",
+       "list"
+      ],
+      "type": "string"
+     },
+     "file_path": {
+      "description": "Absolute file path to image (for 'set' or 'verify')",
+      "type": "string"
+     },
+     "name": {
+      "description": "Spec name (required for 'set' or 'verify')",
+      "type": "string"
+     },
+     "screenshot": {
+      "description": "Base64 encoded screenshot image (for 'set' or 'verify')",
+      "type": "string"
+     },
+     "sdd_requirement_id": {
+      "description": "Optional state-memory-mcp SDD requirement node ID for 'verify'",
+      "type": "string"
+     },
+     "spec_name": {
+      "description": "Alternative spec name alias (for 'verify')",
+      "type": "string"
+     },
+     "tolerance": {
+      "description": "dHash Hamming distance tolerance threshold for 'verify' (default: 8)",
+      "type": "number"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "manage_visual_spec",
+   "title": "Manage Visual Specs"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "readOnlyHint": true
+   },
+   "description": "Predict the best next UI action from the current visual state based on transition success rates, goal alignment, and grounded AX tree element targeting.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "current_state_id": {
+      "description": "ID of current active visual state",
+      "type": "string"
+     },
+     "goal_description": {
+      "description": "Optional natural language goal description",
+      "type": "string"
+     },
+     "goal_state_id": {
+      "description": "Optional target visual state ID",
+      "type": "string"
+     }
+    },
+    "required": [
+     "current_state_id"
+    ],
+    "type": "object"
+   },
+   "name": "predict_next_action",
+   "title": "Predict Next UI Action"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "readOnlyHint": true
+   },
+   "description": "Search visual state memory by screenshot image, text query, or accessibility tree. Read-only \u2014 never creates or modifies states. Use analyze_screenshot to ingest new states.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "accessibility_tree": {
+      "description": "AX tree JSON for filtering",
+      "type": "string"
+     },
+     "file_path": {
+      "description": "Absolute file path to search by local image",
+      "type": "string"
+     },
+     "git_branch": {
+      "description": "Branch scope filter",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Result count limit",
+      "maximum": 20,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "query": {
+      "description": "Text query string for semantic vector search",
+      "type": "string"
+     },
+     "response_format": {
+      "description": "Response format verbosity",
+      "enum": [
+       "compact",
+       "full"
+      ],
+      "type": "string"
+     },
+     "screenshot": {
+      "description": "Base64 image payload to search by visual appearance",
+      "type": "string"
+     },
+     "strategy": {
+      "description": "Retrieval strategy",
+      "enum": [
+       "fast",
+       "semantic",
+       "thorough"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "recall_memory",
+   "title": "Search Visual Memory"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "readOnlyHint": false
+   },
+   "description": "Log an action transition between two visual states and update transition statistics. Call this after every click/type/scroll/navigate action. When action_type is \"blocker\", generates a structured visual blocker payload for state-memory-mcp instead of recording a transition (from_state_id becomes the visual_state_id of the blocker).",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "Action description (or blocker description when action_type is \"blocker\")",
+      "type": "string"
+     },
+     "action_type": {
+      "description": "Category of UI action. Use \"blocker\" to create a visual blocker payload.",
+      "enum": [
+       "click",
+       "type",
+       "navigate",
+       "scroll",
+       "custom",
+       "blocker"
+      ],
+      "type": "string"
+     },
+     "duration_ms": {
+      "description": "Action duration in ms",
+      "type": "number"
+     },
+     "from_state_id": {
+      "description": "Source state ID (or blocker visual_state_id when action_type is \"blocker\")",
+      "type": "string"
+     },
+     "git_branch": {
+      "description": "Active git branch",
+      "type": "string"
+     },
+     "project": {
+      "description": "state-memory-mcp project name (only used when action_type is \"blocker\")",
+      "type": "string"
+     },
+     "response_format": {
+      "enum": [
+       "compact",
+       "full"
+      ],
+      "type": "string"
+     },
+     "success": {
+      "description": "Whether action succeeded (default: true, ignored for blockers)",
+      "type": "boolean"
+     },
+     "to_state_id": {
+      "description": "Destination state ID (not required when action_type is \"blocker\")",
+      "type": "string"
+     }
+    },
+    "required": [
+     "from_state_id",
+     "action"
+    ],
+    "type": "object"
+   },
+   "name": "record_outcome",
+   "title": "Record Action Outcome"
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "readOnlyHint": false
+   },
+   "description": "Revert the most recent visual state ingestion or transition edge addition on the current git branch.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "type": {
+      "description": "Type of mutation to revert (default: any \u2014 reverts the most recent of either)",
+      "enum": [
+       "state",
+       "transition",
+       "any"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "undo_visual_mutation",
+   "title": "Undo Visual Mutation"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "readOnlyHint": true
+   },
+   "description": "Poll for a target visual state ID until it exists in memory or timeout occurs. Use this to avoid agent spin-loops when waiting for asynchronous screenshots.",
+   "execution": {
+    "taskSupport": "forbidden"
+   },
+   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+     "poll_interval_ms": {
+      "description": "Polling interval in ms (default: 500)",
+      "type": "number"
+     },
+     "target_state_id": {
+      "description": "Target visual state ID to wait for",
+      "type": "string"
+     },
+     "timeout_ms": {
+      "description": "Maximum timeout in ms (default: 10000)",
+      "type": "number"
+     }
+    },
+    "required": [
+     "target_state_id"
+    ],
+    "type": "object"
+   },
+   "name": "wait_for_visual_state",
+   "title": "Wait For Visual State"
+  }
+ ],
+ "version": "1.1.1"
+}

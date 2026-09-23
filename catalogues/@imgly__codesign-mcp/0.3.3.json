@@ -1,0 +1,566 @@
+{
+ "args": [
+  "stdio"
+ ],
+ "measured_at": "2026-09-22T19:16:13+00:00",
+ "package": "@imgly/codesign-mcp",
+ "protocol": "2025-06-18",
+ "published": "2026-09-16T11:22:36.057Z",
+ "tools": [
+  {
+   "description": "Add a local image or font file to the workspace so it can be used in a design. Copies the file bytes into the content-addressed asset store at `assets/<sha>.<ext>`. The bring-your-own arm of the asset family: `asset_search` finds an existing asset, `asset_generate` makes one, `asset_add` takes one off your disk \u2014 all three return a `workspace://` uri to embed in `edit`. (To turn a design FILE into a new design, use `import`.)\n\nReturns JSON: `{ uri, httpUrl, mimeType, kind, bytes, note? }`. `uri` (a `workspace://` URI) is the durable handle \u2014 embed it in a subsequent `edit` (image fill, or `engine.asset.apply`; for a font, as both `setFont`'s uri and `typeface.fonts[].uri`), NEVER `httpUrl` and NEVER the original `file://` path, so the design stays loadable after a restart or rewind. `httpUrl` is a fetch link for opening the asset now.\n\nFiles are classified by content (magic bytes) first, extension second: a misnamed file is stored under its actual type, and `note` explains any correction, rescue, or unverifiable content.\n\nMake-available only: it never edits a scene and never creates a revision \u2014 do the placement in `edit`.\n\nSource: `{ path }` \u2014 an absolute path to a file the server can read. Local-only (this backend shares your disk); on a hosted server this arm is not offered.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "source": {
+      "additionalProperties": false,
+      "properties": {
+       "path": {
+        "description": "Absolute path to a local image or font file the server can read.",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     }
+    },
+    "required": [
+     "source"
+    ],
+    "type": "object"
+   },
+   "name": "asset_add"
+  },
+  {
+   "description": "Generate images (text-to-image, image-to-image) via the IMG.LY AI gateway.\n\nCall with NO arguments first: returns the model catalog \u2014 pick a model, then call again with `model` + `prompt` (+ optional `format` aspect like \"16:9\").\n\nFor image-to-image, pass `image_uris` with `workspace://` URIs (from `import` or earlier generations).\n\nThe first content part is JSON: `{ uri, httpUrl, mimeType, bytes }`. `uri` (a `workspace://` URI) is the durable handle \u2014 embed it in subsequent `edit` calls. `httpUrl` opens the asset directly. The parts after it are a labeled thumbnail of each generated image \u2014 look at them; the JSON alone does not tell you what was drawn.\n\nMulti-output models (layerize-class: decompose an input image into layers) add an `assets` array to that JSON \u2014 one entry per image, `{ index, uri, httpUrl, mimeType, bytes }`, in stack order (residual background first, then cutout layers). The top-level fields mirror `assets[0]`. Single-output results carry no `assets` array. Any non-image output the model produced is passed through VERBATIM under `metadata` \u2014 read it, it binds semantics to the assets (layerize, for example, ships a layers list in `assets` order with names, z order and bounding boxes in source pixels; cutouts are cropped to content, so place them by their bounding box).\n\nRequires a free IMG.LY sign-in (the `login` tool); all other design tools work without an account.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "format": {
+      "description": "Aspect ratio, e.g. \"16:9\" or \"1:1\".",
+      "type": "string"
+     },
+     "image_uris": {
+      "description": "workspace:// image URIs used as inputs (image-to-image models).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "model": {
+      "description": "Model id from the catalog (call with no arguments to list). Required to generate.",
+      "type": "string"
+     },
+     "prompt": {
+      "description": "What to generate. Required together with `model`.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "asset_generate"
+  },
+  {
+   "description": "Discover the asset sources registered on the CreativeEngine and search the assets they contain. Read-only \u2014 never creates a revision.\n\nWithout `sourceId`: lists every source id with its supported MIME types.\n\nWith `sourceId`: returns one page of assets as JSON `{ total, currentPage, nextPage, assets: [{ id, label, groups, uri, thumbUri, width, height, uploadedAt }] }`. Typeface assets (e.g. the `ly.img.gfonts` Google Fonts source) additionally carry a compact `typeface: { name, weights, styles }` summary. `query` fuzzy-matches labels and tags.\n\nThe `ly.img.workspace.images` source is this workspace's own image store: every image the agent generated or imported AND every image the human uploaded in the browser editor, newest first. Uploads carry their original filename as `label` (the human will refer to it \u2014 \"use logo-final.png\" \u2014 so search that name), plus `groups: [\"uploads\"]` and an `uploadedAt` timestamp. \"The image the user just uploaded\" = the `uploads`-group asset with the newest `uploadedAt`.\n\n\u26a0 Asset sources are deployment configuration \u2014 where their content lives (IMG.LY CDN, a customer host) is the server's business. NEVER fetch asset manifests (`content.json`) or hardcode `cdn.img.ly` URLs yourself; this tool and `engine.asset.*` are the only correct path. A source missing from the no-arg listing is not available on this server \u2014 say so instead of working around it.\n\nTo USE a result, apply it inside `edit` code \u2014 re-find it there, then either:\n(A) new block: `const id = await engine.asset.apply(sourceId, (await engine.asset.findAssets(sourceId, { query, page: 0, perPage: 1 })).assets[0])` \u2014 then, if you resize the frame, set `engine.block.setContentFillMode(id, \"Cover\")` (resizing does NOT update the crop; without Cover a portrait photo forced into a landscape frame gets squished);\n(B) existing block: `const fill = engine.block.createFill(\"image\"); engine.block.setString(fill, \"fill/image/imageFileURI\", asset.meta.uri); engine.block.setFill(blockId, fill); engine.block.setContentFillMode(blockId, \"Cover\")`.\n(C) fonts: re-find the family inside `edit` code and pass the payload straight to setFont \u2014 `const { assets } = await engine.asset.findAssets(\"ly.img.gfonts\", { query: name, page: 0, perPage: 20 }); const tf = assets.map((a) => a?.payload?.typeface).find((t) => t?.name === name); if (!tf) throw new Error(\"font lookup missed: \" + assets.map((a) => a?.payload?.typeface?.name).join(\", \")); engine.block.setFont(id, tf.fonts[0].uri, tf); engine.block.setTextFontWeight(id, \"normal\")`. Take the EXACT name out of a page of results \u2014 fuzzy ranking can put it behind longer names (query \"Lora\" returns Explora first), so `perPage: 1` fetches the wrong family. And always set the weight: `tf.fonts[0]` is the family's LIGHTEST declared weight (Thin/100 on Inter, Roboto, \u2026), so setFont alone renders hairline text with no error. Never copy font URIs out of this tool into edit code.\nDo NOT use `engine.asset.applyToBlock` \u2014 on this server it silently no-ops (the block keeps its old fill, no error).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "page": {
+      "description": "Page index. Default 0.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "perPage": {
+      "description": "Results per page. Default 20, max 50.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "query": {
+      "description": "Fuzzy search over asset labels and tags.",
+      "type": "string"
+     },
+     "sourceId": {
+      "description": "Asset source id. Omit to list all sources.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "asset_search"
+  },
+  {
+   "description": "Check whether the user changed a design in the browser editor since you last touched it.\n\nPass the revision you believe is current \u2014 normally the one your last `edit` returned. The reply says whether it is still the design head and lists what was written since, oldest first, with each revision's diff note and whether it came from the editor (`origin: \"editor\"`) or from your own `edit`.\n\nCall this before your first `edit` of a design whenever the user may have had the `view` page open: `edit` REJECTS a parent whose path to the head contains one of the user's editor saves, so this is how you find the parent to build on.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "revision": {
+      "description": "Revision you believe is current \u2014 normally the one your last `edit` returned.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "revision"
+    ],
+    "type": "object"
+   },
+   "name": "changes"
+  },
+  {
+   "description": "Register the brief's ACCEPTANCE CHECKLIST for a design \u2014 the machine-checkable claims that must hold before the work counts as done. Do this right after intake, before the first edit: extract from the brief every required output file, every string of approved copy that must land verbatim, and note the constraints only you can check.\n\nItem kinds:\n- { kind: 'output', path } \u2014 a file that must exist when the design is delivered (absolute path, e.g. every variant the brief orders exported).\n- { kind: 'copy', text } \u2014 approved copy that must appear VERBATIM in the design's text (whitespace variants are folded before comparing; wording, case and punctuation are exact).\n- { kind: 'note', text } \u2014 a self-check the server cannot verify (e.g. \"layout structure unchanged from master\"). Kept on record; never machine-checked.\n\nEvery `export` verifies the current checklist against the deliverable and lists unmet items in its result \u2014 treat an unmet item exactly like a failing test: finish the work, or re-register the checklist without the item if it is genuinely obsolete. Calling `checklist` again REPLACES the whole list for this design.\n\nReturns: { ok, itemCount, rootRevision } \u2014 or the current checklist when called with only `revision` (no items).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "items": {
+      "description": "The full checklist (max 64 items) \u2014 replaces any previously registered list. Omit to read the current checklist instead.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "output",
+          "copy",
+          "note"
+         ],
+         "type": "string"
+        },
+        "path": {
+         "type": "string"
+        },
+        "text": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "kind"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "revision": {
+      "description": "Any revision id of the design (the checklist attaches to the design's whole lineage).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "revision"
+    ],
+    "type": "object"
+   },
+   "name": "checklist"
+  },
+  {
+   "description": "Inspect this codesign MCP server: `status` (default) reports what is running (build id, CE.SDK engine version, non-secret config); `summary` returns a bounded digest of recent activity (counts, recent errors, slowest calls); `open` returns a clickable local viewer URL with a Download-ZIP button to send diagnostics to IMG.LY.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "description": "status (default) | summary | open",
+      "enum": [
+       "status",
+       "summary",
+       "open"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "diagnostics"
+  },
+  {
+   "description": "Edit the CE.SDK canvas by running JavaScript against the live CreativeEngine, then commit the result as a new revision.\n\n\u26a0 Call `skill({ name: 'handbook' })` BEFORE your first `edit`. It documents the design loop, the typeface schema, and the engine recipes; on cryptic errors, query its quirks.md.\n\nREQUIRED: `parent` is a revision id (returned by a previous edit), or the JSON null literal (no quotes) to start a new design. Omitting it is an error \u2014 there is no implicit 'continue from wherever'. In a fresh conversation, a request for a new design means `parent: null` \u2014 never resume a workspace design the user didn't reference.\n\nReturns: the first content part is JSON `{ revision, parent, names? }` \u2014 store `revision` so you can pass it as `parent` on the next edit. `names` lists every named block in the committed scene: those are exactly the strings `engine.design.findByName(name)` resolves in your NEXT edit, so name what you build and re-find it instead of matching copy. When the edit changed the scene, the result also ends with a downscaled render of the (first) changed page \u2014 verify your work from it instead of spending a `preview` call. `preview` remains required for full-size judging (the judge loop) and multi-page review; set `render: false` to skip the image on read-only/diagnostic edits.\n\n`code` return contract (STRICT): return `undefined` (no message back), `{ type: \"text\", text }`, `{ type: \"image\", data: \"<base64>\", mimeType }`, or an array of those. Anything else (raw strings, Blobs, plain objects) is rejected.\n\nDIALECT (enforced): mutations go through `engine.design` (create/build/setProps/\u2026). Code that mutates via engine.block.* is rejected before execution with the equivalent calls; `// engine.block: <reason>` opts out for calls the facade lacks.\n\n`code` scope: `engine` (with `engine.design`), plus `findText(copy)` / `findAllText(copy)` for reaching a block by its text. Use them instead of comparing text strings with `===` \u2014 the copy on the page routinely carries a trailing space or an NBSP (before a `\u20ac`/`%`), which is what makes hand-rolled lookups throw. Matching folds those space variants and trims; a miss lists the copy actually on the page.\n\nDirty-on-throw: if your `code` throws, the engine slot is marked dirty and the next `edit` pays one engine reload (regardless of `parent`). Do not catch-and-swallow errors that should propagate \u2014 let them throw so this safety contract kicks in.\n\nOptional: `title` (set on parent=null only \u2014 the design's display name) and `note` (a one-liner describing what this edit accomplished \u2014 purely descriptive, helps you re-ground after a rewind).\n\nRefused parents: if the user saved changes in the browser editor between your `parent` and the design head, this edit would discard them, so it is rejected \u2014 call `changes` to see what they did and which revision to build on.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "code": {
+      "description": "Async JS body. `engine` is in scope, plus `engine.design` \u2014 the preferred nested-props facade; EVERY member returns a Promise (await it): create({ type, name?, props?, children? }, { parent? }), setProps(id, props), getProps(id, select?) \u2014 see the api skill. Strict return contract per the handbook.",
+      "type": "string"
+     },
+     "fork": {
+      "description": "Set true ONLY when the user explicitly asked to discard their own browser-editor changes and branch from an older revision. Without it, `edit` refuses a parent whose path to the head contains a save the user made in the editor.",
+      "type": "boolean"
+     },
+     "note": {
+      "description": "Freeform descriptive text \u2014 what this edit accomplished. Metadata only; never load-bearing.",
+      "type": "string"
+     },
+     "parent": {
+      "description": "Parent revision id from a previous edit (a string). To start a new design root, use the JSON null literal. REQUIRED \u2014 there is no implicit default.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "render": {
+      "description": "Default true: a mutating edit's result ends with a downscaled render of the (first) changed page. Set false to skip the image on read-only or diagnostic edits where seeing the canvas adds nothing.",
+      "type": "boolean"
+     },
+     "title": {
+      "description": "Display name for the design. Set only when parent=null (creating a new design). For mid-chain renames use the `rename` tool.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "parent",
+     "code"
+    ],
+    "type": "object"
+   },
+   "name": "edit"
+  },
+  {
+   "description": "Export a revision to a final deliverable \u2014 `format` picks it: `pdf` (print PDF), `png`/`jpeg`/`webp` (image), `svg` (vector SVG), `pdfx` (print-ready PDF/X), `html` (responsive HTML5), `imgly` (editable design file). Renders `blockId` \u2014 or the whole document when `blockId` is omitted \u2014 and writes the result into the workspace under `exports/<shard>/<rev>/` (revision-pinned, deterministic).\n\nReturns JSON: `{ uri, httpUrl, bytes, format, revision }` (plus `path` when you pass `outPath`). `uri` (a `workspace://` URI) is the durable handle. `httpUrl` is a fetch link tied to this process \u2014 fetch it to download the bytes to disk, or hand it to the user.\n\n`outPath` (optional, absolute path including the filename): ALSO write the artifact to that local path \u2014 the workspace copy is still written, and the response then carries `path`. Use it when the file is wanted on disk, and always when your environment cannot fetch localhost URLs (sandboxed harnesses, e.g. Claude Cowork \u2014 target your session's outputs folder there).\n\n`format=svg` is the engine's vector export: text is outlined into paths (renders identically everywhere, but is not editable text in the SVG), and raster images are embedded in the file at source resolution \u2014 an SVG of a photo-heavy design can be much larger than its source images.\n\n`format=imgly` writes a portable, self-contained `.imgly` design file (scene + all asset bytes bundled) \u2014 the inverse of `import`, and the only format that stays editable. Whole-design only: `blockId` is not accepted. Every `edit` already auto-persists to the workspace, so you never need this to keep your work \u2014 use it to take an editable copy OUT: hand it to a human, back it up, move it between servers.\n\n`format=pdfx` runs the print PDF through a PDF/X conversion (Ghostscript): CMYK with an embedded ICC profile and PDF/X conformance markers, ready for a print shop. Tune it via the optional `pdfx` object \u2014 conformance standard (X-4 default / X-3), output profile (fogra39/gracol/srgb/custom), transparency flattening, OutputIntent metadata. Conversion adds a few seconds.\n\n`format=html` renders ONE page (`blockId` required \u2014 pass a page id) to responsive HTML5. Default is a single self-contained `.html` (assets inlined; animated designs get a CDN GSAP player injected so the file plays as-is); `html: { assets: \"external\" }` delivers html + separate image/font files as one `.zip`.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "blockId": {
+      "description": "The page or block to render. Omit to export the whole document \u2014 for `format=pdf` a multi-page PDF, for an image format one composite image of all pages. Required for format=html (pass a page id).",
+      "type": "integer"
+     },
+     "format": {
+      "description": "The deliverable: pdf \u2192 print PDF; png/jpeg/webp \u2192 image; svg \u2192 vector SVG; pdfx \u2192 print-ready PDF/X; html \u2192 HTML5 page; imgly \u2192 editable design file.",
+      "enum": [
+       "pdf",
+       "png",
+       "jpeg",
+       "webp",
+       "svg",
+       "pdfx",
+       "html",
+       "imgly"
+      ]
+     },
+     "html": {
+      "additionalProperties": false,
+      "description": "Options for `format=html` only (invalid with any other format).",
+      "properties": {
+       "assets": {
+        "description": "embedded (default): one self-contained .html, assets inlined as data URLs \u2014 viewable anywhere as-is. external: html + separate image/font files, delivered as one .zip.",
+        "enum": [
+         "embedded",
+         "external"
+        ]
+       }
+      },
+      "type": "object"
+     },
+     "outPath": {
+      "description": "Absolute path (including filename) to ALSO write the artifact to \u2014 the workspace copy is still written, and the response then carries `path`. Use when you need the file on disk and cannot fetch localhost URLs (sandboxed harnesses).",
+      "type": "string"
+     },
+     "pdfx": {
+      "additionalProperties": false,
+      "description": "Options for `format=pdfx` only (invalid with any other format). Omit entirely for sensible print defaults: PDF/X-4, fogra39, embedded ICC.",
+      "properties": {
+       "embedICCProfile": {
+        "description": "Default true. false \u2192 plain CMYK (or RGB) PDF with no embedded ICC profile, OutputIntent, or PDF/X markers \u2014 for prepress pipelines that apply their own profile.",
+        "type": "boolean"
+       },
+       "flattenTransparency": {
+        "description": "PDF/X-3 only (default true there): rasterize transparent content for strict compliance. false keeps transparency live \u2014 better fidelity, may not validate. Ignored on PDF/X-4.",
+        "type": "boolean"
+       },
+       "outputCondition": {
+        "description": "Overrides /OutputCondition \u2014 the human-readable printing-condition description (e.g. \"ISO Coated v2 (ECI)\"). Defaults from outputProfile.",
+        "type": "string"
+       },
+       "outputConditionIdentifier": {
+        "description": "Overrides the PDF's /OutputConditionIdentifier \u2014 the REGISTERED printing-condition name preflight tools and print shops check (e.g. \"FOGRA39\", \"CGATS 21.2\"). Defaults from outputProfile; with a custom profile, your print shop tells you what to put here.",
+        "type": "string"
+       },
+       "outputProfile": {
+        "description": "Target printing condition / ICC output profile. fogra39 (default) = ISO Coated v2 (ECI), European offset. gracol = GRACoL 2013 CRPC6, US commercial. srgb = keep RGB, for digital distribution. custom = supply the print shop's ICC file via profileUri.",
+        "enum": [
+         "fogra39",
+         "gracol",
+         "srgb",
+         "custom"
+        ]
+       },
+       "outputStandard": {
+        "description": "PDF/X conformance target. PDF/X-4 (default) keeps live transparency. PDF/X-3 is the older PDF 1.4 standard \u2014 it flattens transparency by default and can rasterize gradients/alpha content.",
+        "enum": [
+         "PDF/X-4",
+         "PDF/X-3"
+        ]
+       },
+       "profileUri": {
+        "description": "Required with outputProfile=\"custom\" (invalid otherwise): an https:// URL or absolute local file path of the .icc profile to embed.",
+        "type": "string"
+       },
+       "title": {
+        "description": "PDF document title. Defaults to the design's title.",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "revision": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "format",
+     "revision"
+    ],
+    "type": "object"
+   },
+   "name": "export"
+  },
+  {
+   "description": "Walk back from `revision` to the root, returning the chain (root first). Each entry has `{ revision, parent, note?, origin?, createdAt }` \u2014 `origin: \"editor\"` marks a revision the user saved from the browser editor. Use this to re-ground after a rewind: read the notes, pick the revision you want to continue from, pass it as `parent` to your next `edit`. Continue a prior design only when the user asked for it \u2014 never because it is the newest entry.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "revision": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "revision"
+    ],
+    "type": "object"
+   },
+   "name": "history"
+  },
+  {
+   "description": "Import a design FILE as a NEW design root revision \u2014 a native CE.SDK `.imgly` design file (also the legacy `.scene` and `.zip` forms); a foreign design file: Photoshop (`.psd`/`.psb`), InDesign (`.idml`), PowerPoint (`.pptx`), or PDF; or a plain image (PNG/JPEG/WebP/GIF) or SVG, which becomes a one-page design sized to the image (`format`: `\"image\"`/`\"svg\"`). The inverse of `export({ format: 'imgly' })`. To make a media file (image/font/video/audio) available for use INSIDE a design instead of becoming one, use `asset_add`.\n\nSource: `{ url }` (http/https), `{ demo }` (a design bundled with this server \u2014 ids: `\"cybernews\"`) or `{ path }` (absolute local file path; Local only). Archives are ingested: bundled asset bytes are extracted into the workspace as content-addressed `assets/<sha>.<ext>` files, so the loaded design is durable and behaves exactly like a natively-built one.\n\nReturns JSON `{ revision, title, format }` \u2014 continue with `edit({ parent: revision, \u2026 })`. Foreign-format imports may add `warnings` (importer notes about what did not survive \u2014 substituted fonts, unsupported features): treat them as your touch-up list \u2014 `preview` the pages, then repair with `edit`; find replacement fonts via `asset_search`. Bare scene-file loads (no bundled assets) additionally return `assets`: a classification of every referenced asset URI by scheme (`workspace` / `external` / `bundle` / `transient` / `other`). External URLs are NOT fetched; `transient` entries WILL be lost on the next save \u2014 replace or relocate them before committing further work.\n\nEngine caveat: InDesign and PDF import need the WASM engine (`IMGLY_CESDK_ENGINE=wasm`) \u2014 on the native engine `import` errors cleanly for those two formats; Photoshop and PowerPoint import work on both.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "source": {
+      "additionalProperties": false,
+      "description": "The design to load. Provide exactly one of `url` (http/https), `demo` (a bundled demo design), `path` (absolute local file path; Local only).",
+      "properties": {
+       "demo": {
+        "description": "Id of a demo design bundled with this server \u2014 a finished design to demonstrate on, with no file and no build required.",
+        "enum": [
+         "cybernews"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "description": "Absolute local file path of the design file. Local-only.",
+        "type": "string"
+       },
+       "url": {
+        "description": "http(s) URL of the design file to load.",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "title": {
+      "description": "Display name for the new design. Defaults to the source file's basename.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "source"
+    ],
+    "type": "object"
+   },
+   "name": "import"
+  },
+  {
+   "description": "Read one revision in full: parent, note, createdAt, title (root only), and the JS code that produced it (when written via `edit`).\n\nUse this after `history` when you've picked a revision and want to know HOW it got there \u2014 the code is the precise operation; `note` is the agent's summary.\n\nReturns JSON `{ revision, parent, note?, origin?, createdAt, title?, code? }` \u2014 `origin: \"editor\"` marks a revision the user saved from the browser editor. `code` is omitted for revisions not produced by `edit` (e.g. future import paths).\n\n\u26a0 Past code reveals the PATTERN of an edit (which APIs were called, what kind of block was targeted), NOT the block ids. Block ids are session-scoped \u2014 re-discover them in the current engine; don't replay the literal numeric ids.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "revision": {
+      "description": "Revision id to inspect.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "revision"
+    ],
+    "type": "object"
+   },
+   "name": "inspect"
+  },
+  {
+   "description": "List designs in the workspace. Returns an array of `{ rootRevision, title, latestLeaf, updatedAt, headOrigin?, headNote? }` sorted newest-first; the `head*` fields describe `latestLeaf`. `headOrigin: \"editor\"` means the last hand on that design was the user's, in the browser editor \u2014 read `headNote` (the engine-computed diff of their save) before you change anything, and build from `latestLeaf` so their work is not discarded. Use when the user asks what designs exist or wants to resume earlier work. Seeing a design here is never by itself a reason to continue it \u2014 for a new design request pass `parent: null` to `edit`.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "list"
+  },
+  {
+   "description": "Sign in with your IMG.LY account (opens the system browser). The session saves automatically once the user finishes in the browser; call login again anytime to confirm \u2014 safe to repeat, it does not restart the flow or invalidate the open link. Pass switch_account=true to sign in as a different user.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "switch_account": {
+      "description": "Force a fresh sign-in screen even if a session exists.",
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "name": "login"
+  },
+  {
+   "description": "Sign out of your IMG.LY account (revokes the session and clears local credentials).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "logout"
+  },
+  {
+   "description": "Render blocks (almost always pages) to inline images so you can see the result.\n\n`revision` is REQUIRED \u2014 pass the revision the blocks belong to, the id `edit` returned. `blockIds` is a LIST, rendered in the order you give it: `[pageId]` for one page, `[a, b]` for a subset, or OMIT it entirely to preview every page of the design in document order.\n\nThe given `revision` is loaded before rendering, so the ids always resolve against the right scene \u2014 never against a different design another agent may have loaded on a shared server.\n\nPreview several blocks at once when REVIEWING or capturing a finished design \u2014 a whole deck in one call, or just the pages a fix touched. While BUILDING a multi-page design, keep previewing each page right after you build it: batching there does not avoid the bugs, it only delays finding them.\n\nOutput is always PNG (lossless \u2014 thin lines render exactly). EACH block gets the full 0.25 megapixel budget, adjusted to its own aspect ratio \u2014 a square page renders 512\u00d7512, a 1:4 page 256\u00d71024. There are no size or format knobs, and at most 10 blocks render per call.\n\nTo eyeball fine detail, preview the suspect BLOCK directly \u2014 the pixel budget concentrates on it (an effective zoom). For native-resolution certainty, `export` the page and open its `httpUrl`.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "blockIds": {
+      "description": "Blocks to render, in the order you want them back \u2014 almost always page ids, not the scene root. Omit to preview every page of the design in document order. At most 10 render per call.",
+      "items": {
+       "type": "integer"
+      },
+      "type": "array"
+     },
+     "revision": {
+      "description": "Revision id the blocks belong to (from `edit`). Loaded before rendering so the ids resolve against the right scene.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "revision"
+    ],
+    "type": "object"
+   },
+   "name": "preview"
+  },
+  {
+   "description": "Rename a design. `revision` may be any revision in the lineage; the root's title is updated. Use this when the title set at design creation no longer fits.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "revision": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "revision",
+     "title"
+    ],
+    "type": "object"
+   },
+   "name": "rename"
+  },
+  {
+   "description": "Record the verdict of a judge loop you have COMPLETED for a revision \u2014 the final step of the `judge` skill. Recording is a claim about work already done: never call this without having scored the axes against actual `preview` renders of this exact revision's content.\n\n`verdict: 'pass'` \u2014 every applicable axis scored \u2265 8; the design may be delivered. `verdict: 'fail'` \u2014 you are stopping with an axis below 8 (e.g. the user cut remediation short); the failure stays on record.\n\nThe latest scorecard is what `export` checks: delivering a revision it does not cover (content changed since, or no scorecard at all) adds a reminder to its result. Judging again after further edits? Record a new scorecard for the re-judged revision.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "revision": {
+      "description": "The revision the judge loop scored \u2014 the id whose renders you previewed.",
+      "type": "string"
+     },
+     "verdict": {
+      "description": "'pass' when every applicable axis scored \u2265 8, 'fail' when stopping below the gate.",
+      "enum": [
+       "pass",
+       "fail"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "revision",
+     "verdict"
+    ],
+    "type": "object"
+   },
+   "name": "scorecard"
+  },
+  {
+   "description": "Load a skill \u2014 an instruction document that teaches you how to work with this server. Read the relevant skill BEFORE attempting work it covers. Intended sequence: (1) call with just `name` to get the entry document \u2014 it ends with an index of the bundled files; (2) pass `query` (a regex, like Grep) to search the bundled files for the rules you need, scoping with `path` when you know the file; (3) full-read a file via `path` only when it is small (the index shows line counts) or after a search missed twice \u2014 slice large files with `offset` (skip count: offset=10 starts at line 11) and `limit`. Entry documents are always returned whole (offset/limit are ignored for them).\n\n<available_skills>\n<skill name=\"handbook\">\nThe CoDesign design loop, tool contract, workspace cheatsheet, typeface\nschema, common operations cheatsheet, and the full design-quality rubric.\n**Read this skill before any edit call** \u2014 it contains the 5-step Loop\n(decide parent \u2192 read API \u2192 exec \u2192 preview \u2192 judge), the tool roster and\ncross-tool rules, the workspace revision model (list / history / rename),\nrewind-recovery procedure, the typeface shape text.font declarations need,\nand \u00a76: the design-rules index \u2014 the full enforceable rubric (typography,\nhierarchy, composition, craft) ships as this skill's design-rules.md, the\nruntime-quirk reference as its quirks.md, and the input-resolution contract\nevery skill follows as its intake.md, all read on demand.\n\nTriggered for any task using this server's `edit` or `preview` tools.\n</skill>\n<skill name=\"api\">\nAuthoritative TypeScript signatures for the CE.SDK CreativeEngine. Use this\nskill whenever you need the exact signature, parameter types, or return type\nof an `engine.*` method \u2014 especially before calling a method you haven't\nused yet. This is THE source of truth for signatures: generated from the\n`.d.ts` shipped with the same `@cesdk/node` package the engine runs, while\nprose docs (the `guide` skill) can drift.\n\nReading this skill with no path returns the WHOLE edit-code API surface\ninline \u2014 the engine.design facade, the props trees, the attachment unions\nand the capability matrix. That is one call and it is all edit code needs.\n\nThe sub-file \"signatures.d.ts\" is the same surface plus the upstream CE.SDK\ncore \u2014 JSDoc-free signatures with every string-vocabulary type (property\nnames, block types, enum values) flattened to its literal union on the\ndeclaring line. It is served a page at a time: search it with query (e.g.\nquery: \"saveToArchive\"), then slice around the hit with path + offset/limit.\n\nTriggered when you need to verify an `engine.block.*` or `engine.scene.*`\nsignature, look up a parameter type, or confirm an enum/string-property name.\n</skill>\n<skill name=\"brand\">\nUse when applying a brand kit / brand style to an existing CoDesign / CE.SDK design \u2014 a\nrules-governed restyle (recolor + refont + logo + treatment by role), not a free-form style\nchange; when a restyled design reads off-brand (free-chosen colors, wrong accent, a second\ncolour used as structure, a coloured button the brand forbids, a headline set in a weight the\nbrand bans, a flat bordered card, or the wrong / recoloured / redrawn logo); when loading a\nbrand's fonts, wordmark SVG, or signature device into a scene; or when turning an external brand\n(a guidelines PDF, a website / URL, a Figma file, or a raw asset dump) into a reusable brand kit.\n</skill>\n<skill name=\"create\">\nUse when the user asks to create / generate / make a NEW design from a prompt \u2014 a deck\nor slides, poster, flyer, social post, business card, or a custom-size canvas. Runs the\nguided intake: derive every brief parameter the prompt already answers (class, format,\naudience, vibe, brand, content), ask ONLY the missing questions \u2014 one round, chip-style\noptions, \"Decide automatically\" defaults \u2014 then echo the design brief and hand off to the\nhandbook Loop. A brief given to the /codesign prompt lands here as the stated input.\n</skill>\n<skill name=\"formats\">\nCanvas-format reference for CoDesign designs \u2014 one file per screen/print format (ig-post,\nig-square, ig-story, widescreen, linkedin-post, x-post, deck, poster, flyer, business-card):\nexact W\u00d7H, aspect, medium, platform safe zones, print bleed/dpi. Use when picking or setting up\na canvas size, checking a platform safe zone, or preparing print dimensions. Re-composing an\nexisting design into a format is the `resize` skill; new-design intake is the `create` skill.\n</skill>\n<skill name=\"guide\">\nLook up CE.SDK Node.js reference docs, guides, and configuration pages \u2014\nprose explanations, recipes, and concept docs for everything the engine can\ndo (text, fills, colors, export, video, templates, asset sources, \u2026).\n\nUse when you need to understand HOW a CE.SDK feature works or want a code\nrecipe; also triggered by \"IMG.LY\", \"CreativeEditor\", \"CE.SDK\", or \"cesdk\"\nwhen the user needs an existing Node.js doc page. For exact TypeScript\nsignatures use the `api` skill instead.\n\nThe entry document is an index; every doc page is a sub-file \u2014 read one with\n`path` (e.g. path: \"text/add.md\"), or search them all with `query`.\n</skill>\n<skill name=\"judge\">\nUse to quality-gate a design before reporting it done \u2014 the mandatory step 5 of the\nhandbook Loop; when the user asks for a design review, score, audit, or QA; or when a\ndesign needs remediation after a failed review. The axes, the gate, the scorecard\nformat, and the remediation loop are defined in this skill's body \u2014 read it before\nscoring; do not judge from memory of this description.\n</skill>\n<skill name=\"localize\">\nUse when creating or fixing translated / localized variants of an existing CoDesign / CE.SDK\ndesign (e.g. de/ja/ru/ar editions); when a localized edition's text blocks or\ndecorative elements have drifted, re-centered, or resized away from the source layout; when\ntranslated copy is tofu, overflowing, mis-tracked, or the wrong font after a language swap; or\nwhen loading a non-Latin script (Cyrillic / CJK / Arabic RTL / Vietnamese) font into a scene.\n</skill>\n<skill name=\"onboard\">\nUse when the user is new here or asks what this server is / what it\ncan do (\"what is CoDesign\", \"what can you make\", \"show me\"). A guided, plain-language\nintroduction for a HUMAN: explain what CoDesign is in everyday terms, put the six\njobs it does on the table, let the user pick one, then run it either on the bundled\ndemo design or on the user's own idea \u2014 closing with the optional (never required)\nIMG.LY sign-in and the ways to earn more credits. Not a design manual: the handbook\nremains the required read before any edit.\n</skill>\n<skill name=\"resize\">\nUse when resizing or reformatting a CoDesign / CE.SDK design to a new size or aspect ratio\n(ig-post \u2194 ig-square \u2194 ig-story \u2194 widescreen, or a custom W\u00d7H); when building the size/format\neditions of a design from an existing design or from a brief; or when a reformatted\nedition has a dead void / letterboxed empty band, drifted or broken margins, off-canvas or\nclipped elements, mis-scaled decoration, or a stretched / squished layout.\n</skill>\n</available_skills>",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "context": {
+      "description": "Context lines around each match, like grep -C (default 2; 0 = bare match lines). Only valid with `query`.",
+      "maximum": 10,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "limit": {
+      "description": "Maximum number of lines to return.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxResults": {
+      "description": "Maximum search matches to return (default 50, max 200).",
+      "maximum": 200,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "name": {
+      "description": "Skill to load.",
+      "enum": [
+       "handbook",
+       "api",
+       "brand",
+       "create",
+       "formats",
+       "guide",
+       "judge",
+       "localize",
+       "onboard",
+       "resize"
+      ],
+      "type": "string"
+     },
+     "offset": {
+      "description": "Lines to skip before reading (offset=10 starts at line 11). Use with `limit` to slice large files.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "path": {
+      "description": "Optional sub-file within the skill. Defaults to the entry document.",
+      "type": "string"
+     },
+     "query": {
+      "description": "Search the skill instead of reading it: a regular expression matched per line (like Grep). Smart-case: all-lowercase pattern \u2192 case-insensitive; any uppercase \u2192 case-sensitive. An invalid pattern is an error. Output is grep format \u2014 `file:N:` match lines, `file-N-` context lines, blocks headed by `--` with the enclosing markdown headings. Combine with `path` to search one file. Mutually exclusive with offset/limit.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "name": "skill"
+  },
+  {
+   "description": "Get a URL the human can open to view and edit the design in CE.SDK. Returns the design's stable URL \u2014 the viewer keeps it live, re-rendering as you `edit`, so print it ONCE and don't re-emit a fresh URL every turn. Add `pin: true` for a frozen permalink to that exact revision (for 'look at exactly this' or comparing revisions). The page is a full editor; when the human clicks 'Save', their edits land as a new revision whose note carries an engine-computed change summary \u2014 continue from that revision.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "pin": {
+      "description": "When true, return a frozen permalink to this exact revision instead of the live design URL.",
+      "type": "boolean"
+     },
+     "revision": {
+      "description": "Any revision in the design; resolved to its root and opened at the design head.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "revision"
+    ],
+    "type": "object"
+   },
+   "name": "view"
+  }
+ ],
+ "version": "0.3.3"
+}
