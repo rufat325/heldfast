@@ -1,8 +1,8 @@
 # MCP server tool changes
 
-Last change observed 2026-09-23T15:12:13+00:00. Built by `research/feed/watch.py` on the `main` branch. Watching 9409 npm servers from the official MCP registry (154 daily, the rest weekly) and 18576 hosted endpoints (daily).
+Last change observed 2026-09-23T15:59:41+00:00. Built by `research/feed/watch.py` on the `main` branch. Watching 9409 npm servers from the official MCP registry (154 daily, the rest weekly) and 18576 hosted endpoints (daily).
 
-271 releases that changed a tool definition (25 observed live, 246 from the [churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); 3 where `mcp-pin wrap --drift graded` would refuse something.
+273 releases that changed a tool definition (27 observed live, 246 from the [churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); 3 where `mcp-pin wrap --drift graded` would refuse something.
 
 Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, with the words that moved: [events/](events).
 
@@ -10,6 +10,8 @@ Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, w
 
 | published | server | release | tools | grade |
 |---|---|---|---|---|
+| 2026-09-23 | `@mobilenext/mobile-mcp` | 1.0.4 -> 1.0.5 | 32 changed (every tool) | quiet |
+| 2026-09-23 | `@togglhq/mcp` | 1.11.39 -> 1.11.40 | 9 changed, 1 removed | quiet |
 | 2026-09-23 | `firecrawl-mcp` | 3.25.3 -> 3.25.4 | 2 changed | quiet |
 | 2026-09-23 | `@zereight/mcp-gitlab` | 2.1.65 -> 2.1.66 | 118 changed (every tool) | quiet |
 | 2026-09-23 | `@togglhq/mcp` | 1.11.37 -> 1.11.39 | 1 changed, 1 added | quiet |
@@ -68,5 +70,3 @@ Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, w
 | 2026-09-21 | `sbuilder-mcp` | 0.62.0 -> 0.63.0 | 2 changed, 1 added | quiet |
 | 2026-09-21 | `@qase/mcp-server` | 2.5.1 -> 2.6.0 | 1 changed, 3 added | quiet |
 | 2026-09-21 | `@cap-js/mcp-server` | 0.0.5 -> 0.0.6 | 1 changed | quiet |
-| 2026-09-21 | `premiere-pro-mcp` | 1.16.3 -> 1.16.4 | 6 changed | quiet |
-| 2026-09-21 | `screenpipe-mcp` | 0.19.4 -> 0.20.0 | 1 changed, 2 added | quiet |
