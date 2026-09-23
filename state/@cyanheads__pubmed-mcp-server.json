@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-09-23T04:24:37+00:00",
+ "checked_at": "2026-09-23T11:49:00+00:00",
  "package": "@cyanheads/pubmed-mcp-server",
- "published": "2026-09-23T04:01:24.949Z",
+ "published": "2026-09-23T06:39:05.997Z",
  "tools": {
   "pubmed_convert_ids": {
    "digest": "893b9d7fb80cc052d600071f1ad2ab5852243ac3433f0dc35329bfaeaa6cbe69",
@@ -1311,7 +1311,7 @@
    }
   },
   "pubmed_fetch_fulltext": {
-   "digest": "7dcb46c11c50a170e04896c826e66488a98781b14df327b81e13c43c60ed5016",
+   "digest": "6cdc500e61263ce9fa2d801a898d5eaf4d6e4c6c46179746681e3b254d7c6eb4",
    "raw": {
     "_meta": {
      "io.mcpmed/concepts": [
@@ -1360,7 +1360,7 @@
        "type": "boolean"
       },
       "maxCharacters": {
-       "description": "Per-article budget for body text, in characters. Counts `source=pmc` section and subsection text \u2014 which carries the inline blocks the parser renders in place, such as lists, definition lists, block quotes, boxed text, preformatted blocks and displayed formulae \u2014 plus table label, caption, cell and footnote text and asset label, caption and `href` text; or the `source=unpaywall` `content` body. Titles, abstracts, identifiers, and references are never counted or shortened. The counted unit is that text alone \u2014 the Markdown grid `content[]` renders around the cells (pipes, padding, the divider row, headings) is scaffolding this budget does not measure, so a table renders longer than it costs here. Sections are served first, then tables, then assets, each spending what is left, in document order \u2014 admission stops at the first entry that does not fit, and every entry from there on is dropped whole rather than cut mid-row or returned with a shortened caption, counted in `truncation.omittedTables` / `truncation.omittedAssets` and named in `truncation.articles[].omittedTableNames` / `omittedAssetNames`. Applied after `sections`, `maxSections`, `includeReferences`, `includeTables`, and `includeAssets`, so semantic filtering is unaffected. This knob alone bounds only bodies: the response-wide ceiling it implies is this value times the number of articles returned, plus every uncounted field. Use `maxResponseCharacters` for a true whole-response ceiling. Omit for the full body.",
+       "description": "Per-article budget for body text, in characters. Counts `source=pmc` section and subsection text \u2014 which carries the inline blocks the parser renders in place, such as lists, definition lists, block quotes, boxed text, preformatted blocks and displayed formulae \u2014 plus table label, caption, cell and footnote text and asset label, caption and `href` text; or the `source=unpaywall` `content` body. Titles, abstracts, identifiers, and references are never counted or shortened. Shortened text ends at the last word boundary inside its allowance, so it can come back a few characters under it. The counted unit is that text alone \u2014 the Markdown grid `content[]` renders around the cells (pipes, padding, the divider row, headings) is scaffolding this budget does not measure, so a table renders longer than it costs here. Sections are served first, then tables, then assets, each spending what is left, in document order \u2014 admission stops at the first entry that does not fit, and every entry from there on is dropped whole rather than cut mid-row or returned with a shortened caption, counted in `truncation.omittedTables` / `truncation.omittedAssets` and named in `truncation.articles[].omittedTableNames` / `omittedAssetNames`. Applied after `sections`, `maxSections`, `includeReferences`, `includeTables`, and `includeAssets`, so semantic filtering is unaffected. This knob alone bounds only bodies: the response-wide ceiling it implies is this value times the number of articles returned, plus every uncounted field. Use `maxResponseCharacters` for a true whole-response ceiling. Omit for the full body.",
        "maximum": 1000000,
        "minimum": 1,
        "type": "integer"
@@ -1385,7 +1385,7 @@
       },
       "overflowMode": {
        "default": "truncate",
-       "description": "How to spend `maxCharacters` across an article that exceeds it. truncate: fill sections in document order, so early sections stay whole and sections past the budget are dropped (counted in `truncation.omittedSections`). outline: split the budget evenly so every section keeps its heading, and an excerpt as far as the budget reaches \u2014 use it to survey what an article contains before requesting specific `sections`. Ignored when no budget is set, and identical for `source=unpaywall` bodies, which have no headings to preserve.",
+       "description": "How to spend `maxCharacters` across an article that exceeds it. truncate: fill sections in document order, so early sections stay whole, the section the budget runs out in is cut, and every section or subsection past that point is dropped (counted in `truncation.omittedSections`). outline: split the budget evenly so every section and subsection keeps its heading, and an excerpt as far as the budget reaches \u2014 a heading the budget left empty is marked as such in the rendered text. Use it to survey what an article contains before requesting specific `sections`. Ignored when no budget is set, and identical for `source=unpaywall` bodies, which have no headings to preserve.",
        "enum": [
         "truncate",
         "outline"
@@ -1805,6 +1805,10 @@
             "description": "`publisher` or `repository` \u2014 where the OA copy is hosted",
             "type": "string"
            },
+           "journalName": {
+            "description": "Journal or repository name from Unpaywall's record for the DOI (e.g. `medRxiv` for a medRxiv preprint). Absent when Unpaywall has none.",
+            "type": "string"
+           },
            "license": {
             "description": "License identifier from Unpaywall (e.g. cc-by, cc0)",
             "type": "string"
@@ -1831,7 +1835,7 @@
             "type": "string"
            },
            "title": {
-            "description": "Detected article title when present",
+            "description": "Article title, from the first source that carries one: Unpaywall's record for the DOI, then the Europe PMC record when the chain searched Europe PMC for this id, then \u2014 for `html-markdown` content only \u2014 the title detected on the page. Absent when none of them has a title.",
             "type": "string"
            },
            "totalPages": {
@@ -1849,6 +1853,10 @@
            },
            "wordCount": {
             "description": "Approximate word count reported by the HTML extractor; absent for PDFs",
+            "type": "number"
+           },
+           "year": {
+            "description": "Publication year from Unpaywall's record for the DOI. Absent when Unpaywall has none.",
             "type": "number"
            }
           },
@@ -1927,17 +1935,13 @@
          "additionalProperties": {},
          "properties": {
           "reason": {
-           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). `unpaywall_unreachable`: Unpaywall was unreachable when resolving a DOI or fetching content. `europepmc_unreachable`: Europe PMC failed on every retry attempt \u2014 unreachable, an HTTP 404 or 5xx other than a 504 timeout from its search endpoint, or an empty response with no results. `europepmc_invalid_response`: Europe PMC returned a body that could not be parsed (invalid JSON or XML). `europepmc_invalid_input`: Europe PMC rejected the request input \u2014 an error message such as an empty query, an empty response to a sort with an undocumented field or no asc/desc direction, or an empty response to a pagination cursor on every attempt. Other values are possible when a failure originates below the handler.",
+           "description": "Machine-readable failure mode. Declared by this tool: `queue_full`: The local NCBI request queue shed the call \u2014 the queue is full, or the call cannot start before its total deadline (for example behind the cooldown that follows an NCBI 429). `ncbi_unreachable`: NCBI E-utilities is unreachable after all retry attempts. `ncbi_deadline_exceeded`: Total request deadline expired before NCBI returned a response. `ncbi_invalid_response`: NCBI returned a body that could not be parsed (invalid XML/JSON). `ncbi_resource_not_found`: NCBI returned a structured \"not found\" error for the requested ID(s). Other values are possible when a failure originates below the handler.",
            "examples": [
             "queue_full",
             "ncbi_unreachable",
             "ncbi_deadline_exceeded",
             "ncbi_invalid_response",
-            "ncbi_resource_not_found",
-            "unpaywall_unreachable",
-            "europepmc_unreachable",
-            "europepmc_invalid_response",
-            "europepmc_invalid_input"
+            "ncbi_resource_not_found"
            ],
            "type": "string"
           },
@@ -2029,18 +2033,58 @@
             "type": "number"
            },
            "sections": {
-            "description": "Per-section accounting for `source: pmc` articles, in document order, including sections dropped for budget. Absent for `source: unpaywall`, whose body has no section structure.",
+            "description": "Per-section accounting for `source: pmc` articles, in document order, including sections dropped for budget; a shortened section lists its subsections. Absent for `source: unpaywall`, whose body has no section structure.",
             "items": {
              "additionalProperties": false,
              "description": "Character accounting for one body section of a budgeted article",
              "properties": {
+              "label": {
+               "description": "Section label as printed (e.g. `2`), when the section carries one",
+               "type": "string"
+              },
               "originalCharacters": {
                "description": "Body characters this section carried before the budget pass",
                "type": "number"
               },
               "returnedCharacters": {
-               "description": "Body characters this section carries in the response. Zero means the section was dropped in `truncate` mode, or kept as a heading-only entry in `outline` mode.",
+               "description": "Body characters this section carries in the response. Zero means the section was dropped in `truncate` mode, or kept as a heading-only entry in `outline` mode, marked as such in the rendered text.",
                "type": "number"
+              },
+              "subsections": {
+               "description": "Per-subsection accounting for a shortened section, in document order, including subsections dropped for budget \u2014 where inside the section the cut landed. Absent when the section was returned whole or carries no subsections.",
+               "items": {
+                "additionalProperties": false,
+                "description": "Character accounting for one subsection of a shortened section",
+                "properties": {
+                 "label": {
+                  "description": "Subsection label as printed (e.g. `2.1`), when the subsection carries one",
+                  "type": "string"
+                 },
+                 "originalCharacters": {
+                  "description": "Body characters this subsection carried before the budget pass",
+                  "type": "number"
+                 },
+                 "returnedCharacters": {
+                  "description": "Body characters this subsection carries in the response. Zero means it was dropped in `truncate` mode and counted in `omittedSections`, or kept as a heading-only entry in `outline` mode, marked as such in the rendered text.",
+                  "type": "number"
+                 },
+                 "title": {
+                  "description": "Subsection heading, when the subsection carries one",
+                  "type": "string"
+                 },
+                 "truncated": {
+                  "description": "True when the subsection returned fewer characters than it originally carried",
+                  "type": "boolean"
+                 }
+                },
+                "required": [
+                 "originalCharacters",
+                 "returnedCharacters",
+                 "truncated"
+                ],
+                "type": "object"
+               },
+               "type": "array"
               },
               "title": {
                "description": "Section heading, when the section carries one",
@@ -2100,7 +2144,7 @@
          "type": "number"
         },
         "omittedSections": {
-         "description": "Body sections dropped entirely because an article budget was exhausted before reaching them. Always 0 in `outline` mode, which keeps every heading.",
+         "description": "Body sections and subsections dropped entirely because an article budget was exhausted before reaching them. A dropped section counts once, together with its subsections. Always 0 in `outline` mode, which keeps every heading.",
          "type": "number"
         },
         "omittedTables": {
@@ -3756,5 +3800,5 @@
    }
   }
  },
- "version": "2.10.16"
+ "version": "2.10.18"
 }
