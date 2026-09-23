@@ -46,7 +46,7 @@ class FakeFeed:
         for i, (version, tools) in enumerate(versions.items()):
             published = f"2026-09-0{i + 1}T00:00:00Z"
             entries.append({"version": version, "published": published, "tools": len(tools)})
-            self.pages[f"{BASE}/catalogues/pkg/{version}.json"] = {
+            self.pages[f"{BASE}/catalogues/pkg/{version}.json.gz"] = {
                 "package": "pkg", "version": version, "measured_at": published,
                 "protocol": "2025-06-18", "args": [], "tools": tools}
         events = [{"from": a["version"], "to": b["version"], "published": b["published"],

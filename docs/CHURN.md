@@ -162,9 +162,11 @@ attacker would write.
 ## It keeps going
 
 This was one run. [`research/feed/watch.py`](../research/feed/watch.py)
-repeats it every day for the same servers: when one publishes a stable
-release, it is launched in the same container, its catalogue is compared with
-the last one seen, and the release is recorded -- which tools changed, the
+keeps it going across the whole registry: the servers studied here every day,
+every other npm server in the registry once a week, and every hosted endpoint
+that answers without credentials every day -- a hosted server can change its
+tools without publishing anything. When one moves, the new catalogue is read
+in the same container, compared with the last one seen, and recorded -- which tools changed, the
 words that moved, and whether `--drift graded` would refuse anything, graded
 against the full previous text rather than a lockfile's preview. The record
 starts from the releases measured here and lives on the

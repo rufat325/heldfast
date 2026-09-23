@@ -1,21 +1,34 @@
-# The drift feed: which of the most-used MCP servers changed a tool
-# definition, release by release. research/feed/watch.py does the work; the
-# record lives on the `feed` branch (README.md, feed.xml, events/).
+# The drift feed: which MCP servers changed a tool definition, release by
+# release, across the official MCP registry. research/feed/watch.py does the
+# work; the record lives on the `feed` branch (README.md, feed.xml, events/,
+# index.json, catalogues/).
 #
-# Two jobs, because one of them runs other people's code:
+# The jobs that run or contact other people's servers cannot write:
 #
-#   measure  -- read-only token, credentials not persisted in the checkout,
-#               servers launched inside research/feed/Dockerfile with no
-#               capabilities. Produces files and nothing else.
-#   publish  -- the only job that can write. It runs nothing from the
-#               servers: it checks the files against the names, sizes and
-#               formats the feed writes, then commits them to `feed`.
+#   measure-npm     16 shards. Each launches today's due npm servers inside
+#                   research/feed/Dockerfile (no capabilities, no host env),
+#                   read-only token, credentials not persisted. Uploads only
+#                   the files it changed.
+#   measure-remote  4 shards. Reads hosted endpoints' tool lists over HTTPS.
+#                   Nothing is executed; same isolation anyway.
+#   publish         The only job that can write, and it runs nothing a server
+#                   wrote: it checks every uploaded file against the names,
+#                   sizes and formats the feed produces (with the verifier from
+#                   main), folds the events, renders, verifies again, commits.
+#   sync            Weekly. Rebuilds the watchlist from the registry. Reads
+#                   JSON, launches nothing, writes only watchlist.json.
 name: feed
 
 on:
   schedule:
-    - cron: "23 6 * * *"
+    - cron: "23 6 * * *"   # measure
+    - cron: "3 5 * * 1"    # sync the watchlist, Mondays
   workflow_dispatch:
+    inputs:
+      sync:
+        description: "Rebuild the watchlist from the registry instead of measuring"
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: ["research/feed/**", ".github/workflows/feed.yml"]
@@ -28,11 +41,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  measure:
+  sync:
+    if: github.event.schedule == '3 5 * * 1' || inputs.sync
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          path: tool
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: feed
+          path: feed-data
+      - name: Rebuild the watchlist from the registry
+        run: python3 tool/research/feed/watch.py sync --data feed-data
+      - name: Verify
+        run: python3 tool/research/feed/watch.py verify --data feed-data
+      - name: Commit
+        run: |
+          set -euo pipefail
+          cd feed-data
+          git config user.name "mcp-pin feed"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add watchlist.json
+          if git diff --cached --quiet; then echo "watchlist unchanged"; exit 0; fi
+          git commit -q -m "feed: watchlist $(date -u +%Y-%m-%d)"
+          git push origin HEAD:feed
+
+  measure-npm:
+    if: github.event.schedule != '3 5 * * 1' && !inputs.sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -42,41 +90,86 @@ jobs:
           ref: feed
           path: feed-data
           persist-credentials: false
-
       - name: Build the isolate
         run: docker build -f research/feed/Dockerfile -t mcp-pin-feed .
-
-      # Two servers at a time. Six in parallel took down the workstation the
-      # churn study first ran on; a runner is disposable, but the numbers are
-      # comparable only if the load is.
-      - name: Measure new releases
+      # Two servers at a time, at most 120 launches per shard per day. Six in
+      # parallel took down the workstation the churn study first ran on; the
+      # budget keeps a day with many new releases inside the job's time limit.
+      - name: Measure today's due npm servers
         run: |
           docker run --rm --cap-drop ALL --security-opt no-new-privileges \
             --memory 6g --cpus 2 --pids-limit 2048 --user "$(id -u):$(id -g)" \
-            -v "$PWD/feed-data:/data" mcp-pin-feed check --data /data --jobs 2
-
-      - name: Render
-        run: python3 research/feed/watch.py render --data feed-data
-
-      - name: Verify
-        run: python3 research/feed/watch.py verify --data feed-data
-
+            -v "$PWD/feed-data:/data" mcp-pin-feed \
+            check --data /data --jobs 2 --budget 120 \
+            --shard "${{ matrix.shard }}/16" --label "npm-${{ matrix.shard }}"
+      - name: Collect what changed
+        run: |
+          set -euo pipefail
+          git -C feed-data ls-files -m -o --exclude-standard > changed.txt
+          mkdir -p delta
+          rsync -a --files-from=changed.txt feed-data/ delta/
+          echo "$(wc -l < changed.txt) file(s) changed"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: feed-data
-          path: feed-data
+          name: feed-delta-npm-${{ matrix.shard }}
+          path: delta
           include-hidden-files: false
-          retention-days: 7
-          if-no-files-found: error
+          retention-days: 3
+          if-no-files-found: ignore
+
+  measure-remote:
+    if: github.event.schedule != '3 5 * * 1' && !inputs.sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: feed
+          path: feed-data
+          persist-credentials: false
+      - name: Build the isolate
+        run: docker build -f research/feed/Dockerfile -t mcp-pin-feed .
+      - name: Read hosted endpoints
+        run: |
+          docker run --rm --cap-drop ALL --security-opt no-new-privileges \
+            --memory 2g --cpus 2 --pids-limit 512 --user "$(id -u):$(id -g)" \
+            -v "$PWD/feed-data:/data" mcp-pin-feed \
+            check-remote --data /data --jobs 8 \
+            --shard "${{ matrix.shard }}/4" --label "remote-${{ matrix.shard }}"
+      - name: Collect what changed
+        run: |
+          set -euo pipefail
+          git -C feed-data ls-files -m -o --exclude-standard > changed.txt
+          mkdir -p delta
+          rsync -a --files-from=changed.txt feed-data/ delta/
+          echo "$(wc -l < changed.txt) file(s) changed"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: feed-delta-remote-${{ matrix.shard }}
+          path: delta
+          include-hidden-files: false
+          retention-days: 3
+          if-no-files-found: ignore
 
   publish:
-    needs: measure
+    needs: [measure-npm, measure-remote]
+    # A shard that failed or timed out costs its own slice, not the day.
+    if: ${{ !cancelled() && github.event.schedule != '3 5 * * 1' && !inputs.sync }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
-      # The verifier comes from main, not from anything the measuring job wrote.
+      # The verifier comes from main, not from anything a measuring job wrote.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           path: tool
@@ -87,22 +180,32 @@ jobs:
           path: feed-data
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: feed-data
-          path: incoming
+          pattern: feed-delta-*
+          merge-multiple: true
+          path: incoming-delta
 
-      - name: Verify what the measuring job produced
-        run: python3 tool/research/feed/watch.py verify --data incoming
+      - name: Verify what the measuring jobs produced
+        run: |
+          mkdir -p incoming-delta
+          python3 tool/research/feed/watch.py verify --data incoming-delta
+
+      - name: Merge, fold, render, verify
+        run: |
+          set -euo pipefail
+          rsync -a --exclude .git incoming-delta/ feed-data/
+          python3 tool/research/feed/watch.py fold --data feed-data
+          python3 tool/research/feed/watch.py render --data feed-data
+          python3 tool/research/feed/watch.py verify --data feed-data
 
       - name: Commit to the feed branch
         run: |
           set -euo pipefail
-          rsync -a --delete --exclude .git incoming/ feed-data/
           cd feed-data
           git config user.name "mcp-pin feed"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
-            echo "no new releases changed anything"
+            echo "nothing moved today"
             exit 0
           fi
           git commit -q -m "feed: $(date -u +%Y-%m-%d)"

@@ -1,9 +1,10 @@
-"""A running record of what the most-used MCP servers change, release by release.
+"""A running record of what MCP servers change, release by release.
 
-docs/CHURN.md measured six releases of each server once. This keeps going:
-every day it asks npm whether any watched server has published a new stable
-release, launches that release, reads its catalogue, and compares it with the
-last one it saw. Each release that moved something becomes an event -- which
+docs/CHURN.md measured six releases of each server once. This keeps going,
+across the whole MCP registry: every npm server that runs over stdio, and
+every hosted endpoint that answers without credentials. When one publishes a
+new release (npm) or starts describing its tools differently (hosted), the
+new catalogue is read, compared with the last one seen, and recorded -- which
 tools changed, were added or removed, the words that moved, and what
 `guard --drift graded` would make of it. The events are the product: a
 history of how the servers people actually run behave, which no single scan
@@ -13,36 +14,52 @@ The grading is mcp-pin's own (driftgrade.py), run against the full previous
 text rather than a lockfile's preview, so an event marked `review` is one a
 graded pin would refuse even with the complete approved version in hand.
 
-  watch.py seed   --data DIR [--results DIR]   history from the churn study
-  watch.py check  --data DIR [--jobs N]        measure new releases (runs code:
-                                               in the container only)
-  watch.py render --data DIR                   feed.json, feed.xml, README.md
-  watch.py verify --data DIR                   refuse anything unexpected
+Cadence. The 150 most-downloaded npm servers (the churn study's sample) and
+the four official ones are checked daily. Every other npm server is checked
+once a week, on a weekday fixed by a hash of its name -- no bookkeeping, so a
+day on which nothing moved writes nothing. Hosted endpoints are checked daily,
+because they can change without any release to announce it.
+
+  watch.py seed         --data DIR [--results DIR]  history from the churn study
+  watch.py sync         --data DIR                  rebuild the watchlist from the
+                                                    registry (reads, runs nothing)
+  watch.py check        --data DIR [--shard i/N] [--budget M] [--jobs N]
+                                                    new npm releases (RUNS CODE:
+                                                    in the container only)
+  watch.py check-remote --data DIR [--shard i/N] [--jobs N]
+                                                    hosted endpoints (connects)
+  watch.py fold         --data DIR                  incoming/ -> events/
+  watch.py render       --data DIR                  index.json, feed.*, README.md
+  watch.py verify       --data DIR                  refuse anything unexpected
 
 `check` downloads and runs published npm packages, exactly as measure.py
 does, and for the same reason it belongs in research/feed/Dockerfile. The
-other three read and write JSON and run nothing.
+rest read and write JSON and run nothing a server wrote.
 
 Layout under DIR:
-  watchlist.json           which packages, and the rule that chose them
-  state/<package>.json     the last catalogue seen for each package
-  catalogues/<package>/<version>.json
-                           every catalogue measured, whole: what
-                           `mcp-pin approve --from-feed` pins
-  events/YYYY-MM.jsonl     one line per release that changed something
-  index.json               per package: measured versions and events, no text
-  feed.json, feed.xml      the latest events, as JSON and as Atom
-  README.md                the same, for a person
+  watchlist.json                 which servers, how often, and the rule
+  state/<name>.json              the last version seen and its tool digests
+  catalogues/<name>/<version>.json.gz
+                                 every catalogue measured, whole, gzipped:
+                                 what `mcp-pin approve --from-feed` pins
+  incoming/<label>.jsonl         events from one run, before `fold`
+  events/YYYY-MM.jsonl           one line per release that changed something
+  index.json                     per server: measured versions and events
+  feed.json, feed.xml            the latest events, as JSON and as Atom
+  README.md                      the same, for a person
 """
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
 import os
 import re
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from xml.sax.saxutils import escape
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -56,23 +73,24 @@ from mcp_pin.review import word_diff  # noqa: E402
 
 FEED_EVENTS = 200
 README_EVENTS = 60
-# The fields of a definition the model reads or a client acts on. A change
-# anywhere else does not move the digest either.
 FIELDS = ("description", "title", "inputSchema", "outputSchema", "annotations", "icons")
 SAFE_NAME = re.compile(r"^[A-Za-z0-9@._\-]+$")
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+\-]*$")
 ALLOWED = re.compile(
     r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|"
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
-    r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json)$")
-# What measure.py asks for in `initialize`. Recorded with each catalogue: a
-# server may describe its tools differently to a different protocol version.
+    r"incoming/[a-z0-9\-]+\.jsonl|"
+    r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json\.gz)$")
 MEASURED_PROTOCOL = "2025-06-18"
 MAX_FILE = 20 * 1024 * 1024
-MAX_TOTAL = 400 * 1024 * 1024
-# XML 1.0 has no representation for these, and a description can contain any
-# of them. Dropped from the Atom feed only; the JSON keeps the text as sent.
-_NOT_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+# A gzip that inflates past this is refused, not read: the text inside came
+# from a server, and a server can send a catalogue built to be one.
+MAX_INFLATED = 50 * 1024 * 1024
+MAX_TOTAL = 1024 * 1024 * 1024
+# A hosted catalogue bigger than this is not read. No real one comes close.
+MAX_REMOTE_BYTES = 4 * 1024 * 1024
+_NOT_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f" + chr(0xFFFE) + chr(0xFFFF) + "]")
+REMOTE_PREFIX = "remote/"
 
 
 def now() -> str:
@@ -86,6 +104,27 @@ def safe(package: str) -> str:
     if not SAFE_NAME.match(name) or name.startswith("."):
         raise ValueError(f"package name outside the safe set: {package!r}")
     return name
+
+
+def _hash(text: str, salt: str) -> int:
+    return int(hashlib.sha256((salt + text).encode("utf-8")).hexdigest(), 16)
+
+
+def due(row: dict, day: date) -> bool:
+    """Daily rows every day; the rest on one weekday fixed by their name."""
+    return row.get("tier", "daily") == "daily" or _hash(row["package"], "day") % 7 == day.weekday()
+
+
+def in_shard(row: dict, shard: tuple[int, int]) -> bool:
+    index, of = shard
+    return _hash(row["package"], "shard") % of == index
+
+
+def parse_shard(text: str) -> tuple[int, int]:
+    m = re.match(r"^(\d+)/(\d+)$", text or "0/1")
+    if not m or int(m.group(2)) < 1 or int(m.group(1)) >= int(m.group(2)):
+        raise ValueError(f"--shard wants i/N with 0 <= i < N, not {text!r}")
+    return int(m.group(1)), int(m.group(2))
 
 
 def text_of(raw: dict) -> str:
@@ -146,26 +185,57 @@ def diff(before: dict, after: dict, observed_at: str) -> dict | None:
 
 # -- storage ---------------------------------------------------------------
 
-def write_catalogue(data: str, snap: dict, args: list, measured_at: str) -> None:
+def _write(path: str, data: bytes) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "wb") as fh:
+        fh.write(data)
+    os.replace(path + ".tmp", path)
+
+
+def _json_bytes(obj: object) -> bytes:
+    return (json.dumps(obj, indent=1, sort_keys=True) + "\n").encode("utf-8")
+
+
+def read_gz(path: str) -> object:
+    """A gzipped JSON file, refused if it inflates past MAX_INFLATED."""
+    with gzip.open(path, "rb") as fh:
+        raw = fh.read(MAX_INFLATED + 1)
+    if len(raw) > MAX_INFLATED:
+        raise ValueError(f"{path}: inflates past {MAX_INFLATED} bytes")
+    return json.loads(raw.decode("utf-8"))
+
+
+def catalogue_path(data: str, package: str, version: str) -> str:
+    if not SAFE_VERSION.match(version):
+        raise ValueError(f"version outside the safe set: {version!r}")
+    return os.path.join(data, "catalogues", safe(package), version + ".json.gz")
+
+
+def write_catalogue(data: str, snap: dict, args: list, measured_at: str,
+                    extra: dict | None = None) -> None:
     """The whole catalogue for one version, as `tools/list` returned it.
 
     This is what `mcp-pin approve --from-feed` pins, so it is the raw wire
     objects, not the digests: the client fingerprints them itself, with the
     same code `--probe` uses, rather than trusting a digest it was handed.
+    Gzipped with a fixed mtime, so the same catalogue is the same bytes.
     """
     version = str(snap["version"])
-    if not SAFE_VERSION.match(version):
-        raise ValueError(f"version outside the safe set: {version!r}")
-    folder = os.path.join(data, "catalogues", safe(snap["package"]))
-    os.makedirs(folder, exist_ok=True)
     body = {"package": snap["package"], "version": version,
             "published": snap.get("published", ""), "measured_at": measured_at,
             "protocol": MEASURED_PROTOCOL, "args": list(args or []),
-            "tools": [t["raw"] for _, t in sorted(snap["tools"].items())]}
-    path = os.path.join(folder, version + ".json")
-    with open(path + ".tmp", "w", encoding="utf-8", newline="\n") as fh:
-        json.dump(body, fh, indent=1, sort_keys=True)
-    os.replace(path + ".tmp", path)
+            "tools": [t["raw"] for _, t in sorted(snap["tools"].items())], **(extra or {})}
+    _write(catalogue_path(data, snap["package"], version),
+           gzip.compress(_json_bytes(body), compresslevel=9, mtime=0))
+
+
+def load_snapshot(data: str, package: str, version: str) -> dict | None:
+    """The snapshot for a version the feed holds a catalogue of, or None."""
+    path = catalogue_path(data, package, version)
+    if not os.path.exists(path):
+        return None
+    body = read_gz(path)
+    return snapshot(package, version, str(body.get("published") or ""), body.get("tools") or [])
 
 
 def load_state(data: str, package: str) -> dict | None:
@@ -173,20 +243,35 @@ def load_state(data: str, package: str) -> dict | None:
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
+        state = json.load(fh)
+    # The first layout kept whole definitions here; only digests are needed.
+    tools = state.get("tools") or {}
+    state["tools"] = {n: (t.get("digest") if isinstance(t, dict) else t) for n, t in tools.items()}
+    return state
 
 
 def save_state(data: str, package: str, state: dict) -> None:
-    os.makedirs(os.path.join(data, "state"), exist_ok=True)
-    path = os.path.join(data, "state", safe(package) + ".json")
-    with open(path + ".tmp", "w", encoding="utf-8", newline="\n") as fh:
-        json.dump(state, fh, indent=1, sort_keys=True)
-    os.replace(path + ".tmp", path)
+    compact = {k: v for k, v in state.items() if k != "tools"}
+    compact["tools"] = {n: (t["digest"] if isinstance(t, dict) else t)
+                        for n, t in (state.get("tools") or {}).items()}
+    _write(os.path.join(data, "state", safe(package) + ".json"), _json_bytes(compact))
+
+
+def write_incoming(data: str, label: str, events: list) -> None:
+    if not events:
+        return
+    if not re.match(r"^[a-z0-9\-]+$", label):
+        raise ValueError(f"label outside the safe set: {label!r}")
+    path = os.path.join(data, "incoming", label + ".jsonl")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8", newline="\n") as fh:
+        for event in events:
+            fh.write(json.dumps(event, sort_keys=True) + "\n")
 
 
 def append_events(data: str, events: list) -> None:
     os.makedirs(os.path.join(data, "events"), exist_ok=True)
-    for event in sorted(events, key=lambda e: e["published"]):
+    for event in sorted(events, key=lambda e: (e["published"], e["package"], e["to"])):
         month = event["published"][:7]
         if not re.match(r"^\d{4}-\d{2}$", month):
             month = event["observed_at"][:7]
@@ -211,6 +296,20 @@ def load_watchlist(data: str) -> list:
         return json.load(fh)["packages"]
 
 
+def fold(args: argparse.Namespace) -> int:
+    """Move incoming events into the monthly logs, once, in a stable order."""
+    folder = os.path.join(args.data, "incoming")
+    events = []
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        path = os.path.join(folder, name)
+        with open(path, encoding="utf-8") as fh:
+            events.extend(json.loads(line) for line in fh if line.strip())
+        os.remove(path)
+    append_events(args.data, events)
+    print(f"folded {len(events)} event(s)")
+    return 0
+
+
 # -- seed ------------------------------------------------------------------
 
 def seed(args: argparse.Namespace) -> int:
@@ -218,14 +317,13 @@ def seed(args: argparse.Namespace) -> int:
     with open(os.path.join(ROOT, "research", "churn", "sample.json"), encoding="utf-8") as fh:
         sample = json.load(fh)
     from measure import OFFICIAL  # the four the study measured alongside
-    rows = [{"package": p} for p in OFFICIAL] + [
-        {k: r[k] for k in ("package", "args", "required_env") if k in r}
+    rows = [{"package": p, "kind": "npm", "tier": "daily"} for p in OFFICIAL] + [
+        dict({k: r[k] for k in ("package", "args", "required_env") if k in r},
+             kind="npm", tier="daily")
         for r in sample["sample"]]
     os.makedirs(args.data, exist_ok=True)
-    with open(os.path.join(args.data, "watchlist.json"), "w", encoding="utf-8",
-              newline="\n") as fh:
-        json.dump({"rule": sample["rule"], "chosen_at": sample["taken_at"],
-                   "packages": rows}, fh, indent=1)
+    _write(os.path.join(args.data, "watchlist.json"), _json_bytes(
+        {"rule": sample["rule"], "chosen_at": sample["taken_at"], "packages": rows}))
     events, seeded = [], 0
     for row in rows:
         path = os.path.join(args.results, safe(row["package"]) + ".json")
@@ -245,13 +343,12 @@ def seed(args: argparse.Namespace) -> int:
             if event:
                 event["seeded"] = True
                 events.append(event)
-        state = snaps[-1] if snaps else {"package": r["package"], "tools": {}}
+        state = dict(snaps[-1]) if snaps else {"package": r["package"], "tools": {}}
         if r.get("failures"):
             latest_failed = max(r["failures"], key=lambda v: r["failures"][v]["published"])
             if not snaps or r["failures"][latest_failed]["published"] > state.get("published", ""):
                 state["attempted"] = {"version": latest_failed, "at": now(),
                                       "why": r["failures"][latest_failed]["why"]}
-        state["checked_at"] = now()
         save_state(args.data, r["package"], state)
         seeded += 1
     append_events(args.data, events)
@@ -259,9 +356,101 @@ def seed(args: argparse.Namespace) -> int:
     return 0
 
 
-# -- check -----------------------------------------------------------------
+# -- sync ------------------------------------------------------------------
 
-def check_one(data: str, row: dict) -> dict | None:
+def registry_frame() -> tuple[dict, dict]:
+    """(npm stdio packages, hosted endpoints) from the official registry."""
+    import urllib.parse
+    from sample import REGISTRY, get_json, launch_args
+    npm, remotes, cursor = {}, {}, None
+    while True:
+        q = {"limit": "100", "version": "latest"}
+        if cursor:
+            q["cursor"] = cursor
+        page = get_json(REGISTRY + "?" + urllib.parse.urlencode(q))
+        for entry in page["servers"]:
+            server = entry["server"]
+            for pkg in server.get("packages") or []:
+                if pkg.get("registryType") != "npm" or \
+                        (pkg.get("transport") or {}).get("type") != "stdio":
+                    continue
+                argv, _ = launch_args(pkg)
+                required = [e.get("name") for e in pkg.get("environmentVariables") or []
+                            if e.get("isRequired")]
+                npm.setdefault(pkg["identifier"], {"args": argv, "required_env": required})
+            for i, remote in enumerate(server.get("remotes") or []):
+                url = str(remote.get("url") or "")
+                if (remote.get("type") != "streamable-http" or not url.startswith("https://")
+                        or "{" in url
+                        or any(h.get("isRequired") for h in remote.get("headers") or [])):
+                    continue
+                remotes.setdefault(url, f"{server['name']}{'.' + str(i) if i else ''}")
+        cursor = page["metadata"].get("nextCursor")
+        if not cursor:
+            return npm, remotes
+
+
+def sync(args: argparse.Namespace) -> int:
+    """Every npm stdio server and every open hosted endpoint in the registry.
+
+    The daily rows already in the watchlist stay daily. Everything else is
+    weekly (npm) or daily (hosted). Reads the registry; launches nothing.
+    Endpoints that need a credential or a URL template, or speak the old SSE
+    transport, are left out: there is nothing to read without the secret.
+    """
+    existing = load_watchlist(args.data)
+    daily = {r["package"]: r for r in existing
+             if r.get("kind", "npm") == "npm" and r.get("tier", "daily") == "daily"}
+    npm, remotes = registry_frame()
+    rows = list(daily.values())
+    for name, meta in sorted(npm.items()):
+        if name in daily:
+            continue
+        try:
+            safe(name)
+        except ValueError:
+            continue
+        rows.append({"package": name, "kind": "npm", "tier": "weekly", **meta})
+    seen = set()
+    for url, regname in sorted(remotes.items()):
+        key = REMOTE_PREFIX + regname
+        try:
+            safe(key)
+        except ValueError:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({"package": key, "kind": "remote", "tier": "daily", "url": url})
+    _write(os.path.join(args.data, "watchlist.json"), _json_bytes({
+        "rule": "official MCP registry: every npm stdio package (the 150 most-downloaded "
+                "and the four official ones daily, the rest weekly) and every hosted "
+                "streamable-http endpoint that declares no required header (daily)",
+        "synced_at": now()[:10], "packages": rows}))
+    counts = {k: sum(1 for r in rows if r.get("kind") == k) for k in ("npm", "remote")}
+    print(f"watchlist: {counts['npm']} npm ({len(daily)} daily), {counts['remote']} hosted")
+    return 0
+
+
+# -- check (npm) -----------------------------------------------------------
+
+class Budget:
+    """How many servers one run may launch. Shared by its worker threads."""
+
+    def __init__(self, limit: int) -> None:
+        self.left = limit if limit > 0 else -1
+        self.lock = threading.Lock()
+
+    def take(self) -> bool:
+        with self.lock:
+            if self.left == 0:
+                return False
+            if self.left > 0:
+                self.left -= 1
+            return True
+
+
+def check_one(data: str, row: dict, budget: Budget | None = None) -> dict | None:
     """Measure the newest stable release if it is new. Returns an event or None."""
     import measure
     package = row["package"]
@@ -273,11 +462,13 @@ def check_one(data: str, row: dict) -> dict | None:
     if not latest:
         return None
     version, published = latest[0]
-    if version == state.get("version"):
+    if version == state.get("version") or not SAFE_VERSION.match(version):
         return None
     # A release that already failed to start is not retried every day; the
     # next release gets a fresh attempt.
     if (state.get("attempted") or {}).get("version") == version:
+        return None
+    if budget is not None and not budget.take():
         return None
     tail = list(row.get("args") or [])
     if package.endswith("/server-filesystem"):
@@ -286,28 +477,98 @@ def check_one(data: str, row: dict) -> dict | None:
     tools, why = measure.catalogue(package, version, tail, row.get("required_env") or [])
     if tools is None:
         state["attempted"] = {"version": version, "at": now(), "why": why}
-        state["checked_at"] = now()
         save_state(data, package, state)
         print(f"  {package}@{version}: {why}", flush=True)
         return None
     after = snapshot(package, version, published, tools)
+    before = load_snapshot(data, package, state["version"]) if state.get("version") else None
     write_catalogue(data, after, tail, measured_at=now())
-    event = diff(state, after, observed_at=now()) if state.get("version") else None
-    after["checked_at"] = now()
-    save_state(data, package, after)
+    event = diff(before, after, observed_at=now()) if before else None
+    save_state(data, package, dict(after, checked_at=now()))
     print(f"  {package} {state.get('version') or '(first)'} -> {version}: "
           f"{'no change' if event is None else event['grade']}", flush=True)
     return event
 
 
-def check(args: argparse.Namespace) -> int:
-    rows = load_watchlist(args.data)
+def _selected(args: argparse.Namespace, kind: str) -> list:
+    rows = [r for r in load_watchlist(args.data) if r.get("kind", "npm") == kind]
     if args.only:
-        rows = [r for r in rows if r["package"] in set(args.only)]
+        return [r for r in rows if r["package"] in set(args.only)]
+    shard = parse_shard(args.shard)
+    day = date.fromisoformat(args.day) if args.day else datetime.now(timezone.utc).date()
+    return [r for r in rows if in_shard(r, shard) and (kind == "remote" or due(r, day))]
+
+
+def check(args: argparse.Namespace) -> int:
+    rows = _selected(args, "npm")
+    budget = Budget(args.budget)
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        events = [e for e in pool.map(lambda r: check_one(args.data, r), rows) if e]
-    append_events(args.data, events)
-    print(f"checked {len(rows)} packages; {len(events)} new event(s)")
+        events = [e for e in pool.map(lambda r: check_one(args.data, r, budget), rows) if e]
+    write_incoming(args.data, args.label, events)
+    print(f"checked {len(rows)} npm server(s); {len(events)} new event(s)")
+    return 0
+
+
+# -- check-remote ----------------------------------------------------------
+
+def measure_remote(url: str, timeout: float = 20.0) -> tuple[list | None, str | None]:
+    """(raw tools, None) or (None, why), over Streamable HTTP. Runs nothing."""
+    import urllib.error
+    from mcp_pin.probe import SESSION_HEADER, _initialize_params, _post_jsonrpc, post_rpc
+    try:
+        init, headers = post_rpc(url, {}, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                                           "params": _initialize_params()}, timeout)
+        if "error" in init:
+            return None, "initialize failed"
+        onward = {k: v for k, v in headers.items() if k.lower() == SESSION_HEADER.lower() and v}
+        listed = _post_jsonrpc(url, onward, {"jsonrpc": "2.0", "id": 2,
+                                             "method": "tools/list", "params": {}}, timeout)
+    except urllib.error.HTTPError as exc:
+        return None, f"HTTP {exc.code}"
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return None, type(exc).__name__
+    tools = (listed.get("result") or {}).get("tools") if isinstance(listed, dict) else None
+    if not isinstance(tools, list):
+        return None, "no tools/list answer"
+    if len(json.dumps(tools)) > MAX_REMOTE_BYTES:
+        return None, "catalogue too large to read"
+    return tools, None
+
+
+def check_remote_one(data: str, row: dict) -> dict | None:
+    """Read one hosted endpoint; record it only if what it says has moved."""
+    key, stamp = row["package"], now()
+    state = load_state(data, key) or {"package": key, "tools": {}}
+    tools, why = measure_remote(row["url"])
+    if tools is None:
+        # Written once per reason, not once per day: an endpoint that has
+        # wanted a login for a month is one fact, not thirty.
+        if (state.get("attempted") or {}).get("why") != why:
+            state["attempted"] = {"version": stamp[:10], "at": stamp, "why": why}
+            save_state(data, key, state)
+        return None
+    # Microseconds in the version: two readings can never share a name, so a
+    # catalogue is never overwritten by the next one.
+    version = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S%f")
+    after = snapshot(key, version, stamp, tools)
+    if state.get("version") and {n: t["digest"] for n, t in after["tools"].items()} == state["tools"]:
+        if state.get("attempted"):
+            state.pop("attempted")
+            save_state(data, key, state)
+        return None
+    before = load_snapshot(data, key, state["version"]) if state.get("version") else None
+    write_catalogue(data, after, [], measured_at=stamp, extra={"url": row["url"]})
+    event = diff(before, after, observed_at=stamp) if before else None
+    save_state(data, key, dict(after, url=row["url"]))
+    return event
+
+
+def check_remote(args: argparse.Namespace) -> int:
+    rows = _selected(args, "remote")
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        events = [e for e in pool.map(lambda r: check_remote_one(args.data, r), rows) if e]
+    write_incoming(args.data, args.label, events)
+    print(f"checked {len(rows)} hosted endpoint(s); {len(events)} new event(s)")
     return 0
 
 
@@ -333,19 +594,19 @@ def flagged(event: dict) -> list:
 
 
 def index(data: str, events: list) -> dict:
-    """Every measured version and every event, per package, in one small file.
+    """Every measured version and every event, per server, in one small file.
 
     What `mcp-pin updates` reads: which releases the feed has a catalogue
-    for, and what each one changed, without fetching hundreds of catalogues
-    to find out. Sizes and counts only -- the catalogues and events carry
-    the text.
+    for, and what each one changed, without fetching the catalogues to find
+    out. Sizes and counts only -- the catalogues and events carry the text.
     """
     out: dict = {}
     folder = os.path.join(data, "catalogues")
     for pkg_dir in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
         for name in sorted(os.listdir(os.path.join(folder, pkg_dir))):
-            with open(os.path.join(folder, pkg_dir, name), encoding="utf-8") as fh:
-                body = json.load(fh)
+            if not name.endswith(".json.gz"):
+                continue
+            body = read_gz(os.path.join(folder, pkg_dir, name))
             entry = out.setdefault(body["package"], {"versions": [], "events": []})
             entry["versions"].append({"version": body["version"],
                                       "published": body.get("published", ""),
@@ -369,24 +630,24 @@ def render(args: argparse.Namespace) -> int:
     events = sorted(all_events(args.data), key=lambda e: (e["published"], e["package"]),
                     reverse=True)
     generated = max((e["observed_at"] for e in events), default="")
-    with open(os.path.join(args.data, "index.json"), "w", encoding="utf-8",
-              newline="\n") as fh:
-        json.dump(index(args.data, events), fh, indent=1, sort_keys=True)
-    with open(os.path.join(args.data, "feed.json"), "w", encoding="utf-8",
-              newline="\n") as fh:
-        json.dump({"updated_at": generated, "events": events[:FEED_EVENTS]}, fh, indent=1)
-    with open(os.path.join(args.data, "feed.xml"), "w", encoding="utf-8",
-              newline="\n") as fh:
-        fh.write(atom(events[:FEED_EVENTS], generated))
-    with open(os.path.join(args.data, "README.md"), "w", encoding="utf-8",
-              newline="\n") as fh:
-        fh.write(readme(events, generated, args.data))
+    _write(os.path.join(args.data, "index.json"), _json_bytes(index(args.data, events)))
+    _write(os.path.join(args.data, "feed.json"), _json_bytes(
+        {"updated_at": generated, "events": events[:FEED_EVENTS]}))
+    _write(os.path.join(args.data, "feed.xml"), atom(events[:FEED_EVENTS], generated).encode("utf-8"))
+    _write(os.path.join(args.data, "README.md"), readme(events, generated, args.data).encode("utf-8"))
     print(f"rendered {min(len(events), FEED_EVENTS)} of {len(events)} events")
     return 0
 
 
 def _x(text: str) -> str:
     return escape(_NOT_XML.sub("", str(text)))
+
+
+def _link(e: dict) -> str:
+    if e["package"].startswith(REMOTE_PREFIX):
+        return "https://registry.modelcontextprotocol.io/v0/servers?search=" + \
+            e["package"][len(REMOTE_PREFIX):].split("/")[0]
+    return f"https://www.npmjs.com/package/{e['package']}/v/{e['to']}"
 
 
 def atom(events: list, generated: str) -> str:
@@ -409,7 +670,7 @@ def atom(events: list, generated: str) -> str:
                 f"    <id>tag:github.com,2026:rufat325/mcp-pin/feed/{_x(e['package'])}@{_x(e['to'])}</id>",
                 f"    <title>{_x(title)}</title>",
                 f"    <updated>{_x(e['published'] or e['observed_at'])}</updated>",
-                f'    <link href="https://www.npmjs.com/package/{_x(e["package"])}/v/{_x(e["to"])}"/>',
+                f'    <link href="{_x(_link(e))}"/>',
                 f'    <content type="text">{_x(chr(10).join(lines))}</content>',
                 "  </entry>"]
     out.append("</feed>")
@@ -420,14 +681,17 @@ def readme(events: list, generated: str, data: str) -> str:
     """Counts, names and versions only. The words a server wrote stay in the
     JSON and the Atom feed, where they are data; rendering them as Markdown on
     a page people read would hand a server a formatting channel."""
-    watched = len(load_watchlist(data))
+    rows = load_watchlist(data)
+    npm = [r for r in rows if r.get("kind", "npm") == "npm"]
+    daily = [r for r in npm if r.get("tier", "daily") == "daily"]
+    hosted = [r for r in rows if r.get("kind") == "remote"]
     live = [e for e in events if not e.get("seeded")]
     review = [e for e in events if e["grade"] == "review"]
     lines = [
         "# MCP server tool changes", "",
-        f"Last change observed {generated}. Built by `research/feed/watch.py` on the `main` branch. "
-        f"Watching {watched} servers: the 150 most-downloaded npm stdio servers in the "
-        "official MCP registry, and the four `@modelcontextprotocol` servers.", "",
+        f"Last change observed {generated}. Built by `research/feed/watch.py` on the "
+        f"`main` branch. Watching {len(npm)} npm servers from the official MCP registry "
+        f"({len(daily)} daily, the rest weekly) and {len(hosted)} hosted endpoints (daily).", "",
         f"{len(events)} releases that changed a tool definition "
         f"({len(live)} observed live, {len(events) - len(live)} from the "
         f"[churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); "
@@ -438,23 +702,43 @@ def readme(events: list, generated: str, data: str) -> str:
         "approval). `review`: a change introduced an agent-directed instruction, hidden "
         "character, credential path or look-alike letter. Review means read it, not "
         "that it is hostile.", "",
-        "| published | package | release | tools | grade |",
+        "| published | server | release | tools | grade |",
         "|---|---|---|---|---|",
     ]
     for e in events[:README_EVENTS]:
         lines.append(f"| {e['published'][:10]} | `{e['package']}` | "
-                     f"{e['from']} \u2192 {e['to']} | {summary(e)} | {e['grade']} |")
+                     f"{e['from']} -> {e['to']} | {summary(e)} | {e['grade']} |")
     return "\n".join(lines) + "\n"
 
 
 # -- verify ----------------------------------------------------------------
 
+def _check_file(full: str, rel: str) -> str | None:
+    try:
+        if rel.endswith(".json.gz"):
+            read_gz(full)
+            return None
+        with open(full, encoding="utf-8") as fh:
+            if rel.endswith(".jsonl"):
+                for line in fh:
+                    if line.strip():
+                        json.loads(line)
+            elif rel.endswith(".json"):
+                json.load(fh)
+            else:
+                fh.read()
+    except (ValueError, UnicodeDecodeError, OSError, EOFError) as exc:
+        return str(exc)
+    return None
+
+
 def verify(args: argparse.Namespace) -> int:
     """What the publishing job checks before it commits anything.
 
-    The measuring job ran other people's code. Its output is data about that
-    code and nothing else: known file names, sizes a feed could plausibly
-    reach, JSON that parses. Anything outside that is refused whole.
+    The measuring jobs ran other people's code. Their output is data about
+    that code and nothing else: known file names, sizes a feed could
+    plausibly reach, JSON that parses, gzip that does not inflate without
+    bound. Anything outside that is refused whole.
     """
     problems, total = [], 0
     for base, _dirs, files in os.walk(args.data):
@@ -473,21 +757,12 @@ def verify(args: argparse.Namespace) -> int:
             total += size
             if size > MAX_FILE:
                 problems.append(f"{rel}: {size} bytes")
-            try:
-                with open(full, encoding="utf-8") as fh:
-                    if rel.endswith(".jsonl"):
-                        for line in fh:
-                            if line.strip():
-                                json.loads(line)
-                    elif rel.endswith(".json"):
-                        json.load(fh)
-                    else:
-                        fh.read()
-            except (ValueError, UnicodeDecodeError) as exc:
-                problems.append(f"{rel}: {exc}")
+            why = _check_file(full, rel)
+            if why:
+                problems.append(f"{rel}: {why}")
     if total > MAX_TOTAL:
         problems.append(f"total {total} bytes")
-    for p in problems:
+    for p in problems[:50]:
         print(f"refused: {p}", file=sys.stderr)
     print(f"verify: {'refused' if problems else 'ok'} ({total} bytes)")
     return 1 if problems else 0
@@ -499,14 +774,21 @@ def main() -> int:
     s = sub.add_parser("seed")
     s.add_argument("--data", required=True)
     s.add_argument("--results", default=os.path.join(ROOT, "research", "churn", "results"))
-    c = sub.add_parser("check")
-    c.add_argument("--data", required=True)
-    c.add_argument("--jobs", type=int, default=2)
-    c.add_argument("--only", action="append", default=[], metavar="PACKAGE")
-    for name in ("render", "verify"):
+    for name in ("check", "check-remote"):
+        c = sub.add_parser(name)
+        c.add_argument("--data", required=True)
+        c.add_argument("--jobs", type=int, default=2)
+        c.add_argument("--only", action="append", default=[], metavar="PACKAGE")
+        c.add_argument("--shard", default="0/1", help="this run's slice, i/N")
+        c.add_argument("--day", default="", help="YYYY-MM-DD to schedule for (default today)")
+        c.add_argument("--label", default="local", help="name of this run's incoming file")
+        c.add_argument("--budget", type=int, default=0,
+                       help="launch at most this many servers (0: no limit)")
+    for name in ("sync", "fold", "render", "verify"):
         sub.add_parser(name).add_argument("--data", required=True)
     args = ap.parse_args()
-    return {"seed": seed, "check": check, "render": render, "verify": verify}[args.command](args)
+    return {"seed": seed, "sync": sync, "check": check, "check-remote": check_remote,
+            "fold": fold, "render": render, "verify": verify}[args.command](args)
 
 
 if __name__ == "__main__":

@@ -1395,6 +1395,40 @@ quiet is what `approve --yes` would write and review is a critical change that
 A review update is listed with the tools that need reading. Bump it yourself, then
 `mcp-pin approve --from-feed` prints the diff and asks for `--yes-tool` by name.
 
+### On a schedule (`rufat325/mcp-pin/updates`)
+
+The same thing as a weekly pull request -- Dependabot for MCP tools:
+
+```yaml
+name: mcp-pin updates
+on:
+  schedule: [{ cron: "0 6 * * 1" }]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+jobs:
+  updates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+      - uses: rufat325/mcp-pin/updates@<sha>
+```
+
+Quiet updates are applied and opened as one pull request on the `mcp-pin/updates`
+branch, updated in place on later runs. Updates that need review are listed in one issue
+with the tools to read; nothing is applied for them. The job summary carries the full
+report either way. Inputs: `path` (where the config and lock are), `apply`, `open-pr`,
+`open-issue`, `branch`, `token`.
+
+Pin the action to a commit SHA. mcp-pin is installed from that same commit, so the SHA
+pins the code that edits your config. Inputs reach the shell as environment variables,
+never pasted into a script, and the commit takes only files git already tracks.
+
+A repository has to allow it: **Settings → Actions → General → "Allow GitHub Actions to
+create and approve pull requests"**, or the pull request step is refused.
+
 ## What it doesn't do
 
 - Doesn't call tools, only `initialize` and `tools/list` (and whatever `guard`
@@ -1451,7 +1485,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1328 tests, stdlib unittest, nothing to install.
+1340 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

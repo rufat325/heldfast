@@ -27,6 +27,8 @@ Opens sockets (GitHub, for the feed). `--safe` refuses it.
 
 from __future__ import annotations
 
+import gzip
+import io
 import json
 import re
 from dataclasses import dataclass, field
@@ -41,6 +43,10 @@ from .rules.execution import (_FLOATING, _PYTHON_RUNNERS, extract_package,
 from .enforcement import unwrap_launcher
 
 TIMEOUT = 15.0
+# The feed gzips its catalogues. Inflating one is refused past this size:
+# the text inside came from a server, and a server can build a catalogue to
+# be one of those files that is small until it is opened.
+MAX_INFLATED = 50 * 1024 * 1024
 REPO = "rufat325/mcp-pin"
 BRANCH = "feed"
 HEAD_URL = f"https://api.github.com/repos/{REPO}/commits/{BRANCH}"
@@ -75,7 +81,13 @@ def get_json(url: str) -> Any:
     req = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     try:
         with urlopen(req, timeout=TIMEOUT) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read()
+        if url.endswith(".gz"):
+            with gzip.GzipFile(fileobj=io.BytesIO(raw)) as fh:
+                raw = fh.read(MAX_INFLATED + 1)
+            if len(raw) > MAX_INFLATED:
+                raise FeedError(f"{url}: inflates past {MAX_INFLATED} bytes")
+        return json.loads(raw.decode("utf-8"))
     except URLError as exc:
         if getattr(exc, "code", None) == 404:
             return None
@@ -132,11 +144,12 @@ def lookup(spec: ServerSpec, feed: Feed) -> FeedEntry | str:
     if isinstance(want, str):
         return want
     name, version = want
-    url = f"{feed.base}/catalogues/{name.replace('/', '__')}/{version}.json"
+    url = f"{feed.base}/catalogues/{name.replace('/', '__')}/{version}.json.gz"
     body = get_json(url)
     if body is None:
-        return (f"the feed has not measured {name}@{version}; it watches the "
-                f"most-downloaded registry servers and the releases they publish")
+        return (f"the feed has not measured {name}@{version}; it watches the npm "
+                f"servers in the MCP registry and measures each new release, the "
+                f"popular ones daily and the rest weekly")
     if (not isinstance(body, dict) or body.get("package") != name
             or body.get("version") != version or not isinstance(body.get("tools"), list)):
         raise FeedError(f"{url}: not a catalogue for {name}@{version}")

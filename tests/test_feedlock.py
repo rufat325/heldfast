@@ -51,7 +51,7 @@ class FakeFeed:
         self.pages = {feedlock.HEAD_URL: {"sha": sha}}
         for (package, version), body in (catalogues or {}).items():
             safe = package.replace("/", "__")
-            self.pages[f"{BASE}/catalogues/{safe}/{version}.json"] = body
+            self.pages[f"{BASE}/catalogues/{safe}/{version}.json.gz"] = body
         self.asked: list[str] = []
 
     def __call__(self, url: str):
