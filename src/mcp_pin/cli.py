@@ -611,16 +611,33 @@ def cmd_verify(args: argparse.Namespace) -> int:
         feed = resolve(getattr(args, "feed", None))
         wanted = any(tr.public(s.url or "") for s in hosted)
         found = tr.check(hosted, data.tools, feed_index(feed) if wanted else {}, feed, errors)
+        records = _verify_record(args, feed)
     except FeedError as exc:
         print(f"mcp-pin: the public log could not be read: {exc}", file=sys.stderr)
         return EXIT_ERROR
     if args.format == "json":
-        print(json.dumps({"log": feed.source, "servers": [w.to_dict() for w in found]},
-                         indent=2))
+        print(json.dumps({"log": feed.source, "servers": [w.to_dict() for w in found],
+                          "record": [r.to_dict() for r in records]}, indent=2))
     else:
-        sys.stdout.write(tr.render(found, feed.source))
+        from .lookup import render as render_record
+        sys.stdout.write(tr.render(found, feed.source)
+                         + "".join(line + "\n" for line in render_record(records)))
     worst = ("differs", "unlogged") if args.strict else ("differs",)
-    return EXIT_FINDINGS if any(w.status in worst for w in found) else EXIT_OK
+    failed = any(w.status in worst for w in found) or (
+        args.strict and any(r.unseen for r in records))
+    return EXIT_FINDINGS if failed else EXIT_OK
+
+
+def _verify_record(args: argparse.Namespace, feed: object) -> list:
+    """Every tool the lock records, looked up in the public record by bucket.
+    No lock, or one that cannot be read, is simply nothing to look up."""
+    from .lookup import check as look_up
+
+    try:
+        lock = Lock.load(_resolve_lock_path(args))
+    except (ValueError, OSError):
+        return []
+    return look_up(lock.servers, feed) if lock.servers else []
 
 
 def _witness_approval(data: Collected, args: argparse.Namespace) -> bool:

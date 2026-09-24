@@ -48,6 +48,9 @@ Layout under DIR:
   incoming/<label>.jsonl         events from one run, before `fold`
   events/YYYY-MM.jsonl           one line per release that changed something
   index.json                     per server: measured versions and events
+  lookup/<abc>.json              every tool definition ever logged, by the first
+                                 three hex characters of its fingerprint: when
+                                 first seen, on how many servers (docs/LOOKUP.md)
   feed.json, feed.xml            the latest events, as JSON and as Atom
   README.md                      the same, for a person
 """
@@ -83,7 +86,7 @@ SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+\-]*$")
 ALLOWED = re.compile(
     r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|"
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
-    r"incoming/[a-z0-9\-]+\.jsonl|"
+    r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta)\.json|"
     r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json\.gz)$")
 MEASURED_PROTOCOL = "2025-06-18"
 MAX_FILE = 20 * 1024 * 1024
@@ -658,6 +661,63 @@ def index(data: str, events: list) -> dict:
     return {"packages": out}
 
 
+# Hex characters of a tool fingerprint that name its lookup bucket. Three
+# gives 4,096 buckets: with a few hundred thousand tools logged, a client that
+# asks for one bucket is one of a hundred-odd tools as far as the log can tell.
+LOOKUP_PREFIX = 3
+
+
+def lookup_buckets(data: str) -> dict[str, dict]:
+    """Every tool definition the log has ever recorded, bucketed by fingerprint.
+
+    The fingerprint is the one the lockfile records (docs/LOCK.md), computed
+    by the parser `--probe` uses, so a client can look up a tool it approved
+    without the log ever learning which: it asks for the bucket named by the
+    first LOOKUP_PREFIX characters and searches it itself (docs/LOOKUP.md).
+    Each entry says when the log first saw that exact definition and on how
+    many servers. Nothing in it changes day to day unless a new definition or
+    a new server appears, so a quiet day rewrites no bucket.
+    """
+    from mcp_pin.probe import _parse_tools
+
+    seen: dict[str, dict] = {}
+    folder = os.path.join(data, "catalogues")
+    for pkg_dir in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        for name in sorted(os.listdir(os.path.join(folder, pkg_dir))):
+            if not name.endswith(".json.gz"):
+                continue
+            body = read_gz(os.path.join(folder, pkg_dir, name))
+            when = str(body.get("published") or body.get("measured_at") or "")[:10]
+            try:
+                tools = _parse_tools("feed", {"result": {"tools": body.get("tools") or []}})
+                prints = {t.fingerprint() for t in tools}
+            except ValueError:  # a schema the digest refuses; that server is skipped
+                continue
+            for fp in prints:
+                row = seen.setdefault(fp, {"first_seen": when, "servers": set()})
+                if when and (not row["first_seen"] or when < row["first_seen"]):
+                    row["first_seen"] = when
+                row["servers"].add(body["package"])
+    buckets: dict[str, dict] = {}
+    for fp in sorted(seen):
+        bucket = buckets.setdefault(fp[:LOOKUP_PREFIX], {})
+        bucket[fp] = {"first_seen": seen[fp]["first_seen"],
+                      "servers": len(seen[fp]["servers"])}
+    return buckets
+
+
+def write_lookup(data: str) -> int:
+    buckets = lookup_buckets(data)
+    for prefix, tools in buckets.items():
+        _write(os.path.join(data, "lookup", prefix + ".json"),
+               _json_bytes({"prefix": prefix, "tools": tools}))
+    _write(os.path.join(data, "lookup", "meta.json"), _json_bytes({
+        "prefix_length": LOOKUP_PREFIX,
+        "fingerprint": "the tool fingerprint of docs/LOCK.md, lowercase hex",
+        "tools": sum(len(t) for t in buckets.values()), "buckets": len(buckets)}))
+    return sum(len(t) for t in buckets.values())
+
+
 def render(args: argparse.Namespace) -> int:
     """Write the derived files. Deterministic: the same events give the same
     bytes, so a day on which no watched server changed anything is a day on
@@ -671,7 +731,9 @@ def render(args: argparse.Namespace) -> int:
         {"updated_at": generated, "events": events[:FEED_EVENTS]}))
     _write(os.path.join(args.data, "feed.xml"), atom(events[:FEED_EVENTS], generated).encode("utf-8"))
     _write(os.path.join(args.data, "README.md"), readme(events, generated, args.data).encode("utf-8"))
-    print(f"rendered {min(len(events), FEED_EVENTS)} of {len(events)} events")
+    logged = write_lookup(args.data)
+    print(f"rendered {min(len(events), FEED_EVENTS)} of {len(events)} events; "
+          f"{logged} tool definitions in lookup/")
     return 0
 
 

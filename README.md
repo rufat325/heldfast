@@ -63,6 +63,13 @@ shows *you* with that public log, the way browsers check certificates against Ce
 Transparency, and `approve --probe` refuses a definition the public has never seen until
 you name it. [docs/TRANSPARENCY.md](docs/TRANSPARENCY.md).
 
+**Safe Browsing for AI tools.** The same log answers a smaller question about any tool,
+hosted or not: *has anyone else been shown this exact definition?* `verify` looks up every
+tool in your lockfile -- about 120,000 definitions are on record, each with the date it was
+first seen and on how many servers -- sending only a three-character bucket name per tool,
+so the log never learns which one you have. It is static files and a one-page protocol any
+client can implement: [docs/LOOKUP.md](docs/LOOKUP.md).
+
 **It is one layer: a pin, not a sandbox.** `approve --probe` starts your
 configured servers to read their tools, so isolate that step -- a container, a
 VM, a machine you can throw away -- rather than probing on your workstation and
@@ -313,7 +320,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1388 tests, stdlib unittest, nothing to install.
+1396 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

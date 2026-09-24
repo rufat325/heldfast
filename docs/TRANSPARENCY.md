@@ -107,5 +107,9 @@ Said plainly, because a security tool that overclaims is worse than none:
   next to that entry would make "is this what everyone sees?" a question any
   client can ask.
 
+The same log also answers the smaller question for any tool, hosted or not
+-- has anyone else been shown this exact definition? -- without learning which
+tool you asked about: [LOOKUP.md](LOOKUP.md).
+
 The data behind this is public: the `feed` branch of this repository, read
 at the commit `verify` prints.

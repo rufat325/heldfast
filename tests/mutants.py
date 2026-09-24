@@ -2137,6 +2137,23 @@ w = tr.witness("c:x", "https://x.example/mcp", live, "remote/x",
 FAIL_OPEN = w.status != "differs"
 """,
     ),
+    Mutant(
+        id="lookup-sends-the-fingerprint",
+        theorem="T-LOOKUP",
+        path="lookup.py",
+        original="""    for prefix in sorted({fp[:PREFIX] for fp in wanted}):""",
+        replacement="""    for prefix in sorted(set(wanted)):""",
+        harm=("Each lookup names the exact tool, so the log learns every tool "
+              "every client has approved."),
+        probe="""
+from mcp_pin import feedlock, lookup
+asked = []
+feedlock.get_json = lambda url: asked.append(url) or None
+fp = "ab" * 32
+lookup.seen([fp], feedlock.Feed("https://log.example", "log"))
+FAIL_OPEN = any(fp in url for url in asked)
+""",
+    ),
 )
 
 
