@@ -1,8 +1,8 @@
 # MCP server tool changes
 
-Last change observed 2026-09-24T20:57:53+00:00. Built by `research/feed/watch.py` on the `main` branch. Watching 9409 npm servers from the official MCP registry (154 daily, the rest weekly) and 18576 hosted endpoints (daily).
+Last change observed 2026-09-24T21:24:06+00:00. Built by `research/feed/watch.py` on the `main` branch. Watching 9409 npm servers from the official MCP registry (154 daily, the rest weekly) and 18576 hosted endpoints (daily).
 
-7575 releases that changed a tool definition (7329 observed live, 246 from the [churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); 5 where `mcp-pin wrap --drift graded` would refuse something.
+7605 releases that changed a tool definition (7359 observed live, 246 from the [churn study](https://github.com/rufat325/heldfast/blob/main/docs/CHURN.md)); 6 where `heldfast wrap --drift graded` would refuse something.
 
 Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, with the words that moved: [events/](events).
 
@@ -10,6 +10,36 @@ Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, w
 
 | published | server | release | tools | grade |
 |---|---|---|---|---|
+| 2026-09-24 | `remote/fi.akkilahdot/travel-search` | 2026-09-24T205753767814 -> 2026-09-24T212407089496 | 1 changed | quiet |
+| 2026-09-24 | `remote/se.sistaminuten/travel-search` | 2026-09-24T205537462030 -> 2026-09-24T212329956535 | 1 changed | quiet |
+| 2026-09-24 | `remote/io.github.socialloopai/socialloop-mcp.1` | 2026-09-24T205724075892 -> 2026-09-24T212311522504 | 1 changed | quiet |
+| 2026-09-24 | `remote/com.thejohnsonbros/plumbing-booking` | 2026-09-23T160809132838 -> 2026-09-24T212230794091 | 2 changed, 1 added | quiet |
+| 2026-09-24 | `remote/no.restplass/travel-search` | 2026-09-24T205538178621 -> 2026-09-24T212219594251 | 1 changed | quiet |
+| 2026-09-24 | `remote/io.github.cyanheads/wsdot-mcp-server` | 2026-09-23T163119183678 -> 2026-09-24T212208712750 | 6 changed | quiet |
+| 2026-09-24 | `remote/dk.afbudsrejser/travel-search` | 2026-09-24T205527257144 -> 2026-09-24T212209300150 | 1 changed | quiet |
+| 2026-09-24 | `remote/io.github.cyanheads/npi-providers-mcp-server` | 2026-09-23T160844428861 -> 2026-09-24T212146624653 | 2 changed | quiet |
+| 2026-09-24 | `remote/dev.archstone.hosted/artvinci` | 2026-09-23T162617342861 -> 2026-09-24T212027274895 | 1 changed | quiet |
+| 2026-09-24 | `remote/io.github.mirabello-consultancy/mcp-server` | 2026-09-23T162730463506 -> 2026-09-24T211953151853 | 3 changed | quiet |
+| 2026-09-24 | `remote/so.darwin/darwin` | 2026-09-24T202310496324 -> 2026-09-24T211934930519 | 1 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/vessel-tracking` | 2026-09-24T120030533335 -> 2026-09-24T211920622499 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/nationalize` | 2026-09-24T120019398434 -> 2026-09-24T211855051765 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/taiwan-stocks` | 2026-09-24T115938935000 -> 2026-09-24T211853905817 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/gong` | 2026-09-24T120013382831 -> 2026-09-24T211833687676 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/fara` | 2026-09-24T120010492601 -> 2026-09-24T211830557020 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/dod-contract-announcements` | 2026-09-24T120008330718 -> 2026-09-24T211822430618 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/data-fortworth` | 2026-09-24T120005189326 -> 2026-09-24T211810263343 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/data-colorado` | 2026-09-24T120004533401 -> 2026-09-24T211809751546 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/china-disclosures` | 2026-09-24T120001342201 -> 2026-09-24T211804119003 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.pipeworx-io/arcgis-charlotte` | 2026-09-24T115955981668 -> 2026-09-24T211748067203 | 4 changed | quiet |
+| 2026-09-24 | `remote/io.github.tettertotter/fundinglandscape` | 2026-09-24T205055524443 -> 2026-09-24T211738970497 | 2 changed | quiet |
+| 2026-09-24 | `remote/es.elpujante/subastas` | 2026-09-23T160455308090 -> 2026-09-24T211725165791 | 7 changed (every tool) | quiet |
+| 2026-09-24 | `remote/space.btw/btw` | 2026-09-23T160418000116 -> 2026-09-24T211649511509 | 2 changed, 1 added | quiet |
+| 2026-09-24 | `remote/com.daedalmap/reverse-geocoding` | 2026-09-24T115830852854 -> 2026-09-24T211614989059 | 2 changed | quiet |
+| 2026-09-24 | `remote/io.github.whiteknightonhorse/apibase` | 2026-09-24T201935152635 -> 2026-09-24T211606580080 | 2 added | quiet |
+| 2026-09-24 | `gdharness` | 1.0.30 -> 1.0.31 | 1 changed | quiet |
+| 2026-09-24 | `trace-mcp` | 3.31.5 -> 3.32.0 | 1 changed | review |
+| 2026-09-24 | `@cyanheads/npi-providers-mcp-server` | 0.1.9 -> 0.2.0 | 2 changed | quiet |
+| 2026-09-24 | `@withone/mcp` | 1.3.1 -> 1.4.0 | 3 changed | quiet |
 | 2026-09-24 | `remote/fi.akkilahdot/travel-search` | 2026-09-24T202749065228 -> 2026-09-24T205753767814 | 1 changed | quiet |
 | 2026-09-24 | `remote/io.github.JustJuice55/telegram-catalog` | 2026-09-24T202729164086 -> 2026-09-24T205737118865 | 1 changed | quiet |
 | 2026-09-24 | `remote/io.github.socialloopai/socialloop-mcp.1` | 2026-09-24T202716696002 -> 2026-09-24T205724075892 | 1 changed | quiet |
@@ -40,33 +70,3 @@ Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, w
 | 2026-09-24 | `remote/io.github.pipeworx-io/osrm` | 2026-09-24T120022070962 -> 2026-09-24T205325478382 | 4 changed | quiet |
 | 2026-09-24 | `remote/io.github.pipeworx-io/opentopography` | 2026-09-24T120021947562 -> 2026-09-24T205325006694 | 4 changed | quiet |
 | 2026-09-24 | `remote/io.github.pipeworx-io/openparliament-ca` | 2026-09-24T120021471407 -> 2026-09-24T205324505543 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/notion_connect` | 2026-09-24T120020537595 -> 2026-09-24T205323237410 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/nhl` | 2026-09-24T120019770217 -> 2026-09-24T205322806010 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/mime` | 2026-09-24T120018633939 -> 2026-09-24T205322146302 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/merriam-webster` | 2026-09-24T120018061264 -> 2026-09-24T205319268755 | 4 changed | quiet |
-| 2026-09-24 | `remote/com.rationalbloks/mcp` | 2026-09-23T162800809918 -> 2026-09-24T205319706902 | 2 changed, 1 added | quiet |
-| 2026-09-24 | `remote/io.github.rationalbloks/rationalbloks-mcp` | 2026-09-23T160746234953 -> 2026-09-24T205314598751 | 2 changed, 1 added | quiet |
-| 2026-09-24 | `remote/io.orbitwan/orbitwan` | 2026-09-23T162744513994 -> 2026-09-24T205311570015 | 1 added | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/macau-amcm` | 2026-09-24T120017429511 -> 2026-09-24T205302660668 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/keepa` | 2026-09-24T120016503361 -> 2026-09-24T205301687129 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/kansas-code` | 2026-09-24T120016369272 -> 2026-09-24T205301582304 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/jina-reader` | 2026-09-24T120016013297 -> 2026-09-24T205300848009 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/hkma-hk` | 2026-09-24T120016488041 -> 2026-09-24T205259758468 | 4 changed | quiet |
-| 2026-09-24 | `remote/ai.mysiren/siren` | 2026-09-23T160730317487 -> 2026-09-24T205259755614 | 1 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/google_docs` | 2026-09-24T120013021695 -> 2026-09-24T205258815601 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/gdelt` | 2026-09-24T120011931755 -> 2026-09-24T205240068307 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/flood` | 2026-09-24T120010719586 -> 2026-09-24T205238480920 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/exoplanet-archive` | 2026-09-24T120010024091 -> 2026-09-24T205237964271 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/emailable` | 2026-09-24T120009432111 -> 2026-09-24T205236963212 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/dicebear` | 2026-09-24T120007767198 -> 2026-09-24T205216257263 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/data-paris` | 2026-09-24T120006083412 -> 2026-09-24T205214453460 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/data-mesa` | 2026-09-24T120006689842 -> 2026-09-24T205213512532 | 4 changed | quiet |
-| 2026-09-24 | `remote/online.sasame/research` | 2026-09-23T160621027775 -> 2026-09-24T205200469886 | 1 added | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/data-energystar` | 2026-09-24T120005082042 -> 2026-09-24T205157046413 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/crawlbase` | 2026-09-24T120003191882 -> 2026-09-24T205152918400 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/core-research` | 2026-09-24T120002741908 -> 2026-09-24T205152561147 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/uuid` | 2026-09-24T120020443972 -> 2026-09-24T205135279894 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/clash-royale` | 2026-09-24T120001304349 -> 2026-09-24T205134693536 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/carbon-interface` | 2026-09-24T120000706979 -> 2026-09-24T205131829096 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/bts` | 2026-09-24T120000273982 -> 2026-09-24T205131547679 | 4 changed | quiet |
-| 2026-09-24 | `remote/io.github.pipeworx-io/brapi` | 2026-09-24T115959967637 -> 2026-09-24T205131096408 | 4 changed | quiet |
