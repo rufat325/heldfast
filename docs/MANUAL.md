@@ -80,6 +80,7 @@ mcp-pin check                        # verify .mcp-pin.lock, launch nothing
 mcp-pin approve --probe              # write .mcp-pin.lock
 mcp-pin approve --from-feed          # ...from the drift feed's measurement, launching nothing
 mcp-pin updates                      # newer releases of your pinned servers, and what they change
+mcp-pin verify                       # do your hosted servers show you what they show everyone?
 mcp-pin inspect                      # what is configured, no judgement
 mcp-pin rules                        # list rules
 mcp-pin explain MCPA015              # describe one rule in full
@@ -1457,6 +1458,27 @@ never pasted into a script, and the commit takes only files git already tracks.
 A repository has to allow it: **Settings → Actions → General → "Allow GitHub Actions to
 create and approve pull requests"**, or the pull request step is refused.
 
+### Hosted servers against the public log (`verify`)
+
+A hosted server is a URL: no package, no version, nothing a scanner can download, and
+what it shows your agent can differ from what it shows everyone else. `verify` connects to
+each hosted server in your configuration, as `--probe` does, and compares every tool it
+shows you with the public log the drift feed keeps of what that server shows an anonymous
+client -- by fingerprint, not by name. The idea, the output and the limits are in
+[docs/TRANSPARENCY.md](TRANSPARENCY.md); the short version:
+
+- **same** -- the log has recorded every definition you were shown;
+- **differs** -- the log knows the tool, but never recorded the definition you were shown:
+  exit 1. The server is telling you something it has not told anyone else;
+- **unlogged** -- a tool the log has never seen; normal behind a login, reported, and a
+  failure only under `--strict`;
+- local and private addresses are never sent to the log.
+
+`approve --probe` runs the same comparison for hosted servers at public addresses before it
+writes the lock, and refuses a differing definition until you name it with `--yes-tool`. If
+the log cannot be read, approval goes ahead and says it had no second witness. `verify` never
+launches a local server.
+
 ## What it doesn't do
 
 - Doesn't call tools, only `initialize` and `tools/list` (and whatever `guard`
@@ -1513,7 +1535,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1368 tests, stdlib unittest, nothing to install.
+1388 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

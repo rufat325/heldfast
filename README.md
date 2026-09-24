@@ -55,6 +55,14 @@ change. The measuring keeps going, across every npm server and open hosted
 endpoint in the registry, on the [`feed` branch](https://github.com/rufat325/mcp-pin/tree/feed),
 with an Atom feed to subscribe to.
 
+**Hosted servers, checked against the public record.** Two in three servers in the MCP
+registry are hosted: a URL, no package, nothing any scanner can download -- and what one
+tells your agent can differ from what it tells everyone else. The feed reads every open
+hosted server daily and keeps what it was shown. `mcp-pin verify` compares what a server
+shows *you* with that public log, the way browsers check certificates against Certificate
+Transparency, and `approve --probe` refuses a definition the public has never seen until
+you name it. [docs/TRANSPARENCY.md](docs/TRANSPARENCY.md).
+
 **It is one layer: a pin, not a sandbox.** `approve --probe` starts your
 configured servers to read their tools, so isolate that step -- a container, a
 VM, a machine you can throw away -- rather than probing on your workstation and
@@ -305,7 +313,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1368 tests, stdlib unittest, nothing to install.
+1388 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

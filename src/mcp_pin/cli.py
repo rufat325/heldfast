@@ -591,6 +591,81 @@ def cmd_updates(args: argparse.Namespace) -> int:
     return code if code != EXIT_OK else alarmed
 
 
+def cmd_verify(args: argparse.Namespace) -> int:
+    """Each hosted server's tools, as shown to you, against the public log."""
+    from . import transparency as tr
+    from .feedlock import FeedError, resolve
+    from .updates import feed_index
+
+    if getattr(args, "safe", False):
+        print("mcp-pin: verify connects to your hosted servers and reads the public log, "
+              "which --safe promises not to do", file=sys.stderr)
+        return EXIT_ERROR
+    # Hosted servers only: a local server has no public record to compare,
+    # and verify must never launch one.
+    args.probe, args.no_stdio_probe = True, True
+    data = collect(args)
+    hosted = [s for s in data.servers if s.is_remote and not s.disabled]
+    errors = {k: v for k, v in data.probe_status.items() if v != "answered"}
+    try:
+        feed = resolve(getattr(args, "feed", None))
+        wanted = any(tr.public(s.url or "") for s in hosted)
+        found = tr.check(hosted, data.tools, feed_index(feed) if wanted else {}, feed, errors)
+    except FeedError as exc:
+        print(f"mcp-pin: the public log could not be read: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    if args.format == "json":
+        print(json.dumps({"log": feed.source, "servers": [w.to_dict() for w in found]},
+                         indent=2))
+    else:
+        sys.stdout.write(tr.render(found, feed.source))
+    worst = ("differs", "unlogged") if args.strict else ("differs",)
+    return EXIT_FINDINGS if any(w.status in worst for w in found) else EXIT_OK
+
+
+def _witness_approval(data: Collected, args: argparse.Namespace) -> bool:
+    """First contact with a hosted server, checked against the public log.
+
+    Trust on first use trusts whatever the server chose to show you first.
+    For a hosted server, the public log is a second witness: a tool whose
+    definition, as shown to you, the log has never recorded is not approved
+    unless named with --yes-tool. When the log cannot be read, approval goes
+    ahead without the witness and says so -- it is an extra check, and it is
+    not one an unreachable GitHub should be able to turn into an outage.
+    """
+    from . import transparency as tr
+    from .feedlock import FeedError, resolve
+    from .updates import feed_index
+
+    hosted = [s for s in data.servers if s.is_remote and not s.disabled and s.url
+              and tr.public(s.url) and any(t.server == s.identity() for t in data.tools)]
+    if not hosted:
+        return True
+    try:
+        feed = resolve(getattr(args, "feed", None))
+        found = tr.check(hosted, data.tools, feed_index(feed), feed)
+    except FeedError as exc:
+        print(f"mcp-pin: the public log could not be read ({exc}); hosted servers are "
+              f"approved without a second witness", file=sys.stderr)
+        return True
+    named, refused = set(getattr(args, "yes_tool", None) or []), False
+    for w in found:
+        left = [n for n in w.differs if n not in named]
+        if left:
+            refused = True
+            print(f"mcp-pin: {w.identity}: shows you a definition of {', '.join(left)} that "
+                  f"the public log has never recorded; not approved. Read it, then pass "
+                  f"--yes-tool NAME for each to accept it (`mcp-pin verify` has detail).",
+                  file=sys.stderr)
+        elif w.status in ("same", "differs"):
+            print(f"mcp-pin: {w.identity}: matches the public log", file=sys.stderr)
+        elif w.status == "unlogged":
+            print(f"mcp-pin: {w.identity}: {len(w.unseen)} tool(s) the public log has never "
+                  f"seen ({', '.join(w.unseen[:5])}); expected behind a login -- read them",
+                  file=sys.stderr)
+    return not refused
+
+
 def _apply_updates(args: argparse.Namespace, previous: Lock, todo: list,
                    feed: object) -> int:
     """Bump the config for each quiet update, then re-approve just those.
@@ -688,7 +763,10 @@ def cmd_approve(args: argparse.Namespace) -> int:
     if from_feed:
         if not _collect_feed(data, getattr(args, "feed", None)):
             return EXIT_ERROR
-    elif not args.probe:
+    elif args.probe:
+        if not getattr(args, "safe", False) and not _witness_approval(data, args):
+            return EXIT_ERROR
+    else:
         print(
             "mcp-pin: approving without --probe records configuration only.\n"
             "           Tool descriptions are the thing a rug pull changes, so an\n"
@@ -1074,6 +1152,7 @@ def _serve() -> int:
 _COMMANDS = {
     "approve": cmd_approve,
     "updates": cmd_updates,
+    "verify": cmd_verify,
     "inspect": cmd_inspect,
     "rules": cmd_rules,
     "explain": cmd_explain,

@@ -203,6 +203,17 @@ class TestPublishing(unittest.TestCase):
         self.assertNotIn("script", self._read("index.json"))
         self.assertEqual(0, quiet(watch.verify, SimpleNamespace(data=self.data)))
 
+    def test_the_index_gives_a_hosted_servers_url(self) -> None:
+        """What `mcp-pin verify` finds a server's public record by."""
+        name = "remote/com.example/kb"
+        watch.write_catalogue(self.data, watch.snapshot(name, "2026-09-24T000000000000", "t",
+                                                        [tool("read", APPROVED)]),
+                              [], "t", extra={"url": "https://kb.example.com/mcp"})
+        quiet(watch.render, SimpleNamespace(data=self.data))
+        entry = json.loads(self._read("index.json"))["packages"][name]
+        self.assertEqual("https://kb.example.com/mcp", entry["url"])
+        self.assertNotIn("url", json.loads(self._read("index.json"))["packages"]["pkg"])
+
     def test_catalogues_are_written_whole_and_accepted(self) -> None:
         """What `approve --from-feed` reads: the wire objects, not digests."""
         s = snap("1.0.2", tool("read", APPROVED))

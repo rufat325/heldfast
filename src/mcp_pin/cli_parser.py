@@ -159,6 +159,30 @@ def _register_updates(sub: argparse._SubParsersAction) -> None:
     updates.add_argument("-f", "--format", choices=("text", "json"), default="text")
 
 
+def _register_verify(sub: argparse._SubParsersAction) -> None:
+    verify = sub.add_parser(
+        "verify",
+        help="check that your hosted servers show you what they show everyone",
+        description=(
+            "Connects to each hosted (URL) server in the configuration, as --probe "
+            "does, and compares the tools it shows you with the public log the drift "
+            "feed keeps of what it shows an anonymous client. A tool whose definition "
+            "as shown to you the log has never recorded is how a server that shows "
+            "scanners one thing and you another would look, and exits 1. A tool the "
+            "log has never seen at all is reported: expected behind a login. Local "
+            "servers are not launched, and local or private addresses are never "
+            "looked up."
+        ),
+    )
+    _add_scan_arguments(verify)
+    verify.add_argument("--feed", metavar="URL", default=None,
+                        help="read the log from this base URL instead of the `feed` "
+                             "branch of rufat325/mcp-pin")
+    verify.add_argument("--strict", action="store_true",
+                        help="also exit 1 on tools the public log has never seen")
+    verify.add_argument("-f", "--format", choices=("text", "json"), default="text")
+
+
 def _register_inspect(sub: argparse._SubParsersAction) -> None:
     inspect_p = sub.add_parser(
         "inspect",
@@ -550,6 +574,7 @@ def build_parser() -> argparse.ArgumentParser:
     _register_scan(sub)
     _register_approve(sub)
     _register_updates(sub)
+    _register_verify(sub)
     _register_inspect(sub)
     _register_rules(sub)
     _register_explain(sub)

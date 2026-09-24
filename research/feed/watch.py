@@ -640,6 +640,10 @@ def index(data: str, events: list) -> dict:
                 continue
             body = read_gz(os.path.join(folder, pkg_dir, name))
             entry = out.setdefault(body["package"], {"versions": [], "events": []})
+            # A hosted server's URL, so a client can find its record from the
+            # address in its config (mcp_pin/transparency.py).
+            if isinstance(body.get("url"), str):
+                entry["url"] = body["url"]
             entry["versions"].append({"version": body["version"],
                                       "published": body.get("published", ""),
                                       "tools": len(body.get("tools") or [])})
