@@ -1,0 +1,332 @@
+"""The approval lockfile: what this machine was last known to consent to.
+
+Every other check in this tool is a point-in-time opinion about a config.
+This one is different: it records what you approved, so a later scan can tell
+you what *changed*. A server that passed review on Monday and quietly ships a
+new tool description on Friday is the failure mode that point-in-time
+scanning cannot see, because the Friday config is just as clean-looking as
+the Monday one.
+
+That is the whole reason this file exists, and it is why the lock stores the
+fingerprint of everything the model reads -- name, description, and input
+schema -- rather than a package version.
+"""
+
+from __future__ import annotations
+
+import json
+import shlex
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from .artifacts import artifact_digests
+from .textdiff import PREVIEW_CHARS
+from .model import (PromptSpec, ResourceSpec, ServerSpec, SkillSpec, ToolSpec,
+                    instructions_fingerprint, observed_for)
+
+# 2 changed the digest algorithm to RFC 8785 (JCS). Version 1 fingerprints
+# were written by Python's `json.dumps`, which the JavaScript checker could
+# not reproduce for integral floats, large integers, -0.0, or keys mixing BMP
+# with astral characters. Those digests are not comparable with these, so a
+# version 1 lock is reported as needing re-approval rather than silently
+# mismatching every tool in it -- which would look exactly like a rug pull.
+LOCK_VERSION = 2
+DIGEST_CHANGED_IN = 2
+DEFAULT_LOCK_NAME = ".mcp-pin.lock"
+# Previous product name. Loaded only when the current file is absent, so a
+# rename does not quietly drop enforcement.
+LEGACY_LOCK_NAME = ".mcp-audit.lock"
+
+
+def launch_mismatch(approved: str | None, argv: list[str] | None, *,
+                    pinned: bool = True) -> str | None:
+    """None if the tokens about to run are the ones that were pinned.
+
+    An empty `approved` on a server that *has* a lock entry is an old lock or
+    a hand-edited one, not a pass: the entry stands for an approval and names
+    no command, which let the guard start any binary at all under that
+    server's name. The docstring said this for a while before the code did.
+
+    `pinned=False` says there is no lock entry to read a command from. That
+    is a different situation -- an unlisted server, reached through
+    `--allow-unapproved` -- and it is handled by the tool policy rather than
+    by refusing to launch.
+
+    An empty `argv` is a third case: a remote backend has no local command to
+    compare, so there is nothing to say.
+    """
+    if not argv or not pinned:
+        return None
+    if not approved:
+        return ("the lockfile entry for this server records no launch command, "
+                "so there is nothing to pin the binary against; re-run "
+                "`heldfast approve` to record one")
+    current = " ".join(shlex.quote(tok) for tok in argv)
+    if current == approved:
+        return None
+    return "launch command changed since approval"
+
+
+def _lock_in(base: Path) -> Path | None:
+    current = base / DEFAULT_LOCK_NAME
+    if current.is_file():
+        return current
+    legacy = base / LEGACY_LOCK_NAME
+    if legacy.is_file():
+        return legacy
+    return None
+
+
+def resolve_lock_path(explicit: str | Path | None = None, *,
+                      cwd: Path | None = None,
+                      roots: list[Path] | None = None) -> Path:
+    if explicit:
+        return Path(explicit)
+    bases: list[Path] = []
+    for raw in list(roots or []) + [cwd or Path.cwd()]:
+        p = Path(raw)
+        bases.append(p if (p.is_dir() or not p.exists()) else p.parent)
+    seen: set[Path] = set()
+    first: Path | None = None
+    for base in bases:
+        key = base.resolve() if base.exists() else base
+        if key in seen:
+            continue
+        seen.add(key)
+        if first is None:
+            first = base
+        hit = _lock_in(base)
+        if hit is not None:
+            return hit
+    return (first or Path.cwd()) / DEFAULT_LOCK_NAME
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+@dataclass
+class Lock:
+    version: int = LOCK_VERSION
+    generated: str = field(default_factory=_now)
+    servers: dict[str, Any] = field(default_factory=dict)
+    skills: dict[str, Any] = field(default_factory=dict)
+    # Which agent may reach which servers. Written by a person, never
+    # observed, so `record` preserves it the same way it preserves policy.
+    identities: dict[str, Any] = field(default_factory=dict)
+    path: Path | None = None
+    # True when this lock was written before the RFC 8785 digest change, so
+    # its fingerprints cannot be compared with the ones computed now. Callers
+    # say "re-approve" instead of reporting every tool as drifted.
+    stale_digests: bool = False
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.servers and not self.skills
+
+    # -- persistence -------------------------------------------------------
+
+    @classmethod
+    def load(cls, path: Path) -> "Lock":
+        if not path.is_file():
+            return cls(path=path)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"{path}: cannot read lockfile ({exc})") from None
+        if not isinstance(data, dict):
+            raise ValueError(f"{path}: lockfile is not an object")
+        version = int(data.get("version", 0))
+        if version > LOCK_VERSION:
+            raise ValueError(
+                f"{path}: lockfile version {version} is newer than this tool understands "
+                f"(supports {LOCK_VERSION}); upgrade heldfast"
+            )
+        return cls(
+            version=version or LOCK_VERSION,
+            generated=str(data.get("generated") or _now()),
+            stale_digests=bool(version and version < DIGEST_CHANGED_IN),
+            servers=dict(data.get("servers") or {}),
+            skills=dict(data.get("skills") or {}),
+            identities=dict(data.get("identities") or {}),
+            path=path,
+        )
+
+    def save(self, path: Path | None = None) -> Path:
+        target = path or self.path
+        if target is None:
+            raise ValueError("no lockfile path given")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": LOCK_VERSION,
+            "generated": self.generated,
+            "servers": self.servers,
+            "skills": self.skills,
+        }
+        if self.identities:
+            payload["identities"] = self.identities
+        # Write-then-rename so an interrupted run cannot truncate the record
+        # of what was previously approved.
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        tmp.replace(target)
+        self.path = target
+        return target
+
+    # -- building ----------------------------------------------------------
+
+    def record(self, servers: list[ServerSpec], tools: list[ToolSpec],
+               skills: list[SkillSpec],
+               prompts: list[PromptSpec] | None = None,
+               resources: list[ResourceSpec] | None = None,
+               instructions: dict[str, str] | None = None,
+               previous: "Lock | None" = None,
+               probe_status: dict[str, str] | None = None) -> None:
+        """Replace the lock contents with the current observed state.
+
+        Covers every surface a server controls that reaches the model, not
+        just tools: `instructions` (which the spec allows a client to add to
+        the system prompt), prompt templates, and resource descriptions. A
+        lockfile that pinned only tools would let a server rewrite the agent's
+        standing orders without tripping anything.
+        """
+        by_server: dict[str, list[ToolSpec]] = {}
+        for t in tools:
+            by_server.setdefault(t.server, []).append(t)
+        prompts_by_server: dict[str, list[PromptSpec]] = {}
+        for pr in prompts or []:
+            prompts_by_server.setdefault(pr.server, []).append(pr)
+        resources_by_server: dict[str, list[ResourceSpec]] = {}
+        for rs in resources or []:
+            resources_by_server.setdefault(rs.server, []).append(rs)
+        instructions = instructions or {}
+
+        # Argument policy is written by a person, not observed from a server,
+        # so re-approving must not throw it away. Everything else in an entry
+        # is a fact about what was seen and is rebuilt from scratch.
+        #
+        # `previous` is explicit because the CLI builds a brand-new Lock and
+        # then records into it, so reading self.servers preserved nothing and
+        # a hand-written policy was silently dropped on the next
+        # `approve --probe`. The unit test passed because it reused one object;
+        # only driving the real command line found it.
+        if previous is not None and previous.identities and not self.identities:
+            # Same reasoning as policy: hand-written, so re-approving must not
+            # discard it.
+            self.identities = dict(previous.identities)
+
+        source = previous.servers if previous is not None else self.servers
+        kept_policies = {
+            key: value["policy"]
+            for key, value in source.items()
+            if isinstance(value, dict) and isinstance(value.get("policy"), dict)
+        }
+
+        self.servers = {}
+        for s in servers:
+            entry: dict[str, Any] = {
+                "name": s.name,
+                "client": s.client,
+                "source": s.source,
+                "transport": s.transport,
+                "command_line": s.command_line,
+                "url": s.url,
+                "approved_at": _now(),
+            }
+            # Whether a probe was attempted, and whether it answered. An entry
+            # with no tools means two opposite things -- nobody probed, or the
+            # server was launched and never replied -- and the second is worth
+            # knowing: it is an approval covering a server that does not run.
+            # Without this the coverage report had to guess, and guessed wrong.
+            status = observed_for(probe_status or {}, s, servers)
+            if status is not None:
+                entry["probe"] = status
+            text = observed_for(instructions, s, servers)
+            if text:
+                entry["instructions"] = {
+                    "fingerprint": instructions_fingerprint(text),
+                    "preview": text[:PREVIEW_CHARS],
+                    "length": len(text),
+                }
+            observed_prompts = observed_for(prompts_by_server, s, servers)
+            if observed_prompts is not None:
+                entry["prompts"] = {
+                    pr.name: {"fingerprint": pr.fingerprint(),
+                              "description_preview":
+                                  (pr.description or "")[:PREVIEW_CHARS],
+                              "description_length": len(pr.description or "")}
+                    for pr in sorted(observed_prompts, key=lambda x: x.name)
+                }
+            observed_resources = observed_for(resources_by_server, s, servers)
+            if observed_resources is not None:
+                entry["resources"] = {
+                    rs.uri: {"fingerprint": rs.fingerprint(),
+                             "description_preview":
+                                 (rs.description or "")[:PREVIEW_CHARS],
+                             "description_length": len(rs.description or "")}
+                    for rs in sorted(observed_resources, key=lambda x: x.uri)
+                }
+            # The command is the promise; this is what was behind it. A
+            # config line can stay byte-identical while the script it names
+            # is rewritten, which MCPA016 cannot see.
+            digests = artifact_digests(s)
+            if digests:
+                entry["artifacts"] = digests
+            carried = kept_policies.get(s.identity())
+            if carried:
+                entry["policy"] = carried
+            observed = observed_for(by_server, s, servers)
+            if observed is not None:
+                entry["tools"] = {
+                    t.name: {
+                        "fingerprint": t.fingerprint(),
+                        "description_preview":
+                            (t.description or "")[:PREVIEW_CHARS],
+                        "description_length": len(t.description or ""),
+                    }
+                    for t in sorted(observed, key=lambda t: t.name)
+                }
+            # Two servers can share client:name -- the same name under two
+            # project scopes in one ~/.claude.json, say. They are different
+            # servers and this id cannot tell them apart, so neither entry is
+            # allowed to stand for both: the conflict is written down and a
+            # conflicted entry enforces nothing (Guard._resolve_entry refuses
+            # it). Overwriting silently would approve whichever came last
+            # while the report named the other.
+            existing = self.servers.get(s.identity())
+            if isinstance(existing, dict):
+                lines = existing.get("conflict") or [existing.get("command_line") or ""]
+                entry = {
+                    "name": s.name, "client": s.client, "source": s.source,
+                    "approved_at": _now(),
+                    "conflict": sorted({*lines, s.command_line} - {""}),
+                }
+            self.servers[s.identity()] = entry
+
+        self.skills = {
+            sk.path: {"name": sk.name, "fingerprint": sk.fingerprint(), "approved_at": _now()}
+            for sk in skills
+        }
+        self.generated = _now()
+
+    def merge_unprobed(self, previous: "Lock") -> None:
+        """Carry forward tool fingerprints for servers we could not probe.
+
+        Without this, running `--update` without `--probe` would silently
+        discard the tool baseline and permanently blind the drift check.
+        """
+        for ident, entry in self.servers.items():
+            old = previous.servers.get(ident)
+            if not isinstance(old, dict):
+                continue
+            carried = False
+            for key in ("tools", "prompts", "resources", "instructions",
+                        "artifacts", "integrity", "artifact_urls", "probe"):
+                if key not in entry and key in old:
+                    entry[key] = old[key]
+                    carried = True
+            if carried:
+                entry["approved_at"] = old.get("approved_at", entry["approved_at"])
+                entry["carried_forward"] = True

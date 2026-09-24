@@ -25,11 +25,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec  # noqa: E402
-from mcp_pin.rules import run_rules  # noqa: E402
-from mcp_pin.rules.base import AuditContext  # noqa: E402
-from mcp_pin.enforcement import subcommand as _mcp_pin_subcommand  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec  # noqa: E402
+from heldfast.rules import run_rules  # noqa: E402
+from heldfast.rules.base import AuditContext  # noqa: E402
+from heldfast.enforcement import subcommand as _heldfast_subcommand  # noqa: E402
 
 
 def server(name: str, command: str = "npx", args: list | None = None,
@@ -48,7 +48,7 @@ def fired(servers: list, approved: list | None = None) -> list:
     return [f for f in run_rules(ctx) if f.rule_id == "MCPA032"]
 
 
-GATEWAY = server("everything", "mcp-pin", ["gateway"])
+GATEWAY = server("everything", "heldfast", ["gateway"])
 
 
 class TestItFires(unittest.TestCase):
@@ -100,7 +100,7 @@ class TestItStaysQuiet(unittest.TestCase):
         direct = server("github", client="claude-code")
         elsewhere = ServerSpec(name="everything", source="/p/cursor.json",
                                client="cursor", transport="stdio",
-                               command="mcp-pin", args=["gateway"])
+                               command="heldfast", args=["gateway"])
         self.assertEqual([], fired([elsewhere, direct], approved=[direct]))
 
     def test_a_disabled_direct_entry_is_not_reachable(self) -> None:
@@ -109,10 +109,10 @@ class TestItStaysQuiet(unittest.TestCase):
         self.assertEqual([], fired([GATEWAY, direct], approved=[direct]))
 
     def test_a_guarded_entry_is_not_a_bypass(self) -> None:
-        """`mcp-pin guard -- npx ...` is the enforcement, not a way round
+        """`heldfast guard -- npx ...` is the enforcement, not a way round
         it. Reporting the fix is the failure mode this project is most
         careful about."""
-        guarded = server("github", "mcp-pin",
+        guarded = server("github", "heldfast",
                          ["guard", "--", "npx", "-y", "@scope/srv"])
         self.assertEqual([], fired([GATEWAY, guarded], approved=[guarded]))
 
@@ -123,43 +123,43 @@ class TestRecognisingItsOwnInvocation(unittest.TestCase):
     which is the same bug pointed the other way."""
 
     def test_the_console_script(self) -> None:
-        self.assertEqual("gateway", _mcp_pin_subcommand(
-            server("g", "mcp-pin", ["gateway"])))
+        self.assertEqual("gateway", _heldfast_subcommand(
+            server("g", "heldfast", ["gateway"])))
 
     def test_an_absolute_path_to_it(self) -> None:
-        self.assertEqual("gateway", _mcp_pin_subcommand(
-            server("g", "/usr/local/bin/mcp-pin", ["gateway", "--log", "t.jsonl"])))
+        self.assertEqual("gateway", _heldfast_subcommand(
+            server("g", "/usr/local/bin/heldfast", ["gateway", "--log", "t.jsonl"])))
 
     def test_the_windows_executable(self) -> None:
-        self.assertEqual("gateway", _mcp_pin_subcommand(
-            server("g", r"C:\Python\Scripts\mcp-pin.exe", ["gateway"])))
+        self.assertEqual("gateway", _heldfast_subcommand(
+            server("g", r"C:\Python\Scripts\heldfast.exe", ["gateway"])))
 
     def test_the_cmd_wrapper_windows_users_are_told_to_write(self) -> None:
-        self.assertEqual("gateway", _mcp_pin_subcommand(
-            server("g", "cmd", ["/c", "mcp-pin", "gateway"])))
+        self.assertEqual("gateway", _heldfast_subcommand(
+            server("g", "cmd", ["/c", "heldfast", "gateway"])))
 
     def test_python_dash_m(self) -> None:
-        self.assertEqual("gateway", _mcp_pin_subcommand(
-            server("g", "python", ["-m", "mcp_pin", "gateway"])))
+        self.assertEqual("gateway", _heldfast_subcommand(
+            server("g", "python", ["-m", "heldfast", "gateway"])))
 
     def test_flags_before_the_subcommand_are_skipped(self) -> None:
-        self.assertEqual("gateway", _mcp_pin_subcommand(
-            server("g", "uvx", ["--from", "mcp-pin", "mcp-pin", "gateway"])))
+        self.assertEqual("gateway", _heldfast_subcommand(
+            server("g", "uvx", ["--from", "heldfast", "heldfast", "gateway"])))
 
     def test_guard_is_told_apart_from_gateway(self) -> None:
-        self.assertEqual("guard", _mcp_pin_subcommand(
-            server("g", "mcp-pin", ["guard", "--", "npx"])))
+        self.assertEqual("guard", _heldfast_subcommand(
+            server("g", "heldfast", ["guard", "--", "npx"])))
 
     def test_something_else_entirely(self) -> None:
-        self.assertEqual("", _mcp_pin_subcommand(server("g", "npx", ["-y", "pkg"])))
+        self.assertEqual("", _heldfast_subcommand(server("g", "npx", ["-y", "pkg"])))
 
     def test_a_package_that_merely_mentions_the_name(self) -> None:
-        """`npx -y mcp-pin-helper` is somebody else's package. Matching on a
+        """`npx -y heldfast-helper` is somebody else's package. Matching on a
         substring would hand any publisher the ability to look like the
         gateway, and a rule that can be disabled by naming a package is not a
         rule."""
-        self.assertEqual("", _mcp_pin_subcommand(
-            server("g", "npx", ["-y", "mcp-pin-helper"])))
+        self.assertEqual("", _heldfast_subcommand(
+            server("g", "npx", ["-y", "heldfast-helper"])))
 
 
 if __name__ == "__main__":

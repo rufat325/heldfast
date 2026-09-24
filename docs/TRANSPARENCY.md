@@ -37,12 +37,12 @@ server in the registry that answers without credentials, as an anonymous
 client, and keeps every tool list it was given, in git, at a commit anyone
 can fetch.
 
-`mcp-pin verify` asks the question Certificate Transparency asks:
+`heldfast verify` asks the question Certificate Transparency asks:
 *is this server showing me what it shows everyone?*
 
 ```
-$ mcp-pin verify
-mcp-pin verify -- public log rufat325/mcp-pin@87b7b05a...
+$ heldfast verify
+heldfast verify -- public log rufat325/heldfast@87b7b05a...
 
   claude-code:kb               same as the public log: 12 tool(s), last logged 2026-09-24
   claude-code:crm              DIFFERS from the public log

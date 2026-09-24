@@ -27,14 +27,14 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "research" / "feed"))
 
 import watch  # noqa: E402
-from mcp_pin import feedlock, lookup  # noqa: E402
-from mcp_pin.cli import main  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec  # noqa: E402
-from mcp_pin.probe import _parse_tools  # noqa: E402
+from heldfast import feedlock, lookup  # noqa: E402
+from heldfast.cli import main  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec  # noqa: E402
+from heldfast.probe import _parse_tools  # noqa: E402
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
-BASE = f"https://raw.githubusercontent.com/rufat325/mcp-pin/{SHA}"
+BASE = f"https://raw.githubusercontent.com/rufat325/heldfast/{SHA}"
 
 
 def tool(name: str, description: str) -> dict:
@@ -143,7 +143,7 @@ class TestVerify(Published):
         return code, self.out
 
     def test_approved_tools_are_looked_up_without_launching_anything(self) -> None:
-        with mock.patch("mcp_pin.probe.probe_stdio", side_effect=AssertionError("launched")):
+        with mock.patch("heldfast.probe.probe_stdio", side_effect=AssertionError("launched")):
             code, out = self.run_cli("verify")
         self.assertEqual(0, code, out)
         self.assertIn("1 of 2 seen publicly, the oldest since 2026-03-02, on up to 2 server(s)",

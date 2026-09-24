@@ -3,7 +3,7 @@
 ## Running the tests
 
 ```bash
-git clone https://github.com/rufat325/mcp-pin && cd mcp-pin
+git clone https://github.com/rufat325/heldfast && cd heldfast
 python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests
 ```
@@ -32,8 +32,8 @@ scope — and a sentence that fits none of them does not belong in the README.
 **Adding a rule takes four things, all enforced by tests:**
 
 1. the rule itself
-2. a `RuleDoc` entry in `src/mcp_pin/rule_docs.py`, then
-   `mcp-pin rules --markdown -o docs/rules.md` to regenerate the catalogue
+2. a `RuleDoc` entry in `src/heldfast/rule_docs.py`, then
+   `heldfast rules --markdown -o docs/rules.md` to regenerate the catalogue
 3. an attack in `tests/test_attack_corpus.py` that demonstrates it
 4. evidence it stays quiet on real data
 

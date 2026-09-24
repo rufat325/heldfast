@@ -10,7 +10,7 @@ Read this file and `docs/GUARANTEES.md` instead.
 - Feature freeze. No new clients. A new lockfile theorem is allowed when
   it has a test that would fail if the implementation were deleted.
   PyPI is live; a new version is a tag.
-- GitHub repo, command, wheel and lockfile are `mcp-pin`. Rule ids stay
+- GitHub repo, command, wheel and lockfile are `heldfast`. Rule ids stay
   `MCPA*`: a detection namespace is not a product name.
 - An existing `.mcp-audit.lock` is still loaded if `.mcp-pin.lock` is
   absent, so renaming the file is not a silent loss of enforcement.
@@ -52,7 +52,7 @@ Read this file and `docs/GUARANTEES.md` instead.
 4. ~~`mypy --strict` on `policy.py`, `lockfile.py`, `model.py`, `findings.py`.~~
    Done, CI job `types`. Not a runtime dependency.
 5. ~~A name that can win search.~~ Done: repo, command, wheel and lockfile
-   are `mcp-pin`. Rule ids stay `MCPA*`. Then: PyPI, more clients.
+   are `heldfast`. Rule ids stay `MCPA*`. Then: PyPI, more clients.
 6. ~~Guard fails closed on kernel exceptions.~~ Done: `--fail-open` is the
    opt-out. A withheld catalogue cannot still be called.
 7. ~~Mutants for lockfile load and the guard pump.~~ Done.
@@ -60,7 +60,7 @@ Read this file and `docs/GUARANTEES.md` instead.
    Done.
 9. ~~README first screen is the pin.~~ Done. GIF is a live filesystem
    wrap plus the rug pull. Long form is `docs/MANUAL.md`.
-   [PyPI `mcp-pin` 0.1.0](https://pypi.org/project/mcp-pin/).
+   [PyPI `heldfast` 0.1.0](https://pypi.org/project/heldfast/).
 10. ~~JSON-RPC batches skip the pump.~~ Done: `_screen_outbound` / `_client_to_server`.
 11. ~~`.mcp-pin-ignore` could hide MCPA015.~~ Done: `PINNED` lockfile theorems.
 12. ~~`NODE_OPTIONS` / `PYTHONPATH` inherited.~~ Done: declare them or they stay out.
@@ -71,7 +71,7 @@ Read this file and `docs/GUARANTEES.md` instead.
 17. ~~Probe gate launches on a rule exception.~~ Done: launches nothing.
 18. ~~Drift first-match on bare name.~~ Done: `_entry_for` refuses to guess.
 19. ~~Public-repo hygiene.~~ Done: noreply authors, SHA-pinned actions,
-    `SECURITY.md`. [PyPI `mcp-pin` 0.1.0](https://pypi.org/project/mcp-pin/).
+    `SECURITY.md`. [PyPI `heldfast` 0.1.0](https://pypi.org/project/heldfast/).
 20. ~~Scan looked for the lock in cwd, not the tree.~~ Done: a lock beside
     the scanned directory is the lock; the Action job on the clean fixture
     no longer files MCPA014 because the runner's cwd is the repo root.
@@ -281,11 +281,11 @@ Read this file and `docs/GUARANTEES.md` instead.
     The file you commit is the same check that runs in CI and on the wire.
     - README leads with wrap, names the collision with GautamTalksDev/mcp-pin
       in one sentence (`npx mcp-pin` is theirs).
-    - `wrap` is `guard`. `mcp-pin -- <server>` is wrap. `doctor` is scan.
+    - `wrap` is `guard`. `heldfast -- <server>` is wrap. `doctor` is scan.
       `ci` refuses `--probe` and keeps `--fail-on high`. `check` verifies
       the lockfile and launches nothing.
-    - `js/mcp-pin-check` is a zero-dep verifier of `.mcp-pin.lock` (T-DIGEST).
-      `js/mcp-pin-wrap` would be `npx @rufat325/mcp-pin`, which execs the
+    - `js/heldfast-check` is a zero-dep verifier of `.mcp-pin.lock` (T-DIGEST).
+      `js/heldfast-wrap` would be `npx @rufat325/heldfast`, which execs the
       Python wheel and does not download one. Neither is published to
       npm; the docs say `node js/.../bin.js` because that is what works.
     - Claude Code plugin: SessionStart audit, PreToolUse deny on miss/drift.

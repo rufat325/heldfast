@@ -41,10 +41,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.artifacts import (  # noqa: E402
+from heldfast.artifacts import (  # noqa: E402
     _is_interpreter, artifact_digests, mismatch, unmatched)
-from mcp_pin.model import ServerSpec  # noqa: E402
-from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
+from heldfast.model import ServerSpec  # noqa: E402
+from heldfast.rules import AuditContext, run_rules  # noqa: E402
 
 SCRIPT = 'console.log("hello");\n'
 

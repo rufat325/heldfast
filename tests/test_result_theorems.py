@@ -9,8 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.guard import Guard  # noqa: E402
-from mcp_pin.resultscreen import (  # noqa: E402
+from heldfast.guard import Guard  # noqa: E402
+from heldfast.resultscreen import (  # noqa: E402
     RS_ANSI, RS_EXFIL, RS_SECRET, classify, withheld,
 )
 
@@ -40,7 +40,7 @@ class TestClassify(unittest.TestCase):
     def test_ordinary_docs_are_quiet(self) -> None:
         quiet = [
             "Invoice 41: 120.00 USD",
-            "See https://github.com/rufat325/mcp-pin",
+            "See https://github.com/rufat325/heldfast",
             "Create a .env file and put your API key in it.",
             "notwebhook.site.example is not a collector",
         ]

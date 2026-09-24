@@ -47,7 +47,7 @@ def get_json(url, tries=12):
     for attempt in range(tries):
         wait = delay
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "mcp-pin-churn"})
+            req = urllib.request.Request(url, headers={"User-Agent": "heldfast-churn"})
             with urllib.request.urlopen(req, timeout=60) as r:
                 return json.loads(r.read().decode("utf-8", "replace"))
         except urllib.error.HTTPError as e:

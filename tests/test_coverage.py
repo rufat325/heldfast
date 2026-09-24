@@ -23,9 +23,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from mcp_pin import coverage  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast import coverage  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
 
 
 def spec(name: str, command: str = "node", args: list | None = None,
@@ -262,7 +262,7 @@ class TestTheWholeReport(unittest.TestCase):
     def test_a_fully_covered_server_counts_as_one(self) -> None:
         """Approved, pinned, policed -- and wrapped. The last one is not
         decoration: without it none of the others is in the path."""
-        server = spec("alpha", "mcp-pin",
+        server = spec("alpha", "heldfast",
                       ["guard", "--", "npx", "-y", "pkg@1.0.0"])
         lock = Lock()
         lock.record([server], [ToolSpec(server="alpha", name="read",
@@ -292,7 +292,7 @@ class TestTheWholeReport(unittest.TestCase):
         """In the recommended setup the server is named only in the lockfile;
         the client points at the gateway. This read as "no longer configured"
         and the tool punished its own advice."""
-        gateway = spec("everything", "mcp-pin", ["gateway"])
+        gateway = spec("everything", "heldfast", ["gateway"])
         fronted = spec("alpha", "npx", ["-y", "pkg@1.0.0"])
         lock = Lock()
         lock.record([fronted], [], [])
@@ -307,7 +307,7 @@ class TestTheWholeReport(unittest.TestCase):
     def test_the_gateway_entry_is_not_reported_as_a_server(self) -> None:
         """Approving the thing that enforces approvals is circular, so it has
         none by design -- flagging it would flag the one entry doing the work."""
-        data = self._built(Lock(), [spec("everything", "mcp-pin", ["gateway"])])
+        data = self._built(Lock(), [spec("everything", "heldfast", ["gateway"])])
         self.assertEqual([], [r for r in data["servers"]
                               if r["identity"].endswith(":everything")])
 
@@ -341,7 +341,7 @@ class TestARemedyMustBePossible(unittest.TestCase):
     """A fix the reader cannot carry out is worse than admitting there isn't one.
 
     `coverage` told the operator of a hosted server to "point the client at
-    `mcp-pin gateway`, or wrap it with `mcp-pin guard`". Both are stdio only,
+    `heldfast gateway`, or wrap it with `heldfast guard`". Both are stdio only,
     so neither can wrap a `url`: the row read as "you forgot something" when
     the honest answer is "this tool does not do that yet". Whoever ran the
     commands would have found out the slow way.
@@ -362,14 +362,14 @@ class TestARemedyMustBePossible(unittest.TestCase):
         layer = self._enforced(spec("hosted", "", [], url="https://x.example/sse",
                                     transport="sse"))
         self.assertEqual("no", layer.state)
-        self.assertIn("mcp-pin gateway", layer.remedy)
+        self.assertIn("heldfast gateway", layer.remedy)
         self.assertIn("cannot", layer.remedy)
         self.assertNotIn("no fix available", layer.remedy)
 
     def test_a_local_server_still_gets_the_real_remedy(self) -> None:
         layer = self._enforced(spec("local", "node", ["s.js"]))
         self.assertEqual("no", layer.state)
-        self.assertIn("mcp-pin guard", layer.remedy)
+        self.assertIn("heldfast guard", layer.remedy)
 
 
 if __name__ == "__main__":

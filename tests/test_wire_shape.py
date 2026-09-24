@@ -32,7 +32,7 @@ try:
 except ImportError:
     HAVE_SDK = False
 
-from mcp_pin import llm  # noqa: E402
+from heldfast import llm  # noqa: E402
 
 CANNED_VERDICT = {
     "verdict": "malicious",

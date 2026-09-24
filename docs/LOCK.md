@@ -66,13 +66,13 @@ tools that had been approved correctly.
 `tests/golden/tools/` — twelve objects, ten cases (one pair is key order). A checker that disagrees with any file is wrong.
 
 `tests/golden/jcs_vectors.json` — the canonicalization contract itself, read
-by `tests/test_digest_parity.py` and by `js/mcp-pin-check/test.js`. Both
+by `tests/test_digest_parity.py` and by `js/heldfast-check/test.js`. Both
 languages assert the same strings from the same file, so the two
 implementations cannot drift apart again without a test going red.
 
 ```bash
-python -c "from mcp_pin.digest import tool_digest; ..."
-node js/mcp-pin-check/bin.js --golden tests/golden/tools
+python -c "from heldfast.digest import tool_digest; ..."
+node js/heldfast-check/bin.js --golden tests/golden/tools
 ```
 
 ## File
@@ -101,8 +101,8 @@ node js/mcp-pin-check/bin.js --golden tests/golden/tools
 - **A version 1 lock is reported, not silently re-read.** Its fingerprints
   came from the pre-JCS digest, and this tool cannot tell which of them the
   change affected. `scan` says the lock needs re-approving instead of
-  comparing against it, and `mcp-pin-check` returns `T-LOCK-STALE-DIGEST`.
-  Run `mcp-pin approve` to re-record it.
+  comparing against it, and `heldfast-check` returns `T-LOCK-STALE-DIGEST`.
+  Run `heldfast approve` to re-record it.
 
   In practice **most digests do not change**: all twelve golden vectors hash
   to the same hex under both algorithms, because ordinary tool objects
@@ -114,7 +114,7 @@ node js/mcp-pin-check/bin.js --golden tests/golden/tools
   the failure this whole change exists to prevent.
 - Hostname does not belong in a portable lock.
 - Env values do not belong in a portable lock. The launch command is pinned (`T-LAUNCH`); logs redact env.
-- `mcp-pin check` / `mcp-pin-check` verify the file without launching anything.
+- `heldfast check` / `heldfast-check` verify the file without launching anything.
 - Missing file is MCPA014. Drifted tool is MCPA015.
 
-Python: `mcp_pin.digest.tool_digest`. JavaScript: `js/mcp-pin-check`. Claude Code: `plugin/mcp-pin`.
+Python: `heldfast.digest.tool_digest`. JavaScript: `js/heldfast-check`. Claude Code: `plugin/heldfast`.

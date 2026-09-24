@@ -8,7 +8,7 @@ This asks that second question of most of the public ecosystem at once. The
 [drift feed](CHURN.md#it-keeps-going) holds the current tool definitions of
 every MCP server in the official registry it could read -- npm packages
 launched in a container, hosted endpoints read over HTTPS -- and every one of
-those tools was run through mcp-pin's own content rules, parsed by the same
+those tools was run through heldfast's own content rules, parsed by the same
 code `--probe` uses. Then every hit in the categories that describe an attack
 was read, in context, by a person.
 
@@ -78,7 +78,7 @@ every pattern, or written in another language, is not matched here either.
 ## Three rules were wrong, and are fixed
 
 The raw rate -- 11.3% of servers flagged, excluding MCPA022 -- is the number a
-user would have met running mcp-pin against these servers. A rule that fires
+user would have met running heldfast against these servers. A rule that fires
 on one server in nine gets switched off.
 
 - **Concealment** matched "do not tell the user" and "must not be shown"
@@ -174,7 +174,7 @@ refutation, and it is said here so nobody reads one as the other.
 ## Reproducing
 
 ```bash
-git clone --depth 1 --branch feed https://github.com/rufat325/mcp-pin feed-data
+git clone --depth 1 --branch feed https://github.com/rufat325/heldfast feed-data
 python research/scan/scan.py --feed feed-data      # results/findings.jsonl + the counts
 ```
 

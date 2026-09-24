@@ -24,9 +24,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
-from mcp_pin.textdiff import (  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast.rules import AuditContext, run_rules  # noqa: E402
+from heldfast.textdiff import (  # noqa: E402
     PREVIEW_CHARS, changed_text, first_difference, window)
 
 BENIGN = "Read a file from the filesystem. " * 8          # 264 characters

@@ -34,14 +34,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import coverage as coverage_mod  # noqa: E402
-from mcp_pin import sessions, status as status_mod  # noqa: E402
-from mcp_pin.auditlog import AuditLog  # noqa: E402
-from mcp_pin.findings import Finding, Location, Severity  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_pin.report import render_terminal  # noqa: E402
-from mcp_pin.secrets import safe_name, safe_text  # noqa: E402
+from heldfast import coverage as coverage_mod  # noqa: E402
+from heldfast import sessions, status as status_mod  # noqa: E402
+from heldfast.auditlog import AuditLog  # noqa: E402
+from heldfast.findings import Finding, Location, Severity  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast.report import render_terminal  # noqa: E402
+from heldfast.secrets import safe_name, safe_text  # noqa: E402
 
 # Each of these does something to a terminal that the text around it did not
 # ask for.

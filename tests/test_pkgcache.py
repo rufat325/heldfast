@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fake_npm_cache import (empty_npm_cache, fake_npm_cache,  # noqa: E402
                             npm_cache_at, sri_for, write_entry)
-from mcp_pin import pkgcache  # noqa: E402
+from heldfast import pkgcache  # noqa: E402
 
 
 class TestNpmCache(unittest.TestCase):

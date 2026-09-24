@@ -16,13 +16,13 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import driftgrade  # noqa: E402
-from mcp_pin.cli_parser import build_parser  # noqa: E402
-from mcp_pin.guard import Guard  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_pin.review import acknowledged, changes, grade_change  # noqa: E402
-from mcp_pin.textdiff import PREVIEW_CHARS  # noqa: E402
+from heldfast import driftgrade  # noqa: E402
+from heldfast.cli_parser import build_parser  # noqa: E402
+from heldfast.guard import Guard  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast.review import acknowledged, changes, grade_change  # noqa: E402
+from heldfast.textdiff import PREVIEW_CHARS  # noqa: E402
 
 APPROVED = "Read an invoice by its identifier and return the parsed fields."
 REWORDED = ("Read one invoice by its identifier and return the parsed fields, "
@@ -58,7 +58,7 @@ class TestDefaultIsUnchanged(unittest.TestCase):
         g = Guard("svc", lock_of({"read": APPROVED}), quiet=True)
         self.assertEqual("block", g.drift)
         out = g.filter_tools([wire("read", REWORDED)])
-        self.assertIn("BLOCKED BY mcp-pin", out[0]["description"])
+        self.assertIn("BLOCKED BY heldfast", out[0]["description"])
         self.assertIsNotNone(call(g, "read"))
 
     def test_an_unknown_mode_is_an_error_not_a_fallback(self) -> None:
@@ -99,7 +99,7 @@ class TestGradedForwards(unittest.TestCase):
 class TestGradedRefuses(unittest.TestCase):
     def assertRefused(self, g: Guard, live: dict, contains: str) -> None:
         out = g.filter_tools([live])
-        self.assertIn("BLOCKED BY mcp-pin", out[0]["description"])
+        self.assertIn("BLOCKED BY heldfast", out[0]["description"])
         refusal = call(g, live["name"])
         self.assertIsNotNone(refusal)
         self.assertIn(contains, refusal["result"]["content"][0]["text"])
@@ -144,7 +144,7 @@ class TestGradedRefuses(unittest.TestCase):
     def test_a_tool_that_was_not_there_at_approval(self) -> None:
         g = graded({"read": APPROVED})
         out = g.filter_tools([wire("read", APPROVED), wire("export", "Export data.")])
-        self.assertIn("BLOCKED BY mcp-pin", out[1]["description"])
+        self.assertIn("BLOCKED BY heldfast", out[1]["description"])
         self.assertIsNotNone(call(g, "export"))
 
     def test_a_grading_error_refuses_even_under_fail_open(self) -> None:
@@ -152,7 +152,7 @@ class TestGradedRefuses(unittest.TestCase):
         Without grading this tool was refused, so a grading error refusing
         it is not a new failure -- and forwarding it would be."""
         g = graded({"read": APPROVED}, strict=False)
-        with mock.patch("mcp_pin.guard.introduced", side_effect=RuntimeError("boom")):
+        with mock.patch("heldfast.guard.introduced", side_effect=RuntimeError("boom")):
             g.filter_tools([wire("read", REWORDED)])
             self.assertIsNotNone(call(g, "read"))
         self.assertTrue(any("drift grade raised" in e for e in g.stats.internal_errors))

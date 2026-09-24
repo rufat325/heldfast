@@ -13,14 +13,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.cli import _COMMANDS, _with_default_command, build_parser  # noqa: E402
-from mcp_pin.lockfile import DEFAULT_LOCK_NAME  # noqa: E402
+from heldfast.cli import _COMMANDS, _with_default_command, build_parser  # noqa: E402
+from heldfast.lockfile import DEFAULT_LOCK_NAME  # noqa: E402
 
 
 def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
     env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), NO_COLOR="1")
     return subprocess.run(
-        [sys.executable, "-m", "mcp_pin", *args],
+        [sys.executable, "-m", "heldfast", *args],
         capture_output=True, text=True, env=env,
         cwd=str(cwd or ROOT),
     )
@@ -95,7 +95,7 @@ class TestCiRefusesProbe(unittest.TestCase):
 
     def test_ci_overrides_probe(self) -> None:
         from unittest.mock import patch
-        from mcp_pin import cli
+        from heldfast import cli
         args = cli.build_parser().parse_args(["ci", "--probe", "--fail-on", "never", "."])
         self.assertTrue(args.probe)
         self.assertEqual("never", args.fail_on)

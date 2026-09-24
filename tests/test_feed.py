@@ -204,7 +204,7 @@ class TestPublishing(unittest.TestCase):
         self.assertEqual(0, quiet(watch.verify, SimpleNamespace(data=self.data)))
 
     def test_the_index_gives_a_hosted_servers_url(self) -> None:
-        """What `mcp-pin verify` finds a server's public record by."""
+        """What `heldfast verify` finds a server's public record by."""
         name = "remote/com.example/kb"
         watch.write_catalogue(self.data, watch.snapshot(name, "2026-09-24T000000000000", "t",
                                                         [tool("read", APPROVED)]),

@@ -1,6 +1,6 @@
 """The Python half of the cross-language digest contract.
 
-`js/mcp-pin-check/test.js` loads the same vectors and asserts the same
+`js/heldfast-check/test.js` loads the same vectors and asserts the same
 strings. Before RFC 8785 the two implementations were hand-matched and
 disagreed on five ordinary inputs -- `1.0`, `1e16`, integers above 2**53,
 `-0.0`, and keys mixing BMP with astral characters -- which meant the plugin
@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.digest import canonical_json, tool_digest  # noqa: E402
+from heldfast.digest import canonical_json, tool_digest  # noqa: E402
 
 VECTORS = json.loads(
     (ROOT / "tests" / "golden" / "jcs_vectors.json").read_text(encoding="utf-8"))
@@ -111,7 +111,7 @@ class TestCrossLanguageParity(unittest.TestCase):
 
     def test_digests_agree(self) -> None:
         script = (
-            "const {toolDigest}=require('./js/mcp-pin-check/index.js');"
+            "const {toolDigest}=require('./js/heldfast-check/index.js');"
             "const v=JSON.parse(require('fs').readFileSync("
             "'tests/golden/jcs_vectors.json','utf8'));"
             "console.log(JSON.stringify(v.digests.map(d=>toolDigest(d.tool))));"
@@ -124,7 +124,7 @@ class TestCrossLanguageParity(unittest.TestCase):
 
     def test_canonical_strings_agree(self) -> None:
         script = (
-            "const {canonical}=require('./js/mcp-pin-check/index.js');"
+            "const {canonical}=require('./js/heldfast-check/index.js');"
             "const v=JSON.parse(require('fs').readFileSync("
             "'tests/golden/jcs_vectors.json','utf8'));"
             "console.log(JSON.stringify(v.canonical.map(c=>canonical(c.value))));"
@@ -144,7 +144,7 @@ class TestCrossLanguageParity(unittest.TestCase):
         """
         script = (
             "const {canonical,toolDigest}="
-            "require('./plugin/mcp-pin/scripts/lib.js');"
+            "require('./plugin/heldfast/scripts/lib.js');"
             "const v=JSON.parse(require('fs').readFileSync("
             "'tests/golden/jcs_vectors.json','utf8'));"
             "console.log(JSON.stringify({"
@@ -171,8 +171,8 @@ class TestCrossLanguageParity(unittest.TestCase):
         about the same frame. Vectors 13 and 14 are that case.
         """
         script = (
-            "const a=require('./js/mcp-pin-check/index.js');"
-            "const b=require('./plugin/mcp-pin/scripts/lib.js');"
+            "const a=require('./js/heldfast-check/index.js');"
+            "const b=require('./plugin/heldfast/scripts/lib.js');"
             "const fs=require('fs');"
             "const out={};"
             "for (const f of fs.readdirSync('tests/golden/tools').sort()) {"

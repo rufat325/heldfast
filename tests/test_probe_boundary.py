@@ -35,7 +35,7 @@ sys.path.insert(0, str(ROOT / "src"))
 def run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "src")
-    return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
+    return subprocess.run([sys.executable, "-m", "heldfast", *args],
                           cwd=str(cwd), env=env, capture_output=True,
                           text=True, timeout=180)
 
@@ -126,14 +126,14 @@ class TestARuleCrashDoesNotLaunch(unittest.TestCase):
 
     def test_an_exception_in_the_static_pass_launches_nothing(self) -> None:
         from unittest.mock import patch
-        from mcp_pin.cli import Collected, _gate_servers
-        from mcp_pin.findings import Severity
-        from mcp_pin.model import ServerSpec
+        from heldfast.cli import Collected, _gate_servers
+        from heldfast.findings import Severity
+        from heldfast.model import ServerSpec
 
         out = Collected()
         out.servers = [ServerSpec(name="s", source="/p/.mcp.json", client="c",
                                   transport="stdio", command="node")]
-        with patch("mcp_pin.cli.run_rules", side_effect=RuntimeError("boom")):
+        with patch("heldfast.cli.run_rules", side_effect=RuntimeError("boom")):
             launchable, skipped = _gate_servers(out, Severity.HIGH)
         self.assertEqual([], launchable)
         self.assertEqual(1, len(skipped))
@@ -144,9 +144,9 @@ class TestARuleCrashDoesNotLaunch(unittest.TestCase):
         cursor:github also blocked claude-code:github -- or, after a refactor
         the other way, launched both."""
         from unittest.mock import patch
-        from mcp_pin.cli import Collected, _gate_servers
-        from mcp_pin.findings import Finding, Location, Severity
-        from mcp_pin.model import ServerSpec
+        from heldfast.cli import Collected, _gate_servers
+        from heldfast.findings import Finding, Location, Severity
+        from heldfast.model import ServerSpec
 
         cursor = ServerSpec(name="github", source="/c", client="cursor",
                             transport="stdio", command="node")
@@ -159,7 +159,7 @@ class TestARuleCrashDoesNotLaunch(unittest.TestCase):
             location=Location(path="/c", line=1), evidence="e", remediation="r",
             server=cursor.identity(),
         )
-        with patch("mcp_pin.cli.run_rules", return_value=[blocker]):
+        with patch("heldfast.cli.run_rules", return_value=[blocker]):
             launchable, skipped = _gate_servers(out, Severity.HIGH)
         self.assertEqual([claude], launchable)
         self.assertEqual([cursor.identity()], [ident for ident, _ in skipped])

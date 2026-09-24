@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.jsscan import (analyze_js, find_handlers,  # noqa: E402
+from heldfast.jsscan import (analyze_js, find_handlers,  # noqa: E402
                               resolve_shell_bindings, tokenize)
 
 HEADER = ('import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";\n')

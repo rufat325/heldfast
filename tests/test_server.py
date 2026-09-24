@@ -1,4 +1,4 @@
-"""Tests for mcp-pin's own MCP server.
+"""Tests for heldfast's own MCP server.
 
 Two groups matter most here.
 
@@ -24,10 +24,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import server as srv  # noqa: E402
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_pin.probe import probe_stdio  # noqa: E402
-from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
+from heldfast import server as srv  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast.probe import probe_stdio  # noqa: E402
+from heldfast.rules import AuditContext, run_rules  # noqa: E402
 
 MALICIOUS_CONFIG = json.dumps({
     "mcpServers": {
@@ -55,7 +55,7 @@ class TestProtocol(unittest.TestCase):
         the client asking the question cannot speak."""
         r = call({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
         self.assertEqual(srv.LEGACY_PROTOCOL_VERSION, r["result"]["protocolVersion"])
-        self.assertEqual("mcp-pin", r["result"]["serverInfo"]["name"])
+        self.assertEqual("heldfast", r["result"]["serverInfo"]["name"])
         self.assertIn("tools", r["result"]["capabilities"])
 
     def test_discover_answers_the_current_era(self) -> None:
@@ -64,7 +64,7 @@ class TestProtocol(unittest.TestCase):
         found' from the scanner's own server."""
         r = call({"jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": {}})
         self.assertNotIn("error", r)
-        self.assertEqual("mcp-pin", r["result"]["serverInfo"]["name"])
+        self.assertEqual("heldfast", r["result"]["serverInfo"]["name"])
         self.assertIn("tools", r["result"]["capabilities"])
         self.assertIn(srv.PROTOCOL_VERSION, r["result"]["supportedVersions"])
         self.assertIn(srv.LEGACY_PROTOCOL_VERSION, r["result"]["supportedVersions"])
@@ -165,7 +165,7 @@ class TestTools(unittest.TestCase):
 
     def test_list_rules(self) -> None:
         """Assert against the registry rather than a literal, which goes stale."""
-        from mcp_pin.rules import all_rules
+        from heldfast.rules import all_rules
         rules = srv.tool_list_rules({})["rules"]
         self.assertEqual(len(all_rules()), len(rules))
         self.assertEqual({r.id for r in all_rules()}, {r["id"] for r in rules})
@@ -186,7 +186,7 @@ class TestCoverageOverMCP(unittest.TestCase):
 
     It could report a configuration's findings and knew nothing about whether
     any of this installation's guarantees were in force -- which is the
-    question an agent using mcp-pin as a server most obviously has about
+    question an agent using heldfast as a server most obviously has about
     itself. Same drift as probe.py/server.py, one layer up.
     """
 
@@ -204,8 +204,8 @@ class TestCoverageOverMCP(unittest.TestCase):
         self._tmp.cleanup()
 
     def _approve(self) -> None:
-        from mcp_pin.lockfile import Lock
-        from mcp_pin.parsers import parse_config
+        from heldfast.lockfile import Lock
+        from heldfast.parsers import parse_config
         servers, _ = parse_config(self.project / ".mcp.json", "claude-code")
         lock = Lock(path=self.project / ".mcp-pin.lock")
         lock.record(servers, [], [])
@@ -265,8 +265,8 @@ class TestSelfConsistency(unittest.TestCase):
     """This server's own descriptions must pass this package's own rules."""
 
     def test_our_tool_descriptions_are_clean(self) -> None:
-        spec = ServerSpec(name="mcp-pin", source="<self>", client="self",
-                          transport="stdio", command="mcp-pin", args=["serve"])
+        spec = ServerSpec(name="heldfast", source="<self>", client="self",
+                          transport="stdio", command="heldfast", args=["serve"])
         # Every definition, including the ones gated behind path scanning. The
         # gated tools were never checked against this package's own rules,
         # which is exactly where an unreviewed description would hide.
@@ -280,7 +280,7 @@ class TestSelfConsistency(unittest.TestCase):
         # With the annotations: MCPA021/022 read those claims on other
         # servers, so this server's own claims go through them too.
         tools = [
-            ToolSpec(server="mcp-pin", name=d["name"], description=d["description"],
+            ToolSpec(server="heldfast", name=d["name"], description=d["description"],
                      input_schema=d.get("inputSchema", {}),
                      annotations=d.get("annotations", {}))
             for d in definitions
@@ -288,7 +288,7 @@ class TestSelfConsistency(unittest.TestCase):
         findings = run_rules(AuditContext(servers=[spec], tools=tools))
         self.assertEqual(
             [], findings,
-            "mcp-pin's own MCP server fails mcp-pin:\n"
+            "heldfast's own MCP server fails heldfast:\n"
             + "\n".join(f"  {f.rule_id} {f.evidence}" for f in findings),
         )
 
@@ -355,7 +355,7 @@ class TestSelfConsistency(unittest.TestCase):
             srv.ALLOW_PATH_SCAN = original
 
     def test_descriptions_carry_no_invisible_characters(self) -> None:
-        from mcp_pin.rules.poisoning import invisible_runs
+        from heldfast.rules.poisoning import invisible_runs
         for d in srv._tool_definitions():
             self.assertEqual([], invisible_runs(d["description"]), d["name"])
 
@@ -365,8 +365,8 @@ class TestEndToEnd(unittest.TestCase):
 
     def test_client_can_probe_our_server(self) -> None:
         spec = ServerSpec(
-            name="mcp-pin", source="<test>", client="test", transport="stdio",
-            command=sys.executable, args=["-m", "mcp_pin", "serve"],
+            name="heldfast", source="<test>", client="test", transport="stdio",
+            command=sys.executable, args=["-m", "heldfast", "serve"],
             env={"PYTHONPATH": str(ROOT / "src")},
         )
         result = probe_stdio(spec, timeout=30)

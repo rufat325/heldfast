@@ -47,7 +47,7 @@ inherited. A variable the registry marks as required gets a placeholder.
 `research/churn/analyse.py` compares consecutive releases.
 `research/churn/suspicious.py` reads every tool whose agent-facing text
 changed -- description, title, and every description inside the input schema
--- and reports what a release *introduced*: mcp-pin's poisoning signals,
+-- and reports what a release *introduced*: heldfast's poisoning signals,
 hidden characters, credential paths, and new domains. A signal the previous
 release already carried is not counted again. Every number below comes out of
 one of those two scripts; run them against the data and they should
@@ -134,7 +134,7 @@ miss every pattern would be missed here too.
 
 **A pin that stops on every change will be muted.** Nearly half of real
 upgrades move something, and 90 of the 109 servers moved at least once in six
-releases. mcp-pin as it stands refuses every one of those until someone
+releases. heldfast as it stands refuses every one of those until someone
 re-approves, and the re-approval prompt for a benign doc edit looks the same
 as the one for an attack. Asked that often, people stop reading it.
 
@@ -170,8 +170,8 @@ in the same container, compared with the last one seen, and recorded -- which to
 words that moved, and whether `--drift graded` would refuse anything, graded
 against the full previous text rather than a lockfile's preview. The record
 starts from the releases measured here and lives on the
-[`feed` branch](https://github.com/rufat325/mcp-pin/tree/feed): a summary in
-its README, [an Atom feed](https://github.com/rufat325/mcp-pin/blob/feed/feed.xml)
+[`feed` branch](https://github.com/rufat325/heldfast/tree/feed): a summary in
+its README, [an Atom feed](https://github.com/rufat325/heldfast/blob/feed/feed.xml)
 to subscribe to, and every event in `events/`. The workflow that runs it
 (`.github/workflows/feed.yml`) launches the servers in a job with a read-only
 token, and commits from a separate job that runs nothing the servers wrote.
@@ -205,12 +205,12 @@ token, and commits from a separate job that runs nothing the servers wrote.
 
 ```bash
 python research/churn/sample.py            # writes sample.json (the frame and the rule)
-docker build -f research/churn/Dockerfile -t mcp-pin-churn .
+docker build -f research/churn/Dockerfile -t heldfast-churn .
 docker run --rm --cap-drop ALL --security-opt no-new-privileges \
   --memory 4g --cpus 2 \
   -v "$PWD/research/churn/sample.json:/work/research/churn/sample.json:ro" \
   -v "$PWD/research/churn/results:/work/research/churn/results" \
-  mcp-pin-churn --jobs 2
+  heldfast-churn --jobs 2
 python research/churn/measure.py merge     # results/ -> wide.json.gz
 python research/churn/analyse.py           # every count above
 python research/churn/suspicious.py        # the four, and suspicious.json

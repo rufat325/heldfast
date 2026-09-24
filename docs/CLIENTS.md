@@ -5,7 +5,7 @@ Frozen 2026-09-21. This is not a discoverer race. Seventeen entries; Goose and C
 | id | name | last verified | notes |
 |---|---|---|---|
 | claude-desktop | Claude Desktop | 2026-09-21 | `claude_desktop_config.json` |
-| claude-code | Claude Code | 2026-09-21 | `.mcp.json`, `~/.claude.json`; also the plugin in `plugin/mcp-pin` |
+| claude-code | Claude Code | 2026-09-21 | `.mcp.json`, `~/.claude.json`; also the plugin in `plugin/heldfast` |
 | cursor | Cursor | 2026-09-21 | `.cursor/mcp.json` |
 | vscode | VS Code | 2026-09-21 | servers under `servers` |
 | windsurf | Windsurf | 2026-09-21 | |
@@ -22,4 +22,4 @@ Frozen 2026-09-21. This is not a discoverer race. Seventeen entries; Goose and C
 | goose | Goose | 2026-09-21 | YAML; discovered, not parsed |
 | codex | Codex CLI | 2026-09-21 | TOML; discovered, not parsed |
 
-The registry is `src/mcp_pin/clients.py`. Adding a client is out of scope until this table is wrong.
+The registry is `src/heldfast/clients.py`. Adding a client is out of scope until this table is wrong.

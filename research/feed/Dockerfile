@@ -1,10 +1,10 @@
 # The isolate for `watch.py check`, which downloads and runs published MCP
 # servers. Built and run by .github/workflows/feed.yml; locally:
 #
-#   docker build -f research/feed/Dockerfile -t mcp-pin-feed .
+#   docker build -f research/feed/Dockerfile -t heldfast-feed .
 #   docker run --rm --cap-drop ALL --security-opt no-new-privileges \
 #     --memory 6g --cpus 2 --pids-limit 2048 --user "$(id -u):$(id -g)" \
-#     -v "$PWD/feed-data:/data" mcp-pin-feed check --data /data --jobs 2
+#     -v "$PWD/feed-data:/data" heldfast-feed check --data /data --jobs 2
 #
 # The only host path it can write is the feed data. Nothing from the host
 # environment is passed in, and measure.py strips the environment again

@@ -26,8 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
-from mcp_pin.sourcescan import (analyze_source, looks_like_mcp_server,  # noqa: E402
+from heldfast.rules import AuditContext, run_rules  # noqa: E402
+from heldfast.sourcescan import (analyze_source, looks_like_mcp_server,  # noqa: E402
                                   scan_source_tree)
 
 HEADER = "from mcp.server.fastmcp import FastMCP\nimport subprocess, os, shlex, asyncio\nmcp = FastMCP('x')\n"

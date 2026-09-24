@@ -4,7 +4,7 @@ Report vulnerabilities privately. Do not open a public issue for a hole
 in scanning, enforcement, or the GitHub Action.
 
 **GitHub:** Security tab → Report a vulnerability
-(https://github.com/rufat325/mcp-pin/security/advisories/new)
+(https://github.com/rufat325/heldfast/security/advisories/new)
 
 Include a reproduction. A config and the command you ran is enough.
 
@@ -20,5 +20,5 @@ this tool is a pin, not a sandbox.
 The GitHub Action must be pinned to a commit SHA. `@main` moves.
 The third-party actions this repo uses are pinned the same way.
 
-Install the package from PyPI (`pipx install mcp-pin`). A git SHA is
+Install the package from PyPI (`pipx install heldfast`). A git SHA is
 still the pin for the Action.

@@ -30,8 +30,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import fetch  # noqa: E402
-from mcp_pin.probe import post_rpc  # noqa: E402
+from heldfast import fetch  # noqa: E402
+from heldfast.probe import post_rpc  # noqa: E402
 
 RECEIVED: dict = {}
 
@@ -247,7 +247,7 @@ class TestItSaysWhoItIs(unittest.TestCase):
         self.addCleanup(self.server.shutdown)
 
     def _post(self, headers):
-        from mcp_pin.probe import post_rpc
+        from heldfast.probe import post_rpc
         post_rpc(f"http://127.0.0.1:{self.server.server_port}/mcp", headers,
                  {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}, 5.0)
         return RECEIVED.get("headers", {})
@@ -255,10 +255,10 @@ class TestItSaysWhoItIs(unittest.TestCase):
     def test_the_default_agent_is_not_what_goes_out(self) -> None:
         agent = self._post({}).get("User-Agent", "")
         self.assertNotIn("Python-urllib", agent)
-        self.assertIn("mcp-pin", agent)
+        self.assertIn("heldfast", agent)
 
     def test_it_is_the_same_name_the_registry_lookup_uses(self) -> None:
-        from mcp_pin import integrity
+        from heldfast import integrity
         self.assertEqual(fetch.USER_AGENT, integrity._UA)
 
     def test_a_configured_agent_still_wins(self) -> None:

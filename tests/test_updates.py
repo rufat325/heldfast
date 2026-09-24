@@ -1,4 +1,4 @@
-"""`mcp-pin updates`: what a newer release would change, and bumping the quiet ones.
+"""`heldfast updates`: what a newer release would change, and bumping the quiet ones.
 
 The grade is approve's own, so these hold that a quiet update is one approve
 would write under --yes and a review update is one it would not. `--apply`
@@ -23,11 +23,11 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from fake_advisories import FakeEcosystem  # noqa: E402
-from mcp_pin import feedlock  # noqa: E402
-from mcp_pin.cli import main  # noqa: E402
+from heldfast import feedlock  # noqa: E402
+from heldfast.cli import main  # noqa: E402
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
-BASE = f"https://raw.githubusercontent.com/rufat325/mcp-pin/{SHA}"
+BASE = f"https://raw.githubusercontent.com/rufat325/heldfast/{SHA}"
 
 
 def tool(name: str, description: str) -> dict:
@@ -91,7 +91,7 @@ class Base(unittest.TestCase):
     def run_cli(self, *argv: str) -> tuple[int, str]:
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.object(feedlock, "get_json", self.feed), \
-                mock.patch("mcp_pin.integrity.get_json", return_value=None), \
+                mock.patch("heldfast.integrity.get_json", return_value=None), \
                 self.eco.active(), redirect_stdout(out), redirect_stderr(err):
             code = main([*argv, str(self.dir), "--no-user-configs", "--no-skills"])
         self.stdout = out.getvalue()

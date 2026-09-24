@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from mcp_pin.pkgcache import content_path, npm_tarball_url  # noqa: E402
+from heldfast.pkgcache import content_path, npm_tarball_url  # noqa: E402
 
 _PREFIX = "make-fetch-happen:request-cache:"
 

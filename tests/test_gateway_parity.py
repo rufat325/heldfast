@@ -38,9 +38,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from mcp_pin.gateway import Gateway  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast.gateway import Gateway  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
 
 FAKE = ROOT / "tests" / "fixtures" / "fake_server.py"
 
@@ -205,7 +205,7 @@ class TestListChangedIsNoticed(unittest.TestCase):
         trail does: "something changed its tools" is not actionable when
         eight servers are behind one endpoint."""
         import tempfile
-        from mcp_pin.auditlog import AuditLog
+        from heldfast.auditlog import AuditLog
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trail.jsonl"
             gateway, _ = gateway_with({"jsonrpc": "2.0", "id": 1, "result": {}},
@@ -225,7 +225,7 @@ class TestListChangedIsNoticed(unittest.TestCase):
     def test_the_next_list_is_refetched(self) -> None:
         """Logging the notification and serving the start-of-session snapshot
         is how a rug pull announced itself and then kept the old catalogue."""
-        from mcp_pin.gateway import Backend
+        from heldfast.gateway import Backend
         backend = Backend(spec("alpha"))
         backend.tools = [{"name": "old", "description": "was"}]
         backend.needs_refresh = True
@@ -273,7 +273,7 @@ class TestOverARealPipe(unittest.TestCase):
         env = dict(os.environ)
         env["PYTHONPATH"] = str(ROOT / "src")
         env["MCP_PIN_FIXTURE_MODE"] = mode
-        return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
+        return subprocess.run([sys.executable, "-m", "heldfast", *args],
                               cwd=str(self.project), env=env, input=stdin,
                               capture_output=True, text=True, timeout=180)
 
@@ -332,7 +332,7 @@ class TestTheParityItself(unittest.TestCase):
         """Each of these was missing once. If the guard grows another, this
         fails until somebody decides whether the gateway needs it -- which is
         the decision that went unmade for three cycles."""
-        source = (ROOT / "src" / "mcp_pin" / "gateway.py").read_text(encoding="utf-8")
+        source = (ROOT / "src" / "heldfast" / "gateway.py").read_text(encoding="utf-8")
         for screen in ("screen_result_text", "screen_input_required",
                        "screen_server_request", "note_notification"):
             with self.subTest(screen=screen):
@@ -349,7 +349,7 @@ class TestTheParityItself(unittest.TestCase):
         each transport implements `_start`, so a fourth transport that forgets
         the gate cannot exist.
         """
-        from mcp_pin.gateway import Backend, HttpBackend
+        from heldfast.gateway import Backend, HttpBackend
 
         self.assertIs(Backend.start, HttpBackend.start,
                       "HttpBackend overrides start(), which skips the pin gate")
@@ -365,7 +365,7 @@ class TestTheParityItself(unittest.TestCase):
         local script digest, the command line, and the registry artifact.
         The guard grew the third one and the gateway has to have it for the
         same reason it needed the other two."""
-        source = (ROOT / "src" / "mcp_pin" / "gateway.py").read_text(encoding="utf-8")
+        source = (ROOT / "src" / "heldfast" / "gateway.py").read_text(encoding="utf-8")
         for check in ("mismatch", "launch_mismatch", "refusal"):
             with self.subTest(check=check):
                 self.assertIn(check, source,
@@ -382,8 +382,8 @@ class TestTheGatewayChecksTheArtifactToo(unittest.TestCase):
     """
 
     def _backend(self, integrity: dict, urls: dict | None = None):
-        from mcp_pin.gateway import Backend
-        from mcp_pin.model import ServerSpec
+        from heldfast.gateway import Backend
+        from heldfast.model import ServerSpec
 
         spec = ServerSpec(name="svc", source="/tmp/.mcp.json", client="test",
                           transport="stdio", command="npx",

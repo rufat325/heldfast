@@ -1,11 +1,11 @@
 # The isolate for measure.py, which downloads and runs published MCP servers.
 #
-#   docker build -f research/churn/Dockerfile -t mcp-pin-churn .
+#   docker build -f research/churn/Dockerfile -t heldfast-churn .
 #   docker run --rm --cap-drop ALL --security-opt no-new-privileges \
 #     --memory 4g --cpus 2 --pids-limit 2048 \
 #     -v "$PWD/research/churn/sample.json:/work/research/churn/sample.json:ro" \
 #     -v "$PWD/research/churn/results:/work/research/churn/results" \
-#     mcp-pin-churn --jobs 2
+#     heldfast-churn --jobs 2
 #
 # The only host path it can write is results/; the sample is mounted
 # read-only. Nothing from the host environment is passed in, and measure.py

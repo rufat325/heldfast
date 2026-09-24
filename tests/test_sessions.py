@@ -24,8 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import auditlog, sessions  # noqa: E402
-from mcp_pin.auditlog import AuditLog  # noqa: E402
+from heldfast import auditlog, sessions  # noqa: E402
+from heldfast.auditlog import AuditLog  # noqa: E402
 
 
 class TrailCase(unittest.TestCase):
@@ -268,7 +268,7 @@ class TestThroughTheCommandLine(TrailCase):
         env = dict(os.environ)
         env["PYTHONPATH"] = str(ROOT / "src")
         result = subprocess.run(
-            [sys.executable, "-m", "mcp_pin", "report", str(path), "--no-color"],
+            [sys.executable, "-m", "heldfast", "report", str(path), "--no-color"],
             env=env, capture_output=True, text=True, timeout=120)
         return result.returncode
 

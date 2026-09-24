@@ -14,11 +14,11 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fake_npm_cache import empty_npm_cache, fake_npm_cache  # noqa: E402
-from mcp_pin import integrity as integ  # noqa: E402
-from mcp_pin import pkgcache  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec  # noqa: E402
-from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
+from heldfast import integrity as integ  # noqa: E402
+from heldfast import pkgcache  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec  # noqa: E402
+from heldfast.rules import AuditContext, run_rules  # noqa: E402
 
 
 def _npx(version: str = "1.2.3") -> ServerSpec:
@@ -84,7 +84,7 @@ class TestLookup(unittest.TestCase):
         self.assertEqual([], found)
 
     def test_stamp_records_the_hash(self) -> None:
-        from mcp_pin.cli import _stamp_integrity
+        from heldfast.cli import _stamp_integrity
         spec = _npx()
         lock = Lock()
         lock.record([spec], [], [])
@@ -252,7 +252,7 @@ class TestApprovalRecordsWhatItCouldNotDo(unittest.TestCase):
     def test_the_artifact_url_is_recorded_alongside_the_hash(self) -> None:
         """pkgcache needs it: a PyPI URL carries a hash path that no package
         name implies, so without it the local wheel cannot be found."""
-        from mcp_pin.cli import _stamp_integrity
+        from heldfast.cli import _stamp_integrity
         spec = ServerSpec(name="n", source="/x", client="c", transport="stdio",
                           command="uvx", args=["pkg==1.2.3"])
         lock = Lock()
@@ -268,7 +268,7 @@ class TestApprovalRecordsWhatItCouldNotDo(unittest.TestCase):
     def test_a_failed_lookup_is_reported_to_the_operator(self) -> None:
         """An approval that could not record the hash is a weaker approval,
         and the moment to say so is while somebody is deciding."""
-        from mcp_pin.cli import _stamp_integrity
+        from heldfast.cli import _stamp_integrity
         spec = _npx()
         lock = Lock()
         lock.record([spec], [], [])
@@ -279,7 +279,7 @@ class TestApprovalRecordsWhatItCouldNotDo(unittest.TestCase):
         self.assertNotIn("integrity", lock.servers[spec.identity()])
 
     def test_safe_records_nothing_and_names_what_went_unpinned(self) -> None:
-        from mcp_pin.cli import _stamp_integrity
+        from heldfast.cli import _stamp_integrity
         spec = _npx()
         lock = Lock()
         lock.record([spec], [], [])
@@ -294,7 +294,7 @@ class TestApprovalRecordsWhatItCouldNotDo(unittest.TestCase):
         """Only a launch that *would* have had a tarball counts. Listing a
         plain `node server.js` here would make the warning noise, and noise
         is how a warning stops being read."""
-        from mcp_pin.cli import _stamp_integrity
+        from heldfast.cli import _stamp_integrity
         spec = ServerSpec(name="local", source="/x", client="c",
                           transport="stdio", command="node", args=["server.js"])
         lock = Lock()

@@ -23,11 +23,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import status as status_mod  # noqa: E402
-from mcp_pin.auditlog import AuditLog  # noqa: E402
-from mcp_pin.findings import Finding, Location, Severity  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import PromptSpec, ServerSpec, ToolSpec  # noqa: E402
+from heldfast import status as status_mod  # noqa: E402
+from heldfast.auditlog import AuditLog  # noqa: E402
+from heldfast.findings import Finding, Location, Severity  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import PromptSpec, ServerSpec, ToolSpec  # noqa: E402
 
 
 def spec(name: str) -> ServerSpec:
@@ -106,7 +106,7 @@ class TestTheStateWord(unittest.TestCase):
         lock = approved(["alpha", "beta"])
         gateway = ServerSpec(name="everything", source="/p/.mcp.json",
                              client="claude-code", transport="stdio",
-                             command="mcp-pin", args=["gateway"])
+                             command="heldfast", args=["gateway"])
         states = self._state(lock, [gateway], [])
         self.assertEqual("gateway", states["claude-code:alpha"])
         self.assertEqual("gateway", states["claude-code:beta"])
@@ -117,7 +117,7 @@ class TestTheStateWord(unittest.TestCase):
         lock = approved(["alpha"])
         gateway = ServerSpec(name="everything", source="/p/.mcp.json",
                              client="claude-code", transport="stdio",
-                             command="mcp-pin", args=["gateway"])
+                             command="heldfast", args=["gateway"])
         self.assertNotIn("claude-code:everything", self._state(lock, [gateway], []))
 
     def test_a_gateway_elsewhere_does_not_rescue_this_client(self) -> None:
@@ -125,7 +125,7 @@ class TestTheStateWord(unittest.TestCase):
         lock = approved(["alpha"])
         elsewhere = ServerSpec(name="everything", source="/p/cursor.json",
                                client="cursor", transport="stdio",
-                               command="mcp-pin", args=["gateway"])
+                               command="heldfast", args=["gateway"])
         self.assertEqual("GONE", self._state(lock, [elsewhere], [])["claude-code:alpha"])
 
     def test_a_server_that_was_probed_and_never_answered(self) -> None:
@@ -274,7 +274,7 @@ class TestRendering(unittest.TestCase):
     def test_no_lockfile_says_what_to_do(self) -> None:
         text = status_mod.render(status_mod.build(Lock(), [], []), color=False)
         self.assertIn("No approval lockfile", text)
-        self.assertIn("mcp-pin approve", text)
+        self.assertIn("heldfast approve", text)
 
     def test_an_unprobed_page_says_drift_was_not_checked(self) -> None:
         """Found as a stranger: with a poisoned server live, `scan --probe`

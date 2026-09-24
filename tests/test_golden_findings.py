@@ -18,8 +18,8 @@ PIN = Path(__file__).resolve().parent / "golden" / "vulnerable_rule_ids.txt"
 
 
 def _scan_vulnerable() -> set[str]:
-    from mcp_pin.parsers import parse_config
-    from mcp_pin.rules import AuditContext, run_rules
+    from heldfast.parsers import parse_config
+    from heldfast.rules import AuditContext, run_rules
 
     fixtures = ROOT / "tests" / "fixtures"
     vuln = fixtures / "vulnerable" / ".mcp.json"
@@ -78,9 +78,9 @@ class TestTheCleanTreeStaysQuiet(unittest.TestCase):
     """
 
     def _scan(self, **options) -> list:
-        from mcp_pin.lockfile import Lock
-        from mcp_pin.parsers import parse_config
-        from mcp_pin.rules import AuditContext, run_rules
+        from heldfast.lockfile import Lock
+        from heldfast.parsers import parse_config
+        from heldfast.rules import AuditContext, run_rules
 
         fixtures = ROOT / "tests" / "fixtures"
         config = fixtures / "clean" / ".mcp.json"

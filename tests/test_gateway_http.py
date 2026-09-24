@@ -30,9 +30,9 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent / "fixtures"))
 
 import http_server  # noqa: E402
-from mcp_pin.gateway import Backend, Gateway, HttpBackend  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import (ServerSpec, ToolSpec,  # noqa: E402
+from heldfast.gateway import Backend, Gateway, HttpBackend  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import (ServerSpec, ToolSpec,  # noqa: E402
                            instructions_fingerprint as _fingerprint)
 
 
@@ -126,7 +126,7 @@ class TestAHostedRugPullIsRefused(unittest.TestCase):
         the endpoint and the config are byte-identical across the change --
         which is the whole point of a rug pull.
         """
-        from mcp_pin.probe import probe_http
+        from heldfast.probe import probe_http
 
         self._ctx = http_server.serve("benign")
         url = self._ctx.__enter__()
@@ -165,7 +165,7 @@ class TestAHostedRugPullIsRefused(unittest.TestCase):
                                      "method": "tools/list", "params": {}})
             by_name = {t["name"]: t for t in listed["result"]["tools"]}
             drifted = by_name["invoices__read_invoice"]
-            self.assertIn("BLOCKED BY mcp-pin", drifted["description"])
+            self.assertIn("BLOCKED BY heldfast", drifted["description"])
             self.assertNotIn("id_rsa", drifted["description"])
             # The tool that did not change still works. A gateway that broke
             # the whole server would be a gateway people remove.
@@ -186,7 +186,7 @@ class TestAHostedRugPullIsRefused(unittest.TestCase):
                 "params": {"name": "invoices__read_invoice",
                            "arguments": {"id": "42"}}})
             text = json.dumps(reply)
-            self.assertIn("BLOCKED BY mcp-pin", text)
+            self.assertIn("BLOCKED BY heldfast", text)
             self.assertEqual([], http_server.calls_made(),
                              "the refused call must not reach the server")
         finally:
@@ -247,7 +247,7 @@ class TestTheScannerCarriesTheSessionToo(unittest.TestCase):
     """
 
     def test_a_session_enforcing_server_can_be_probed(self) -> None:
-        from mcp_pin.probe import probe_http
+        from heldfast.probe import probe_http
 
         with http_server.serve() as url:
             result = probe_http(hosted(url), timeout=10)
@@ -257,7 +257,7 @@ class TestTheScannerCarriesTheSessionToo(unittest.TestCase):
         self.assertIn("invoice records", result.instructions)
 
     def test_the_session_is_sent_on_the_calls_after_initialize(self) -> None:
-        from mcp_pin.probe import probe_http
+        from heldfast.probe import probe_http
 
         with http_server.serve() as url:
             probe_http(hosted(url), timeout=10)

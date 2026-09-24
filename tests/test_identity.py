@@ -29,11 +29,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.gateway import Gateway  # noqa: E402
-from mcp_pin.identity import (Identity, MalformedIdentity,  # noqa: E402
+from heldfast.gateway import Gateway  # noqa: E402
+from heldfast.identity import (Identity, MalformedIdentity,  # noqa: E402
                                 UnknownIdentity, all_identities)
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
 
 FAKE = ROOT / "tests" / "fixtures" / "fake_server.py"
 INIT = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -337,7 +337,7 @@ class TestClientInfoIsNotAuthorization(unittest.TestCase):
         env = dict(os.environ)
         env["PYTHONPATH"] = str(ROOT / "src")
         env["MCP_PIN_FIXTURE_MODE"] = "benign"
-        return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
+        return subprocess.run([sys.executable, "-m", "heldfast", *args],
                               cwd=str(self.project), env=env, input=stdin,
                               capture_output=True, text=True, timeout=180)
 
@@ -360,7 +360,7 @@ class TestClientInfoIsNotAuthorization(unittest.TestCase):
         self.assertEqual(2, len(self._tools(["--as", "reader"])))
 
     def test_the_claim_is_recorded_though(self) -> None:
-        from mcp_pin.auditlog import verify
+        from heldfast.auditlog import verify
         trail = self.project / "trail.jsonl"
         self._cli(["gateway", ".", "--no-user-configs", "--log", str(trail)],
                   stdin=INIT + "\n" + LIST + "\n")

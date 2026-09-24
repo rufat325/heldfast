@@ -18,8 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.confusables import mixed_script_words  # noqa: E402
-from mcp_pin.rules.poisoning import SIGNALS, invisible_runs  # noqa: E402
+from heldfast.confusables import mixed_script_words  # noqa: E402
+from heldfast.rules.poisoning import SIGNALS, invisible_runs  # noqa: E402
 
 CONCEALMENT = next(s for s in SIGNALS if s.category == "concealment").pattern
 ZWNJ, ZWJ, SHY = chr(0x200C), chr(0x200D), chr(0x00AD)

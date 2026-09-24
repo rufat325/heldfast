@@ -1,4 +1,4 @@
-"""`mcp-pin verify`, and approve's second witness for hosted servers.
+"""`heldfast verify`, and approve's second witness for hosted servers.
 
 A hosted server has no package: nothing for any scanner to download, and
 what it shows can differ from one client to the next. These hold that what
@@ -23,12 +23,12 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import feedlock, transparency  # noqa: E402
-from mcp_pin.cli import main  # noqa: E402
-from mcp_pin.probe import ProbeResult, _parse_tools  # noqa: E402
+from heldfast import feedlock, transparency  # noqa: E402
+from heldfast.cli import main  # noqa: E402
+from heldfast.probe import ProbeResult, _parse_tools  # noqa: E402
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
-BASE = f"https://raw.githubusercontent.com/rufat325/mcp-pin/{SHA}"
+BASE = f"https://raw.githubusercontent.com/rufat325/heldfast/{SHA}"
 URL = "https://mcp.example.com/mcp"
 NAME = "remote/com.example/mcp"
 
@@ -138,8 +138,8 @@ class Cli(unittest.TestCase):
     def run_cli(self, *argv: str) -> tuple[int, str, str]:
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.object(feedlock, "get_json", self.log), \
-                mock.patch("mcp_pin.cli.probe", self.probe), \
-                mock.patch("mcp_pin.integrity.get_json", return_value=None), \
+                mock.patch("heldfast.cli.probe", self.probe), \
+                mock.patch("heldfast.integrity.get_json", return_value=None), \
                 redirect_stdout(out), redirect_stderr(err):
             code = main([*argv, str(self.dir), "--no-user-configs", "--no-skills"])
         return code, out.getvalue(), err.getvalue()

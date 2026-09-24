@@ -9,7 +9,7 @@ a different question and the one the README makes a promise about:
                 -> the proxy refuses to pass it through
 
 Nothing here imports an internal function. Everything goes through
-`python -m mcp_pin`, with a real config file, a real lockfile, a real server
+`python -m heldfast`, with a real config file, a real lockfile, a real server
 process and this package's own MCP client on the other side -- because a chain
 that only works when called from inside the package is not a chain anybody
 else can use.
@@ -43,7 +43,7 @@ def run(args: list[str], cwd: Path, poisoned: bool = False, **kw) -> subprocess.
     env["MCP_PIN_FIXTURE_MODE"] = "poisoned" if poisoned else "benign"
     env.pop("MCP_PIN_ALLOW_PATH_SCAN", None)
     return subprocess.run(
-        [sys.executable, "-m", "mcp_pin", *args],
+        [sys.executable, "-m", "heldfast", *args],
         cwd=str(cwd), env=env, capture_output=True, text=True, timeout=180, **kw)
 
 
@@ -104,13 +104,13 @@ class TestTheRugPullStory(unittest.TestCase):
         self.assertEqual(EXIT_FINDINGS, gated.returncode)
 
         # 5. The proxy refuses to pass the rewritten tool to a client.
-        from mcp_pin.model import ServerSpec
-        from mcp_pin.probe import probe_stdio
+        from heldfast.model import ServerSpec
+        from heldfast.probe import probe_stdio
 
         spec = ServerSpec(
             name="invoices", source="<test>", client="test", transport="stdio",
             command=sys.executable,
-            args=["-m", "mcp_pin", "guard", "--quiet", "--name", "invoices",
+            args=["-m", "heldfast", "guard", "--quiet", "--name", "invoices",
                   "--lock", str(self.project / ".mcp-pin.lock"),
                   "--", sys.executable, str(FAKE)],
             env={"PYTHONPATH": str(ROOT / "src"), "MCP_PIN_FIXTURE_MODE": "poisoned"},
@@ -120,7 +120,7 @@ class TestTheRugPullStory(unittest.TestCase):
 
         served = {t.name: t.description for t in result.tools}
         self.assertIn("read_invoice", served, "a blocked tool keeps its name")
-        self.assertIn("BLOCKED BY mcp-pin", served["read_invoice"])
+        self.assertIn("BLOCKED BY heldfast", served["read_invoice"])
         self.assertNotIn("id_rsa", served["read_invoice"],
                          "the poisoned text must not reach the client")
 
@@ -166,8 +166,8 @@ class TestThePolicyStory(unittest.TestCase):
     do something outside its boundary."""
 
     def test_an_approved_tool_refused_for_its_arguments(self) -> None:
-        from mcp_pin.guard import Guard
-        from mcp_pin.lockfile import Lock
+        from heldfast.guard import Guard
+        from heldfast.lockfile import Lock
 
         with tempfile.TemporaryDirectory() as td:
             project = Path(td)

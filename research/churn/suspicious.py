@@ -9,7 +9,7 @@ Only what a release *introduced* is reported. A description that has said
 the scanner, not for a study of change -- and counting it here would make
 every release of that server look like a new event.
 
-Every hit is a lead for a human, not a verdict. The signals are mcp-pin's
+Every hit is a lead for a human, not a verdict. The signals are heldfast's
 own, with the confidence it gives them; a URL that appears in a new version
 is usually documentation. The output says which release, which tool, and
 the words that moved, so the claim can be checked in a minute.
@@ -24,8 +24,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "src"))
-from mcp_pin.review import word_diff  # noqa: E402
-from mcp_pin.rules.poisoning import (  # noqa: E402
+from heldfast.review import word_diff  # noqa: E402
+from heldfast.rules.poisoning import (  # noqa: E402
     SENSITIVE_PATHS, _scan_text, invisible_runs)
 
 HERE = os.path.dirname(os.path.abspath(__file__))

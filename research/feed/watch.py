@@ -10,7 +10,7 @@ tools changed, were added or removed, the words that moved, and what
 history of how the servers people actually run behave, which no single scan
 can produce.
 
-The grading is mcp-pin's own (driftgrade.py), run against the full previous
+The grading is heldfast's own (driftgrade.py), run against the full previous
 text rather than a lockfile's preview, so an event marked `review` is one a
 graded pin would refuse even with the complete approved version in hand.
 
@@ -44,7 +44,7 @@ Layout under DIR:
   state/<name>.json              the last version seen and its tool digests
   catalogues/<name>/<version>.json.gz
                                  every catalogue measured, whole, gzipped:
-                                 what `mcp-pin approve --from-feed` pins
+                                 what `heldfast approve --from-feed` pins
   incoming/<label>.jsonl         events from one run, before `fold`
   events/YYYY-MM.jsonl           one line per release that changed something
   index.json                     per server: measured versions and events
@@ -74,9 +74,9 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "research", "churn"))
 
-from mcp_pin.digest import tool_digest  # noqa: E402
-from mcp_pin.driftgrade import introduced, live_text  # noqa: E402
-from mcp_pin.review import word_diff  # noqa: E402
+from heldfast.digest import tool_digest  # noqa: E402
+from heldfast.driftgrade import introduced, live_text  # noqa: E402
+from heldfast.review import word_diff  # noqa: E402
 
 FEED_EVENTS = 200
 README_EVENTS = 60
@@ -135,7 +135,7 @@ def parse_shard(text: str) -> tuple[int, int]:
 
 
 def text_of(raw: dict) -> str:
-    """Everything in a definition the model reads, as mcp-pin grades it."""
+    """Everything in a definition the model reads, as heldfast grades it."""
     return live_text(str(raw.get("description") or ""), str(raw.get("title") or ""),
                      raw.get("annotations") or {}, raw.get("inputSchema") or {},
                      raw.get("outputSchema") or {})
@@ -222,7 +222,7 @@ def write_catalogue(data: str, snap: dict, args: list, measured_at: str,
                     extra: dict | None = None) -> None:
     """The whole catalogue for one version, as `tools/list` returned it.
 
-    This is what `mcp-pin approve --from-feed` pins, so it is the raw wire
+    This is what `heldfast approve --from-feed` pins, so it is the raw wire
     objects, not the digests: the client fingerprints them itself, with the
     same code `--probe` uses, rather than trusting a digest it was handed.
     Gzipped with a fixed mtime, so the same catalogue is the same bytes.
@@ -548,7 +548,7 @@ def measure_remote(url: str, timeout: float = 20.0) -> tuple[list | None, str | 
     """(raw tools, None) or (None, why), over Streamable HTTP. Runs nothing."""
     import http.client
     import urllib.error
-    from mcp_pin.probe import SESSION_HEADER, _initialize_params, _post_jsonrpc, post_rpc
+    from heldfast.probe import SESSION_HEADER, _initialize_params, _post_jsonrpc, post_rpc
     try:
         init, headers = post_rpc(url, {}, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
                                            "params": _initialize_params()}, timeout)
@@ -631,7 +631,7 @@ def flagged(event: dict) -> list:
 def index(data: str, events: list) -> dict:
     """Every measured version and every event, per server, in one small file.
 
-    What `mcp-pin updates` reads: which releases the feed has a catalogue
+    What `heldfast updates` reads: which releases the feed has a catalogue
     for, and what each one changed, without fetching the catalogues to find
     out. Sizes and counts only -- the catalogues and events carry the text.
     """
@@ -644,7 +644,7 @@ def index(data: str, events: list) -> dict:
             body = read_gz(os.path.join(folder, pkg_dir, name))
             entry = out.setdefault(body["package"], {"versions": [], "events": []})
             # A hosted server's URL, so a client can find its record from the
-            # address in its config (mcp_pin/transparency.py).
+            # address in its config (heldfast/transparency.py).
             if isinstance(body.get("url"), str):
                 entry["url"] = body["url"]
             entry["versions"].append({"version": body["version"],
@@ -678,7 +678,7 @@ def lookup_buckets(data: str) -> dict[str, dict]:
     many servers. Nothing in it changes day to day unless a new definition or
     a new server appears, so a quiet day rewrites no bucket.
     """
-    from mcp_pin.probe import _parse_tools
+    from heldfast.probe import _parse_tools
 
     seen: dict[str, dict] = {}
     folder = os.path.join(data, "catalogues")
@@ -751,10 +751,10 @@ def _link(e: dict) -> str:
 def atom(events: list, generated: str) -> str:
     out = ['<?xml version="1.0" encoding="utf-8"?>',
            '<feed xmlns="http://www.w3.org/2005/Atom">',
-           "  <title>mcp-pin: MCP server tool changes</title>",
-           "  <id>tag:github.com,2026:rufat325/mcp-pin/feed</id>",
+           "  <title>heldfast: MCP server tool changes</title>",
+           "  <id>tag:github.com,2026:rufat325/heldfast/feed</id>",
            f"  <updated>{_x(generated)}</updated>",
-           '  <link href="https://github.com/rufat325/mcp-pin/tree/feed"/>']
+           '  <link href="https://github.com/rufat325/heldfast/tree/feed"/>']
     for e in events:
         title = f"{e['package']} {e['from']} -> {e['to']}: {summary(e)}"
         if e["grade"] == "review":
@@ -765,7 +765,7 @@ def atom(events: list, generated: str) -> str:
         lines += [f"removed {r}" for r in e["removed"]]
         lines += [f"introduced -- {f}" for f in flagged(e)]
         out += ["  <entry>",
-                f"    <id>tag:github.com,2026:rufat325/mcp-pin/feed/{_x(e['package'])}@{_x(e['to'])}</id>",
+                f"    <id>tag:github.com,2026:rufat325/heldfast/feed/{_x(e['package'])}@{_x(e['to'])}</id>",
                 f"    <title>{_x(title)}</title>",
                 f"    <updated>{_x(e['published'] or e['observed_at'])}</updated>",
                 f'    <link href="{_x(_link(e))}"/>',
@@ -792,8 +792,8 @@ def readme(events: list, generated: str, data: str) -> str:
         f"({len(daily)} daily, the rest weekly) and {len(hosted)} hosted endpoints (daily).", "",
         f"{len(events)} releases that changed a tool definition "
         f"({len(live)} observed live, {len(events) - len(live)} from the "
-        f"[churn study](https://github.com/rufat325/mcp-pin/blob/main/docs/CHURN.md)); "
-        f"{len(review)} where `mcp-pin wrap --drift graded` would refuse something.", "",
+        f"[churn study](https://github.com/rufat325/heldfast/blob/main/docs/CHURN.md)); "
+        f"{len(review)} where `heldfast wrap --drift graded` would refuse something.", "",
         "Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, "
         "with the words that moved: [events/](events).", "",
         "`quiet`: a graded pin forwards every changed tool (new tools still need "

@@ -1,6 +1,6 @@
 # Privacy
 
-mcp-pin is a tool you run. It has no service behind it, no accounts, no
+heldfast is a tool you run. It has no service behind it, no accounts, no
 telemetry and no analytics. Nothing is sent to the maintainer, ever. What it
 reads stays on your machine, and the files it writes -- the lockfile, reports,
 audit logs -- are written where you tell it to and nowhere else.
@@ -19,24 +19,24 @@ places named. Each is a consequence of a command or flag you chose.
 
 `--safe` opens no connection at all, and says which guarantee that cost.
 
-**The MCP server** (`mcp-pin serve`) opens no connection and starts no
+**The MCP server** (`heldfast serve`) opens no connection and starts no
 process; every tool it exposes is read-only, and a test fails if one reaches
 the network. Path scanning is off unless `MCP_PIN_ALLOW_PATH_SCAN` is set.
 
 **The Claude Code plugin** runs on your machine. It reads `.mcp-pin.lock`, and
-with `MCP_PIN_DRIFT=graded` it runs the `mcp-pin` you installed. It sends
+with `MCP_PIN_DRIFT=graded` it runs the `heldfast` you installed. It sends
 nothing anywhere.
 
 **Secrets.** Findings pass through a redaction step before any report or tool
 result is written, so a credential seen during analysis is not repeated back.
-Servers launched by `--probe` and `wrap` do not receive mcp-pin's own
+Servers launched by `--probe` and `wrap` do not receive heldfast's own
 environment variables, and `--isolate-env` withholds yours too.
 
 **The drift feed** (`.github/workflows/feed.yml`, published on the `feed`
 branch) runs on GitHub, not on your machine. It measures public npm packages
 listed in the public MCP registry and publishes what their tools say. It holds
-no information about anyone who uses mcp-pin.
+no information about anyone who uses heldfast.
 
 Questions: open an issue on
-[github.com/rufat325/mcp-pin](https://github.com/rufat325/mcp-pin/issues).
+[github.com/rufat325/heldfast](https://github.com/rufat325/heldfast/issues).
 Anything sensitive: [SECURITY.md](SECURITY.md) describes the private route.

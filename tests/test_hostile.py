@@ -25,9 +25,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import lifetime  # noqa: E402
-from mcp_pin.model import ServerSpec  # noqa: E402
-from mcp_pin.probe import probe_stdio  # noqa: E402
+from heldfast import lifetime  # noqa: E402
+from heldfast.model import ServerSpec  # noqa: E402
+from heldfast.probe import probe_stdio  # noqa: E402
 
 HOSTILE = ROOT / "tests" / "fixtures" / "hostile_server.py"
 
@@ -35,7 +35,7 @@ HOSTILE = ROOT / "tests" / "fixtures" / "hostile_server.py"
 def probe(mode: str, *, through_guard: bool = False, timeout: float = 20.0):
     env = {"MCP_PIN_HOSTILE": mode, "PYTHONPATH": str(ROOT / "src")}
     if through_guard:
-        args = ["-m", "mcp_pin", "guard", "--quiet", "--name", "h", "--",
+        args = ["-m", "heldfast", "guard", "--quiet", "--name", "h", "--",
                 sys.executable, str(HOSTILE)]
     else:
         args = [str(HOSTILE)]
@@ -198,7 +198,7 @@ class TestChildLifetime(unittest.TestCase):
     def test_the_probe_binds_the_child_the_same_way(self) -> None:
         """`--probe` launches code nobody has reviewed. Orphaning it is
         the same bug the guard already paid for."""
-        src = (ROOT / "src" / "mcp_pin" / "probe.py").read_text(encoding="utf-8")
+        src = (ROOT / "src" / "heldfast" / "probe.py").read_text(encoding="utf-8")
         self.assertIn("preexec_fn=posix_preexec()", src)
         self.assertIn("bind_child(proc)", src)
 
@@ -215,7 +215,7 @@ class TestChildLifetime(unittest.TestCase):
                        MCP_PIN_HOSTILE_PIDFILE=str(pidfile),
                        PYTHONPATH=str(ROOT / "src"))
             guard = subprocess.Popen(
-                [sys.executable, "-m", "mcp_pin", "guard", "--quiet", "--name", "h", "--",
+                [sys.executable, "-m", "heldfast", "guard", "--quiet", "--name", "h", "--",
                  sys.executable, str(HOSTILE)],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, cwd=str(ROOT), env=env)
             try:

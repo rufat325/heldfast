@@ -17,15 +17,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.childenv import OWN, build  # noqa: E402
-from mcp_pin.guard import Guard, _child_env  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec  # noqa: E402
-from mcp_pin.parsers import parse_config  # noqa: E402
-from mcp_pin.resultscreen import RS_EXFIL, classify  # noqa: E402
-from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
+from heldfast.childenv import OWN, build  # noqa: E402
+from heldfast.guard import Guard, _child_env  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec  # noqa: E402
+from heldfast.parsers import parse_config  # noqa: E402
+from heldfast.resultscreen import RS_EXFIL, classify  # noqa: E402
+from heldfast.rules import AuditContext, run_rules  # noqa: E402
 
-PLUGIN = ROOT / "plugin" / "mcp-pin" / "scripts"
+PLUGIN = ROOT / "plugin" / "heldfast" / "scripts"
 
 
 def _denies(guard: Guard, tool: str) -> bool:

@@ -14,8 +14,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 LIMIT = 60
 TARGETS = (
-    ROOT / "src" / "mcp_pin" / "cli.py",
-    ROOT / "src" / "mcp_pin" / "guard.py",
+    ROOT / "src" / "heldfast" / "cli.py",
+    ROOT / "src" / "heldfast" / "guard.py",
 )
 
 

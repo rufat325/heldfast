@@ -38,7 +38,7 @@ from concurrent.futures import ThreadPoolExecutor
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "src"))
-from mcp_pin.digest import tool_digest  # noqa: E402
+from heldfast.digest import tool_digest  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
@@ -50,7 +50,7 @@ OFFICIAL = [
     "@modelcontextprotocol/server-sequential-thinking",
 ]
 
-PLACEHOLDER = "mcp-pin-churn-placeholder"
+PLACEHOLDER = "heldfast-churn-placeholder"
 UNSTABLE = re.compile(r"(alpha|beta|rc|next|canary|dev|pre|snapshot)", re.I)
 POSIX = os.name == "posix"
 
@@ -58,7 +58,7 @@ POSIX = os.name == "posix"
 def registry_meta(package):
     import urllib.request
     url = "https://registry.npmjs.org/" + package.replace("/", "%2F")
-    req = urllib.request.Request(url, headers={"User-Agent": "mcp-pin-churn"})
+    req = urllib.request.Request(url, headers={"User-Agent": "heldfast-churn"})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             # Bytes, then utf-8: a large registry document contains bytes a
@@ -90,7 +90,7 @@ def child_env(workdir, required):
         "USERPROFILE": workdir,
         "TMPDIR": workdir, "TEMP": workdir, "TMP": workdir,
         "npm_config_cache": os.environ.get("npm_config_cache")
-        or os.path.join(tempfile.gettempdir(), "mcp-pin-churn-npm"),
+        or os.path.join(tempfile.gettempdir(), "heldfast-churn-npm"),
         "npm_config_update_notifier": "false",
         "npm_config_fund": "false",
         "npm_config_audit": "false",
@@ -192,7 +192,7 @@ def catalogue(package, version, argv_tail, required, boot_timeout=240):
 
     send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
         "protocolVersion": "2025-06-18", "capabilities": {},
-        "clientInfo": {"name": "mcp-pin-churn", "version": "2"}}})
+        "clientInfo": {"name": "heldfast-churn", "version": "2"}}})
     t0 = time.time()
     while "init" not in got and p.poll() is None and time.time() - t0 < boot_timeout:
         time.sleep(0.1)

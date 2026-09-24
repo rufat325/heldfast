@@ -186,9 +186,9 @@ def main() -> int:
     src = HERE.parent.parent / "src"
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
-    from mcp_pin.discovery import discover_config_files
-    from mcp_pin.lockfile import Lock
-    from mcp_pin.parsers import parse_config
+    from heldfast.discovery import discover_config_files
+    from heldfast.lockfile import Lock
+    from heldfast.parsers import parse_config
     servers = []
     for cfg, client in discover_config_files([CLEAN], scan_user=False):
         parsed, _ = parse_config(cfg, client)

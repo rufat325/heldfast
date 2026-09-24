@@ -24,14 +24,14 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from fake_advisories import FakeEcosystem  # noqa: E402
-from mcp_pin import feedlock  # noqa: E402
-from mcp_pin.cli import main  # noqa: E402
-from mcp_pin.guard import Guard  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec  # noqa: E402
+from heldfast import feedlock  # noqa: E402
+from heldfast.cli import main  # noqa: E402
+from heldfast.guard import Guard  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec  # noqa: E402
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
-BASE = f"https://raw.githubusercontent.com/rufat325/mcp-pin/{SHA}"
+BASE = f"https://raw.githubusercontent.com/rufat325/heldfast/{SHA}"
 READ = {"name": "read_file", "description": "Read a file from disk.",
         "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}}
 
@@ -87,7 +87,7 @@ class TestLookup(unittest.TestCase):
         with mock.patch.object(feedlock, "get_json", fake):
             feed = feedlock.resolve()
         self.assertEqual(BASE, feed.base)
-        self.assertEqual(f"rufat325/mcp-pin@{SHA}", feed.source)
+        self.assertEqual(f"rufat325/heldfast@{SHA}", feed.source)
 
     def test_a_branch_that_does_not_resolve_is_an_error(self) -> None:
         with mock.patch.object(feedlock, "get_json", FakeFeed(sha="main")):
@@ -143,7 +143,7 @@ class TestApprove(unittest.TestCase):
     def _approve(self, *extra: str) -> tuple[int, str]:
         err = io.StringIO()
         with mock.patch.object(feedlock, "get_json", self.fake), \
-                mock.patch("mcp_pin.integrity.get_json", return_value=None), \
+                mock.patch("heldfast.integrity.get_json", return_value=None), \
                 self.eco.active(), redirect_stdout(io.StringIO()), redirect_stderr(err):
             code = main(["approve", "--from-feed", *extra, str(self.dir),
                          "--no-user-configs", "--no-skills"])
@@ -157,7 +157,7 @@ class TestApprove(unittest.TestCase):
         self.assertEqual(0, code, err)
         entries = {v["name"]: v for v in self._lock().values()}
         self.assertEqual(["read_file"], list(entries["files"]["tools"]))
-        self.assertIn(f"rufat325/mcp-pin@{SHA}", entries["files"]["probe"])
+        self.assertIn(f"rufat325/heldfast@{SHA}", entries["files"]["probe"])
         self.assertIn("pkg@1.0.0", entries["files"]["probe"])
         self.assertNotIn("tools", entries["floating"])
         self.assertNotIn("tools", entries["local"])

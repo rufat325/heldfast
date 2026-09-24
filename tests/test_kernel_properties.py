@@ -18,9 +18,9 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.discovery import _strip_jsonc, load_jsonc  # noqa: E402
-from mcp_pin.model import ToolSpec  # noqa: E402
-from mcp_pin.policy import Policy  # noqa: E402
+from heldfast.discovery import _strip_jsonc, load_jsonc  # noqa: E402
+from heldfast.model import ToolSpec  # noqa: E402
+from heldfast.policy import Policy  # noqa: E402
 
 
 class TestPolicyUnknownKeys(unittest.TestCase):

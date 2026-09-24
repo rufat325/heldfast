@@ -10,7 +10,7 @@ servers it read as an anonymous client -- about 120,000 distinct definitions.
 It publishes all of them as static files, bucketed so that a client can look
 a tool up without telling anyone which tool it has.
 
-`mcp-pin verify` does this for every tool in your lockfile. This page is the
+`heldfast verify` does this for every tool in your lockfile. This page is the
 protocol, for any other client to do the same.
 
 ## What an answer means
@@ -31,7 +31,7 @@ whether you are looking at the same thing as everyone else.
    write `.mcp-pin.lock` have it on disk.
 2. **Take the first three hex characters.** That names one of 4,096 buckets.
 3. **Fetch the bucket:**
-   `https://raw.githubusercontent.com/rufat325/mcp-pin/<commit>/lookup/<abc>.json`,
+   `https://raw.githubusercontent.com/rufat325/heldfast/<commit>/lookup/<abc>.json`,
    where `<commit>` is the `feed` branch resolved to a commit (or `feed` itself,
    if you do not need to record which state of the log you read).
 4. **Search it locally.** The file is
@@ -52,7 +52,7 @@ could log more than GitHub already does for any file you fetch.
 ```python
 import json, urllib.request
 
-LOG = "https://raw.githubusercontent.com/rufat325/mcp-pin/feed/lookup"
+LOG = "https://raw.githubusercontent.com/rufat325/heldfast/feed/lookup"
 
 def seen(fingerprint: str) -> dict | None:
     """What the public log says about one tool fingerprint, or None."""

@@ -1,4 +1,4 @@
-"""OSV and the npm registry, as `mcp_pin.advisories` sees them, without a network.
+"""OSV and the npm registry, as `heldfast.advisories` sees them, without a network.
 
 Every version asked about exists, was published long ago, runs no install
 script and has no advisory, unless a test says otherwise.
@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 from unittest import mock
 
-from mcp_pin import advisories
+from heldfast import advisories
 
 LONG_AGO = "2020-01-01T00:00:00.000Z"
 

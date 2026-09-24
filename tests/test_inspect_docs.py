@@ -14,10 +14,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import clients, inspect as inspect_mod, rule_docs  # noqa: E402
-from mcp_pin.model import ServerSpec, SkillSpec, ToolSpec  # noqa: E402
-from mcp_pin.parsers import normalize_tool_grants, parse_config  # noqa: E402
-from mcp_pin.rules import all_rules  # noqa: E402
+from heldfast import clients, inspect as inspect_mod, rule_docs  # noqa: E402
+from heldfast.model import ServerSpec, SkillSpec, ToolSpec  # noqa: E402
+from heldfast.parsers import normalize_tool_grants, parse_config  # noqa: E402
+from heldfast.rules import all_rules  # noqa: E402
 
 
 class TestClientRegistry(unittest.TestCase):
@@ -156,7 +156,7 @@ class TestRuleDocs(unittest.TestCase):
         self.assertEqual(
             expected, actual,
             "docs/rules.md is stale; regenerate with "
-            "`mcp-pin rules --markdown -o docs/rules.md`",
+            "`heldfast rules --markdown -o docs/rules.md`",
         )
 
     def test_every_rule_appears_in_the_markdown(self) -> None:
@@ -197,8 +197,8 @@ class TestRuleDocs(unittest.TestCase):
     def test_the_action_example_is_not_floating_main(self) -> None:
         """@main is whoever pushed last."""
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertNotIn("mcp-pin@main", readme)
-        self.assertRegex(readme, r"mcp-pin@[0-9a-f]{40}")
+        self.assertNotIn("heldfast@main", readme)
+        self.assertRegex(readme, r"heldfast@[0-9a-f]{40}")
 
     def test_the_first_screen_does_not_tell_you_to_probe_first(self) -> None:
         """Download, probe on the laptop, now trusted -- that is the
@@ -250,14 +250,14 @@ class TestTheUsageBlockIsTrue(unittest.TestCase):
 
     def _parser(self):
         sys.path.insert(0, str(ROOT / "src"))
-        from mcp_pin.cli import build_parser
+        from heldfast.cli import build_parser
         return build_parser()
 
     def test_every_command_it_names_exists(self) -> None:
         commands = set()
         for line in self._usage_block().splitlines():
             line = line.split("#", 1)[0].strip()
-            if not line.startswith("mcp-pin"):
+            if not line.startswith("heldfast"):
                 continue
             rest = line.split()[1:]
             if rest and not rest[0].startswith("-"):
@@ -276,7 +276,7 @@ class TestTheUsageBlockIsTrue(unittest.TestCase):
         parser = self._parser()
         for line in self._usage_block().splitlines():
             line = line.split("#", 1)[0].strip()
-            if not line.startswith("mcp-pin ") or " -- " in line:
+            if not line.startswith("heldfast ") or " -- " in line:
                 continue
             argv = line.split()[1:]
             if not argv:
@@ -294,14 +294,14 @@ class TestTheUsageBlockIsTrue(unittest.TestCase):
         block = self._manual_usage()
         for command in sorted(self._parser().mcp_commands):
             with self.subTest(command=command):
-                self.assertIn(f"mcp-pin {command}", block,
+                self.assertIn(f"heldfast {command}", block,
                               f"`{command}` is not in the MANUAL usage block")
 
 
 class TestNewCommands(unittest.TestCase):
     def _run(self, *args: str) -> subprocess.CompletedProcess:
         env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), NO_COLOR="1")
-        return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
+        return subprocess.run([sys.executable, "-m", "heldfast", *args],
                               capture_output=True, text=True, env=env, cwd=str(ROOT))
 
     def test_explain_known_rule(self) -> None:
@@ -431,7 +431,7 @@ class TestNothingCarriesThisMachinesPaths(unittest.TestCase):
         nix = "/" + "home/"
         for text in (f'"{win}<you>/AppData/Roaming/Claude"',
                      f'"{nix}me/project/server.js"',
-                     f'"{nix}runner/work/mcp-pin"',
+                     f'"{nix}runner/work/heldfast"',
                      f'"{win}username/AppData/Local"',
                      'argv = ["node", "server.js"]',
                      'path = Path.home() / ".npm"',
@@ -535,5 +535,5 @@ class TestTheReadmeMatchesTheCode(unittest.TestCase):
                 self.assertIn(f"| {c.id} |", table)
         self.assertIn(clients.CLIENTS_VERIFIED, table)
 
-    def test_the_readme_names_the_other_mcp_pin(self) -> None:
+    def test_the_readme_names_the_other_heldfast(self) -> None:
         self.assertIn("GautamTalksDev/mcp-pin", self._readme())

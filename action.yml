@@ -1,4 +1,4 @@
-name: "mcp-pin"
+name: "heldfast"
 description: "Scan MCP server configurations and agent skills for security issues"
 author: "rufat325"
 branding:
@@ -21,7 +21,7 @@ inputs:
   output:
     description: "Path for the report file"
     required: false
-    default: "mcp-pin.sarif"
+    default: "heldfast.sarif"
   probe:
     description: >-
       Connect to servers and read live tool descriptions. This LAUNCHES local
@@ -61,7 +61,7 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install mcp-pin
+    - name: Install heldfast
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -95,13 +95,13 @@ runs:
           common+=(--no-user-configs)
         fi
 
-        summary="$RUNNER_TEMP/mcp-pin-summary.json"
-        mcp-pin "${common[@]}" --format json --output "$summary" --fail-on never
+        summary="$RUNNER_TEMP/heldfast-summary.json"
+        heldfast "${common[@]}" --format json --output "$summary" --fail-on never
 
         if [ "$IN_FORMAT" = "json" ]; then
           cp "$summary" "$IN_OUTPUT"
         else
-          mcp-pin "${common[@]}" --format "$IN_FORMAT" --output "$IN_OUTPUT" --fail-on never
+          heldfast "${common[@]}" --format "$IN_FORMAT" --output "$IN_OUTPUT" --fail-on never
         fi
 
         total=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['summary']['total'])" "$summary")
@@ -115,10 +115,10 @@ runs:
 
         # Print the findings into the log. A report written only to a file is
         # a report nobody reads.
-        mcp-pin "${common[@]}" --format text --fail-on never --no-color || true
+        heldfast "${common[@]}" --format text --fail-on never --no-color || true
 
         {
-          echo "### mcp-pin"
+          echo "### heldfast"
           echo ""
           echo "\`$total\` finding(s), highest severity: \`$highest\`"
         } >> "$GITHUB_STEP_SUMMARY"
@@ -128,7 +128,7 @@ runs:
       uses: github/codeql-action/upload-sarif@fca7ace96b7d713c7035871441bd52efbe39e27e # v3.28.19
       with:
         sarif_file: ${{ inputs.output }}
-        category: mcp-pin
+        category: heldfast
 
     - name: Enforce threshold
       if: ${{ inputs.fail-on != 'never' }}
@@ -149,12 +149,12 @@ runs:
         highest = os.environ["HIGHEST"]
         total = int(os.environ["FINDINGS"] or 0)
         if total == 0 or highest == "none":
-            print("mcp-pin: no findings")
+            print("heldfast: no findings")
             sys.exit(0)
         if order.index(highest) >= order.index(threshold):
-            print(f"mcp-pin: {total} finding(s); highest '{highest}' "
+            print(f"heldfast: {total} finding(s); highest '{highest}' "
                   f"meets or exceeds the '{threshold}' threshold")
             sys.exit(1)
-        print(f"mcp-pin: {total} finding(s); highest '{highest}' is below "
+        print(f"heldfast: {total} finding(s); highest '{highest}' is below "
               f"the '{threshold}' threshold")
         EOF

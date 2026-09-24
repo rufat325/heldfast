@@ -8,7 +8,7 @@
 #       runs-on: ubuntu-latest
 #       steps:
 #         - uses: actions/checkout@<sha>
-#         - uses: rufat325/mcp-pin/updates@<sha>
+#         - uses: rufat325/heldfast/updates@<sha>
 #
 # For each server pinned to an exact npm version, it asks the drift feed what
 # newer releases changed, and OSV and the npm registry what is known about
@@ -19,10 +19,10 @@
 # listed in one issue; nothing is applied for them. If a pinned release is
 # itself reported as malware, the issue says so first and the job fails.
 #
-# mcp-pin is installed from this action's own commit, so pinning the action
+# heldfast is installed from this action's own commit, so pinning the action
 # to a SHA pins the code that runs. Inputs reach the shell as environment
 # variables, never as text pasted into a script.
-name: mcp-pin updates
+name: heldfast updates
 description: Open a pull request for quiet MCP server updates, and an issue for the ones to review.
 author: rufat325
 branding:
@@ -47,7 +47,7 @@ inputs:
     default: "true"
   branch:
     description: Branch the pull request is pushed to
-    default: mcp-pin/updates
+    default: heldfast/updates
   token:
     description: Token for pushing the branch and opening the PR and issue
     default: ${{ github.token }}
@@ -79,7 +79,7 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Install mcp-pin from this action's commit
+    - name: Install heldfast from this action's commit
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -96,10 +96,10 @@ runs:
         # Exit 1 means a pinned release is reported as malware. That is
         # reported below and fails the job at the end, after the issue is open.
         rc=0
-        mcp-pin updates "$TARGET" --no-user-configs --no-skills --min-age "$MIN_AGE" \
+        heldfast updates "$TARGET" --no-user-configs --no-skills --min-age "$MIN_AGE" \
           --format json > "$RUNNER_TEMP/updates.json" || rc=$?
         if [ "$rc" -gt 1 ]; then exit "$rc"; fi
-        mcp-pin updates "$TARGET" --no-user-configs --no-skills --min-age "$MIN_AGE" \
+        heldfast updates "$TARGET" --no-user-configs --no-skills --min-age "$MIN_AGE" \
           > "$RUNNER_TEMP/updates.txt" || true
         python - "$RUNNER_TEMP/updates.json" >> "$GITHUB_OUTPUT" <<'PY'
         import json, sys
@@ -110,7 +110,7 @@ runs:
         print(f"attention={sum(s['grade'] in ('review', 'blocked') or bool(s.get('alarm')) for s in servers)}")
         PY
         {
-          echo '## mcp-pin updates'
+          echo '## heldfast updates'
           echo '```'
           cat "$RUNNER_TEMP/updates.txt"
           echo '```'
@@ -124,7 +124,7 @@ runs:
         MIN_AGE: ${{ inputs.min-age }}
       run: |
         rc=0
-        mcp-pin updates --apply "$TARGET" --no-user-configs --no-skills --min-age "$MIN_AGE" || rc=$?
+        heldfast updates --apply "$TARGET" --no-user-configs --no-skills --min-age "$MIN_AGE" || rc=$?
         if [ "$rc" -gt 1 ]; then exit "$rc"; fi
 
     - name: Open or update the pull request
@@ -147,11 +147,11 @@ runs:
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git checkout -B "$BRANCH"
         git commit -q -m "Bump MCP servers with quiet tool changes" \
-                      -m "Applied by mcp-pin updates --apply: each change is one approve --yes would write."
+                      -m "Applied by heldfast updates --apply: each change is one approve --yes would write."
         git push --force origin "$BRANCH"
         {
-          echo 'Servers pinned to an exact version whose newer release the [drift feed](https://github.com/rufat325/mcp-pin/tree/feed) has measured.'
-          echo 'Each change here is **quiet**: no tool change is critical (one `mcp-pin approve --yes` would write), no advisory in OSV names the release, it adds no install script, and it has been published long enough for a malicious release to have been reported. Nobody has read its code. Updates that need review are not in this PR.'
+          echo 'Servers pinned to an exact version whose newer release the [drift feed](https://github.com/rufat325/heldfast/tree/feed) has measured.'
+          echo 'Each change here is **quiet**: no tool change is critical (one `heldfast approve --yes` would write), no advisory in OSV names the release, it adds no install script, and it has been published long enough for a malicious release to have been reported. Nobody has read its code. Updates that need review are not in this PR.'
           echo
           echo '```'
           cat "$RUNNER_TEMP/updates.txt"
@@ -160,7 +160,7 @@ runs:
         if url=$(gh pr view "$BRANCH" --json url --jq .url 2>/dev/null); then
           gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/body.md" >/dev/null
         else
-          url=$(gh pr create --head "$BRANCH" --title "mcp-pin: quiet MCP server updates" \
+          url=$(gh pr create --head "$BRANCH" --title "heldfast: quiet MCP server updates" \
                              --body-file "$RUNNER_TEMP/body.md")
         fi
         echo "url=$url" >> "$GITHUB_OUTPUT"
@@ -173,7 +173,7 @@ runs:
         MALWARE: ${{ steps.check.outputs.malware }}
       run: |
         set -euo pipefail
-        title="mcp-pin: MCP server updates to review"
+        title="heldfast: MCP server updates to review"
         {
           if [ "$MALWARE" != "0" ]; then
             echo '> [!CAUTION]'
@@ -181,7 +181,7 @@ runs:
             echo
           fi
           echo 'These pinned servers need a person: a newer release changes a tool in a way `approve --yes` would not write, an advisory names it, it adds an install script, or every newer release was reported as malware or pulled.'
-          echo 'Read what is named below. To take a release, bump the version and run `mcp-pin approve --from-feed`, which prints the diff and asks for `--yes-tool NAME` where a change is critical.'
+          echo 'Read what is named below. To take a release, bump the version and run `heldfast approve --from-feed`, which prints the diff and asks for `--yes-tool NAME` where a change is critical.'
           echo
           echo '```'
           cat "$RUNNER_TEMP/updates.txt"

@@ -27,8 +27,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_pin.rules import AuditContext, run_rules  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast.rules import AuditContext, run_rules  # noqa: E402
 
 # Verbatim from the official MCP servers repository, the Python SDK and
 # FastMCP. Nothing here is invented, which is the point.
@@ -186,13 +186,13 @@ class TestFoldingCostsNoPrecision(unittest.TestCase):
     """
 
     def test_the_fold_is_the_identity_on_every_real_description(self) -> None:
-        from mcp_pin.confusables import fold
+        from heldfast.confusables import fold
         for name, text in REAL_DESCRIPTIONS:
             with self.subTest(tool=name):
                 self.assertEqual(text, fold(text))
 
     def test_the_fold_is_the_identity_on_ascii_generally(self) -> None:
-        from mcp_pin.confusables import fold
+        from heldfast.confusables import fold
         for text in ("", "Read a file.", "a" * 500, "!@#$%^&*()_+-=[]{}|;':\",./<>?",
                      "Ignore all previous instructions", "0123456789"):
             with self.subTest(text=text[:20]):
@@ -259,7 +259,7 @@ class TestSkillBodiesDocumentSetup(unittest.TestCase):
     """
 
     def _skill(self, body: str):
-        from mcp_pin.model import SkillSpec
+        from heldfast.model import SkillSpec
         spec = SkillSpec(name="setup", path="/p/SKILL.md", frontmatter={}, body=body)
         return [f for f in run_rules(AuditContext(skills=[spec]))
                 if f.rule_id == "MCPA012"]

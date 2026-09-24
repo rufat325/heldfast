@@ -13,9 +13,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.lockfile import Lock, launch_mismatch  # noqa: E402
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
-from mcp_pin.review import acknowledged, changes, grade, render, word_diff  # noqa: E402
+from heldfast.lockfile import Lock, launch_mismatch  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast.review import acknowledged, changes, grade, render, word_diff  # noqa: E402
 
 FAKE = ROOT / "tests" / "fixtures" / "fake_server.py"
 
@@ -25,7 +25,7 @@ def _run(*args: str, cwd: Path, env: dict | None = None) -> subprocess.Completed
     if env:
         merged.update(env)
     return subprocess.run(
-        [sys.executable, "-m", "mcp_pin", *args],
+        [sys.executable, "-m", "heldfast", *args],
         cwd=str(cwd), capture_output=True, text=True, env=merged,
     )
 
@@ -229,7 +229,7 @@ class TestGuardBindsTheLaunch(unittest.TestCase):
             lock.save(root / ".mcp-pin.lock")
             from io import StringIO
             from contextlib import redirect_stderr
-            from mcp_pin.guard import run
+            from heldfast.guard import run
             buf = StringIO()
             with redirect_stderr(buf):
                 code = run(

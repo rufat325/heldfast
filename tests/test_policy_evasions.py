@@ -35,7 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.policy import Policy  # noqa: E402
+from heldfast.policy import Policy  # noqa: E402
 
 
 def allows(rules: dict, tool: str, arguments) -> bool:

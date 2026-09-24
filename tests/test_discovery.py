@@ -1,6 +1,6 @@
 """What the filesystem walk finds, and what it refuses to spend time on.
 
-`mcp-pin` with no arguments scans the current directory. The README's first
+`heldfast` with no arguments scans the current directory. The README's first
 command is exactly that, so the walk runs in whatever directory the reader
 happens to be in -- quite often their home directory.
 
@@ -27,7 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin.discovery import _SKIP_DIRS, discover_config_files  # noqa: E402
+from heldfast.discovery import _SKIP_DIRS, discover_config_files  # noqa: E402
 
 CONFIG = '{"mcpServers": {"x": {"command": "node", "args": ["s.js"]}}}'
 
@@ -103,7 +103,7 @@ class TestWhatItRefusesToWalk(unittest.TestCase):
             self.assertEqual("keep", found[0][0].parent.name)
 
     def test_a_pruned_name_is_still_scanned_when_named_directly(self) -> None:
-        """Only directories *below* a root are pruned. Pointing mcp-pin at
+        """Only directories *below* a root are pruned. Pointing heldfast at
         one has to keep working, or you could never scan inside AppData."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td) / "AppData"

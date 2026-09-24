@@ -16,10 +16,10 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import guard as guard_mod  # noqa: E402
-from mcp_pin.guard import Guard  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ToolSpec  # noqa: E402
+from heldfast import guard as guard_mod  # noqa: E402
+from heldfast.guard import Guard  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ToolSpec  # noqa: E402
 
 TOOL = {"name": "read_text_file", "description": "Read a file.",
         "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}}
@@ -42,7 +42,7 @@ def _call(name: str = "read_text_file") -> dict:
 class TestTheRunnerIsResolvedBeforeSpawning(unittest.TestCase):
     """`npx` on Windows is `npx.cmd`, and CreateProcess cannot run a batch file.
 
-    `mcp-pin wrap -- npx -y @scope/server@1.2.3` is the command the README
+    `heldfast wrap -- npx -y @scope/server@1.2.3` is the command the README
     leads with and the `.mcp.json` snippet beside it, and it died with
     "cannot launch 'npx'". `gateway` and `probe` both resolve through
     `shutil.which` first; the guard was the one launch path that did not. The
@@ -71,7 +71,7 @@ class TestTheRunnerIsResolvedBeforeSpawning(unittest.TestCase):
     def test_the_pin_still_compares_the_tokens_the_operator_wrote(self) -> None:
         """Resolution happens at spawn and not a line earlier. `launch_mismatch`
         has to see `npx`, or every pinned command would mismatch itself."""
-        from mcp_pin.lockfile import launch_mismatch
+        from heldfast.lockfile import launch_mismatch
         approved = "npx -y @scope/server@1.2.3"
         self.assertIsNone(launch_mismatch(
             approved, ["npx", "-y", "@scope/server@1.2.3"]))

@@ -26,12 +26,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import inspect as inspect_mod  # noqa: E402
-from mcp_pin.discovery import _strip_jsonc, find_key_line  # noqa: E402
-from mcp_pin.findings import redact  # noqa: E402
-from mcp_pin.guard import Guard  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast import inspect as inspect_mod  # noqa: E402
+from heldfast.discovery import _strip_jsonc, find_key_line  # noqa: E402
+from heldfast.findings import redact  # noqa: E402
+from heldfast.guard import Guard  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
 
 BS = chr(92)
 
@@ -145,7 +145,7 @@ class TestTheGuardAgainstAHostileServer(unittest.TestCase):
         message = {"jsonrpc": "2.0", "id": 1, "result": {"tools": [{"name": "read"}]}}
         returned = guard.handle_server_message(dict(message))
         self.assertTrue(returned["result"]["isError"])
-        self.assertIn("WITHHELD BY mcp-pin", returned["result"]["content"][0]["text"])
+        self.assertIn("WITHHELD BY heldfast", returned["result"]["content"][0]["text"])
         self.assertTrue(guard.stats.internal_errors)
 
     def test_fail_open_still_forwards_the_uninspected_payload(self) -> None:

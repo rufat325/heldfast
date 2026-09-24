@@ -21,10 +21,10 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests" / "fixtures"))
 
 from fake_server import BENIGN_TOOLS, POISONED_TOOLS  # noqa: E402
-from mcp_pin.gateway import Gateway  # noqa: E402
-from mcp_pin.guard import Guard  # noqa: E402
-from mcp_pin.lockfile import Lock  # noqa: E402
-from mcp_pin.model import ServerSpec, ToolSpec  # noqa: E402
+from heldfast.gateway import Gateway  # noqa: E402
+from heldfast.guard import Guard  # noqa: E402
+from heldfast.lockfile import Lock  # noqa: E402
+from heldfast.model import ServerSpec, ToolSpec  # noqa: E402
 
 PIN_DIR = Path(__file__).resolve().parent / "golden" / "traces"
 WRITE = os.environ.get("MCP_PIN_WRITE_GOLDEN") == "1"
@@ -114,7 +114,7 @@ def _classify_stdout(text: str) -> dict[str, Any]:
             "has_error": "error" in msg,
             "is_error_result": bool((msg.get("result") or {}).get("isError"))
             if isinstance(msg.get("result"), dict) else False,
-            "blocked": "BLOCKED BY mcp-pin" in stripped,
+            "blocked": "BLOCKED BY heldfast" in stripped,
             "leaked_secret": "id_rsa" in stripped,
         })
     return {"frames": frames}
@@ -168,13 +168,13 @@ class TestRewriteAfterNCalls(unittest.TestCase):
             "id": "rewrite-after-2-calls",
             "first_list_blocked": [
                 t["name"] for t in first["result"]["tools"]
-                if "BLOCKED BY mcp-pin" in str(t.get("description"))
+                if "BLOCKED BY heldfast" in str(t.get("description"))
             ],
             "calls_forwarded": [call_one, call_two],
             "list_changed_forwarded": note.get("method"),
             "second_list_blocked": [
                 t["name"] for t in tools
-                if "BLOCKED BY mcp-pin" in str(t.get("description"))
+                if "BLOCKED BY heldfast" in str(t.get("description"))
             ],
             "second_list_leaked_secret": any(
                 "id_rsa" in str(t.get("description")) for t in tools),
@@ -184,11 +184,11 @@ class TestRewriteAfterNCalls(unittest.TestCase):
         })
         self.assertEqual([], [
             t["name"] for t in first["result"]["tools"]
-            if "BLOCKED BY mcp-pin" in str(t.get("description"))
+            if "BLOCKED BY heldfast" in str(t.get("description"))
         ])
         self.assertIn("read_invoice", [
             t["name"] for t in tools
-            if "BLOCKED BY mcp-pin" in str(t.get("description"))
+            if "BLOCKED BY heldfast" in str(t.get("description"))
         ])
 
 
@@ -255,7 +255,7 @@ class TestGatewayTraces(unittest.TestCase):
             "call": reply,
         })
         self.assertTrue(reply["result"]["isError"])
-        self.assertIn("BLOCKED BY mcp-pin", reply["result"]["content"][0]["text"])
+        self.assertIn("BLOCKED BY heldfast", reply["result"]["content"][0]["text"])
 
 
 class TestHostileStdoutBeforeFrame(unittest.TestCase):
@@ -270,7 +270,7 @@ class TestHostileStdoutBeforeFrame(unittest.TestCase):
                           "params": {}}) + "\n"
         )
         result = subprocess.run(
-            [sys.executable, "-m", "mcp_pin", "guard", "--quiet",
+            [sys.executable, "-m", "heldfast", "guard", "--quiet",
              "--allow-unapproved", "--name", "h", "--",
              sys.executable, str(HOSTILE)],
             input=stdin, capture_output=True, text=True, timeout=30, env=env,

@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from mcp_pin import auditlog  # noqa: E402
+from heldfast import auditlog  # noqa: E402
 
 STUB = ROOT / "tests" / "fixtures" / "stub_signer.py"
 SIGN = f'"{sys.executable}" "{STUB}" sign'
@@ -180,7 +180,7 @@ class TestThroughTheRealCommandLine(SigningCase):
         # DEVNULL, not inherited: the guard reads stdin until EOF, so an
         # inherited stdin makes this hang until the timeout under a test
         # runner and pass when run alone.
-        return subprocess.run([sys.executable, "-m", "mcp_pin", *args],
+        return subprocess.run([sys.executable, "-m", "heldfast", *args],
                               capture_output=True, text=True, timeout=90,
                               env=env, cwd=str(ROOT),
                               stdin=subprocess.DEVNULL)
@@ -200,8 +200,8 @@ class TestThroughTheRealCommandLine(SigningCase):
 
     def test_guard_seals_the_trail_at_session_end(self) -> None:
         """End to end: the real proxy, the real flag, a real signed segment."""
-        from mcp_pin.lockfile import Lock
-        from mcp_pin.model import ServerSpec
+        from heldfast.lockfile import Lock
+        from heldfast.model import ServerSpec
 
         fake = ROOT / "tests" / "fixtures" / "fake_server.py"
         lock_path = Path(self._tmp.name) / ".mcp-pin.lock"

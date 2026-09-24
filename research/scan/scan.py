@@ -1,11 +1,11 @@
-"""Read every tool the drift feed holds, the way mcp-pin reads one.
+"""Read every tool the drift feed holds, the way heldfast reads one.
 
 The churn study asked how often tool definitions change. Pinning answers
 "did it change since I approved it" -- it cannot answer "was it honest when
 I approved it". This asks that second question of the whole ecosystem at
 once: the latest catalogue of every server the feed has measured (npm
 packages launched in a container, hosted endpoints read over HTTPS), run
-through mcp-pin's own content rules, parsed by the same code `--probe` uses.
+through heldfast's own content rules, parsed by the same code `--probe` uses.
 
 A finding here is a pattern match, not a verdict. The output is a list for a
 person to read in context before anything is said about any server.
@@ -50,9 +50,9 @@ def latest(feed: str) -> list[tuple[str, str]]:
 
 
 def scan_one(item: tuple[str, str]) -> dict:
-    from mcp_pin.model import ServerSpec
-    from mcp_pin.probe import _parse_tools
-    from mcp_pin.rules import AuditContext, run_rules
+    from heldfast.model import ServerSpec
+    from heldfast.probe import _parse_tools
+    from heldfast.rules import AuditContext, run_rules
 
     package, path = item
     with gzip.open(path, "rb") as fh:
