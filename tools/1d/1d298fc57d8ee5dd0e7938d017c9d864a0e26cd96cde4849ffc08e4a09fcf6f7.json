@@ -1,0 +1,426 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Preview a placement"
+ },
+ "description": "Scores where SpringRoll would place this application and what it would cost, without deploying or writing anything. It shares its implementation with springroll.deploy, so the receipt it returns is what a deploy right now would decide: the provider and plan, the estimated monthly cost range, every limit the plan carries, what was inferred rather than declared, and why each other candidate lost.\n\nIt works before any provider account is connected. The ranking is computed from the public catalog alone and credentials never affect it: connecting an account changes only whether a plan is deployable, never how it ranks. Each ranked alternative carries its readiness and the action that unlocks it, so you can tell the user both what is recommended and what would deploy today.\n\nUse it to put the cost and the limits in front of the user before deploying, or to ask what-if questions by varying the placement hints.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "application": {
+    "description": "Application slug or id.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "context": {
+    "description": "Explain why you are calling this tool and how it fits into the user's overall goal. This parameter is used for analytics and user intent tracking. YOU MUST provide 15-25 words (count carefully). NEVER use first person ('I', 'we', 'you') - maintain third-person perspective. NEVER include sensitive information such as credentials, passwords, or personal data. Example (20 words): \"Searching across the organization's repositories to find all open issues related to performance complaints and latency issues for team prioritization.\"",
+    "type": "string"
+   },
+   "environmentType": {
+    "description": "Environment class to score for. Defaults to production, which is the strictest: plans published as unsuitable for production are excluded there.",
+    "enum": [
+     "development",
+     "uat",
+     "production"
+    ],
+    "type": "string"
+   },
+   "placement": {
+    "additionalProperties": false,
+    "description": "Optional, provider-neutral hints about what this application needs. SpringRoll chooses the provider and plan; these only inform that choice. Leave out anything you do not actually know: monthly billing quantities remain unknown; ordinary workload hints are inferred from the source and named on the placement receipt, which is more useful to the user than a confident guess.",
+    "properties": {
+     "budgetUsdPerMonth": {
+      "description": "A real ceiling, if the user gave one. Leave it out otherwise: a budget of zero that nobody asked for would exclude every qualified plan with a non-zero estimate.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "coldStartTolerant": {
+      "description": "False if the first visitor after an idle period must not wait. Set this when the user says the app has to be instant; it excludes plans that sleep, which are otherwise the cheapest ones.",
+      "type": "boolean"
+     },
+     "computeVcpu": {
+      "description": "Sustained vCPU. Fractional is normal.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "expectedBandwidthGb": {
+      "description": "Egress in gigabytes a month. Only if the user told you.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "expectedRequestsPerMonth": {
+      "description": "Only if the user actually told you. Do not estimate: an invented number is indistinguishable from a measured one once it gets here, and SpringRoll's own default for an internal tool is more honest than a guess.",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "memoryMb": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "monthlyUsage": {
+      "additionalProperties": false,
+      "description": "Optional monthly billing quantities supplied by the user or actual usage evidence. Never invent values or default missing fields to zero. CPU-hours mean active CPU time; memory GB-hours include billable wait time and provider minimums. Build minutes do not substitute for Sandbox CPU/memory. Database and object storage are separate from local disk. Cloudflare Worker dispatch requests and CPU are separate from container active vCPU, provisioned memory, disk and regional egress. Rows read/written mean billed rows including indexes, not SQL query counts. Cache commands include internal operations and realtime polling. On redeploy this replaces the previous monthlyUsage forecast; omit the whole object to keep it.",
+      "properties": {
+       "build": {
+        "additionalProperties": false,
+        "properties": {
+         "activeCpuHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "artifactAdvancedOperations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "artifactDataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "artifactSimpleOperations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "artifactStorageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "dataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "minutes": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "provisionedMemoryGbHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "registryStorageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "starts": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "cache": {
+        "additionalProperties": false,
+        "properties": {
+         "commands": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "dataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "container": {
+        "additionalProperties": false,
+        "properties": {
+         "billedDiskGbSeconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "billedMemoryGibSeconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "billedVcpuSeconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "egressNaEuGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "egressOceaniaKoreaTaiwanGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "egressOtherGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "database": {
+        "additionalProperties": false,
+        "properties": {
+         "computeCuHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "extraBranchHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "extraBranchMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "publicDataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "restoreHistoryGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "rowsRead": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "rowsWritten": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "snapshotStorageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "durableObject": {
+        "additionalProperties": false,
+        "properties": {
+         "billableRequests": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "durationGbSeconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "rowsRead": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "rowsWritten": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "kv": {
+        "additionalProperties": false,
+        "properties": {
+         "deletes": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "lists": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "reads": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "writes": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "objectStorage": {
+        "additionalProperties": false,
+        "properties": {
+         "advancedOperations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "dataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "simpleOperations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "runtime": {
+        "additionalProperties": false,
+        "properties": {
+         "activeCpuHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "invocations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "originTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "provisionedMemoryGbHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "worker": {
+        "additionalProperties": false,
+        "properties": {
+         "cpuMilliseconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "dispatchRequests": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "needs": {
+      "description": "Everything this application needs, in one list. At most one shape of thing being run ('static', 'serverless', 'server', or 'container'), plus any services it needs beside its own code: 'postgres', 'auth', 'storage', 'realtime', 'edge-functions'. A provider that cannot supply an entry is excluded, so ask only for what the app actually uses, and leave the shape out unless the project does something the source does not show.",
+      "items": {
+       "enum": [
+        "static",
+        "serverless",
+        "server",
+        "container",
+        "database",
+        "postgres",
+        "auth",
+        "storage",
+        "realtime",
+        "edge-functions"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "needsBackgroundWork": {
+      "description": "Set true if the app runs jobs or a scheduler outside a request.",
+      "type": "boolean"
+     },
+     "needsPersistentDisk": {
+      "description": "Set true if the app writes files it expects to read back later.",
+      "type": "boolean"
+     },
+     "needsWebSockets": {
+      "description": "Set true if the app holds a live connection. Inferred from the dependency list otherwise, and getting it wrong puts the app on a runtime that drops the socket on every request.",
+      "type": "boolean"
+     },
+     "productionCritical": {
+      "description": "Whether a colleague depends on this during their working day. Defaults to true for production and false elsewhere.",
+      "type": "boolean"
+     },
+     "region": {
+      "description": "A required region, when the data has to stay somewhere specific.",
+      "maxLength": 64,
+      "type": "string"
+     },
+     "storageGb": {
+      "description": "Persistent disk needed, in gigabytes.",
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "application",
+   "context"
+  ],
+  "type": "object"
+ },
+ "name": "springroll.placement.preview",
+ "title": "Preview a placement"
+}

@@ -1,0 +1,206 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Plan Reaction Captions"
+ },
+ "description": "Plan stacked, speaker-colored reaction captions from a word timeline and an explicit speaker palette. Flash-length words merge, overlaps stack, and unknown speakers stay uncolored. Local-only; never changes Premiere.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "combine_gap_seconds": {
+    "description": "Maximum gap when combining a flash cue with the next same-speaker cue; defaults to 0.8.",
+    "maximum": 5,
+    "minimum": 0,
+    "type": "number"
+   },
+   "frame_rate": {
+    "description": "Sequence frame rate used to snap times to frames; defaults to 30.",
+    "maximum": 240,
+    "minimum": 1,
+    "type": "number"
+   },
+   "merge_gap_seconds": {
+    "description": "Same-speaker words closer than this become one cue; defaults to 0.12 so a short pause can start a new line.",
+    "maximum": 5,
+    "minimum": 0,
+    "type": "number"
+   },
+   "min_hold_seconds": {
+    "description": "Minimum duration kept after clamping a cue to a shot change; defaults to 0.35.",
+    "maximum": 3,
+    "minimum": 0.15,
+    "type": "number"
+   },
+   "min_solo_cue_seconds": {
+    "description": "Cues shorter than this merge with the next same-speaker cue; defaults to 0.45.",
+    "maximum": 3,
+    "minimum": 0.15,
+    "type": "number"
+   },
+   "shot_changes": {
+    "description": "Optional labeled cut points. A matching speaker's caption will not start before they appear on screen when a readable hold remains.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "speaker_label": {
+       "description": "Speaker who becomes visible at this cut.",
+       "maxLength": 128,
+       "minLength": 1,
+       "type": "string"
+      },
+      "time_seconds": {
+       "description": "Shot-change time in source seconds; must be non-decreasing.",
+       "maximum": 86400,
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "time_seconds",
+      "speaker_label"
+     ],
+     "type": "object"
+    },
+    "maxItems": 256,
+    "type": "array"
+   },
+   "speaker_palette": {
+    "description": "Known speakers and their exact #RRGGBB colors. Missing labels are returned as uncertain and never receive a guessed color.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "color": {
+       "description": "Caption color as #RRGGBB.",
+       "maxLength": 7,
+       "minLength": 7,
+       "pattern": "^#[0-9A-Fa-f]{6}$",
+       "type": "string"
+      },
+      "speaker_label": {
+       "description": "Speaker label exactly as used in word_timeline.",
+       "maxLength": 128,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "speaker_label",
+      "color"
+     ],
+     "type": "object"
+    },
+    "maxItems": 16,
+    "minItems": 1,
+    "type": "array"
+   },
+   "word_timeline": {
+    "additionalProperties": false,
+    "description": "Caller-supplied word-timed transcript for one Premiere source item. Words must be ordered by start time and bound to the transcript revision returned by get_clip_transcript_uxp. Different labeled speakers may overlap; same-speaker words may not, even when another speaker is between them.",
+    "properties": {
+     "source_project_item_id": {
+      "description": "Exact Premiere source project-item ID.",
+      "maxLength": 512,
+      "minLength": 1,
+      "type": "string"
+     },
+     "transcript_revision": {
+      "description": "Revision returned by get_clip_transcript_uxp.",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "type": "string"
+     },
+     "words": {
+      "description": "Ordered word tokens with source-time boundaries.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "confidence": {
+         "description": "Optional recognizer confidence.",
+         "maximum": 1,
+         "minimum": 0,
+         "type": "number"
+        },
+        "end_seconds": {
+         "description": "Word end in source seconds.",
+         "exclusiveMinimum": 0,
+         "maximum": 86400,
+         "type": "number"
+        },
+        "speaker_label": {
+         "description": "Optional caller-normalized speaker label.",
+         "maxLength": 128,
+         "minLength": 1,
+         "type": "string"
+        },
+        "start_seconds": {
+         "description": "Word start in source seconds.",
+         "maximum": 86400,
+         "minimum": 0,
+         "type": "number"
+        },
+        "text": {
+         "description": "Word token, punctuation allowed.",
+         "maxLength": 128,
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "start_seconds",
+        "end_seconds"
+       ],
+       "type": "object"
+      },
+      "maxItems": 20000,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "source_project_item_id",
+     "transcript_revision",
+     "words"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "word_timeline",
+   "speaker_palette"
+  ],
+  "type": "object"
+ },
+ "name": "plan_reaction_captions",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "data": {
+    "description": "Tool-specific result data when ok is true."
+   },
+   "error": {
+    "description": "Failure detail when ok is false.",
+    "type": "string"
+   },
+   "ok": {
+    "description": "Whether the tool completed successfully.",
+    "type": "boolean"
+   },
+   "tool": {
+    "description": "The registered MCP tool name.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "tool"
+  ],
+  "type": "object"
+ },
+ "title": "Plan Reaction Captions"
+}

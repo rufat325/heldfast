@@ -1,0 +1,41 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Stock Price (Daily)"
+ },
+ "description": "Daily end-of-day stock prices (open/high/low, close, split- & dividend-adjusted adj_close, volume) for US exchange-listed companies. Sourced from a market-data feed, not SEC filings.\n\nMarkets are open only on business days, so rows exist ONLY for trading days \u2014 the data IS the trading calendar:\n- Price ON OR AFTER a date (e.g. an announcement landing on a weekend): pass start_date=<date>; the FIRST row is that date or the next open day.\n- Price ON OR BEFORE a date: pass end_date=<date>; the LAST row is that date or the prior open day.\n- A single specific date: pass start_date=<date> (omit end_date) \u2014 returns a short forward window whose first row is your on/after price.\n\nUse Cases:\n- \"AAPL close on 2025-07-28\" -> get_stock_price(\"AAPL\", start_date=\"2025-07-28\")\n- \"DKNG total return 2025-01-02 \u2192 2026-02-27\" -> get_stock_price(\"DKNG\", start_date=\"2025-01-02\") + get_stock_price(\"DKNG\", end_date=\"2026-02-27\"), first/last close (cheaper than one 14-month window)\n- \"SUI +1/+14/+30 days after an 8-K\" -> start_date=<announce>, end_date=<announce + ~32d>; pick rows on/after each\n- No dates -> the latest price\n\nWhen the window spans \u22652 trading days, the response also reports the first/last close and the period return on BOTH close (point-to-point) and adj_close (split/dividend-adjusted: the economic return).\n\nEach response also includes the latest REPORTED period-end shares outstanding on/before your end date (period-end balance-sheet count; dei cover where absent) plus the implied market cap at the latest close \u2014 use these for market-cap / EV / P/B math instead of deriving share counts from NI/EPS (that yields weighted-average shares, a different basis).\n\nCoverage: ~8,400 US common-equity tickers, end-of-day only (no intraday/real-time, no options/FX). Recent history is dense; deep pre-2014 history may be sparse. Period-end multiples (P/E, EV/EBITDA, P/B): get_metric_history, whose `metric_id` lists the primitives for a CUSTOM multiple (e.g. lease-adjusted EV) priced with this tool.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "end_date": {
+    "description": "Window end (YYYY-MM-DD). The LAST returned row on/before this date is the price ON OR BEFORE it. Omit start_date to fetch just the price on/before this date.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "limit": {
+    "default": 30,
+    "description": "Max rows (newest first if the window exceeds it). Default 30. For a point-to-point return over a long span, make TWO narrow-window calls (one per date) rather than one wide window \u2014 cheaper, and avoids the cap dropping your start date.",
+    "maximum": 2000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "start_date": {
+    "description": "Window start (YYYY-MM-DD). Markets trade only on business days \u2014 if this date is a weekend/holiday the FIRST returned row is the next OPEN day (the price ON OR AFTER this date). Omit end_date to fetch just the price on/after this date.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "ticker": {
+    "description": "Company ticker symbol (e.g., 'AAPL'). US exchange-listed (NYSE/Nasdaq/AMEX), 1\u20135 letters.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "ticker"
+  ],
+  "type": "object"
+ },
+ "name": "get_stock_price",
+ "title": "Stock Price (Daily)"
+}

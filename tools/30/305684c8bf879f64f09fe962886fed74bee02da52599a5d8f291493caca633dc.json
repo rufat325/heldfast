@@ -1,0 +1,120 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Read Filing Section"
+ },
+ "description": "Read a specific section from an SEC Source (10-K, 10-Q, 8-K earnings, 8-K events, or DEF 14A proxy).\n\n**Two modes:**\n1. **Section mode (default)** \u2014 pass section_id for full paginated text (up to 10 chunks per page).\n2. **Outline mode** \u2014 OMIT section_id, pass accession_number: returns the filing's section TOC with ~120-char previews, so you pick by content instead of guessing an id. Use it on an unfamiliar Source (multi-exhibit 8-K, DEF 14A, FPI 6-K).\n\nOmitting accession_number reads the latest filing; `list_filings` finds a specific one. Valid ids are listed under `section_id` below.\n\nUse Cases:\n- \"Apple risk factors\" -> get_filing_section(\"AAPL\", \"risk_factors\")\n- \"Customer concentration in NVDA\" -> get_filing_section(\"NVDA\", \"risk_factors\", query=\"customer concentration\")\n- \"Workforce / headcount by geography\" -> get_filing_section(\"MSFT\", \"business_description\", query=\"human capital\")\n- \"M&A terms\" -> get_filing_section(\"CVX\", \"item_1_01_material_agreement\", form_type=\"8-K\")\n- \"As of a past date / point-in-time\" -> get_filing_section(\"MSFT\", \"business_description\", vantage_date=\"2025-04-07\")\n- \"Multi-exhibit 8-K\" -> get_filing_section(ticker, accession_number=\"...\") (outline mode) \u2192 pick exhibit \u2192 drill by section_id\n\nSister Sources (non-SEC):\n- Earnings call transcripts \u2192 `compare_earnings_calls`, or list_filings + section_id=\"transcript_prepared_remarks\"\n- IR press releases / events \u2192 `screen_filing_signals` with signal_type=\"ir_press_release\"; earnings-DECK guidance / operational KPIs (in neither the filing nor XBRL) \u2192 `get_ir_documents`\n- Year-over-year risk-factor change \u2192 `screen_filing_signals(signals=[\"has_new_risks\"], ticker=\u2026)` \u2014 a computed vs-prior-filing signal, cheaper and more reliable than diffing two filings yourself\n- A figure ABSENT from the section you expected \u2192 `search_sec_filings(company=<ticker/CIK>, query=\"exact phrase\")` locates which section of which filing carries it \u2014 absence from one section does not mean the filing lacks it",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "accession_number": {
+    "description": "Filing accession number from list_filings. Latest filing used if omitted.",
+    "type": "string"
+   },
+   "char_offset": {
+    "default": 0,
+    "description": "Within-chunk character offset (default 0). A chunk exceeding max_chars serves a char-window and emits a `char_offset` cursor \u2014 pass it back with the same `offset` to read deeper. Ignored on normal chunks.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "cik": {
+    "description": "10-digit SEC CIK as an alternative to ticker \u2014 use for delisted/acquired companies (e.g. Activision cik='0000718877') whose ticker no longer resolves.",
+    "pattern": "^\\d{10}$",
+    "type": "string"
+   },
+   "companion_accessions": {
+    "description": "Explicit companion accessions (from a `screen_filing_signals` row's `value.companion_accessions`). With `include_companions=true`, skips the discovery hop \u2014 halves the round-trips if you already screened.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "fiscal_period": {
+    "description": "Fiscal period: 'Q1'/'Q2'/'Q3' for a quarter's 10-Q, or 'FY' for the annual 10-K (the default when omitted). Resolved via the XBRL DEI period index (correct for non-calendar fiscal years). The fourth quarter is reported in the annual 10-K \u2014 'Q4' is treated as 'FY'. Use with fiscal_year. Ignored if accession_number provided.",
+    "enum": [
+     "Q1",
+     "Q2",
+     "Q3",
+     "Q4",
+     "FY"
+    ],
+    "type": "string"
+   },
+   "fiscal_year": {
+    "description": "Fiscal year to look up (e.g., 2023). Resolves to that fiscal year's filing via the XBRL period index \u2014 correct for non-calendar fiscal years (e.g. a 10-K filed Feb 2024 covers FY2023, not FY2024). Combine with fiscal_period for a specific quarter; omit fiscal_period to get the annual 10-K. Ignored if accession_number provided. DEF 14A / non-XBRL forms are not period-indexed \u2014 for those use accession_number (via list_filings), or vantage_date for as-of-date retrieval.",
+    "type": "integer"
+   },
+   "form_type": {
+    "description": "Form type filter (picks the latest of that type when accession_number is omitted). 20-F/40-F/6-K cover foreign private issuers.",
+    "enum": [
+     "10-K",
+     "10-Q",
+     "8-K",
+     "DEF 14A",
+     "20-F",
+     "40-F",
+     "6-K"
+    ],
+    "type": "string"
+   },
+   "include_companions": {
+    "default": false,
+    "description": "With section_id='item_1_01_material_agreement' on an 8-K anchor: also return text from same-day same-issuer companion 8-Ks (7.01 Reg FD + Ex 99 / 8.01). Default false = anchor only.",
+    "type": "boolean"
+   },
+   "include_delisted": {
+    "description": "Query a delisted/acquired company by its old ticker. Default false returns a structured delisted error pointing at the CIK.",
+    "type": "boolean"
+   },
+   "max_chars": {
+    "default": 20000,
+    "description": "Soft response-size cap (default 20,000 chars). The anchor is always served in full; companions are appended in priority order and truncated with a follow-up-call marker. Raise only when you need wider context.",
+    "maximum": 60000,
+    "minimum": 2000,
+    "type": "integer"
+   },
+   "max_chunks": {
+    "default": 10,
+    "description": "Chunks per page (default 10, max 10)",
+    "maximum": 10,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Chunk offset for pagination (default 0)",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "preview_chars": {
+    "default": 120,
+    "description": "Outline-mode preview length per section (default 120 \u2248 25 words). Ignored when section_id is provided.",
+    "maximum": 200,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Keyword to search within section chunks (e.g., 'customer concentration', 'export control'). Returns only matching chunks.",
+    "type": "string"
+   },
+   "section_id": {
+    "description": "Section ID \u2014 omit it (with `accession_number` set) for outline mode. Common IDs by category:\n\n**10-K / 10-Q core:** `risk_factors`, `business_description`, `mda_full`, `mda_results_operations`, `mda_liquidity`, `mda_outlook`, `mda_critical_accounting`, `legal_proceedings`, `market_risk`, `controls_procedures`, `cybersecurity`, `properties`, `signature_officers`\n  \u21b3 Human Capital / headcount lives in `business_description` (Item 1) \u2014 there is no `human_capital` id; use `query=\"human capital\"`.\n\n**Footnotes:** `footnote_revenue`, `footnote_segment`, `footnote_debt`, `footnote_accounting_policies`, `footnote_commitments`, `footnote_stock_comp`, `footnote_income_tax`, `footnote_leases`, `footnote_goodwill`, `footnote_business_combinations`, `footnote_fair_value`, `footnote_related_party`\n\n**Data tables:** `table_revenue_disaggregation`, `table_segment_reporting`, `table_eps`, `table_deferred_taxes`, `table_ppe`, `table_fair_value`, `table_goodwill`, `table_lease_costs`, `table_contract_assets`, `table_debt_maturities`\n  \u21b3 These carve the numeric tables OUT of the parent footnote, so the matching `footnote_*` may be PROSE-ONLY \u2014 query the `table_*` id for a disaggregated figure. A 10-K's segment schedule carries THREE fiscal years, so one filing is not the whole series.\n  \u21b3 \u26a0 Consolidated income-statement cost lines (`earnings_income_statement`, the 10-Q statements) are COMPANY-WIDE, not per-segment.\n\n**8-K earnings release:** `earnings_document_map`, `earnings_press_release`, `earnings_guidance`, `earnings_guidance_prose`, `earnings_income_statement`, `earnings_balance_sheet`, `earnings_cash_flow`, `earnings_segment_data`, `earnings_gaap_reconciliation`, `earnings_supplemental_tables`, `earnings_full_text`\n  \u21b3 `earnings_guidance` = the outlook TABLE, `earnings_guidance_prose` its prose sibling \u2014 check both. `earnings_full_text` = the whole release in one searchable section \u2014 the residual fallback when a guided figure was mis-classified into another id.\n\n**8-K events:** `item_1_01_material_agreement`, `item_2_01_acquisition`, `item_2_01_exhibit_2_1`, `item_2_01_exhibit_99_1`, `item_2_03_financial_obligation`, `item_3_03_material_modification`, `item_5_02_executive_changes`, `item_5_03_articles_amendment`, `item_5_07_shareholder_votes`, `item_8_01_other_events`\n  \u21b3 Exhibits are `item_<event>_exhibit_<major>_<minor>` (non-padded minor). Every non-earnings 8-K carries an **`exhibit_manifest`** listing every exhibit with its section_id, or an EDGAR link when link-only \u2014 read it before guessing.\n\n**Earnings call transcript:** `transcript_prepared_remarks`, `transcript_qa_session`, `transcript_guidance`\n\n**DEF 14A proxy:** `proxy_cd_and_a`, `proxy_compensation_table`, `proxy_peer_group`, `proxy_ceo_pay_ratio`, `proxy_pay_vs_performance`, `proxy_board_composition`, `proxy_shareholder_proposals`, `proxy_say_on_pay`\n\n**Risk vs risk management:** `risk_factors` lists what risks exist; for risk MANAGEMENT / mitigation read `mda_full` with `query` (e.g. 'risk management'). `mda_full` is the complete MD&A \u2014 use it when a subsection (`mda_results_operations`, `mda_liquidity`) comes back empty or thin.\n**20-F / foreign filer:** `mda_operating_results`, `mda_trend_information`, `mda_research_development`, `business_overview`, `business_organizational_structure`, `major_shareholders`, `directors_management`\n\n**FPI 6-K interim metrics:** `interim_monthly_revenue` (TSM monthly revenue release \u2014 primary doc text + inline NT$ table)\n\n**Accounting standard:** chunks carry `accounting_standard` (`US-GAAP` / `IFRS`), populated for FPI extractions, NULL for domestic 10-K/Q (implicitly US-GAAP) \u2014 read it before comparing ratios across filer types.",
+    "type": "string"
+   },
+   "ticker": {
+    "description": "Company ticker symbol (e.g., 'AAPL'). Required unless cik is provided.",
+    "type": "string"
+   },
+   "vantage_date": {
+    "description": "As-of vantage (YYYY-MM-DD): serve the latest filing filed ON OR BEFORE this date \u2014 don't assume the newest filing reflects a past vantage. Omit for the latest. Ignored if accession_number is provided.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_filing_section",
+ "title": "Read Filing Section"
+}

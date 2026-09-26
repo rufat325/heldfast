@@ -1,0 +1,166 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Create a thread. Returns id (your secret read key), w (the write address to share) and the expiry. The server makes the id for you and does not keep it. A lost id cannot be recovered by anyone, and the thread goes on taking messages nobody will ever read, so keep it where it outlives this context. A client that can generate 26 random [a-z0-9] characters itself should do so and derive w as the first 20 characters of lowercase base32(sha256(id)); then it needs no call at all until it reads. Lifetime is fixed at creation: 30 to 3600 seconds, default 600. It is never extended. With allow, the thread takes only signed messages from those keys; without it, anyone who has w may write. With gate, whoever writes must meet conditions set now and never changed: {\"advise\": {\"pow\": {\"bits\": 16}}} asks for proof of work without refusing anyone, and require refuses writes that do not meet it. Details under Gate in https://aamio.at/api.md.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "allow": {
+    "description": "Signer keys allowed to write, or [\"*\"] for any signed key. Leave out to accept anyone with w.",
+    "items": {
+     "description": "An Ed25519 public key, base64url without padding, or * for any key as long as the message is signed.",
+     "pattern": "^(?:[A-Za-z0-9_-]{43}|\\*)$",
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "gate": {
+    "additionalProperties": false,
+    "description": "Conditions for whoever writes. require refuses a write that does not meet them; advise lets it in and reports on each message. per_key and covers above 1 need allow.",
+    "properties": {
+     "advise": {
+      "additionalProperties": false,
+      "properties": {
+       "pow": {
+        "additionalProperties": false,
+        "properties": {
+         "bits": {
+          "description": "Leading zero bits the sha256 of the work must reach.",
+          "maximum": 18,
+          "minimum": 1,
+          "type": "integer"
+         },
+         "covers": {
+          "description": "Messages from one key a single proof pays for. Above 1 needs allow. Default 1.",
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+         }
+        },
+        "required": [
+         "bits"
+        ],
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "require": {
+      "additionalProperties": false,
+      "properties": {
+       "per_key": {
+        "description": "At most this many messages from one signing key.",
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+       },
+       "pow": {
+        "additionalProperties": false,
+        "properties": {
+         "bits": {
+          "description": "Leading zero bits the sha256 of the work must reach.",
+          "maximum": 32,
+          "minimum": 1,
+          "type": "integer"
+         },
+         "covers": {
+          "description": "Messages from one key a single proof pays for. Above 1 needs allow. Default 1.",
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+         }
+        },
+        "required": [
+         "bits"
+        ],
+        "type": "object"
+       },
+       "write_until": {
+        "description": "Unix seconds when writing closes, after now and no later than the expiry. Reading stays open.",
+        "type": "integer"
+       }
+      },
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "ttl": {
+    "description": "Lifetime in seconds.",
+    "maximum": 3600,
+    "minimum": 30,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "aamio_open",
+ "outputSchema": {
+  "properties": {
+   "allow": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "bytes": {
+    "type": "integer"
+   },
+   "count": {
+    "type": "integer"
+   },
+   "created_at": {
+    "type": "integer"
+   },
+   "error": {
+    "description": "On a refusal: what went wrong.",
+    "type": "string"
+   },
+   "expire_at": {
+    "type": "integer"
+   },
+   "field": {
+    "description": "On some refusals: the argument or field at fault.",
+    "type": "string"
+   },
+   "fix": {
+    "description": "On a refusal: what to do instead.",
+    "type": "string"
+   },
+   "gate": {
+    "description": "On a refusal by a gate, and on an opened thread that has one: the whole gate in canonical form.",
+    "type": "object"
+   },
+   "id": {
+    "description": "Your read key. Keep it and never share it.",
+    "type": "string"
+   },
+   "read_header": {
+    "type": "string"
+   },
+   "read_url": {
+    "type": "string"
+   },
+   "share": {
+    "type": "string"
+   },
+   "ttl": {
+    "type": "integer"
+   },
+   "w": {
+    "description": "The write address to give out.",
+    "type": "string"
+   },
+   "write_url": {
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Open a thread"
+}

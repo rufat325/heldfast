@@ -1,0 +1,235 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Get Product Availability"
+ },
+ "description": "Check real-time availability for one or more tours or activities on GuruWalk in a single call. Pass an `items` array \u2014 each entry is independent and has its own type, product_id and date range. Returns a `results` array where every entry echoes its `type` and `product_id` so you can match each response to its request. Check the tours the traveler has already chosen \u2014 this is not a catalog browsing tool, so don't run it over search results to explore what's on offer. For paid activities, shows rates by traveler type (adult, child, infant). `price` is always per person \u2014 never state a group total by quoting `price` alone. When `total_price` is present on a rate, it's already computed for the participants you requested of that rate's type \u2014 quote it directly, don't multiply or divide it yourself. If the group mixes traveler types (e.g. adults and children), sum each rate's `total_price` for the full group total. For free walking tours, no upfront price \u2014 travelers pay what they want after the tour. For paid activities, an event's `languages` lists the languages that session runs in (e.g. audioguide languages), and sessions differing only in language are merged into a single event; free walking tour events each carry a single `language` instead. `booking_url` is returned once per item, not per event; for paid activities you can add a `date=YYYY-MM-DD` query parameter to preselect a day. Maximum date range per item: 5 days. Per-item errors (invalid dates, product not found) are reported inside that item's result without failing the rest of the batch. Use this tool when the traveler asks about specific dates, wants to know if something is available, or is ready to book. When the traveler hasn't given specific dates, use the booking date \u00b12 days as the default search range. Supports en, es, de, it; any other value falls back to English. Pass the traveler's language code anyway and translate the answer into their language.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "items": {
+    "description": "One or more tours/products to check (max 20 per call). Use a single entry for one tour, or many entries to batch multiple tours in the same call.",
+    "items": {
+     "properties": {
+      "from_date": {
+       "description": "Start date in YYYY-MM-DD format.",
+       "type": "string"
+      },
+      "language": {
+       "description": "Language code. Supported: en, es, de, it; any other value falls back to English. Defaults to en.",
+       "type": "string"
+      },
+      "participants": {
+       "description": "Traveler breakdown by type. REQUIRED for paid activities (type: 'product') to get accurate per-person pricing \u2014 always pass the actual group the caller confirmed (e.g. 2 adults, 1 child). Ignored for free_tour. If the traveler has not yet confirmed group size, omit this field and a default of 2 adults will be used as a fallback. Valid types: adult, youth, child, infant, senior, student, eu_citizen, military, eu_citizen_student.",
+       "items": {
+        "properties": {
+         "quantity": {
+          "description": "Number of travelers of this type.",
+          "minimum": 1,
+          "type": "integer"
+         },
+         "type": {
+          "description": "Traveler type.",
+          "enum": [
+           "adult",
+           "youth",
+           "child",
+           "infant",
+           "senior",
+           "student",
+           "eu_citizen",
+           "military",
+           "eu_citizen_student"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "type",
+         "quantity"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "product_id": {
+       "description": "The product or tour ID to check availability for.",
+       "type": "string"
+      },
+      "to_date": {
+       "description": "End date in YYYY-MM-DD format. Defaults to from_date if omitted. Maximum 5-day range per item.",
+       "type": "string"
+      },
+      "type": {
+       "description": "Type of listing: 'product' for paid activities, 'free_tour' for free walking tours. Use the type returned by search_tours_activities_by_destination or get_tours_activities_by_category.",
+       "enum": [
+        "product",
+        "free_tour"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "product_id",
+      "from_date"
+     ],
+     "type": "object"
+    },
+    "maxItems": 20,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "items"
+  ],
+  "type": "object"
+ },
+ "name": "get_product_availability",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "results": {
+    "description": "One entry per requested item, in request order, echoing its type and product_id.",
+    "items": {
+     "properties": {
+      "booking_url": {
+       "description": "Booking link for this item. Share it with the traveler exactly as returned \u2014 never rewrite the domain or drop query parameters, they carry required attribution.",
+       "type": "string"
+      },
+      "error": {
+       "description": "Per-item failure; other items in the batch are unaffected.",
+       "type": "string"
+      },
+      "events": {
+       "description": "Available sessions. Paid activity events carry `languages` and `pricing`; free walking tour events carry a single `language` and `last_seats`.",
+       "items": {
+        "properties": {
+         "available": {
+          "type": "boolean"
+         },
+         "available_seats": {
+          "type": "integer"
+         },
+         "date": {
+          "description": "YYYY-MM-DD.",
+          "type": "string"
+         },
+         "language": {
+          "description": "Free walking tours only.",
+          "type": "string"
+         },
+         "languages": {
+          "description": "Languages this session runs in; sessions differing only in language are merged.",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "last_seats": {
+          "description": "Free walking tours only: true when few seats remain.",
+          "type": "boolean"
+         },
+         "name": {
+          "description": "Session or ticket option name, when the provider names sessions.",
+          "type": "string"
+         },
+         "pricing": {
+          "properties": {
+           "currency": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "rates": {
+            "items": {
+             "properties": {
+              "max_quantity": {
+               "type": [
+                "integer",
+                "null"
+               ]
+              },
+              "min_quantity": {
+               "type": [
+                "integer",
+                "null"
+               ]
+              },
+              "name": {
+               "type": [
+                "string",
+                "null"
+               ]
+              },
+              "price": {
+               "description": "Per-person price.",
+               "type": [
+                "number",
+                "null"
+               ]
+              },
+              "total_price": {
+               "description": "Total already computed for the requested participants of this rate's type.",
+               "type": "number"
+              }
+             },
+             "type": "object"
+            },
+            "type": "array"
+           }
+          },
+          "type": "object"
+         },
+         "start_time": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "date"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "from_date": {
+       "description": "YYYY-MM-DD.",
+       "type": "string"
+      },
+      "product_id": {
+       "type": "string"
+      },
+      "to_date": {
+       "description": "YYYY-MM-DD.",
+       "type": "string"
+      },
+      "type": {
+       "enum": [
+        "product",
+        "free_tour"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "product_id",
+      "from_date",
+      "to_date"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "results"
+  ],
+  "type": "object"
+ }
+}

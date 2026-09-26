@@ -1,0 +1,182 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Query a table exactly"
+ },
+ "description": "Run an EXACT, deterministic query over ONE tabular file (a CSV, or the first table of a spreadsheet/PDF/Word document). Use this instead of ask_docs whenever the question needs COUNTING, SUMMING, AVERAGING, MIN/MAX, FILTERING, or exact row lookups over structured data ('how many rows...', 'total amount by region', 'list orders where status is failed') - semantic search undercounts tables, while this executes over EVERY row and returns exact numbers. Use ask_docs for prose/meaning questions and get_file to read a whole document. The `query` argument is a JSON object: { select?: [column names to return as raw rows], where?: [{col, op, value}, ...] filters combined with AND - ops eq | neq | contains compare text case-insensitively, gt | gte | lt | lte compare numerically (rows whose cell is not a number are skipped and counted in skippedNonNumeric), groupBy?: 'column' gives one result row per distinct value, aggregates?: [{fn, col}] with fn count | sum | avg | min | max ('col' required except for count), limit?: max raw rows (default 50, max 200) }. Column names match the file's header row case-insensitively. Examples: {\"where\":[{\"col\":\"status\",\"op\":\"eq\",\"value\":\"failed\"}],\"aggregates\":[{\"fn\":\"count\"}]} counts failed rows; {\"groupBy\":\"region\",\"aggregates\":[{\"fn\":\"sum\",\"col\":\"amount\"}]} totals amount per region; {\"select\":[\"name\",\"email\"],\"where\":[{\"col\":\"country\",\"op\":\"eq\",\"value\":\"FR\"}]} returns the matching rows. If you name a column that does not exist, the error lists the file's real columns - retry with one of those. Read-only; nothing is written, so it is safe to call.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "fileId": {
+    "description": "The id of the file to query (from list_files / search_files - the same id get_file takes).",
+    "type": "string"
+   },
+   "handle": {
+    "description": "Optional: name one of the user's OWN profiles by its public @handle (with or without the leading @), as listed by list_profiles - an alternative to projectId, and it takes precedence if both are given. Honored only for an account-wide connection; a single-project connection is already scoped and ignores it. A handle that is not one of the user's own profiles is refused outright, never quietly swapped for another profile. To read context someone ELSE shared with the user or published, use shared_context instead.",
+    "type": "string"
+   },
+   "projectId": {
+    "description": "Optional: which of the user's projects holds the file. Honored only for an account-wide connection; a single-project connection is already scoped and ignores this.",
+    "type": "string"
+   },
+   "query": {
+    "additionalProperties": false,
+    "description": "The constrained query object (grammar in the tool description): select?, where?, groupBy?, aggregates?, limit?.",
+    "properties": {
+     "aggregates": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "col": {
+         "type": "string"
+        },
+        "fn": {
+         "enum": [
+          "count",
+          "sum",
+          "avg",
+          "min",
+          "max"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "fn"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "groupBy": {
+      "type": "string"
+     },
+     "limit": {
+      "maximum": 200,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "select": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "where": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "col": {
+         "type": "string"
+        },
+        "op": {
+         "enum": [
+          "eq",
+          "neq",
+          "contains",
+          "gt",
+          "gte",
+          "lt",
+          "lte"
+         ],
+         "type": "string"
+        },
+        "value": {
+         "type": [
+          "string",
+          "number"
+         ]
+        }
+       },
+       "required": [
+        "col",
+        "op",
+        "value"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "fileId",
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "query_table",
+ "outputSchema": {
+  "properties": {
+   "columns": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "groups": {
+    "description": "Aggregate rows (aggregate / groupBy mode).",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "rowCountMatched": {
+    "description": "Rows that passed the where filter.",
+    "type": "integer"
+   },
+   "rowCountTotal": {
+    "description": "Total data rows in the table.",
+    "type": "integer"
+   },
+   "rows": {
+    "description": "Raw matching rows (select mode). Either rows or groups is present, never both.",
+    "items": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "skippedNonNumeric": {
+    "description": "Cells skipped as non-numeric during a numeric comparison or aggregate (present only when > 0).",
+    "type": "integer"
+   },
+   "tableSource": {
+    "description": "Whether the rows came from a native CSV parse, an extracted document table, or a table read out of an image (image numbers may be misread - treat them as approximate).",
+    "enum": [
+     "csv",
+     "extracted",
+     "image"
+    ],
+    "type": "string"
+   },
+   "truncated": {
+    "description": "True when rows/groups were clipped by a cap.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "columns",
+   "rowCountTotal",
+   "rowCountMatched",
+   "truncated",
+   "tableSource"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "docs:read"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "Query a table exactly"
+}

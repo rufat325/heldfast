@@ -1,0 +1,62 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Financial Statements"
+ },
+ "description": "Get multi-period financial statements: income statement, balance sheet, and cash flow in one call.\n\nReturns quantitative historical data with key metrics and trends. Default: all 3 statements, quarterly, 2 years.\nFor qualitative analysis (risks, accounting quality, management tone), use get_filing_index (signal map) then get_filing_section to read the text.\n\nUse Cases:\n- \"Show me AAPL's financials\" -> all statements\n- \"MSFT revenue trend 5 years\" -> period=\"annual\", years=5\n- \"Is Tesla's debt increasing?\" -> statements=[\"balance\"]\n- \"As of a past date / point-in-time\" -> get_financials(\"MSFT\", vantage_date=\"2024-04-30\") (values as known from filings published on/before that date)\n\nEach period cites its original disclosing SEC filing (accession + filed date in a footnote; resolvable EDGAR index handles in the `<raw_data>` block), so every figure is traceable to its source filing.\n\n**Exactness:** the markdown table ABBREVIATES (`$68.14M`) \u2014 it quantises to $10K above $1M and $10M above $1B, so it is not a tie-out surface. The `<raw_data>` block carries the exact stored value (`68135000`). Quote figures from `<raw_data>`, not the table, whenever the precise number matters.\n\nResponses capped at ~20K chars. If truncated, whole statements are dropped (not sliced) with a note \u2014 request fewer statements or reduce years. Note the cap also trims `<raw_data>` periods, so a truncated response can lose the exact channel for the dropped periods.\n\nCompany-reported **Adjusted EBITDA** (issuer-specific add-backs) is NOT a computed metric here \u2014 read the issuer's own reconciliation via get_filing_section (earnings release / MD&A).",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "period": {
+    "default": "quarterly",
+    "description": "Time period granularity",
+    "enum": [
+     "quarterly",
+     "annual"
+    ],
+    "type": "string"
+   },
+   "statements": {
+    "default": [
+     "income",
+     "balance",
+     "cashflow"
+    ],
+    "description": "Which statements to include (default: all three)",
+    "items": {
+     "enum": [
+      "income",
+      "balance",
+      "cashflow"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "ticker": {
+    "description": "Company ticker symbol (e.g., 'AAPL'). Must be exact.",
+    "type": "string"
+   },
+   "vantage_date": {
+    "description": "As-of vantage (YYYY-MM-DD): restrict to filings PUBLISHED on or before this date, and cite the filing that was current then. Omit for the latest. IMPORTANT \u2014 this bounds which FILINGS are visible and which SOURCE is cited; it does NOT reconstruct the value as it stood on that date. If a later filing restated a period, THE RESTATED VALUE IS WHAT IS SERVED under a pre-vantage citation \u2014 and the response carries an explicit LOOK-AHEAD warning naming the affected periods, so the exposure is disclosed rather than silent. For a true as-originally-filed series use get_xbrl_facts with period_history=true.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "years": {
+    "default": 2,
+    "description": "Years of history (default 2, max 10)",
+    "maximum": 10,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "ticker"
+  ],
+  "type": "object"
+ },
+ "name": "get_financials",
+ "title": "Financial Statements"
+}

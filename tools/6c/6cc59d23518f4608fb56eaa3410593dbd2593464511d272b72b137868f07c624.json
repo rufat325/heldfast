@@ -1,0 +1,329 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search CJEU and General Court case law \u2014 judgments, orders, and Advocate General opinions \u2014 by case number, court, case type, keyword, and date range. A case number reaches every judgment, order, and AG opinion filed under it. By default only these primary records are returned; derivative judicial information notices, case abstracts, summaries, and corrigenda are excluded so distinct cases fill the page (set include_derivative to include them). Keyword matches English case titles (which carry party names) and CELEX strings; there is no full-text body search. Returns each case with its CELEX number (whose sixth character names the court: C, T, or F), work URI, ECLI, date, and type, plus \u2014 parsed from the title where present \u2014 the formation, Advocate General, parties, referring court, subject matter, and case reference. The raw CELLAR title is returned only when those fields do not capture all of it.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "case_number": {
+    "description": "Number of a single case: C-{num}/{year} (Court of Justice), T-{num}/{year} (General Court), or F-{num}/{year} (Civil Service Tribunal), e.g. C-131/12. Also accepts the case_reference form (\"Case C-97/23 P.\"), any procedural suffix after the year (P, R, PPU, \u2026), and a pre-1989 Court of Justice number with no prefix (26/62). A value naming more than one case (\"C-131/12 and C-132/12\") is rejected; search each separately. Matches the judgments, orders, AG opinions, and other primary records filed under that number; derivative records (notices, abstracts, summaries, corrigenda) join only under include_derivative. Numbered Opinions and Rulings of the Court of Justice (\"Opinion 2/13\", \"Ruling 1/78\") are not reached by a case number; look one up by its CELEX (e.g. 62013CV0002). A value made only of CELEX characters is matched as a CELEX substring instead, case-insensitively: one opening with the sector and year (62014CJ0362), the year and both letters (2013CJ0131), or both letters and the number (CJ0131) is answered from the CELEX index; any other (12CJ0131, 0131) tests every CELEX and can take tens of seconds.",
+    "type": "string"
+   },
+   "case_type": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "judgment, order (procedural decision), or ag_opinion (Advocate General opinion).",
+      "enum": [
+       "judgment",
+       "order",
+       "ag_opinion"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "Case type: judgment, order (procedural decision), or ag_opinion (Advocate General opinion). Omit to search all."
+   },
+   "court": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "CJEU (C) = Court of Justice of the EU, GC (T) = General Court.",
+      "enum": [
+       "CJEU",
+       "GC"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "Court filter, by the court letter at position 6 of the CELEX: CJEU (C) = Court of Justice of the EU, GC (T) = General Court. It does not narrow by record type: every primary record the court filed matches, and its derivative records (notices, abstracts, summaries, corrigenda) join only under include_derivative. Omit to search every court."
+   },
+   "date_from": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Start date in ISO 8601 format (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Start of date range in ISO 8601 format (YYYY-MM-DD). Leave blank or omit for no lower bound."
+   },
+   "date_to": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "End date in ISO 8601 format (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "End of date range in ISO 8601 format (YYYY-MM-DD). Leave blank or omit for no upper bound."
+   },
+   "include_derivative": {
+    "default": false,
+    "description": "Include derivative sector-6 records \u2014 judicial information notices, case abstracts, case summaries, and corrigenda \u2014 alongside primary judgments, orders, and AG opinions. Default false: these are excluded so distinct primary cases fill the page. Ignored when case_type is set (that path already returns a single primary type).",
+    "type": "boolean"
+   },
+   "keyword": {
+    "description": "Keyword matched against English case titles via the full-text index (multi-word input is treated as a phrase), and against CELEX numbers. A keyword that is a whole CELEX (e.g. 62023CO0097) matches that record, its numbered siblings (\u2026(01) to \u2026(20)), its _INF, _RES, _SUM, and _EXT records, and its corrigenda, with notices, abstracts, summaries, and corrigenda still joining only under include_derivative; for every record filed under a case, use case_number. A partial CELEX that opens with the sector and year (62013CJ), the year and type letters (2013CJ0131), or type letters followed by the number (CJ0131, J0131) matches every CELEX that holds it at that position; one opening with letters not followed by a digit (R(01)) tests every CELEX and can take tens of seconds; a bare year (2013) or a fragment opening mid-year or mid-number (013CJ0131, 0131) matches titles only. A keyword with no digit, or with a character no CELEX holds (a space, a period), matches titles only. A keyword with no letter or digit is rejected.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Maximum number of results to return (1\u2013100). Defaults to 20.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Pagination offset \u2014 number of results to skip. Defaults to 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "eurlex_get_cases",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "cases",
+     "total",
+     "offset",
+     "has_more",
+     "query_echo"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit that was applied to this page.",
+    "type": "number"
+   },
+   "cases": {
+    "description": "Matching case law records ordered by date descending, then by CELEX number ascending among records sharing a date, so pages are stable across calls.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single CJEU or General Court case law record.",
+     "properties": {
+      "advocate_general": {
+       "description": "Advocate General who delivered the opinion, from an AG opinion title (e.g. \"J\u00e4\u00e4skinen\"). Absent on judgments and orders.",
+       "type": "string"
+      },
+      "case_reference": {
+       "description": "Case reference parsed from the title (e.g. \"Case C-97/23 P.\"). Absent when the title carries no case-reference segment.",
+       "type": "string"
+      },
+      "celex_number": {
+       "description": "CELEX identifier for the case (e.g. 62024CJ0629).",
+       "type": "string"
+      },
+      "date": {
+       "description": "Judgment/opinion date in ISO 8601 format.",
+       "type": "string"
+      },
+      "display_title": {
+       "description": "Clean human-readable title for display \u2014 the parties for a contested case (e.g. \"Google Spain SL v AEPD\"), or the court/AG descriptor when a case has no named parties. Parsed from the English title; absent when the record has none or its title carries no \"#\" segments.",
+       "type": "string"
+      },
+      "ecli": {
+       "description": "European Case Law Identifier, the citation form of the record (e.g. \"ECLI:EU:C:2014:317\"); eurlex_lookup_celex resolves one back to its CELEX. Absent for judicial notices and the few records that carry none.",
+       "type": "string"
+      },
+      "formation": {
+       "description": "Formation that decided, from the title's leading segment, verbatim (e.g. \"Grand Chamber\", \"Full Court\", \"Fourth Chamber, Extended Composition\"), or \"President\", \"Vice-President\", or \"President of the Second Chamber\" for an order issued by that office. Absent when the title names none, as older \"Judgment of the Court of \u2026\" titles do.",
+       "type": "string"
+      },
+      "parties": {
+       "description": "Parties to the case, parsed from the title (e.g. \"WhatsApp Ireland Ltd v European Data Protection Board.\"). Absent when the title carries no parties segment (e.g. AG opinions).",
+       "type": "string"
+      },
+      "referring_court": {
+       "description": "National court that referred a preliminary ruling, from the title's referral segment (e.g. \"Audiencia Nacional\", or \"Tariefcommissie - Netherlands\" in older titles). Absent on direct actions and appeals.",
+       "type": "string"
+      },
+      "resource_type": {
+       "description": "Human-readable case type label (e.g. \"Judgment\", \"Order\", \"AG Opinion\"). Cases with several resource-types (e.g. corrigenda) list all, comma-separated. Absent for some older cases.",
+       "type": "string"
+      },
+      "subject_matter": {
+       "description": "Subject-matter keyword summary parsed from the title \u2014 the legal topics and provisions at issue. Absent when the title carries no subject-matter segment.",
+       "type": "string"
+      },
+      "title": {
+       "description": "Raw English expression title as stored in CELLAR, a \"#\"-delimited string (court, formation and date; parties; referral; subject matter; case reference). Present only when the parsed fields do not capture all of it: a segment the parser could not place, a judgment or order published by extracts (\"(Extracts)\"), a leading date that differs from date, or a title with no \"#\". Absent when the parse is complete, and for records with no English title.",
+       "type": "string"
+      },
+      "work_uri": {
+       "description": "CELLAR work URI.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "work_uri",
+      "celex_number"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_date_range`: date_from or date_to is not a real calendar date, or date_from falls after date_to. `invalid_case_number`: case_number is not a recognizable case number and holds characters no CELEX contains, names more than one case (e.g. \"C-131/12 and C-132/12\"), or is a prefix-less number dated outside 1953\u20131988. `invalid_keyword`: keyword holds no letters or digits, so no case title and no CELEX can match it. `sparql_error`: Virtuoso returned HTTP 200 with an error body \u2014 query malformed or timed out. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_date_range",
+         "invalid_case_number",
+         "invalid_keyword",
+         "sparql_error"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "has_more": {
+    "description": "True only when CELLAR returned an additional valid row beyond this page.",
+    "type": "boolean"
+   },
+   "next_offset": {
+    "description": "Offset for the next page. Present only when has_more is true.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance for the next call: on an empty first page, the filters that matched nothing and how to broaden them; on a page with more rows, the offset to continue from.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Pagination offset used for this response.",
+    "type": "number"
+   },
+   "query_echo": {
+    "additionalProperties": false,
+    "description": "Echo of filters applied to this search. Useful for diagnosing empty results.",
+    "properties": {
+     "case_number": {
+      "description": "Case number filter applied.",
+      "type": "string"
+     },
+     "case_type": {
+      "description": "Case type filter applied.",
+      "type": "string"
+     },
+     "celex_fragment": {
+      "description": "CELEX pattern matched for case_number: year, court letter, and zero-padded case number, with * standing for any document letter that court files under a case number (e.g. \"2023C*0097\" reaches 62023CJ0097, 62023CO0097, and 62023CC0097). Absent when case_number was matched as a raw CELEX substring.",
+      "type": "string"
+     },
+     "court": {
+      "description": "Court filter applied.",
+      "type": "string"
+     },
+     "date_from": {
+      "description": "Start date filter applied.",
+      "type": "string"
+     },
+     "date_to": {
+      "description": "End date filter applied.",
+      "type": "string"
+     },
+     "include_derivative": {
+      "description": "Effective include_derivative value after the false default is applied \u2014 whether derivative sector-6 records (notices, abstracts, summaries, corrigenda) were admitted alongside primary cases. Always present, since the default shapes which records can appear.",
+      "type": "boolean"
+     },
+     "keyword": {
+      "description": "Keyword filter applied.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "include_derivative"
+    ],
+    "type": "object"
+   },
+   "shown": {
+    "description": "Number of cases returned in this page.",
+    "type": "number"
+   },
+   "total": {
+    "description": "Number of cases returned in this page (not a corpus-wide count).",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when an additional CELLAR row proves more cases exist beyond this page.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search CJEU/GC Case Law"
+}

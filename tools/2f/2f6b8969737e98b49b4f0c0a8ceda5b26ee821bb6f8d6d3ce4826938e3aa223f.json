@@ -1,0 +1,363 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Decide whether another agent's claim-backed output is safe to relay onward. Returns a relay verdict with per-claim findings, orphaned evidence references, and owner actions. It does not fetch or validate the cited sources. Required fields in 'request': output_under_review, claims. Grades the evidence you supply and names what is still missing; it does not retrieve sources, so a call that brings none is refused. With only a question and no evidence yet, start at corridor_sanctions_assistant. Evidence triage only: no factual-truth verification, no legal, compliance, sanctions, or financial advice. Human review is required before any commercial action.",
+ "inputSchema": {
+  "$defs": {
+   "claim": {
+    "additionalProperties": false,
+    "properties": {
+     "claim": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "claim_id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "claim_type": {
+      "description": "Taxonomy label for the claim. regulatory_change: law or regulation adopted, amended, or enforced. regulatory_gap: identified absence or weakness in existing regulation. sanctions_event: sanctions designation, evasion, or enforcement action. geopolitical_event: political decision or conflict development. market_event: price move, trade flow, or commercial development. industry_response: industry adaptation or corporate strategy shift. corporate_disclosure: company filing, statement, or announcement. capability_claim: assertion about technical or operational capability.",
+      "enum": [
+       "regulatory_change",
+       "regulatory_gap",
+       "sanctions_event",
+       "geopolitical_event",
+       "market_event",
+       "industry_response",
+       "corporate_disclosure",
+       "capability_claim"
+      ],
+      "type": "string"
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "risk_if_wrong": {
+      "description": "Decision-level cost if this claim turns out to be wrong.",
+      "type": "string"
+     },
+     "support_level": {
+      "enum": [
+       "direct",
+       "partial",
+       "weak",
+       "unsupported"
+      ],
+      "type": "string"
+     },
+     "supporting_quotes": {
+      "description": "Optional span-level grounding: the specific quote(s) in cited evidence that back this claim. Records which span supports the claim, not just which document. Each entry's evidence_id should be one of this claim's evidence_ids. audit-claims checks the structural link only (flags span_orphans where it is not); it does NOT verify the quote text appears in the source \u2014 that is verify-quotes' job. Neither verifies factual truth.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "evidence_id": {
+         "minLength": 1,
+         "type": "string"
+        },
+        "quote": {
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "evidence_id",
+        "quote"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "uncertainty": {
+      "description": "What the analyst is unsure about, even if the claim is supported.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "claim_id",
+     "claim",
+     "support_level"
+    ],
+    "type": "object"
+   },
+   "evidence_item": {
+    "additionalProperties": false,
+    "properties": {
+     "body": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "content": {
+      "description": "Optional source text extract. When present, supporting_quotes are corroborated by matching their text against this content; without a content field, caller-declared quotes count as unverified assertions.",
+      "type": "string"
+     },
+     "evidence_id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "excerpt": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "freshness": {
+      "type": "string"
+     },
+     "full_text": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "limits": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "name": {
+      "type": "string"
+     },
+     "quote": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "snippet": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "source_type": {
+      "description": "e.g. official_document, regulator_announcement, news, analyst_report, primary_data, illustrative_placeholder.",
+      "type": "string"
+     },
+     "summary": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "supports": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "text": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "evidence_id",
+     "source_type"
+    ],
+    "type": "object"
+   }
+  },
+  "$id": "https://github.com/vassiliylakhonin/agenda-intelligence-md/schemas/v1/evidence-audit.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Claim-level evidence audit. Each important claim should be traceable to specific evidence with an explicit support level, uncertainty hook, and risk-if-wrong note. Use the `audit-claims` CLI command or `audit_claims` MCP tool to validate.",
+  "properties": {
+   "claims": {
+    "items": {
+     "$ref": "#/$defs/claim"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "evidence": {
+    "items": {
+     "$ref": "#/$defs/evidence_item"
+    },
+    "type": "array"
+   },
+   "topic": {
+    "type": "string"
+   },
+   "unsupported_claims": {
+    "description": "Important claims the analyst could not back with evidence.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "claims",
+   "evidence"
+  ],
+  "title": "EvidenceAudit",
+  "type": "object",
+  "x-schema-version": "1"
+ },
+ "name": "agent_output_verification",
+ "outputSchema": {
+  "$id": "https://github.com/vassiliylakhonin/agenda-intelligence-md/schemas/v1/agent-output-verification-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Structured verdict for whether one agent's claim-backed output is ready for a consuming agent to relay or act on. Wraps a claim-level evidence audit (evidence-audit.schema.json) and returns a machine-actionable relay verdict, weak/unsafe claim triage, evidence gaps, and owner actions. Schema-level and structural only: it does not verify that any claim or quote is factually true, does not fetch or validate cited sources, and does not authorize an action or provide legal, compliance, sanctions, financial, or investment advice.",
+  "properties": {
+   "claim_count": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "evidence_gaps": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "factual_verification_performed": {
+    "const": false
+   },
+   "grounded_claim_count": {
+    "description": "Number of claims with at least one supporting quote whose normalized text appears in the cited evidence item's content fields. A quote that is only declared, with no matching evidence content, does not count.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "human_review_required": {
+    "description": "True for any verdict other than allow_relay: a human should review before the consuming agent acts.",
+    "type": "boolean"
+   },
+   "limitations": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "not_advice_notice": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "owner_actions": {
+    "description": "Concrete fixes the producing agent should make before the output is relayed.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "readiness_label": {
+    "enum": [
+     "insufficient_information",
+     "not_decision_ready",
+     "partial",
+     "review_ready"
+    ],
+    "type": "string"
+   },
+   "readiness_score": {
+    "description": "Heuristic 0-100 score over declared evidence structure, capped below the review_ready band (max 84) because caller-declared packs are never externally verified here. Only claims that cite an evidence_id present in the supplied evidence contribute to it; a claim whose declared support_level nothing in the pack corroborates weighs nothing. Not approval, clearance, or factual verification.",
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "score_scope": {
+    "const": "declared_evidence_structure_only"
+   },
+   "trust_signal": {
+    "enum": [
+     "low",
+     "medium",
+     "medium_high",
+     "high",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "unsafe_claims": {
+    "description": "Claims that must not be relayed as fact: marked unsupported, or citing evidence_ids absent from the supplied evidence.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "claim": {
+       "type": "string"
+      },
+      "claim_id": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "reason": {
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "claim_id",
+      "reason"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "unsupported_statements": {
+    "description": "Statements the producing agent itself flagged as unsupported (from evidence-audit unsupported_claims).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "verdict": {
+    "description": "Machine-actionable relay verdict. verify_before_relay: claims are declared-supported and structurally consistent; the pack is caller-declared and never externally verified here, so this is the best possible routing and human review is mandatory. block_unsafe_claims: at least one claim is marked unsupported or cites evidence that is not present. not_decision_ready / insufficient_information: not enough structured claim material to verdict, or no claim cites evidence present in the supplied pack. allow_relay is reserved and never issued from caller-declared packs: this gate performs no external verification, so nothing it returns may be read as relay-ready. A declared support_level is a caller assertion, not a verified fact: it counts only where the claim cites an evidence_id the caller actually supplied.",
+    "enum": [
+     "allow_relay",
+     "verify_before_relay",
+     "block_unsafe_claims",
+     "not_decision_ready",
+     "insufficient_information"
+    ],
+    "type": "string"
+   },
+   "watch_next": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "weak_claims": {
+    "description": "Claims declared with weak support that should be strengthened before relay.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "claim": {
+       "type": "string"
+      },
+      "claim_id": {
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "claim_id"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "verdict",
+   "trust_signal",
+   "readiness_score",
+   "readiness_label",
+   "claim_count",
+   "grounded_claim_count",
+   "unsafe_claims",
+   "weak_claims",
+   "unsupported_statements",
+   "evidence_gaps",
+   "owner_actions",
+   "watch_next",
+   "human_review_required",
+   "not_advice_notice",
+   "limitations"
+  ],
+  "title": "AgentOutputVerificationResponse",
+  "type": "object",
+  "x-schema-version": "1"
+ }
+}

@@ -1,0 +1,219 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Build Caption Artifact"
+ },
+ "description": "Build a CapCut/Submagic-style SRT or VTT caption artifact from a caller-supplied word timeline: balanced word groups, sentence-aware breaks, min/max cue durations, optional karaoke word timestamps (VTT), emphasis and speaker markup. Local-only; returns the artifact inline or writes it inside an approved workspace and never changes Premiere.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "approved_workspace_path": {
+    "description": "Absolute existing directory that must contain output_path (checked via realpath of the parent directory). Required with output_path.",
+    "maxLength": 4096,
+    "type": "string"
+   },
+   "emphasis_words": {
+    "description": "Words wrapped in <b> (SRT) or <c.emphasis> (VTT).",
+    "items": {
+     "description": "Word to emphasize (case-insensitive, punctuation ignored).",
+     "maxLength": 64,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 128,
+    "type": "array"
+   },
+   "format": {
+    "description": "Artifact format. SRT uses HH:MM:SS,mmm; VTT starts with WEBVTT and uses HH:MM:SS.mmm.",
+    "enum": [
+     "srt",
+     "vtt"
+    ],
+    "type": "string"
+   },
+   "karaoke": {
+    "description": "VTT only: emit per-word <HH:MM:SS.mmm> timestamps inside each cue for word-highlight styles. Errors for SRT.",
+    "type": "boolean"
+   },
+   "max_chars_per_line": {
+    "description": "Maximum characters per line of plain caption text (default 32); words are never split. Wrapping counts unescaped words only, so VTT escaping, karaoke timestamps, emphasis tags, and speaker prefixes can make the rendered line longer.",
+    "maximum": 80,
+    "minimum": 8,
+    "type": "integer"
+   },
+   "max_cue_seconds": {
+    "description": "Maximum cue duration (default 5).",
+    "maximum": 15,
+    "minimum": 0.5,
+    "type": "number"
+   },
+   "max_lines": {
+    "description": "Maximum lines of plain caption text per cue (default 1); markup does not add lines.",
+    "maximum": 3,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "merge_gap_seconds": {
+    "description": "Extend a cue to the next cue start when the gap is smaller than this (default 0.3) so captions do not flicker.",
+    "maximum": 5,
+    "minimum": 0,
+    "type": "number"
+   },
+   "min_cue_seconds": {
+    "description": "Minimum cue duration (default 0.5); short cues are extended but never past the next cue start.",
+    "maximum": 5,
+    "minimum": 0.2,
+    "type": "number"
+   },
+   "output_path": {
+    "description": "Optional absolute file path to write the artifact to. Requires approved_workspace_path; the file must not already exist. When omitted the artifact text is returned inline (up to 512 KiB).",
+    "maxLength": 4096,
+    "type": "string"
+   },
+   "speaker_prefix": {
+    "description": "Prefix cues with the speaker label when present: 'Speaker: ' in SRT, <v Speaker> in VTT.",
+    "type": "boolean"
+   },
+   "strip_fillers": {
+    "description": "Tokens removed from the caption text (case-insensitive, punctuation ignored).",
+    "items": {
+     "description": "Filler token to drop, e.g. um, uh.",
+     "maxLength": 64,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 64,
+    "type": "array"
+   },
+   "style_preset": {
+    "description": "Style descriptor to return with the artifact (default clean). Documentation only; not encoded in SRT/VTT.",
+    "enum": [
+     "clean",
+     "bold_pop",
+     "karaoke",
+     "podcast",
+     "lecture"
+    ],
+    "type": "string"
+   },
+   "uppercase": {
+    "description": "Render caption text in upper case.",
+    "type": "boolean"
+   },
+   "word_timeline": {
+    "additionalProperties": false,
+    "description": "Caller-supplied word-timed transcript for one Premiere source item. Words must be ordered by start time and bound to the transcript revision returned by get_clip_transcript_uxp. Different labeled speakers may overlap; same-speaker words may not, even when another speaker is between them.",
+    "properties": {
+     "source_project_item_id": {
+      "description": "Exact Premiere source project-item ID.",
+      "maxLength": 512,
+      "minLength": 1,
+      "type": "string"
+     },
+     "transcript_revision": {
+      "description": "Revision returned by get_clip_transcript_uxp.",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "type": "string"
+     },
+     "words": {
+      "description": "Ordered word tokens with source-time boundaries.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "confidence": {
+         "description": "Optional recognizer confidence.",
+         "maximum": 1,
+         "minimum": 0,
+         "type": "number"
+        },
+        "end_seconds": {
+         "description": "Word end in source seconds.",
+         "exclusiveMinimum": 0,
+         "maximum": 86400,
+         "type": "number"
+        },
+        "speaker_label": {
+         "description": "Optional caller-normalized speaker label.",
+         "maxLength": 128,
+         "minLength": 1,
+         "type": "string"
+        },
+        "start_seconds": {
+         "description": "Word start in source seconds.",
+         "maximum": 86400,
+         "minimum": 0,
+         "type": "number"
+        },
+        "text": {
+         "description": "Word token, punctuation allowed.",
+         "maxLength": 128,
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "start_seconds",
+        "end_seconds"
+       ],
+       "type": "object"
+      },
+      "maxItems": 20000,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "source_project_item_id",
+     "transcript_revision",
+     "words"
+    ],
+    "type": "object"
+   },
+   "words_per_cue": {
+    "description": "Target words per cue (default 4); sentences are split into balanced groups of at most this many words.",
+    "maximum": 12,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "word_timeline",
+   "format"
+  ],
+  "type": "object"
+ },
+ "name": "build_caption_artifact",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "data": {
+    "description": "Tool-specific result data when ok is true."
+   },
+   "error": {
+    "description": "Failure detail when ok is false.",
+    "type": "string"
+   },
+   "ok": {
+    "description": "Whether the tool completed successfully.",
+    "type": "boolean"
+   },
+   "tool": {
+    "description": "The registered MCP tool name.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "tool"
+  ],
+  "type": "object"
+ },
+ "title": "Build Caption Artifact"
+}

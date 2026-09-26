@@ -1,0 +1,72 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Raw XBRL Facts"
+ },
+ "description": "Raw XBRL facts from SEC filings \u2014 the escape hatch when `get_financials` (323+ standard metrics; faster) cannot answer: ~3,000 as-filed facts per filing, with segment / geography / product breakdowns.\n\n**Use it for:**\n- a segment / geographic / product-line breakdown `get_financials` aggregates away \u2014 only what the filer tags dimensionally (usually revenue + segment profit / Adjusted EBITDA).\n- **revenue concentration / share** by customer, channel, distributor, geography or product: search `concentration` (as-filed `ConcentrationRiskPercentage`, present even when the prose is qualitative).\n- an industry metric outside the catalog (`medical cost ratio`, `reserve replacement ratio`), or checking a text figure against its as-filed value.\n- a past filing: the default resolves the latest filing as of TODAY; pin `accession_number` or `fiscal_year`/`fiscal_period`.\n- a standalone quarter from a cumulative YTD line: `period_history: true` (recipe on that parameter).\n\n**Sign \u2014 read before quoting a direction.** `<raw_data>.value` is the raw as-filed value: a positive magnitude for outflow / contra-asset concepts (`PaymentsTo\u2026`, capex, accumulated depreciation) but **signed by construction** for the `IncreaseDecreaseIn\u2026` working-capital family. Where a negative value carries the negated-label role, the table shows the filed face instead. `(filed \u2212)` is a per-concept **hint, not a guarantee**: it fires wherever the filing presents that concept negatively *anywhere* (e.g. TXN's tax provision, whose face reads `709`). When direction is load-bearing, check the `edgar` fact link or use `get_financials` (a curated statement-sign map).\n\n**Share counts:** the **dei** `EntityCommonStockSharesOutstanding` (\"cover-page / current\", as of the filing date) is for market cap and equity value; the **us-gaap** `CommonStockSharesOutstanding` is the **balance-sheet period-end** count; `WeightedAverageNumberOf\u2026SharesOutstanding` is the per-period EPS average. They can differ a few % \u2014 match the Period column to your task.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "accession_number": {
+    "description": "Specific filing accession number (from list_filings \u2014 which takes vantage_date, so it gives the filing current as of a past date). If omitted, resolves automatically from form_type + fiscal_year (latest filing as of today).",
+    "type": "string"
+   },
+   "fiscal_period": {
+    "description": "Pin the exact period when resolving by fiscal_year (Q1/Q2/Q3/Q4/FY). WITHOUT it, fiscal_year resolves to the LATEST filing of that year \u2014 wrong for 'as of <quarter>' questions (use this to get the right quarter's balance/figure). Ignored if accession_number or period_history is set. (For a concept's value across ALL periods at once, use period_history instead.)",
+    "enum": [
+     "Q1",
+     "Q2",
+     "Q3",
+     "Q4",
+     "FY"
+    ],
+    "type": "string"
+   },
+   "fiscal_year": {
+    "description": "Fiscal year to look up (e.g., 2022). If omitted, uses the latest filing. Ignored if accession_number provided.",
+    "type": "integer"
+   },
+   "form_type": {
+    "default": "10-K",
+    "description": "Filing type when auto-resolving (ignored if accession_number provided). Default: 10-K (annual). FPI filers: 20-F/40-F (annual) or 6-K (interim) \u2014 the backend auto-resolves the right form family, so the default also serves FPIs (#558).",
+    "enum": [
+     "10-K",
+     "10-Q",
+     "20-F",
+     "40-F",
+     "6-K"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "default": 50,
+    "description": "Maximum facts to return (default 50, max 200)",
+    "maximum": 200,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "period_history": {
+    "default": false,
+    "description": "Return the searched concept's full as-filed series ACROSS filings (every period: quarter, 6-month YTD, 9-month YTD, FY) instead of one filing's facts. Use this to de-cumulate a cumulative cash-flow / income line into a standalone quarter \u2014 e.g. Q2 cash paid for acquisitions = the 6-month YTD minus the Q1 3-month (both shown, sharing the same start date). Requires search; ignores accession_number / fiscal_year.",
+    "type": "boolean"
+   },
+   "search": {
+    "description": "Search XBRL concepts by label or name. SPACES INSIDE A TERM ARE 'AND' \u2014 every word must appear somewhere in the fact's concept name, label, OR its dimension axis/member labels AS THE FILER WROTE THEM. Commas are OR ('goodwill,impairment'). So adding a category word to narrow a search can silently DROP the series you want: the filer may name the axis something else entirely (AutoNation tags reporting-unit goodwill on 'Goodwill Reporting Units', so 'goodwill segment' eliminates it while 'goodwill' finds it). PREFER ONE WORD and filter the results yourself; widen if a multi-word search returns suspiciously few facts. Examples: 'goodwill', 'medical cost ratio', 'goodwill,impairment', 'concentration' (revenue share by customer / channel / distributor / geography / product).",
+    "type": "string"
+   },
+   "ticker": {
+    "description": "Company ticker symbol (e.g., 'UNH', 'AAPL'). Must be exact.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "ticker",
+   "search"
+  ],
+  "type": "object"
+ },
+ "name": "get_xbrl_facts",
+ "title": "Raw XBRL Facts"
+}

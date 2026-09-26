@@ -1,0 +1,163 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Detect Repeated Takes"
+ },
+ "description": "Detect repeated sentence takes (retakes) in a word timeline using token similarity within a time window, and plan removal of all but the kept take. Returns take groups, removal and keep ranges, and apply routes. Local-only; never changes Premiere.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "frame_rate": {
+    "description": "Timebase used to snap ranges to whole frames; defaults to 30.",
+    "maximum": 240,
+    "minimum": 1,
+    "type": "number"
+   },
+   "handle_frames": {
+    "description": "Frames of handle left inside each removal so cuts are not tight; defaults to 1.",
+    "maximum": 24,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "keep": {
+    "description": "Which take in each group to keep; defaults to last.",
+    "enum": [
+     "last",
+     "first"
+    ],
+    "type": "string"
+   },
+   "max_gap_seconds": {
+    "description": "Only sentences starting within this many seconds of an earlier candidate are compared; defaults to 20.",
+    "maximum": 120,
+    "minimum": 1,
+    "type": "number"
+   },
+   "max_groups": {
+    "description": "Maximum take groups to return; defaults to 64.",
+    "maximum": 256,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "min_words": {
+    "description": "Minimum tokens a sentence needs before it is compared; defaults to 4.",
+    "maximum": 20,
+    "minimum": 3,
+    "type": "integer"
+   },
+   "similarity_threshold": {
+    "description": "Token Jaccard/containment similarity needed to group two sentences; defaults to 0.8.",
+    "maximum": 1,
+    "minimum": 0.6,
+    "type": "number"
+   },
+   "word_timeline": {
+    "additionalProperties": false,
+    "description": "Caller-supplied word-timed transcript for one Premiere source item. Words must be ordered by start time and bound to the transcript revision returned by get_clip_transcript_uxp. Different labeled speakers may overlap; same-speaker words may not, even when another speaker is between them.",
+    "properties": {
+     "source_project_item_id": {
+      "description": "Exact Premiere source project-item ID.",
+      "maxLength": 512,
+      "minLength": 1,
+      "type": "string"
+     },
+     "transcript_revision": {
+      "description": "Revision returned by get_clip_transcript_uxp.",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "type": "string"
+     },
+     "words": {
+      "description": "Ordered word tokens with source-time boundaries.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "confidence": {
+         "description": "Optional recognizer confidence.",
+         "maximum": 1,
+         "minimum": 0,
+         "type": "number"
+        },
+        "end_seconds": {
+         "description": "Word end in source seconds.",
+         "exclusiveMinimum": 0,
+         "maximum": 86400,
+         "type": "number"
+        },
+        "speaker_label": {
+         "description": "Optional caller-normalized speaker label.",
+         "maxLength": 128,
+         "minLength": 1,
+         "type": "string"
+        },
+        "start_seconds": {
+         "description": "Word start in source seconds.",
+         "maximum": 86400,
+         "minimum": 0,
+         "type": "number"
+        },
+        "text": {
+         "description": "Word token, punctuation allowed.",
+         "maxLength": 128,
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "start_seconds",
+        "end_seconds"
+       ],
+       "type": "object"
+      },
+      "maxItems": 20000,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "source_project_item_id",
+     "transcript_revision",
+     "words"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "word_timeline"
+  ],
+  "type": "object"
+ },
+ "name": "detect_repeated_takes",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "data": {
+    "description": "Tool-specific result data when ok is true."
+   },
+   "error": {
+    "description": "Failure detail when ok is false.",
+    "type": "string"
+   },
+   "ok": {
+    "description": "Whether the tool completed successfully.",
+    "type": "boolean"
+   },
+   "tool": {
+    "description": "The registered MCP tool name.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "tool"
+  ],
+  "type": "object"
+ },
+ "title": "Detect Repeated Takes"
+}

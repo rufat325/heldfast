@@ -1,0 +1,262 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Plan Active Speaker Reframe"
+ },
+ "description": "Plan an active-speaker vertical reframe (Motion Scale/Position keyframes that follow whoever is talking) or a static stacked/split layout from a word timeline and static speaker regions. Returns framings, switches, keyframes, and apply routes. Local-only; never changes Premiere.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "base_video_track_index": {
+    "description": "Video track holding the source clip in the target sequence; defaults to 0.",
+    "maximum": 99,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "ease_frames": {
+    "description": "Frames to ease each switch with bezier keyframes; 0 (default) emits hold keyframes (hard cuts).",
+    "maximum": 30,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "frame_rate": {
+    "description": "Sequence frame rate used to snap times to frames; defaults to 30.",
+    "maximum": 240,
+    "minimum": 1,
+    "type": "number"
+   },
+   "headroom": {
+    "description": "Fraction of the crop height reserved above the region top; defaults to 0.12.",
+    "maximum": 0.5,
+    "minimum": 0,
+    "type": "number"
+   },
+   "layout": {
+    "description": "auto (default) picks active_speaker for 3+ speakers or a region wider than 0.6, stacked for exactly 2 speakers.",
+    "enum": [
+     "active_speaker",
+     "stacked",
+     "split_left_right",
+     "auto"
+    ],
+    "type": "string"
+   },
+   "min_hold_seconds": {
+    "description": "Never switch faster than this; shorter turns are absorbed. Defaults to 1.5.",
+    "maximum": 10,
+    "minimum": 0.5,
+    "type": "number"
+   },
+   "source_frame": {
+    "additionalProperties": false,
+    "description": "Source clip frame size in pixels, e.g. 1920x1080 or 3840x2160.",
+    "properties": {
+     "height": {
+      "description": "Frame height in pixels.",
+      "maximum": 16384,
+      "minimum": 16,
+      "type": "integer"
+     },
+     "width": {
+      "description": "Frame width in pixels.",
+      "maximum": 16384,
+      "minimum": 16,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "width",
+     "height"
+    ],
+    "type": "object"
+   },
+   "speaker_regions": {
+    "description": "Normalized (0..1) face/body rectangle of every speaker that appears, measured in the source frame.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "height": {
+       "description": "Height as a fraction of source height (> 0).",
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "speaker_label": {
+       "description": "Speaker label exactly as used in word_timeline.",
+       "maxLength": 128,
+       "minLength": 1,
+       "type": "string"
+      },
+      "width": {
+       "description": "Width as a fraction of source width (> 0).",
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "x": {
+       "description": "Left edge as a fraction of source width.",
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "y": {
+       "description": "Top edge as a fraction of source height.",
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "speaker_label",
+      "x",
+      "y",
+      "width",
+      "height"
+     ],
+     "type": "object"
+    },
+    "maxItems": 8,
+    "minItems": 1,
+    "type": "array"
+   },
+   "switch_lead_seconds": {
+    "description": "Switch this long before the speaker starts; defaults to 0.15.",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "target_frame": {
+    "additionalProperties": false,
+    "description": "Target sequence frame size in pixels; defaults to 1080x1920.",
+    "properties": {
+     "height": {
+      "description": "Frame height in pixels.",
+      "maximum": 16384,
+      "minimum": 16,
+      "type": "integer"
+     },
+     "width": {
+      "description": "Frame width in pixels.",
+      "maximum": 16384,
+      "minimum": 16,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "width",
+     "height"
+    ],
+    "type": "object"
+   },
+   "word_timeline": {
+    "additionalProperties": false,
+    "description": "Caller-supplied word-timed transcript for one Premiere source item. Words must be ordered by start time and bound to the transcript revision returned by get_clip_transcript_uxp. Different labeled speakers may overlap; same-speaker words may not, even when another speaker is between them.",
+    "properties": {
+     "source_project_item_id": {
+      "description": "Exact Premiere source project-item ID.",
+      "maxLength": 512,
+      "minLength": 1,
+      "type": "string"
+     },
+     "transcript_revision": {
+      "description": "Revision returned by get_clip_transcript_uxp.",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "type": "string"
+     },
+     "words": {
+      "description": "Ordered word tokens with source-time boundaries.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "confidence": {
+         "description": "Optional recognizer confidence.",
+         "maximum": 1,
+         "minimum": 0,
+         "type": "number"
+        },
+        "end_seconds": {
+         "description": "Word end in source seconds.",
+         "exclusiveMinimum": 0,
+         "maximum": 86400,
+         "type": "number"
+        },
+        "speaker_label": {
+         "description": "Optional caller-normalized speaker label.",
+         "maxLength": 128,
+         "minLength": 1,
+         "type": "string"
+        },
+        "start_seconds": {
+         "description": "Word start in source seconds.",
+         "maximum": 86400,
+         "minimum": 0,
+         "type": "number"
+        },
+        "text": {
+         "description": "Word token, punctuation allowed.",
+         "maxLength": 128,
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "start_seconds",
+        "end_seconds"
+       ],
+       "type": "object"
+      },
+      "maxItems": 20000,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "source_project_item_id",
+     "transcript_revision",
+     "words"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "word_timeline",
+   "source_frame",
+   "speaker_regions"
+  ],
+  "type": "object"
+ },
+ "name": "plan_active_speaker_reframe",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "data": {
+    "description": "Tool-specific result data when ok is true."
+   },
+   "error": {
+    "description": "Failure detail when ok is false.",
+    "type": "string"
+   },
+   "ok": {
+    "description": "Whether the tool completed successfully.",
+    "type": "boolean"
+   },
+   "tool": {
+    "description": "The registered MCP tool name.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "tool"
+  ],
+  "type": "object"
+ },
+ "title": "Plan Active Speaker Reframe"
+}

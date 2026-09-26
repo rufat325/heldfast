@@ -1,0 +1,551 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch the metadata and full text of an EU act or case-law record by CELEX number, ELI URI, or work URI. Returns structured metadata (title, date, type, author institution, Advocates General, legal basis, EuroVoc subjects, in-force status and, for an act not in force, its repealing acts, end of validity, or pending entry into force; for case law, the ECLI and the formation, referring court, subject matter, and case reference parsed from the title) plus the body as HTML, Markdown, or Formex4 XML, defaulting to English with automatic fallback. Every body returned in one call is capped at 100,000 characters \u2014 paged and full windows page onward with offset/limit; use outline: true for a heading map and select to pull specific articles, chapters, recitals, or annexes of an act, or the headed sections and operative part of a judgment or order, reading a selected section on its own from the offset and chars in selected_sections.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "celex_number": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "CELEX number of the act (e.g. 32016R0679 for GDPR). Surrounding whitespace is trimmed and the value is uppercased before validation.",
+      "pattern": "^[0-9A-Z][0-9A-Z()/_-]{5,}$",
+      "type": "string"
+     }
+    ],
+    "description": "CELEX number of the act to fetch (e.g. 32016R0679 for GDPR). Provide exactly one of celex_number, eli_uri, or work_uri."
+   },
+   "content_mode": {
+    "default": "paged",
+    "description": "How much of the body to return. \"paged\" (default) returns an offset/limit window; \"full\" requests from the start and returns at most 100000 characters with continuation metadata when more exists; \"metadata_only\" skips the content fetch. offset and limit apply only to \"paged\".",
+    "enum": [
+     "metadata_only",
+     "paged",
+     "full"
+    ],
+    "type": "string"
+   },
+   "eli_uri": {
+    "description": "Work-level ELI URI of the act to fetch (e.g. http://data.europa.eu/eli/reg/2016/679, with or without the /oj suffix). Provide exactly one of celex_number, eli_uri, or work_uri.",
+    "type": "string"
+   },
+   "format": {
+    "default": "html",
+    "description": "Content format: \"html\" for the act text as served by EUR-Lex (default), \"markdown\" for that HTML converted to clean Markdown server-side, or \"xml\" for Formex4 structured XML.",
+    "enum": [
+     "html",
+     "xml",
+     "markdown"
+    ],
+    "type": "string"
+   },
+   "include_recitals": {
+    "default": false,
+    "description": "List every recital as its own outline entry, with its own offset, instead of one entry for the run. Applies only when outline is true; select reaches a single recital either way.",
+    "type": "boolean"
+   },
+   "language": {
+    "default": "EN",
+    "description": "One of the 24 supported two-letter EUR-Lex language codes (e.g. EN, FR, DE), accepted case-insensitively and normalized to uppercase. Defaults to EN, and falls back to EN if the requested language is unavailable.",
+    "pattern": "^(?:[Ee][Nn]|[Ff][Rr]|[Dd][Ee]|[Ee][Ss]|[Ii][Tt]|[Pp][Ll]|[Pp][Tt]|[Nn][Ll]|[Cc][Ss]|[Dd][Aa]|[Ee][Ll]|[Ee][Tt]|[Ff][Ii]|[Hh][Uu]|[Ll][Tt]|[Ll][Vv]|[Mm][Tt]|[Rr][Oo]|[Ss][Kk]|[Ss][Ll]|[Ss][Vv]|[Bb][Gg]|[Hh][Rr]|[Gg][Aa])$",
+    "type": "string"
+   },
+   "limit": {
+    "default": 25000,
+    "description": "Maximum characters to return in this window (\"paged\" mode only; select ignores it). Default 25000, max 100000. Follow has_more and the returned offsets until false to reconstruct the complete body.",
+    "maximum": 100000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Character offset into the body where the returned window starts (\"paged\" mode only). Page forward by setting offset = content_offset + content_chars_returned from the previous call. Offsets are format-specific: an offset is only valid against the same format it was measured in \u2014 keep format constant when paging.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "outline": {
+    "default": false,
+    "description": "Return a structural outline of the act \u2014 chapters, sections, articles, annexes, and the preamble's recitals as a heading list, each with its character offset \u2014 instead of body text. The recitals appear as one entry spanning the run (e.g. \"Recitals 1\u2013173\") at the first recital's offset unless include_recitals is true. Headings of text an amending act inserts into another act are not listed. For case law, the outline lists each top-level section heading (\"Legal context\", \"Costs\") and, for a judgment or order, the operative part (the ruling). Read a section by paging with its offset, keeping the same format: outline offsets are measured in the requested format's body and land in the wrong place under any other format. Ignores offset/limit and select; no detectable structure returns an empty outline. Not applied in content_mode \"metadata_only\".",
+    "type": "boolean"
+   },
+   "resolve": {
+    "default": "as_requested",
+    "description": "Which version to serve. \"as_requested\" (default) returns the exact CELEX requested; \"current_consolidated\" serves the newest consolidated version in effect of the requested act \u2014 or, for a consolidated CELEX, of its base act \u2014 echoing the request in requested_celex, and is a no-op when none exists (with a notice when the act's only consolidated versions are dated in the future). Either way, is_superseded / current_consolidated_celex / consolidated_as_of describe the text served.",
+    "enum": [
+     "as_requested",
+     "current_consolidated"
+    ],
+    "type": "string"
+   },
+   "select": {
+    "description": "Return only the text of specific sections by type and number, instead of a raw character window (Roman and Arabic numbers are equivalent; a number may carry an English kind word or one in the language served, e.g. \"Article 5\", \"Artikel 5\", \"5. cikk\"). For case law, select headed sections by position or the operative part. Sections are located in the body of the requested format, so pair select with the same format used for any outline. A section inside another selected section (an article in a selected chapter) is returned once, within the enclosing one. A section that cannot be located \u2014 including a number that appears only in text an amending act inserts into another act \u2014 is reported in selection.missed with no wrong text returned. offset and limit do not apply: the joined sections are capped at 100000 characters with no continuation, and each section stays readable on its own from its offset and chars in selected_sections. Ignored when outline is true or in content_mode \"metadata_only\".",
+    "properties": {
+     "annexes": {
+      "description": "Comma-separated annex numbers or letters, e.g. \"I,II\".",
+      "type": "string"
+     },
+     "articles": {
+      "description": "Comma-separated article numbers, e.g. \"1,5,17\".",
+      "type": "string"
+     },
+     "chapters": {
+      "description": "Comma-separated chapter numbers, Roman or Arabic, e.g. \"I,IV\" or \"1,4\".",
+      "type": "string"
+     },
+     "headings": {
+      "description": "Case law: comma-separated positions of section headings, as numbered in the outline, e.g. \"2\" or \"1,4\". A section runs to the next heading or the operative part.",
+      "type": "string"
+     },
+     "operative_part": {
+      "description": "Case law: true to return a judgment's or order's operative part (the ruling) to the end of the body: from its opening words (\"On those grounds, \u2026\") in a modern body, from the \"Operative part\" section in a legacy one.",
+      "type": "boolean"
+     },
+     "recitals": {
+      "description": "Comma-separated recital numbers, e.g. \"1,10\".",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "work_uri": {
+    "description": "CELLAR work resource URI to fetch (e.g. http://publications.europa.eu/resource/cellar/3e485e15-11bd-11e6-ba9a-01aa75ed71a1) \u2014 the form returned by eurlex_lookup_celex, eurlex_get_relations, and eurlex_search_documents. A work carrying several CELEX numbers (a national implementing measure, one per directive it was notified against) is served under its lowest, with a notice giving the count; each names the same document, so pass celex_number to serve a specific one. Provide exactly one of celex_number, eli_uri, or work_uri.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "eurlex_get_document",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "celex_number",
+     "content_mode",
+     "content_available",
+     "content_status",
+     "has_more",
+     "language",
+     "content_format"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "advocates_general": {
+    "description": "Advocates General who delivered this case-law record, by surname as CELLAR records it (e.g. [\"J\u00e4\u00e4skinen\"]), sorted. A few Opinions of the Court list several. Absent for legislation and for case law with none recorded.",
+    "items": {
+     "description": "Advocate General surname, as CELLAR records it.",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "author_institution": {
+    "description": "Primary (first) author, by the English label of its CELLAR authority code: an EU institution or body (e.g. \"European Parliament\", \"Court of Justice\", \"European Union\"), a member state on a national implementing measure (e.g. \"Netherlands\"), an MEP by surname on a parliamentary question (e.g. \"VAN MIERT\"), \"Provisional data\" for a consolidated text with no linked base act, or for a national-court decision the deciding court (e.g. \"Supremo Tribunal de Justi\u00e7a\"). A code with no English label shows the last segment of its code. Each label is accepted by the author_institution filter of eurlex_search_documents. For co-legislated acts, prefer author_institutions for the complete set. For a consolidated text, the base act's (see base_act_celex). Absent when not recorded, and for an AG opinion whose only recorded author is the Advocate General.",
+    "type": "string"
+   },
+   "author_institutions": {
+    "description": "All authors, labelled as in author_institution and listed once each, for acts adopted by more than one body (e.g. [\"European Parliament\", \"Council of the European Union\"]) or signed by several states. Advocates General appear in advocates_general instead. For a consolidated text, the base act's. Absent when none recorded.",
+    "items": {
+     "description": "Author label, as in author_institution.",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "base_act_celex": {
+    "description": "CELEX of the base act a consolidated text consolidates (e.g. 32024R1689), linked through CELLAR rather than derived from the consolidated CELEX. Its authors, in-force status, legal basis, and EuroVoc subjects are reported here in place of the consolidation's own. Absent for a base act, and for a consolidated text whose base act is unlinked or carries no CELEX.",
+    "type": "string"
+   },
+   "cap": {
+    "description": "Maximum body characters allowed in the window.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "case_reference": {
+    "description": "Case law: the case reference from the title (e.g. \"Case C-131/12.\").",
+    "type": "string"
+   },
+   "celex_number": {
+    "description": "Confirmed CELEX number for the retrieved work.",
+    "type": "string"
+   },
+   "consolidated_as_of": {
+    "description": "Consolidation date of current_consolidated_celex in ISO 8601 (YYYY-MM-DD). Present whenever is_superseded is.",
+    "type": "string"
+   },
+   "content": {
+    "description": "Body content of the act in the requested format and language. In \"paged\" mode this is the requested window; in \"full\" mode it starts at zero; under select it is the matched sections joined in document order, each source character once \u2014 a section inside another selected section (an article in a selected chapter) is carried inside the enclosing one. Every one is capped at 100000 characters. Omitted in \"metadata_only\" mode, when the window is empty, or when content is unavailable.",
+    "type": "string"
+   },
+   "content_available": {
+    "description": "Whether body content was fetched from EUR-Lex. False in \"metadata_only\" mode (no fetch attempted) \u2014 use content_mode to distinguish \"not requested\" from \"unavailable upstream\".",
+    "type": "boolean"
+   },
+   "content_chars_returned": {
+    "description": "Number of body characters returned in this response (equals content length). Present when a body was fetched and available.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "content_chars_total": {
+    "description": "Total character length of the full document body. Present when content was fetched and available; use with content_offset to page through the entire act.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "content_format": {
+    "description": "Format of the returned content: \"html\", \"markdown\", or \"xml\".",
+    "type": "string"
+   },
+   "content_mode": {
+    "description": "Content mode applied to this response: \"metadata_only\", \"paged\", or \"full\".",
+    "type": "string"
+   },
+   "content_offset": {
+    "description": "Character offset where the returned contiguous window begins. Present in \"paged\" and \"full\" modes. Absent for outline and select responses, whose content is not a contiguous span \u2014 read selected_sections for each matched section's own offset.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "content_status": {
+    "description": "Body resolution status: \"not_requested\" for metadata-only calls, \"available\" when a body was resolved, or \"unavailable\" after ordinary resolution attempts returned no usable body.",
+    "enum": [
+     "not_requested",
+     "available",
+     "unavailable"
+    ],
+    "type": "string"
+   },
+   "content_unavailability_reason": {
+    "description": "Why content_status is \"unavailable\": no representation exists, the upstream request failed, or a multipart Formex body could not be assembled completely.",
+    "enum": [
+     "no_representation",
+     "upstream_failure",
+     "multipart_incomplete"
+    ],
+    "type": "string"
+   },
+   "current_consolidated_celex": {
+    "description": "CELEX of the act's newest consolidated version in effect (e.g. 02014R0833-20260424) \u2014 fetch it with eurlex_get_document, or pass resolve \"current_consolidated\". A consolidation dated in the future is never this version. Present whenever is_superseded is.",
+    "type": "string"
+   },
+   "date": {
+    "description": "Document date in ISO 8601 format (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "ecli": {
+    "description": "European Case Law Identifier of a case-law record (e.g. \"ECLI:EU:C:2014:317\"), as eurlex_lookup_celex reports it: the work's own, or the lowest another work holding the same CELEX records. Absent for legislation.",
+    "type": "string"
+   },
+   "end_of_validity": {
+    "description": "Date (YYYY-MM-DD) the act's validity ends or ended: past for an expired act, and possibly in the future for one not yet in force (read it with entry_into_force), so on its own it does not mean the act expired. Present only when in_force is false and CELLAR records an actual date rather than its open-ended 9999-12-31; for a consolidated text, its base act's.",
+    "type": "string"
+   },
+   "entry_into_force": {
+    "description": "Earliest entry-into-force date (YYYY-MM-DD) of an act not yet in force. Present only when in_force is false and that date is after today (UTC); for a consolidated text, its base act's.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_identifier_args`: None of celex_number, eli_uri, or work_uri was provided, or more than one was. `not_found`: The CELEX, ELI, or work URI resolves to no fetchable work \u2014 the work is absent from the corpus, or the CELLAR work carries no CELEX number. `content_challenge`: The primary content response is an AWS WAF bot-challenge interstitial rather than legal text. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_identifier_args",
+         "not_found",
+         "content_challenge"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "eurovoc_subjects": {
+    "description": "EuroVoc subject classifications \u2014 for a consolidated text, its base act's. Absent when none are recorded.",
+    "items": {
+     "additionalProperties": false,
+     "description": "An EuroVoc subject: its concept URI plus its preferred label when available.",
+     "properties": {
+      "concept_uri": {
+       "description": "EuroVoc concept URI (http://eurovoc.europa.eu/{id}), the exact value the eurovoc_concept filter of eurlex_search_documents accepts.",
+       "type": "string"
+      },
+      "label": {
+       "description": "EuroVoc preferred label in the requested language. Absent when the concept has no label in that language.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "concept_uri"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "formation": {
+    "description": "Case law: the formation that decided, from the title's leading segment, verbatim (e.g. \"Grand Chamber\"), or \"President\", \"Vice-President\", or \"President of the Second Chamber\" for an order issued by that office. Absent when the title names none.",
+    "type": "string"
+   },
+   "has_more": {
+    "description": "True when body content exists beyond the returned contiguous window. Continue in \"paged\" mode with offset = content_offset + content_chars_returned until false. Always false in \"metadata_only\" mode, and always false for outline and select responses, where that recipe cannot resume across disjoint slices \u2014 a cut selection is disclosed through the truncated enrichment instead.",
+    "type": "boolean"
+   },
+   "in_force": {
+    "description": "Whether the act is currently in force \u2014 for a consolidated text, whether its base act is. When false, repealed_by, entry_into_force, and end_of_validity give the reason where CELLAR records one: an explicit repeal, an entry into force still ahead, or an end of validity \u2014 past for an expired act, possibly still ahead for one not yet in force. Some acts not in force carry none of them.",
+    "type": "boolean"
+   },
+   "is_superseded": {
+    "description": "Whether a newer consolidated version (an unofficial reading aid merging later amendments) than the text served is in effect, so this text may lack those amendments. False when the text served is the newest consolidated version in effect, or a consolidated version dated after it that does not apply yet. Not a repeal/replacement signal \u2014 the base act remains the law and may still be in force (see in_force). Present whenever the act has a consolidated version in effect; absent otherwise.",
+    "type": "boolean"
+   },
+   "language": {
+    "description": "Language code of the returned content.",
+    "type": "string"
+   },
+   "language_fallback": {
+    "description": "Human-readable note explaining the fallback that occurred (e.g. \"Requested FR content unavailable; returned EN\"). Present only when a fallback happened.",
+    "type": "string"
+   },
+   "legal_basis": {
+    "description": "Legal basis acts for this work \u2014 for a consolidated text, its base act's. Absent when none are recorded.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A legal basis act: its CELLAR work URI plus its CELEX number when recorded.",
+     "properties": {
+      "celex_number": {
+       "description": "CELEX number of the legal basis act (e.g. 12012E016 for TFEU Article 16). Absent when CELLAR records no CELEX for the work.",
+       "type": "string"
+      },
+      "work_uri": {
+       "description": "CELLAR work URI of the legal basis act. When celex_number is present, pass either as work_uri or celex_number to eurlex_get_document to fetch that act; a basis with no CELEX is a CELLAR reference that may not resolve to a fetchable work.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "work_uri"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "How to retrieve the remaining document content; when a work_uri carries several CELEX numbers, how many it carries and which one was served; and, when no consolidated version is in effect yet, that the consolidated text served does not apply yet, or that resolve \"current_consolidated\" served the base act.",
+    "type": "string"
+   },
+   "outline": {
+    "description": "Structural outline of the act. Present only when outline is true; an empty array means no structure was detected.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One detected heading, addressable by its character offset into the body.",
+     "properties": {
+      "kind": {
+       "description": "Structural unit kind: \"chapter\", \"section\", \"article\", \"annex\", or \"recital\" in an act; \"heading\" or \"operative_part\" in case law.",
+       "type": "string"
+      },
+      "label": {
+       "description": "Human label in English whatever the language and format, e.g. \"Article 17\", \"CHAPTER IV\", \"Recitals 1\u2013173\" \u2014 the form selection.matched reports; only an xml article with no number to read keeps its own heading text. A case-law heading keeps its text as served (e.g. \"Legal context\", \"Sur les d\u00e9pens\"); the operative part is \"Operative part\".",
+       "type": "string"
+      },
+      "number": {
+       "description": "Numbering token, the same in every language (e.g. \"17\", \"6A\", \"IV\" \u2014 Roman numerals in Latin letters, French \"premier\" as \"1\"); empty for a lone unnumbered annex. A recital entry covering a run reads as a range, first\u2013last (e.g. \"1\u2013173\"), unless include_recitals is true. A case-law heading is numbered by its 1-based position, the number select.headings takes; empty for the operative part.",
+       "type": "string"
+      },
+      "offset": {
+       "description": "Character offset of the heading in the full body of the requested format \u2014 pass as offset in a paged call to read from here.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "title": {
+       "description": "Descriptive title where the act supplies one.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "kind",
+      "number",
+      "label",
+      "offset"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "referring_court": {
+    "description": "Case law: the national court that referred a preliminary ruling, from the title (e.g. \"Audiencia Nacional\"). Absent on direct actions and appeals.",
+    "type": "string"
+   },
+   "repealed_by": {
+    "description": "CELEX numbers of the acts that explicitly repeal this one, the relation eurlex_get_relations names repealed_by (implicit repeals are listed there as implicitly_repealed_by). Present only when in_force is false; for a consolidated text, its base act's.",
+    "items": {
+     "description": "CELEX number of a repealing act.",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "requested_celex": {
+    "description": "The originally requested CELEX, echoed when resolve \"current_consolidated\" served a different consolidated version. celex_number holds the CELEX actually served. Absent when the served work is the one requested.",
+    "type": "string"
+   },
+   "requested_language": {
+    "description": "Originally requested language code when English fallback changed the effective language reported in language.",
+    "type": "string"
+   },
+   "resource_type": {
+    "description": "Human-readable document type label (e.g. \"Regulation\", \"Directive\"). Absent for some older works.",
+    "type": "string"
+   },
+   "selected_sections": {
+    "description": "Source address of each distinct section the selection located, in document order. Present only when select was used. A section nested inside another selected section keeps its own entry, though its text appears in content only once, inside the enclosing section. A selection is a set of slices, not a contiguous window, so these addresses \u2014 not content_offset \u2014 are how a caller navigates one; every section stays individually reachable even when the cap cut its text.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One selected section, addressable on its own through the paging floor.",
+     "properties": {
+      "chars": {
+       "description": "Characters the section spans in the source body \u2014 pass as limit alongside offset to read exactly this section. A section longer than the maximum window is read by paging forward from offset instead.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "label": {
+       "description": "Section label as in the outline, e.g. \"Article 17\", or a case-law heading's served text.",
+       "type": "string"
+      },
+      "offset": {
+       "description": "Character offset of the section in the full body of the requested format \u2014 pass as offset in a paged call to read it.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "label",
+      "offset",
+      "chars"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "selection": {
+    "additionalProperties": false,
+    "description": "Outcome of a structural selection. Present only when select was used; content holds the matched sections joined in document order, a nested section's text once inside its enclosing section, capped at 100000 characters. When the cap cuts the join, a trailing matched section may be partly or wholly absent from content \u2014 read selected_sections for each one's own address.",
+    "properties": {
+     "matched": {
+      "description": "Labels of the sections located in the body, in document order, as in the outline \u2014 in English whatever the language and format, except a case-law heading, which keeps its text as served.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "missed": {
+      "description": "Requested section descriptors that could not be located.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "requested": {
+      "description": "Section descriptors requested, in English whatever the language, e.g. [\"Article 17\", \"CHAPTER IV\"], or [\"Heading 2\", \"Operative part\"] for case law.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "requested",
+     "matched",
+     "missed"
+    ],
+    "type": "object"
+   },
+   "shown": {
+    "description": "Number of body characters returned.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "structure_detected": {
+    "description": "Whether any structure was parsed from the body. Present when outline or select was used; false means no detectable chapter/article/annex structure, or for case law no section heading or operative part \u2014 read it via offset/limit or content_mode \"full\".",
+    "type": "boolean"
+   },
+   "subject_matter": {
+    "description": "Case law: the subject-matter keyword list from the title (e.g. \"Personal data \u2013 Protection of individuals \u2026\").",
+    "type": "string"
+   },
+   "title": {
+    "description": "Document title in the language the body is served in (see language), or in English when CELLAR records no title in that language. Case law is titled in English whatever the language, parsed from its English CELLAR title: the parties (e.g. \"Google Spain SL and Google Inc. v Agencia Espa\u00f1ola de Protecci\u00f3n de Datos (AEPD) and Mario Costeja Gonz\u00e1lez.\"), or the court/AG descriptor when the case names none, with the rest in formation, referring_court, subject_matter, and case_reference, when the parser places the title whole; otherwise the raw \"#\"-delimited English title, or the served language's raw title when there is no English one. Absent for some older works and judgments.",
+    "type": "string"
+   },
+   "truncated": {
+    "description": "True when the returned body window was capped.",
+    "type": "boolean"
+   },
+   "work_uri": {
+    "description": "CELLAR work URI.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get EU Document"
+}

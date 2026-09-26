@@ -1,0 +1,126 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Screen Filing Signals"
+ },
+ "description": "Screen companies by signals across all source types \u2014 filings, earnings, transcripts, IR events.\n\nThis is NOT metric screening (use screen_companies for P/E, ROIC, etc.).\nMost signals are LLM-classified, not computed facts.\n\nSignals span five source types \u2014 10-K/10-Q filing intelligence, 8-K/6-K earnings releases, earnings-call transcripts, IR press releases, and DEF 14A proxies. Full id catalog with labels: see the `signals` parameter.\n\nUse Cases:\n- \"Which tech companies have cautious management?\" -> signals=[\"tone_cautious\"], sectors=[\"TECH\"]\n- \"Does NVDA have any tone_shifted recently?\" -> ticker=\"NVDA\", signals=[\"tone_shifted\"], recency_days=30\n- \"Did AAPL disclose new risk factors vs last year's 10-K?\" (year-over-year risk surveillance) -> ticker=\"AAPL\", signals=[\"has_new_risks\"] \u2014 prefer this over reading risk_factors for two periods via get_filing_section and diffing the prose by hand\n- \"Companies that gave specific guidance on calls?\" -> signals=[\"transcript_has_guidance\"]\n- \"Which companies announced strategic partnerships or M&A deals?\" -> signals=[\"ir_partnership\"]\n\nCross-filing composition (Brief 35 \u2014 Pattern 4):\n`ir_partnership` matches on M&A / partnership 8-K anchors (Item 1.01) carry a `companion_accessions: string[]`\nfield in their payload value when the announcement is split across an anchor + same-day companion 8-K\n(7.01 Reg FD + Ex 99 press release / 8.01 other events). To read the full announcement narrative \u2014 CEO quotes,\ndeal terms, investor-presentation text living in the companion \u2014 pass those accession numbers to\n`get_filing_section({..., section_id:\"item_1_01_material_agreement\", include_companions:true, companion_accessions:[...]})`.\nEmpty list means no companion exists or the producer hasn't backfilled it (acceptable; anchor-only flow still works).",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "agreement_type_filter": {
+    "description": "Discriminator for `ir_partnership` signals \u2014 e.g. 'm_and_a_announcement' for fresh M&A deals, 'partnership_strategic' for alliances. Ignored for non-IR signals.",
+    "enum": [
+     "partnership_strategic",
+     "partnership_supply",
+     "partnership_jv",
+     "partnership_amendment",
+     "warrant_issuance",
+     "m_and_a_announcement",
+     "m_and_a_amendment",
+     "m_and_a_termination",
+     "m_and_a_close",
+     "other"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Max results (default: 20)",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "match_mode": {
+    "default": "all",
+    "description": "Match semantics within a source type. 'all' (default) = every requested signal fires on the SAME row (targeted screening); 'any' = at least one fires (broadcast discovery / digest pools).",
+    "enum": [
+     "all",
+     "any"
+    ],
+    "type": "string"
+   },
+   "order_by": {
+    "default": "recency",
+    "description": "Result ordering. 'recency' (default) = event_date/filing_date DESC; 'market_cap' = market-cap DESC NULLS LAST with a recency tiebreak \u2014 use it so high-impact filings aren't pushed past the limit by fresher small-cap noise.",
+    "enum": [
+     "recency",
+     "market_cap"
+    ],
+    "type": "string"
+   },
+   "recency_days": {
+    "default": 90,
+    "description": "Only filings from last N days (default: 90)",
+    "maximum": 365,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "sectors": {
+    "description": "Sector codes: TECH, HEALTH, FIN, RE, CONS_DISC, CONS_STAPLES, IND, MAT, ENERGY, UTIL, TRANSPORT, COMM, OTHER",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "signals": {
+    "description": "Signal filters to match. Pass one or more ids EXACTLY as listed below (only these are screenable).\nOmit `ticker` to screen the whole universe for a signal (the common case); pass `ticker` only to check ONE company \u2014 don't loop company-by-company.\n\n**Filing signals (10-K/10-Q):**\n- `tone_cautious` \u2014 Management tone is cautious/defensive\n- `customer_concentration_high` \u2014 Customer concentration > 20% or elevated risk\n- `covenant_risk` \u2014 Covenant tight, waiver obtained, or violation\n- `debt_maturity_near` \u2014 Significant debt maturing within 12 months\n- `dividend_coverage_weak` \u2014 Dividend coverage below operating cash flow\n- `sbc_unhedged` \u2014 Stock comp exceeds buybacks (net dilution)\n- `has_fuel_sensitivity` \u2014 Fuel cost sensitivity quantified in MD&A\n- `mda_has_scale_claims` \u2014 \u22653 quantified operational scale claims extracted from MD&A narrative (e.g. renewal rates, member counts, comp sales)\n\n**Earnings releases (8-K Item 2.02 + 6-K Ex 99.1):**\n- `earnings_revenue_grew` \u2014 Revenue grew year-over-year\n- `earnings_revenue_declined` \u2014 Revenue declined year-over-year\n- `earnings_margin_expanded` \u2014 Operating or gross margin expanded vs prior year\n- `earnings_margin_contracted` \u2014 Operating or gross margin contracted vs prior year\n- `earnings_guidance_raised_8k` \u2014 Forward guidance raised in earnings release\n- `earnings_guidance_lowered_8k` \u2014 Forward guidance lowered in earnings release\n- `earnings_has_special_items` \u2014 Non-recurring charges or special items disclosed\n- `earnings_accrual_concerning` \u2014 Accrual quality weak or concerning (cash vs earnings divergence)\n- `earnings_has_capital_return` \u2014 Shareholder capital returned (buybacks and/or dividends)\n\n**Earnings call transcript:**\n- `transcript_has_guidance` \u2014 Specific guidance given on earnings call\n- `transcript_has_prepared_remarks` \u2014 Prepared remarks available (true for all transcript sources)\n- `transcript_has_analyst_questions` \u2014 Analyst Q&A captured with topics + firms\n- `transcript_guidance_raised` \u2014 \u22651 guidance item raised vs prior quarter (from transcript)\n- `transcript_guidance_lowered` \u2014 \u22651 guidance item lowered vs prior quarter (from transcript)\n- `transcript_has_revenue_decompositions` \u2014 Segment-level revenue decomposed into quantified drivers (volume / price / mix / FX / M&A) on call\n- `transcript_qa_concerns_retained` \u2014 \u22652 analysts left with concerns retained after Q&A\n- `transcript_qa_forward_committed` \u2014 \u22652 executive responses with forward-looking commitments on call (count-based; transcript_has_forward_commits exposes the underlying instances)\n\n**IR events:**\n- `ir_partnership` \u2014 Strategic partnerships announced\n\n**DEF 14A proxy:**\n- `def14a_peer_group` \u2014 Compensation peer group disclosed (with company names)\n- `def14a_ceo_pay_ratio` \u2014 CEO pay ratio disclosed",
+    "items": {
+     "enum": [
+      "tone_cautious",
+      "customer_concentration_high",
+      "covenant_risk",
+      "debt_maturity_near",
+      "dividend_coverage_weak",
+      "sbc_unhedged",
+      "has_fuel_sensitivity",
+      "earnings_revenue_grew",
+      "earnings_revenue_declined",
+      "earnings_margin_expanded",
+      "earnings_margin_contracted",
+      "earnings_guidance_raised_8k",
+      "earnings_guidance_lowered_8k",
+      "earnings_has_special_items",
+      "earnings_accrual_concerning",
+      "earnings_has_capital_return",
+      "transcript_has_guidance",
+      "transcript_has_prepared_remarks",
+      "transcript_has_analyst_questions",
+      "transcript_guidance_raised",
+      "transcript_guidance_lowered",
+      "transcript_has_revenue_decompositions",
+      "transcript_qa_concerns_retained",
+      "transcript_qa_forward_committed",
+      "mda_has_scale_claims",
+      "ir_partnership",
+      "def14a_peer_group",
+      "def14a_ceo_pay_ratio"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "since_date": {
+    "description": "Lower bound (inclusive, YYYY-MM-DD) on event_date / filing_date. With until_date, defines an explicit range that OVERRIDES recency_days \u2014 use for historical windows, backfilling past digests, or comparing two windows to detect cross-period signal change.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "ticker": {
+    "description": "Filter to a single ticker (e.g. 'NVDA'). Use for per-ticker cross-source signal inventory. Omit to screen across all companies.",
+    "type": "string"
+   },
+   "until_date": {
+    "description": "Upper bound (inclusive, YYYY-MM-DD). With since_date, overrides recency_days.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "signals"
+  ],
+  "type": "object"
+ },
+ "name": "screen_filing_signals",
+ "title": "Screen Filing Signals"
+}

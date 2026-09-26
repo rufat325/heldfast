@@ -1,0 +1,307 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Verify a CodeRifts signed chain-receipt you ALREADY HOLD: cryptographic\nauthenticity (signature + key id), body binding, and \u2014 when lifecycle indices\nare available \u2014 whether it is currently valid authorization (not expired,\nsuperseded, or revoked) for a stated operation/target.\n\nUse this when:\n- You already obtained a chain_receipt / receipt token from a prior preflight\n  (or CI artifact) and are about to act (merge/deploy) under that receipt.\n- A contract-gate or policy requires offline/online proof that the receipt is\n  authentic for this change before proceeding.\n- You must distinguish \"signature ok\" from \"currently authorized\" (stale or\n  superseded receipts must not be treated as live approval).\n\nDo not use when:\n- You do not have a receipt yet \u2014 call coderifts.preflight_change_set first.\n- You need a NEW decision for a changed base\u2192head set \u2014 preflight again;\n  verify_receipt does not re-diff specs.\n- The receipt you hold binds a different operation or target than the one you\n  are about to perform \u2014 call coderifts.preflight_change_set with\n  context.operation set to that operation (a merge receipt does not authorize\n  a deploy); verify_receipt cannot re-scope or re-issue a decision.\n- You only need human-readable history of an old decision_id without a receipt\n  token \u2014 use coderifts.get_decision_details.\n- The change set itself is unknown or incomplete \u2014 fix the change set and\n  preflight; do not \"verify\" a placeholder.\n\nInputs: receipt token (required); optional intended context (operation, environment,\nfingerprint, target_id, audience, repository/branch/pull_request, base/head) and the\nbody_hash-bound decision_result envelope. 30s clock-skew leeway on expiry. A 0s\ngrace for declared destructive production operations is defined in the policy but\nis unreachable today: the intended-context schema has no destructive field, so\nnothing can declare one and the 30s leeway always applies.\nReturns { valid, status, currently_authorized (bool|null), reason, payload, authz_* }.\nBranch on currently_authorized; null = not evaluated.\n\nWhen a decision envelope is also in hand (e.g. from a prior preflight), its\ncontrol_envelope.next_agent_step (if present) is structured remediation guidance\nthe agent MAY follow after a non-CONTINUE decision \u2014 still branch on\nexecution_action; next_agent_step is suggestion, not permission.",
+ "inputSchema": {
+  "description": "Two evaluation modes (schema-documented; no mode discriminator field). SIGNATURE: supply token only \u2014 signature + expiry; currently_authorized is null. AUTHORIZATION: also supply intended context (operation, environment, fingerprint, target_id set to decision_result.artifact_digest, audience, repository/branch/pull_request, and/or base/head) AND the body_hash-bound decision_result envelope so currently_authorized / authz_status / authz_reason can be evaluated. Token alone is always accepted; omitting the envelope when context fields are present yields a signature verdict plus fail-closed authorization (currently_authorized false), not a schema reject.",
+  "properties": {
+   "audience": {
+    "description": "Intended audience \u2014 must match the receipt",
+    "type": "string"
+   },
+   "base": {
+    "description": "Intended base commit/ref SHA the receipt must match (signed-wins vs envelope.base)",
+    "type": "string"
+   },
+   "branch": {
+    "description": "Intended branch the receipt must bind (place binding; optional)",
+    "type": "string"
+   },
+   "decision_result": {
+    "additionalProperties": true,
+    "description": "The body_hash-bound decision envelope (carries operation/target/decision). Required for a meaningful AUTHORIZATION evaluation of scope; without it, intended context alone fails closed on authorization (currently_authorized false) while signature status remains independent. Full schema: https://coderifts.com/schemas/decision-result.v1.consumer.json.",
+    "properties": {
+     "audience": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "authority": {
+      "description": "Additive. { audience, tenant_scope: bound|unbound, binding_proven_at? }. Informational \u2014 not permission, not a verify-receipt gate, not an ACL.",
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "base": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "blast_radius": {
+      "description": "Additive COUNTS (not a score). Not permission.",
+      "properties": {
+       "consumers_declared": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "consumers_observed": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "endpoints": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "fields": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "graph_source": {
+        "type": "string"
+       },
+       "params": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "type": "object"
+     },
+     "decision": {
+      "enum": [
+       "ALLOW",
+       "WARN",
+       "REQUIRE_APPROVAL",
+       "BLOCK"
+      ],
+      "type": "string"
+     },
+     "decision_body_hash": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "decision_id": {
+      "type": "string"
+     },
+     "derivation": {
+      "description": "Additive. Present only when derivation:\"server\" produced this envelope. { source, platform?, base_sha, head_sha }. Covered by body_hash; not fingerprint.",
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "environment": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "execution_action": {
+      "enum": [
+       "CONTINUE",
+       "CONTINUE_WITH_MONITORING",
+       "REQUEST_APPROVAL",
+       "STOP"
+      ],
+      "type": "string"
+     },
+     "expires_at": {
+      "type": "string"
+     },
+     "fingerprint": {
+      "type": "string"
+     },
+     "head": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "input_fingerprint": {
+      "type": "string"
+     },
+     "operation": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "receipt": {
+      "type": "object"
+     },
+     "repository": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "safe_for_agent": {
+      "type": "boolean"
+     },
+     "spec_version": {
+      "pattern": "^decision-result\\.v1(\\.[0-9]+)?$",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "environment": {
+    "description": "Intended environment (e.g. production) \u2014 must match the receipt",
+    "type": "string"
+   },
+   "fingerprint": {
+    "description": "Intended change fingerprint \u2014 must equal the receipt fp",
+    "type": "string"
+   },
+   "head": {
+    "description": "Intended head commit/ref SHA the receipt must match (signed-wins vs envelope.head)",
+    "type": "string"
+   },
+   "operation": {
+    "description": "Intended operation the receipt must authorize (conventional: merge|deploy|tool_call|publish). Triggers authorization evaluation when non-empty; supply decision_result for full scope binding.",
+    "type": "string"
+   },
+   "pull_request": {
+    "description": "Intended pull-request id the receipt must bind (place binding; optional)",
+    "oneOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "number"
+     }
+    ]
+   },
+   "repository": {
+    "description": "Intended repository the receipt must bind (place binding; optional)",
+    "type": "string"
+   },
+   "target_id": {
+    "description": "REQUIRED to authorize under a held receipt. Set it to decision_result.artifact_digest \u2014 the digest of the artifact the receipt was issued for, which you already hold in the decision_result you are passing. The server does NOT derive it for you: it carries YOUR intended apply-site, and taking it from the envelope would compare that document against itself. Omit it and the answer is currently_authorized false with authz_reason target_not_stated and authz_status VERIFIED_TARGET_NOT_STATED \u2014 a missing input, distinct from target_mismatch, which means the receipt covers a different target.",
+    "type": "string"
+   },
+   "token": {
+    "description": "The chain receipt token (base64url(body).base64url(signature))",
+    "type": "string"
+   }
+  },
+  "required": [
+   "token"
+  ],
+  "type": "object"
+ },
+ "name": "verify_receipt",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "Receipt signature/status plus optional authorization layer. additionalProperties true: additive fields may appear and are not permission. Envelope compatibility when a decision_result is supplied: https://coderifts.com/schemas/decision-result.v1.consumer.json schema description (single source).",
+  "properties": {
+   "authz_note": {
+    "description": "Present when no intended context supplied: status reflects signature+expiry only",
+    "type": "string"
+   },
+   "authz_reason": {
+    "description": "When currently_authorized=false: the deny reason (operation_mismatch, decision_not_allow, superseded, expired, target_mismatch, environment_mismatch, \u2026)",
+    "type": "string"
+   },
+   "authz_reasons": {
+    "description": "Every violation found; the first is authz_reason. [] when authorized. Fix all of them before re-verifying.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "authz_state": {
+    "description": "Lifecycle state from isCurrentlyAuthorized when authorization is evaluated (optional; omitted when currently_authorized is null)",
+    "type": "string"
+   },
+   "authz_status": {
+    "description": "Authorization-level status (VERIFIED_WRONG_ENVIRONMENT / VERIFIED_SUPERSEDED / VERIFIED_SCOPE_MISMATCH / \u2026)",
+    "type": "string"
+   },
+   "binding_level": {
+    "description": "place_and_content | content_only \u2014 forensic, not a second verdict",
+    "type": "string"
+   },
+   "caller_value": {
+    "description": "Caller claim that differed from the signed envelope",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "correlation_id": {
+    "description": "Route-owned trace id, set by the route itself rather than by correlation middleware; always a non-empty string on 200",
+    "type": "string"
+   },
+   "currently_authorized": {
+    "description": "Whether the receipt currently authorizes the intended operation/target/fp (\u00a7106). null means authorization could not be evaluated (e.g. no intended context) \u2014 not unauthorized and not authorized.",
+    "type": [
+     "boolean",
+     "null"
+    ]
+   },
+   "payload": {
+    "type": "object"
+   },
+   "reason": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "signed_value": {
+    "description": "Signed envelope slot when signed-wins fail-closed (source_binding_mismatch)",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "status": {
+    "enum": [
+     "VERIFIED_CURRENT",
+     "VERIFIED_EXPIRED",
+     "VERIFIED_WRONG_AUDIENCE",
+     "VERIFIED_WRONG_ENVIRONMENT",
+     "VERIFIED_SUPERSEDED",
+     "VERIFIED_SCOPE_MISMATCH",
+     "VERIFIED_UNBOUND_OPERATION",
+     "VERIFIED_UNBOUND_TARGET",
+     "VERIFIED_UNBOUND_REPOSITORY",
+     "VERIFIED_UNBOUND_BRANCH",
+     "VERIFIED_UNBOUND_PULL_REQUEST",
+     "VERIFIED_TARGET_NOT_STATED",
+     "UNKNOWN_KEY",
+     "UNKNOWN_KEY_STATUS",
+     "RETIRED_KEY_VALID_AT_ISSUE",
+     "KEY_RETIRED_AFTER_SIGNING",
+     "REVOKED_KEY",
+     "REVOKED_KEY_UNDECIDABLE",
+     "KEY_REVOKED",
+     "REVOCATION_UNDECIDABLE",
+     "AUTHORIZATION_UNDECIDABLE",
+     "INVALID_SIGNATURE",
+     "MALFORMED",
+     "UNSUPPORTED_VERSION",
+     "REGISTRY_UNREACHABLE"
+    ],
+    "type": "string"
+   },
+   "valid": {
+    "description": "true iff status is VERIFIED_CURRENT or RETIRED_KEY_VALID_AT_ISSUE",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "valid",
+   "status",
+   "currently_authorized"
+  ],
+  "type": "object"
+ }
+}

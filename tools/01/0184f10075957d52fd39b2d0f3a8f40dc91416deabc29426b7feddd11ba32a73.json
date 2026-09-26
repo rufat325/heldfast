@@ -1,0 +1,83 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Submit an approval request"
+ },
+ "description": "Submits an approval request of any supported type: UAT_PROMOTION, UAT_SIGN_OFF, PRODUCTION_PROMOTION, VISIBILITY_CHANGE, OWNERSHIP_TRANSFER, RETIREMENT, DOMAIN_CHANGE, or ROLLBACK. **An agent may submit but never decide**: SpringRoll requires a human approver, and an agent token cannot approve its own request.\n\nConfirm with the user before calling this. It creates review work for named people.\n\nType-specific behaviour:\n  \u2022 `PRODUCTION_PROMOTION`: this does NOT deploy. It asks. `releaseId` defaults to the application's latest release. Once approved, call springroll.deploy.promote.\n  \u2022 `ROLLBACK`: `justification` is required, and `targetEnvironmentType` says which environment to roll back. Put the deployment to restore in `payload.targetDeploymentId`; it defaults to the last successful one.\n  \u2022 `RETIREMENT`: `justification` is required.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "application": {
+    "description": "Application slug or id.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "context": {
+    "description": "Explain why you are calling this tool and how it fits into the user's overall goal. This parameter is used for analytics and user intent tracking. YOU MUST provide 15-25 words (count carefully). NEVER use first person ('I', 'we', 'you') - maintain third-person perspective. NEVER include sensitive information such as credentials, passwords, or personal data. Example (20 words): \"Searching across the organization's repositories to find all open issues related to performance complaints and latency issues for team prioritization.\"",
+    "type": "string"
+   },
+   "idempotencyKey": {
+    "description": "Required. A stable, caller-generated key. Retrying with the same key returns the original result instead of creating a duplicate.",
+    "maxLength": 200,
+    "minLength": 8,
+    "type": "string"
+   },
+   "justification": {
+    "description": "Why this should happen. Shown to reviewers. Required for ROLLBACK and RETIREMENT, and at least 10 characters when required.",
+    "maxLength": 2000,
+    "type": "string"
+   },
+   "payload": {
+    "additionalProperties": {},
+    "description": "Type-specific detail, e.g. { visibility: 'TENANT' }, { newOwnerMembershipId: '\u2026' }, or { targetDeploymentId: '\u2026' } for a rollback.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "releaseId": {
+    "description": "Release this concerns. For PRODUCTION_PROMOTION, defaults to the latest release.",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "requestType": {
+    "enum": [
+     "UAT_PROMOTION",
+     "UAT_SIGN_OFF",
+     "PRODUCTION_PROMOTION",
+     "VISIBILITY_CHANGE",
+     "OWNERSHIP_TRANSFER",
+     "RETIREMENT",
+     "DOMAIN_CHANGE",
+     "ROLLBACK"
+    ],
+    "type": "string"
+   },
+   "targetEnvironmentType": {
+    "description": "Canonical environment class. SpringRoll promotes development -> uat -> production.",
+    "enum": [
+     "development",
+     "uat",
+     "production"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "application",
+   "requestType",
+   "idempotencyKey",
+   "context"
+  ],
+  "type": "object"
+ },
+ "name": "springroll.approval.submit",
+ "title": "Submit an approval request"
+}

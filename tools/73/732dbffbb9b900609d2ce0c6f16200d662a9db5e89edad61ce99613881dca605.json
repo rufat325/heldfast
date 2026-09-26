@@ -1,0 +1,62 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Full-Text SEC Filing Search"
+ },
+ "description": "Search the full text of every SEC filing since 2001 to find companies related to any concept \u2014 a product, technology, regulation, event, or company.\n\nReturns filing-level results with aggregated statistics (company count, form type breakdown, industry distribution). For 10-K/10-Q filings processed by MetricDuck, also shows WHICH SECTIONS contain the term with drill-in pointers.\n\n**Searchable form types** \u2014 any SEC form since 2001; omit `form_type` to search all:\n- Periodic reports: 10-K, 10-Q (section-level drill-down available), 20-F, 40-F, 6-K (foreign private issuers)\n- Events + proxies: 8-K, DEF 14A / DEFM14A / PRE 14A\n- Registration + offerings: S-1, F-1, S-3, S-4, 424B series\n- Ownership + other: SC 13D, SC 13G, SD (conflict minerals), N-CSR / N-CSRS (fund reports)\n\n**Section-level enrichment** (10-K/10-Q only): results name which sections contain the term, with chunk pointers for drill-in via get_filing_section. Other forms return filing metadata + accession numbers only.\n\nUse cases:\n- \"Who supplies Apple?\" \u2192 query=\"\\\"Apple Inc.\\\"\", form_type=\"10-K,10-Q,8-K\" \u2192 Company Exposure Map of the filers mentioning Apple. Constrain forms \u2014 mutual-fund NPORT-P filings otherwise crowd the results (see `date_from`).\n- \"What did WM say at its investor day?\" \u2192 query=\"\\\"investor day\\\"\", company=\"WM\" \u2192 that filer only\n- \"Recent data breaches?\" \u2192 query=\"cybersecurity incident\", form_type=\"8-K\"\n- \"Tariff-exposed companies?\" \u2192 query=\"tariff\", form_type=\"10-K\" \u2192 risk factor disclosures\n- \"Activist campaigns?\" \u2192 query=\"board representation\", form_type=\"DEF 14A,SC 13D\"\n\nWhen to use other tools instead:\n- You already know the company \u2192 `get_filing_index` (signal triage) or `list_filings` (filing inventory)\n- You want financial metrics \u2192 `screen_companies` (numeric filters)\n- You want earnings call cross-quarter view \u2192 `compare_earnings_calls`\n\nKey limitation: keyword matching only, not semantic. \"No material weakness\" matches \"material weakness found.\" Verify hits with `get_filing_section` for context.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "company": {
+    "description": "Restrict to one company. Accepts a ticker (e.g. 'WSC'), a CIK (exact match, preferred \u2014 get from search_companies; shorter numeric CIKs are auto-zero-padded to 10 digits), or a company name (partial match \u2014 may include unrelated companies).",
+    "type": "string"
+   },
+   "date_from": {
+    "description": "Start date YYYY-MM-DD. Default: 1 year ago. For a HISTORICAL event (M&A announcement, lawsuit, restructuring, leadership change) set it before the event, with form_type='8-K' and rank_by='relevance': the default window and date order bury the anchor 8-K under mutual-fund NPORT-P holdings.",
+    "type": "string"
+   },
+   "date_to": {
+    "description": "End date YYYY-MM-DD. Default: today.",
+    "type": "string"
+   },
+   "form_type": {
+    "description": "SEC form type filter. 10-K (annual report), 10-Q (quarterly), 8-K (material events), DEF 14A (proxy/compensation), S-1 (IPO registration). Comma-separated for multiple: '10-K,10-Q'. Omit to search all types.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Max results (default 10, max 100). Results deduplicated by filing, sorted most recent first. Section-level enrichment applies to the first 10 results.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Search terms. All terms required by default (implicit AND). Syntax: exact phrase \"revenue recognition\", OR: \"goodwill impairment\" OR \"asset writedown\", NOT: restructuring NOT \"restructuring charges\", NEAR: goodwill NEAR(5) impairment (within N words), wildcard: restructur* (trailing only, not in phrases). Use formal terms as written in SEC filings, not abbreviations. Required.",
+    "type": "string"
+   },
+   "rank_by": {
+    "default": "date",
+    "description": "Sort order for the returned filing list. 'date' (default) = most recent filings first \u2014 best for time-sensitive queries (breaches, guidance changes, recent events). 'relevance' = EFTS native relevance score \u2014 best for thematic discovery where the most concentrated mentions matter more than recency (e.g., 'liquefied natural gas', 'H100 supply chain'). The Company Exposure Map is always frequency-ranked from EFTS aggregation regardless of rank_by.",
+    "enum": [
+     "date",
+     "relevance"
+    ],
+    "type": "string"
+   },
+   "sections": {
+    "default": true,
+    "description": "Include section-level matches showing WHERE in each filing the term appears. Provides exact section + chunk pointers for immediate drill-in with get_filing_section. Set false for faster filing-level-only results.",
+    "type": "boolean"
+   },
+   "ticker_lookup": {
+    "description": "RETIRED \u2014 returns a redirect. Scope with `company`; to find who MENTIONS a company, search its formal name with form_type.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "search_sec_filings",
+ "title": "Full-Text SEC Filing Search"
+}

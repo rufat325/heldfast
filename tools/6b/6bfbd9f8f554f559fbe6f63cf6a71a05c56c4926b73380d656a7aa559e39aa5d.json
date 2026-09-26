@@ -1,0 +1,666 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Detection range (sonar equation, passive or active)"
+ },
+ "description": "Sonar detection range along a bearing from a location (lat/lon or `place`).\n    Transmission loss (TL) is ALWAYS computed: RAM parabolic equation with the\n    location's bathymetry, seasonal sound speed (`month`, default: current month)\n    and seabed. Every other sonar-equation term is optional \u2014 anything not given\n    gets a stated, typical default listed in `assumptions` with its source.\n    Tell the user which values were assumed.\n\n    Detection threshold DT is derived from processing gain (unless given):\n    detection index d from `pd`/`pfa` (default 0.5 / 1e-4 \u2192 d \u2248 13.8), then\n      passive (incoherent energy detector): DT = 5\u00b7log10(d / (B\u00b7T)),\n        B = analysis band, T = `integration_time_s` (default 1 s);\n      active (matched filter): DT = 10\u00b7log10(d / (2\u00b7B\u00b7\u03c4)),\n        B = `bandwidth_hz` (default 100 Hz LFM), \u03c4 = `pulse_length_s` (default 0.5 s).\n    DT is in-band SNR, so it can be negative \u2014 that IS the processing gain.\n\n    mode=\"passive\": SE = SL \u2212 TL \u2212 (NL \u2212 DI) \u2212 DT. Default target = merchant ship\n      (bulk carrier, AIS 70, 200 m @ 12 kn, JOMOPANS-ECHO decidecade band level) at\n      6 m; receiver \u00bd water depth (\u2264 30 m), omni (DI 0 \u2014 give directivity_index_db\n      for an array). `frequency_hz` is optional: the tool always also evaluates\n      the target's MOST DETECTABLE 1/3-octave band in 50\u20132000 Hz (`best_band`) \u2014\n      ships are loudest there; a user frequency is reported as asked. If you give\n      `source_level_db` without `frequency_hz`, the range is evaluated at 50 Hz.\n    mode=\"active\" (monostatic, `frequency_hz` required): SE = SL \u2212 2\u00b7TL + TS \u2212\n      (NL \u2212 DI) \u2212 DT, TL from the sonar to the target depth. Defaults: hull sonar\n      at 7 m, SL 220 dB, TS 10 dB (submarine-sized, beam aspect), target \u00bd water\n      depth (\u2264 50 m), DI 20 dB (hull array). Noise-limited only: reverberation is\n      NOT included (often the limit in shallow water).\n    NL (unless given) = Wenz ambient noise at the CURRENT forecast wind at the point\n    (Clairwave weather), moderate shipping, in the analysis band.\n    Units: dB re 1 \u00b5Pa (SL @ 1 m).",
+ "inputSchema": {
+  "properties": {
+   "bandwidth_hz": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Bandwidth Hz"
+   },
+   "bearing_deg": {
+    "default": 0.0,
+    "title": "Bearing Deg",
+    "type": "number"
+   },
+   "detection_threshold_db": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Detection Threshold Db"
+   },
+   "directivity_index_db": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Directivity Index Db"
+   },
+   "frequency_hz": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Frequency Hz"
+   },
+   "integration_time_s": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Integration Time S"
+   },
+   "lat": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Lat"
+   },
+   "lon": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Lon"
+   },
+   "max_range_km": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Max Range Km"
+   },
+   "mode": {
+    "default": "passive",
+    "title": "Mode",
+    "type": "string"
+   },
+   "month": {
+    "anyOf": [
+     {
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Month"
+   },
+   "noise_level_db": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Noise Level Db"
+   },
+   "pd": {
+    "default": 0.5,
+    "title": "Pd",
+    "type": "number"
+   },
+   "pfa": {
+    "default": 0.0001,
+    "title": "Pfa",
+    "type": "number"
+   },
+   "place": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Place"
+   },
+   "pulse_length_s": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Pulse Length S"
+   },
+   "receiver_depth_m": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Receiver Depth M"
+   },
+   "source_depth_m": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Source Depth M"
+   },
+   "source_level_db": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Source Level Db"
+   },
+   "target_depth_m": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Target Depth M"
+   },
+   "target_strength_db": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Target Strength Db"
+   }
+  },
+  "title": "estimate_detection_rangeArguments",
+  "type": "object"
+ },
+ "name": "estimate_detection_range",
+ "outputSchema": {
+  "$defs": {
+   "LocationInfo": {
+    "additionalProperties": true,
+    "properties": {
+     "depth_m": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "water depth at the point, metres (positive down)",
+      "title": "Depth M"
+     },
+     "lat": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "latitude used, decimal degrees N",
+      "title": "Lat"
+     },
+     "lon": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "longitude used, decimal degrees E",
+      "title": "Lon"
+     },
+     "matched": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "gazetteer key or OpenStreetMap display name that matched",
+      "title": "Matched"
+     },
+     "offshore_km": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "offset applied along the seaward bearing",
+      "title": "Offshore Km"
+     },
+     "original": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "description": "original lat/lon/depth before the snap",
+      "title": "Original"
+     },
+     "provenance": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "description": "provider/source notes",
+      "title": "Provenance"
+     },
+     "query": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "place name as given",
+      "title": "Query"
+     },
+     "seaward_bearing_deg": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "compass bearing that leads further to sea",
+      "title": "Seaward Bearing Deg"
+     },
+     "snap": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "description": "bearing_deg and distance_km of the seaward walk",
+      "title": "Snap"
+     },
+     "snapped_to_water": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "true if the original point was on land/shallow and was moved seaward",
+      "title": "Snapped To Water"
+     },
+     "source": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "gazetteer:exact | gazetteer:contains | gazetteer:fuzzy | nominatim (OpenStreetMap)",
+      "title": "Source"
+     }
+    },
+    "title": "LocationInfo",
+    "type": "object"
+   }
+  },
+  "properties": {
+   "assumptions": {
+    "anyOf": [
+     {},
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Assumptions"
+   },
+   "bearing_deg": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Bearing Deg"
+   },
+   "best_band": {
+    "anyOf": [
+     {},
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Best Band"
+   },
+   "caveats": {
+    "anyOf": [
+     {},
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Caveats"
+   },
+   "continuous_detection_range_km": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Continuous Detection Range Km"
+   },
+   "detectable_fraction_of_track": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Detectable Fraction Of Track"
+   },
+   "detection_threshold_db": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Detection Threshold Db"
+   },
+   "environment_run_id": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Environment Run Id"
+   },
+   "furthest_detectable_range_km": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Furthest Detectable Range Km"
+   },
+   "inputs": {
+    "anyOf": [
+     {},
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Inputs"
+   },
+   "limited_by_max_range": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Limited By Max Range"
+   },
+   "location": {
+    "anyOf": [
+     {
+      "$ref": "#/$defs/LocationInfo"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null
+   },
+   "method": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Method"
+   },
+   "mode": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Mode"
+   },
+   "noise_level_db": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Noise Level Db"
+   },
+   "open_url": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Open Url"
+   },
+   "open_url_note": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Open Url Note"
+   },
+   "provenance": {
+    "anyOf": [
+     {},
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Provenance"
+   },
+   "receiver_below_seafloor_fraction": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Receiver Below Seafloor Fraction"
+   },
+   "replication": {
+    "anyOf": [
+     {},
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Replication"
+   },
+   "se_db": {
+    "anyOf": [
+     {},
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Se Db"
+   },
+   "signal_excess_vs_range": {
+    "anyOf": [
+     {},
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Signal Excess Vs Range"
+   },
+   "sonar_equation": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Sonar Equation"
+   },
+   "source_level_db": {
+    "anyOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Source Level Db"
+   }
+  },
+  "title": "DetectionRangeResult",
+  "type": "object"
+ },
+ "title": "Detection range (sonar equation, passive or active)"
+}

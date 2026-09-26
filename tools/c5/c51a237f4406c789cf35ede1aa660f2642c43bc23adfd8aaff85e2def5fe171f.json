@@ -1,0 +1,524 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Route a caller-controlled action to continue, request_evidence, require_approval, or stop using supplied claim evidence, risk tier, policy checks, and an optional external approval reference. Resubmit the same run_id after adding evidence or approval. The caller remains responsible for enforcement. Required fields in 'request': run_id, proposed_action, risk_tier, claims, dated_sources, policy_context. Grades the evidence you supply and names what is still missing; it does not retrieve sources, so a call that brings none is refused. With only a question and no evidence yet, start at corridor_sanctions_assistant. Evidence triage only: no factual-truth verification, no legal, compliance, sanctions, or financial advice. Human review is required before any commercial action.",
+ "inputSchema": {
+  "$defs": {
+   "actor": {
+    "additionalProperties": false,
+    "properties": {
+     "id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "operator": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "type": {
+      "enum": [
+       "ai_agent",
+       "automation",
+       "api_client",
+       "human_delegated_agent",
+       "unknown",
+       "other"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "type"
+    ],
+    "type": "object"
+   },
+   "approval": {
+    "additionalProperties": false,
+    "properties": {
+     "reference": {
+      "description": "Opaque caller-held reference to an external approval record.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "not_requested",
+       "approved",
+       "rejected"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "status"
+    ],
+    "type": "object"
+   },
+   "claim": {
+    "additionalProperties": false,
+    "properties": {
+     "claim": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "claim_id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "claim_type": {
+      "enum": [
+       "regulatory_change",
+       "regulatory_gap",
+       "sanctions_event",
+       "geopolitical_event",
+       "market_event",
+       "industry_response",
+       "corporate_disclosure",
+       "capability_claim"
+      ],
+      "type": "string"
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "risk_if_wrong": {
+      "type": "string"
+     },
+     "support_level": {
+      "enum": [
+       "direct",
+       "partial",
+       "weak",
+       "unsupported"
+      ],
+      "type": "string"
+     },
+     "supporting_quotes": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "evidence_id": {
+         "minLength": 1,
+         "type": "string"
+        },
+        "quote": {
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "evidence_id",
+        "quote"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "uncertainty": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "claim_id",
+     "claim",
+     "support_level"
+    ],
+    "type": "object"
+   },
+   "evidence_item": {
+    "additionalProperties": false,
+    "properties": {
+     "body": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "content": {
+      "description": "Optional source text extract. supporting_quotes corroborate only by matching their text against evidence content fields; without one, quotes are caller assertions.",
+      "type": "string"
+     },
+     "evidence_id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "excerpt": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "freshness": {
+      "type": "string"
+     },
+     "full_text": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "limits": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "name": {
+      "type": "string"
+     },
+     "quote": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "snippet": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "source_type": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "summary": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "supports": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "text": {
+      "description": "Alias content field; treated like 'content' for quote corroboration.",
+      "type": "string"
+     },
+     "url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "evidence_id",
+     "source_type"
+    ],
+    "type": "object"
+   },
+   "policy_context": {
+    "additionalProperties": false,
+    "properties": {
+     "checks": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "check_id": {
+         "minLength": 1,
+         "type": "string"
+        },
+        "evidence_gap": {
+         "minLength": 1,
+         "type": "string"
+        },
+        "status": {
+         "enum": [
+          "passed",
+          "needs_evidence",
+          "failed"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "check_id",
+        "status"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "profile": {
+      "enum": [
+       "default",
+       "agentic_interaction_trust"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "target": {
+    "additionalProperties": false,
+    "properties": {
+     "id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "type": {
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "type"
+    ],
+    "type": "object"
+   }
+  },
+  "$id": "https://github.com/vassiliylakhonin/agenda-intelligence-md/schemas/v1/pre-action-check-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Caller-supplied action context and claim evidence for deterministic pre-action routing. The check can continue, request evidence, require human approval, or stop. It does not authenticate the actor, verify factual truth, enforce the decision, or authorize the action.",
+  "properties": {
+   "actor": {
+    "$ref": "#/$defs/actor"
+   },
+   "approval": {
+    "$ref": "#/$defs/approval"
+   },
+   "claims": {
+    "items": {
+     "$ref": "#/$defs/claim"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "evidence": {
+    "items": {
+     "$ref": "#/$defs/evidence_item"
+    },
+    "type": "array"
+   },
+   "policy_context": {
+    "$ref": "#/$defs/policy_context"
+   },
+   "requested_action": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "risk_tier": {
+    "enum": [
+     "low",
+     "medium",
+     "high",
+     "critical"
+    ],
+    "type": "string"
+   },
+   "run_id": {
+    "description": "Caller-generated correlation identifier. Resubmit the same run_id after adding evidence or approval.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "target": {
+    "$ref": "#/$defs/target"
+   },
+   "unsupported_claims": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "run_id",
+   "actor",
+   "requested_action",
+   "target",
+   "risk_tier",
+   "claims",
+   "evidence"
+  ],
+  "title": "PreActionCheckRequest",
+  "type": "object",
+  "x-schema-version": "1"
+ },
+ "name": "pre_action_check",
+ "outputSchema": {
+  "$id": "https://github.com/vassiliylakhonin/agenda-intelligence-md/schemas/v1/pre-action-check-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Deterministic routing result for a caller-controlled action boundary. The response reports readiness; the caller remains responsible for enforcement, authentication, authorization, approval storage, and the action itself.",
+  "properties": {
+   "approval_required": {
+    "type": "boolean"
+   },
+   "blocking_gaps": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "decision": {
+    "enum": [
+     "continue",
+     "request_evidence",
+     "require_approval",
+     "stop"
+    ],
+    "type": "string"
+   },
+   "decision_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "evidence_requests": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "human_review_required": {
+    "type": "boolean"
+   },
+   "limitations": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "not_authorization_notice": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "policy_checks": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "check_id": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "evidence_gap": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "status": {
+       "enum": [
+        "passed",
+        "needs_evidence",
+        "failed"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "check_id",
+      "status"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "policy_version": {
+    "const": "pre-action-check.v1",
+    "type": "string"
+   },
+   "reason_code": {
+    "enum": [
+     "evidence_ready",
+     "evidence_gaps",
+     "unsafe_claims",
+     "policy_check_failed",
+     "approval_required_for_risk",
+     "approval_rejected"
+    ],
+    "type": "string"
+   },
+   "receipt": {
+    "description": "Short-lived readiness receipt attached by decision_check. The legacy pre_action_check response omits it.",
+    "oneOf": [
+     {
+      "type": "null"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "action_hash": {
+        "pattern": "^sha256:[a-f0-9]{64}$",
+        "type": "string"
+       },
+       "expires_at": {
+        "format": "date-time",
+        "type": "string"
+       },
+       "format": {
+        "const": "agenda-readiness-receipt+jws",
+        "type": "string"
+       },
+       "issued_at": {
+        "format": "date-time",
+        "type": "string"
+       },
+       "receipt_id": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "request_hash": {
+        "pattern": "^sha256:[a-f0-9]{64}$",
+        "type": "string"
+       },
+       "token": {
+        "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+        "type": "string"
+       },
+       "verification_tool": {
+        "const": "decision_verify",
+        "type": "string"
+       }
+      },
+      "required": [
+       "format",
+       "token",
+       "receipt_id",
+       "issued_at",
+       "expires_at",
+       "request_hash",
+       "action_hash",
+       "verification_tool"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "receipt_status": {
+    "description": "Present on decision_check. unavailable fails the signed Gate path closed.",
+    "enum": [
+     "signed",
+     "unavailable"
+    ],
+    "type": "string"
+   },
+   "run_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "verification": {
+    "additionalProperties": true,
+    "required": [
+     "verdict",
+     "evidence_gaps",
+     "owner_actions"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "decision_id",
+   "run_id",
+   "policy_version",
+   "decision",
+   "reason_code",
+   "blocking_gaps",
+   "evidence_requests",
+   "approval_required",
+   "human_review_required",
+   "verification",
+   "not_authorization_notice",
+   "limitations"
+  ],
+  "title": "PreActionCheckResponse",
+  "type": "object",
+  "x-schema-version": "1"
+ }
+}

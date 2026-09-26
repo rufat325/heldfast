@@ -1,0 +1,536 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Deploy a project"
+ },
+ "description": "Registers the project if it is new, attaches whatever source you give it, and deploys it using the application's Deployment workflow. Direct applications go to Production; Staged applications go to Development. Returns the live URL, or a deployment id to poll if the build is still running.\n\n**You do not decide whether this project needs git.** Send what you have and SpringRoll works it out:\n  \u2022 a pushed git remote \u2192 pass `repositoryUrl` (and `ref` if not the default branch)\n  \u2022 no remote, or uncommitted work \u2192 pass `archive`, a base64 tar+gzip of the source:\n      tar --exclude=node_modules --exclude=.next --exclude=.git --exclude='.env*' \\\n          -czf - . | base64 -w0\n  \u2022 both \u2192 SpringRoll builds from git, and falls back to your files if the ref cannot be resolved (an unpushed branch, typically)\n  \u2022 neither, on an app that already exists \u2192 redeploys its current source\n\nUpload SOURCE, not build output: SpringRoll runs the build. node_modules, .next, dist, build, out, coverage and .log files are dropped automatically and reported. Every .env file and .git/ is REFUSED outright, naming the offending path: configuration belongs in SpringRoll, not in the bundle. Upload limits are about 3 MB compressed on the wire (a platform request-body cap, not a preference), 20 MB expanded, 2000 files, 512 KB per file; a project past them should pass `repositoryUrl` instead, which SpringRoll clones directly with no size limit. Sending the same files twice is free, because bundles are addressed by content.\n\nDirect to Production skips workflow approvals but keeps production safety checks. Staged applications continue to use explicit promotion and approvals.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "application": {
+    "description": "An existing app's slug or id. Omit on the first ship; `name` implies it.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "archive": {
+    "description": "Base64 of a gzipped tar of the project source. Preferred over `files`.",
+    "type": "string"
+   },
+   "buildCommand": {
+    "maxLength": 500,
+    "type": "string"
+   },
+   "context": {
+    "description": "Explain why you are calling this tool and how it fits into the user's overall goal. This parameter is used for analytics and user intent tracking. YOU MUST provide 15-25 words (count carefully). NEVER use first person ('I', 'we', 'you') - maintain third-person perspective. NEVER include sensitive information such as credentials, passwords, or personal data. Example (20 words): \"Searching across the organization's repositories to find all open issues related to performance complaints and latency issues for team prioritization.\"",
+    "type": "string"
+   },
+   "dataClassification": {
+    "enum": [
+     "public",
+     "internal",
+     "confidential",
+     "restricted"
+    ],
+    "type": "string"
+   },
+   "department": {
+    "maxLength": 120,
+    "type": "string"
+   },
+   "description": {
+    "maxLength": 2000,
+    "type": "string"
+   },
+   "files": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Path-to-contents map. Use `archive` for anything beyond a few files.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "filesEncoding": {
+    "enum": [
+     "utf-8",
+     "base64"
+    ],
+    "type": "string"
+   },
+   "framework": {
+    "enum": [
+     "nextjs",
+     "static"
+    ],
+    "type": "string"
+   },
+   "idempotencyKey": {
+    "description": "Required. A stable, caller-generated key. Retrying with the same key returns the original result instead of creating a duplicate.",
+    "maxLength": 200,
+    "minLength": 8,
+    "type": "string"
+   },
+   "installCommand": {
+    "maxLength": 500,
+    "type": "string"
+   },
+   "manifest": {
+    "description": "A SpringRoll manifest. Supersedes the metadata fields below; the source fields still apply.",
+    "type": "string"
+   },
+   "name": {
+    "maxLength": 120,
+    "minLength": 2,
+    "type": "string"
+   },
+   "outputDirectory": {
+    "maxLength": 300,
+    "type": "string"
+   },
+   "placement": {
+    "additionalProperties": false,
+    "description": "Optional, provider-neutral hints about what this application needs. SpringRoll chooses the provider and plan; these only inform that choice. Leave out anything you do not actually know: monthly billing quantities remain unknown; ordinary workload hints are inferred from the source and named on the placement receipt, which is more useful to the user than a confident guess.",
+    "properties": {
+     "budgetUsdPerMonth": {
+      "description": "A real ceiling, if the user gave one. Leave it out otherwise: a budget of zero that nobody asked for would exclude every qualified plan with a non-zero estimate.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "coldStartTolerant": {
+      "description": "False if the first visitor after an idle period must not wait. Set this when the user says the app has to be instant; it excludes plans that sleep, which are otherwise the cheapest ones.",
+      "type": "boolean"
+     },
+     "computeVcpu": {
+      "description": "Sustained vCPU. Fractional is normal.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "expectedBandwidthGb": {
+      "description": "Egress in gigabytes a month. Only if the user told you.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "expectedRequestsPerMonth": {
+      "description": "Only if the user actually told you. Do not estimate: an invented number is indistinguishable from a measured one once it gets here, and SpringRoll's own default for an internal tool is more honest than a guess.",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "memoryMb": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "monthlyUsage": {
+      "additionalProperties": false,
+      "description": "Optional monthly billing quantities supplied by the user or actual usage evidence. Never invent values or default missing fields to zero. CPU-hours mean active CPU time; memory GB-hours include billable wait time and provider minimums. Build minutes do not substitute for Sandbox CPU/memory. Database and object storage are separate from local disk. Cloudflare Worker dispatch requests and CPU are separate from container active vCPU, provisioned memory, disk and regional egress. Rows read/written mean billed rows including indexes, not SQL query counts. Cache commands include internal operations and realtime polling. On redeploy this replaces the previous monthlyUsage forecast; omit the whole object to keep it.",
+      "properties": {
+       "build": {
+        "additionalProperties": false,
+        "properties": {
+         "activeCpuHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "artifactAdvancedOperations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "artifactDataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "artifactSimpleOperations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "artifactStorageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "dataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "minutes": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "provisionedMemoryGbHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "registryStorageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "starts": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "cache": {
+        "additionalProperties": false,
+        "properties": {
+         "commands": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "dataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "container": {
+        "additionalProperties": false,
+        "properties": {
+         "billedDiskGbSeconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "billedMemoryGibSeconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "billedVcpuSeconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "egressNaEuGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "egressOceaniaKoreaTaiwanGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "egressOtherGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "database": {
+        "additionalProperties": false,
+        "properties": {
+         "computeCuHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "extraBranchHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "extraBranchMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "publicDataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "restoreHistoryGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "rowsRead": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "rowsWritten": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "snapshotStorageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "durableObject": {
+        "additionalProperties": false,
+        "properties": {
+         "billableRequests": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "durationGbSeconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "rowsRead": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "rowsWritten": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "kv": {
+        "additionalProperties": false,
+        "properties": {
+         "deletes": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "lists": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "reads": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "writes": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "objectStorage": {
+        "additionalProperties": false,
+        "properties": {
+         "advancedOperations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "dataTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "simpleOperations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "storageGbMonths": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "runtime": {
+        "additionalProperties": false,
+        "properties": {
+         "activeCpuHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "invocations": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "originTransferGb": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "provisionedMemoryGbHours": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "worker": {
+        "additionalProperties": false,
+        "properties": {
+         "cpuMilliseconds": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+         },
+         "dispatchRequests": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "needs": {
+      "description": "Everything this application needs, in one list. At most one shape of thing being run ('static', 'serverless', 'server', or 'container'), plus any services it needs beside its own code: 'postgres', 'auth', 'storage', 'realtime', 'edge-functions'. A provider that cannot supply an entry is excluded, so ask only for what the app actually uses, and leave the shape out unless the project does something the source does not show.",
+      "items": {
+       "enum": [
+        "static",
+        "serverless",
+        "server",
+        "container",
+        "database",
+        "postgres",
+        "auth",
+        "storage",
+        "realtime",
+        "edge-functions"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "needsBackgroundWork": {
+      "description": "Set true if the app runs jobs or a scheduler outside a request.",
+      "type": "boolean"
+     },
+     "needsPersistentDisk": {
+      "description": "Set true if the app writes files it expects to read back later.",
+      "type": "boolean"
+     },
+     "needsWebSockets": {
+      "description": "Set true if the app holds a live connection. Inferred from the dependency list otherwise, and getting it wrong puts the app on a runtime that drops the socket on every request.",
+      "type": "boolean"
+     },
+     "productionCritical": {
+      "description": "Whether a colleague depends on this during their working day. Defaults to true for production and false elsewhere.",
+      "type": "boolean"
+     },
+     "region": {
+      "description": "A required region, when the data has to stay somewhere specific.",
+      "maxLength": 64,
+      "type": "string"
+     },
+     "storageGb": {
+      "description": "Persistent disk needed, in gigabytes.",
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "preferSource": {
+    "description": "Tie-breaker when both a repository and files are given. Defaults to git.",
+    "enum": [
+     "git",
+     "upload"
+    ],
+    "type": "string"
+   },
+   "ref": {
+    "description": "Branch, tag, or full commit SHA. Defaults to the app's default revision.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "repositoryUrl": {
+    "format": "uri",
+    "type": "string"
+   },
+   "rootDirectory": {
+    "maxLength": 300,
+    "type": "string"
+   },
+   "slug": {
+    "maxLength": 63,
+    "minLength": 2,
+    "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+    "type": "string"
+   },
+   "supportContact": {
+    "description": "Team channel or email for users of this app. Required before production.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "tags": {
+    "items": {
+     "maxLength": 60,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "waitSeconds": {
+    "description": "How long to wait for the build before returning. Defaults to 20. A real build usually outlasts this; poll springroll.deploy.status after.",
+    "maximum": 60,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "idempotencyKey",
+   "context"
+  ],
+  "type": "object"
+ },
+ "name": "springroll.deploy",
+ "title": "Deploy a project"
+}

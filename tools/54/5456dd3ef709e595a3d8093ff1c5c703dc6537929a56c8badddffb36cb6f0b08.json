@@ -1,0 +1,51 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Metric History"
+ },
+ "description": "Time series for one metric across fiscal periods. Returns newest-first rows with fiscal_year + fiscal_period labels \u2014 AUTHORITATIVE for period-specific questions (\"Q2 FY2025?\"). The period_end calendar date is NOT the fiscal label, especially for non-December FYE companies (AAPL FY ends Sep; CRM FY ends Jan; ORCL FY ends May).\n\nEach row with an SEC accession is cited back to the source filing via the MetricDuck viewer.\n\n\u26a0 CONSOLIDATED ONLY \u2014 there is no segment/geography/product breakdown here, and no parameter adds one: the metrics layer sums those axes away, so per-member values are never stored. For a BY-SEGMENT series use `get_xbrl_facts(ticker, search=\"<segment name> revenue\", period_history=true)` (as-filed dimensional facts) or `get_filing_section(ticker, \"table_segment_reporting\")` (the schedule, 3 fiscal years per 10-K).\n\nUse Cases:\n- \"What was AAPL's Q2 FY2025 gross margin?\" -> get_metric_history(\"AAPL\", \"gross_margin\")\n- \"ROE last 5 years for MSFT\" -> get_metric_history(\"MSFT\", \"roe\", period_type=\"FY\", window=5)\n- \"As of a past date / point-in-time\" -> get_metric_history(\"MSFT\", \"revenues\", vantage_date=\"2024-04-30\") (series as known from filings published on/before that date)\n\nAlso serves NON-XBRL operating KPIs (LLM-extracted from 10-K/10-Q MD&A + earnings releases), available QUARTERLY and ANNUAL (FY) \u2014 coverage varies by KPI. Besides the ids on `metric_id`: gross_booking_value, take_rate (marketplaces), revpar, occupancy_rate (lodging/REIT), passenger_load_factor, prasm, casm (airlines), oil_production, headcount, and more.\n\nPrice-derived multiples here (pe_ratio, ev_ebitda, pb_ratio\u2026) use the PERIOD-END close; for a price on a SPECIFIC date use get_stock_price.\n\n**Latest fiscal year during earnings season:** full-year results post in an earnings 8-K weeks before the 10-K that populates this FY series, so inside that gap the series ends a year early and this tool appends a pointer to the 8-K (get_filing_section \"earnings_income_statement\") \u2014 the year is not unavailable.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "metric_id": {
+    "description": "Exact metric id (lowercase + underscores). Common XBRL financials: gross_margin, oper_margin, net_margin, ebitda_margin, roe, roa, roic, pe_ratio, ev_ebitda, ev_sales, fcf_yield, pb_ratio, current_ratio, debt_to_equity, interest_coverage, revenues, net_income, ebitda, fcf, net_cf_ops, capex, dividends_per_share, dividends_paid, dividend_yield, dividend_payout_ratio, fcf_payout_ratio, dividend_coverage. Operating KPIs (non-XBRL, quarterly AND annual), most-covered first: net_interest_margin, return_on_average_assets, return_on_average_equity, nonperforming_assets_to_total_assets, nonperforming_loans_to_total_loans, allowance_for_credit_losses_to_total_loans, loan_to_deposit_ratio, net_charge_offs_to_average_loans, common_equity_tier_1_capital_ratio, tier_1_leverage_ratio, tier_1_capital_ratio, total_capital_ratio, return_on_average_tangible_common_equity, net_leverage_ratio, nonperforming_loan_ratio, liquidity_coverage_ratio, net_stable_funding_ratio, combined_ratio, loss_ratio, expense_ratio, policies_in_force, arr, recurring_revenue, remaining_performance_obligations, organic_revenue_growth, cancellation_rate, subscribers, arpu, store_count, same_store_sales. Both lists are non-exhaustive \u2014 try a canonical name even if unlisted; a miss returns the full served catalog and steers. Banks/insurers often NULL on COGS-based metrics (gross_margin, gross_profit) \u2014 use sector alternatives. A CUSTOM multiple (e.g. lease-adjusted EV) = get_stock_price (price leg) + the primitives oper_lease_liabs, ttl_debt, cash_st_invs, ttl_equity, shares_basic.",
+    "type": "string"
+   },
+   "period_type": {
+    "default": "Q",
+    "description": "Q = quarterly, FY = fiscal year, TTM = trailing 12 months.",
+    "enum": [
+     "Q",
+     "FY",
+     "TTM"
+    ],
+    "type": "string"
+   },
+   "ticker": {
+    "description": "Company ticker symbol (e.g., 'AAPL'). Must be exact.",
+    "type": "string"
+   },
+   "vantage_date": {
+    "description": "As-of vantage (YYYY-MM-DD): restrict the series to periods whose ORIGINAL filing was published on or before this date, and cite the filing that was current then. Omit for the latest. IMPORTANT \u2014 this bounds period EXISTENCE and the CITATION; it does NOT reconstruct the value as it stood on that date. If a later filing restated a period, the restated value is what is served, and the response carries an explicit LOOK-AHEAD warning naming the affected periods. For a true as-originally-filed series use get_xbrl_facts with period_history=true.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "window": {
+    "default": 20,
+    "description": "Max observations returned, newest first. Default 20, max 40.",
+    "maximum": 40,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "ticker",
+   "metric_id"
+  ],
+  "type": "object"
+ },
+ "name": "get_metric_history",
+ "title": "Metric History"
+}

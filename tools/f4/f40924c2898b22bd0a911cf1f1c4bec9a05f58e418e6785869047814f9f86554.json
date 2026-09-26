@@ -1,0 +1,443 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "tier": "free",
+  "title": "Reverse Image Search"
+ },
+ "description": "Find MemeStack images that look visually similar to a given image. Accepts an HTTPS image URL or a `data:image/...;base64,...` URL for bytes pasted into agent context. Returns visually-similar matches via perceptual-hash (dHash) hamming distance, with citation blocks. Heavily rate-limited (10/min/IP) since each call hashes the input. Results exclude images classified controversial unless include_controversial is true.",
+ "inputSchema": {
+  "properties": {
+   "include_controversial": {
+    "description": "Include images classified controversial (excluded by default).",
+    "type": "boolean"
+   },
+   "limit": {
+    "description": "Max results (1-20, default 10)",
+    "type": "number"
+   },
+   "url": {
+    "description": "HTTPS image URL, or data:image/(jpeg|png|webp);base64,... URL",
+    "type": "string"
+   }
+  },
+  "required": [
+   "url"
+  ],
+  "type": "object"
+ },
+ "name": "reverse_image_search",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "Visually similar gallery images for the input image, plus input metadata.",
+  "properties": {
+   "citations_combined": {
+    "additionalProperties": false,
+    "description": "Combined attribution for all images in this response, in three formats.",
+    "properties": {
+     "html": {
+      "description": "Numbered attribution list as HTML.",
+      "type": "string"
+     },
+     "markdown": {
+      "description": "Numbered attribution list as Markdown.",
+      "type": "string"
+     },
+     "plain": {
+      "description": "Numbered attribution list as plain text.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "markdown",
+     "html",
+     "plain"
+    ],
+    "type": "object"
+   },
+   "input_meta": {
+    "additionalProperties": true,
+    "description": "Computed metadata for the input image.",
+    "properties": {
+     "mime_type": {
+      "description": "Input MIME type.",
+      "type": "string"
+     },
+     "phash": {
+      "description": "Perceptual hash of the input.",
+      "type": "string"
+     },
+     "size_bytes": {
+      "description": "Input size in bytes.",
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "similar": {
+    "description": "Visually similar images.",
+    "items": {
+     "additionalProperties": true,
+     "description": "A gallery image (compact fields) with a ranking score and attribution.",
+     "properties": {
+      "canonical_url": {
+       "description": "Full-resolution image URL.",
+       "type": "string"
+      },
+      "caption": {
+       "description": "AI-generated caption.",
+       "type": "string"
+      },
+      "chart": {
+       "additionalProperties": true,
+       "description": "Structured source metadata for a chart, map or infographic, present only when MemeStack holds a record for this image (an image_chart_meta row). Absent or null means no stored metadata - never a signal that the image is not a chart.",
+       "properties": {
+        "citation_long": {
+         "description": "Full academic citation for the upstream dataset.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "citation_short": {
+         "description": "Short attribution line for the upstream dataset.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "dataset_timespan": {
+         "additionalProperties": true,
+         "description": "The underlying dataset's own history - display-only context, NOT the period this chart shows (see rendered_period). Never usable as a date filter.",
+         "properties": {
+          "end": {
+           "description": "Latest year in the dataset, when known.",
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "raw": {
+           "description": "The dataset timespan as published upstream, verbatim.",
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "start": {
+           "description": "Earliest year in the dataset, when known.",
+           "type": [
+            "number",
+            "null"
+           ]
+          }
+         },
+         "type": [
+          "object",
+          "null"
+         ]
+        },
+        "provenance": {
+         "description": "How this metadata was captured: read from the source's own structured feed ('authoritative'), or read off the chart image itself ('extracted').",
+         "enum": [
+          "authoritative",
+          "extracted"
+         ],
+         "type": "string"
+        },
+        "published_at": {
+         "description": "The publisher's release date for this edition (YYYY-MM-DD).",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "regions": {
+         "description": "Entities plotted, exactly as the chart names them (e.g. \"World\", \"Germany\").",
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "rendered_period": {
+         "additionalProperties": true,
+         "description": "The period the chart PROVABLY displays, grounded in its own OCR text - null when no period could be proven. Never a guess, and never the wider history in dataset_timespan.",
+         "properties": {
+          "end": {
+           "description": "Last year the chart displays.",
+           "type": "number"
+          },
+          "evidence": {
+           "description": "OCR substring the period was grounded on.",
+           "type": "string"
+          },
+          "start": {
+           "description": "First year the chart displays.",
+           "type": "number"
+          }
+         },
+         "type": [
+          "object",
+          "null"
+         ]
+        },
+        "series": {
+         "description": "Every visible edition of this chart, newest first (get_image only).",
+         "items": {
+          "additionalProperties": true,
+          "properties": {
+           "id": {
+            "description": "Image id of the edition.",
+            "type": "string"
+           },
+           "published_at": {
+            "description": "Release date.",
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "rendered_period": {
+            "additionalProperties": true,
+            "properties": {
+             "end": {
+              "description": "Last year shown.",
+              "type": "number"
+             },
+             "start": {
+              "description": "First year shown.",
+              "type": "number"
+             }
+            },
+            "type": [
+             "object",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "series_key": {
+         "description": "Editions of one chart share this key; null when the chart is not part of a series.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "source": {
+         "description": "Upstream source key: \"owid\", \"usda_ers\", \"eurostat\" or \"eea\".",
+         "type": "string"
+        },
+        "source_url": {
+         "description": "Canonical URL for the chart at its upstream source.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "superseded": {
+         "description": "True when the upstream source has published data newer than this snapshot.",
+         "type": "boolean"
+        },
+        "title": {
+         "description": "Chart title as published upstream.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "unit": {
+         "description": "Measurement unit, when the underlying indicators agree on one.",
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "type": [
+        "object",
+        "null"
+       ]
+      },
+      "citation": {
+       "additionalProperties": true,
+       "description": "Ready-to-paste attribution for this image in three formats, plus source metadata.",
+       "properties": {
+        "academic_citation": {
+         "description": "Full upstream academic citation, present only when the image has stored chart metadata with one.",
+         "type": "string"
+        },
+        "attribution_recommended": {
+         "description": "Always true \u2014 attribution is recommended.",
+         "type": "boolean"
+        },
+        "attribution_required": {
+         "description": "True when the licence or the rights holder requires attribution: Our World in Data, the chart publishers (USDA ERS, Eurostat, EEA), and a verified creator's own work.",
+         "type": "boolean"
+        },
+        "canonical_url": {
+         "description": "Full-resolution image URL.",
+         "type": "string"
+        },
+        "html": {
+         "description": "Attribution as HTML.",
+         "type": "string"
+        },
+        "markdown": {
+         "description": "Attribution as Markdown.",
+         "type": "string"
+        },
+        "page_url": {
+         "description": "Canonical MemeStack gallery page for the image.",
+         "type": "string"
+        },
+        "plain": {
+         "description": "Attribution as plain text.",
+         "type": "string"
+        },
+        "site": {
+         "description": "Always \"MemeStack\".",
+         "type": "string"
+        },
+        "site_url": {
+         "description": "The MemeStack site URL.",
+         "type": "string"
+        },
+        "source_external_url": {
+         "description": "External source URL \u2014 the Our World in Data chart, the chart publisher's page, or the X post; null otherwise.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "source_origin": {
+         "description": "Origin: 'owid' | 'usda_ers' | 'eurostat' | 'eea' | 'imgflip' | '4chan' | 'telegram' | 'generated' | 'mcp' | 'x' | 'unknown' | null (null = a direct upload).",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "thumbnail_url": {
+         "description": "Thumbnail image URL.",
+         "type": "string"
+        },
+        "uploader_display_name": {
+         "description": "Uploader name, or null when absent/withheld.",
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "site",
+        "page_url",
+        "markdown",
+        "html",
+        "plain"
+       ],
+       "type": "object"
+      },
+      "controversial": {
+       "description": "True when MemeStack classifies the image as controversial (likely to offend or divide a general audience). The list tools exclude such images unless include_controversial is true; by-id tools always answer and carry this flag. Absent when the API answer predates the flag.",
+       "type": "boolean"
+      },
+      "created_at": {
+       "description": "ISO 8601 creation timestamp.",
+       "type": "string"
+      },
+      "free_tags": {
+       "description": "Free-form tag slugs.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "height": {
+       "description": "Original height in pixels.",
+       "type": "number"
+      },
+      "id": {
+       "description": "Image UUID.",
+       "type": "string"
+      },
+      "like_count": {
+       "description": "Number of likes.",
+       "type": "number"
+      },
+      "meme_template_name": {
+       "description": "Recognised meme template, if any.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "page_url": {
+       "description": "MemeStack gallery page URL.",
+       "type": "string"
+      },
+      "relevance_score": {
+       "description": "Semantic-relevance score (find_related).",
+       "type": "number"
+      },
+      "save_count": {
+       "description": "Number of saves.",
+       "type": "number"
+      },
+      "similarity": {
+       "description": "Visual-similarity score (find_similar / reverse_image_search).",
+       "type": "number"
+      },
+      "tags": {
+       "description": "Topic tag slugs.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "thumbnail_url": {
+       "description": "Thumbnail image URL.",
+       "type": "string"
+      },
+      "uploader_display_name": {
+       "description": "Uploader name, or null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "width": {
+       "description": "Original width in pixels.",
+       "type": "number"
+      },
+      "zap_count": {
+       "description": "Number of Lightning zaps.",
+       "type": "number"
+      },
+      "zap_total_sats": {
+       "description": "Total sats zapped.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "id",
+      "thumbnail_url",
+      "canonical_url",
+      "page_url",
+      "citation"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "similar"
+  ],
+  "type": "object"
+ }
+}

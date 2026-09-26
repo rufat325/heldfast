@@ -1,0 +1,81 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "List Filing Sections"
+ },
+ "description": "Browse Sources inventory and the section catalog for a single company. Covers SEC filings: 10-K, 10-Q, 8-K, DEF 14A, plus 20-F / 40-F / 6-K for foreign private issuers.\n\n**Scope:** filings-metadata utility. Returns filing list (form type, dates, accession numbers) plus per-section details (word count, chunk count, tables) for 10-K/10-Q/DEF 14A; 8-K returns filing metadata only. Default: last 2 years. Use `fiscal_year` + `fiscal_period` to pin a single historical PERIODIC filing (10-K/10-Q) in one call \u2014 8-K sub-types are not period-indexed, so pair `form_subtype` with `years` instead.\n\n**For signal triage and \"what matters\" in a filing, use `get_filing_index` instead.** Use `list_filings` only when:\n- You need an accession_number for a specific historical filing (before `get_xbrl_facts` or `get_filing_section`)\n- You need to pin a specific fiscal year/period (e.g., FY2020 Q3)\n- You need the full section inventory with sizes to plan pagination\n- You need to confirm whether a specific filing exists\n\nSister Sources (non-SEC): earnings call transcripts \u2192 `compare_earnings_calls`; IR press releases / events \u2192 `screen_filing_signals` with signal_type=\"ir_press_release\".\n\n**Delisted / acquired issuers**: pass `cik` (10-digit, zero-padded) instead of `ticker` and set `include_delisted=true`. SEC's ticker registry excludes delisted issuers, so `ticker`-only calls 404 even when MetricDuck holds the filings. Example: SAVE Spirit Airlines (`cik=\"0001498710\"`).\n\nData horizon: 2013+. Responses capped at ~20K chars; narrow via `form_type`, `fiscal_year`, or reduce `years`.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "cik": {
+    "description": "10-digit SEC CIK as alternative to ticker. Use for delisted/acquired companies (e.g., Z=Zillow ticker may not resolve; pass cik='0001617640' instead). Either ticker or cik required.",
+    "pattern": "^\\d{10}$",
+    "type": "string"
+   },
+   "fiscal_period": {
+    "description": "Pick a specific fiscal period. FY = annual (10-K / 20-F / 40-F); Q1/Q2/Q3 = quarterly (10-Q). The 4th quarter is reported in the annual 10-K, so Q4 is treated as FY. Combine with fiscal_year to pin a single filing.",
+    "enum": [
+     "Q1",
+     "Q2",
+     "Q3",
+     "Q4",
+     "FY"
+    ],
+    "type": "string"
+   },
+   "fiscal_year": {
+    "description": "Pick a specific fiscal year (e.g., 2020). Resolved via the XBRL period index \u2014 correct for non-calendar fiscal years (a 10-K filed Feb 2024 is FY2023). Alone, lists all of that fiscal year's filings (10-K + its 10-Qs); combine with fiscal_period to pin one. Overrides years. DEF 14A / non-XBRL forms are not period-indexed. Data horizon: 2013+.",
+    "type": "integer"
+   },
+   "form_subtype": {
+    "description": "Filter 8-K filings by sub-type (derived from section inventory): earnings releases; event = M&A / exec changes / debt; transcript = earnings calls; other = misc. Implicitly narrows to form_type='8-K'. CANNOT be combined with fiscal_year/fiscal_period \u2014 8-Ks carry no XBRL fiscal-period focus to pin against; use `years` and read the implied period off each row.",
+    "enum": [
+     "8-K-earnings",
+     "8-K-event",
+     "8-K-transcript",
+     "8-K-other"
+    ],
+    "type": "string"
+   },
+   "form_type": {
+    "description": "Filter by form type: 10-K annual, 10-Q quarterly, 8-K current reports, DEF 14A proxy; 20-F/40-F annual and 6-K interim for foreign private issuers",
+    "enum": [
+     "10-K",
+     "10-Q",
+     "8-K",
+     "DEF 14A",
+     "20-F",
+     "40-F",
+     "6-K"
+    ],
+    "type": "string"
+   },
+   "include_delisted": {
+    "default": false,
+    "description": "Opt in to historical data for a delisted company. Default false returns a structured 'delisted' error (HTTP 410) naming the delisting date. Querying by cik bypasses this gate. Applies to 10-K/10-Q/DEF 14A only.",
+    "type": "boolean"
+   },
+   "ticker": {
+    "description": "Company ticker symbol (e.g., 'AAPL'). Must be exact. Either ticker or cik required.",
+    "type": "string"
+   },
+   "vantage_date": {
+    "description": "As-of vantage (YYYY-MM-DD): only list filings filed ON OR BEFORE this date (point-in-time). Omit to list the most recent filings. For vantages older than the `years` window, pass a larger `years`.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "years": {
+    "default": 2,
+    "description": "Years of filing history (default 2, max 7). Ignored when fiscal_year is set.",
+    "maximum": 7,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "list_filings",
+ "title": "List Filing Sections"
+}

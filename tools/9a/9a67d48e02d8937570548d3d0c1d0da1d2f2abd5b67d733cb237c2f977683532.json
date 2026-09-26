@@ -1,0 +1,434 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Audit Timeline Health"
+ },
+ "description": "Audit one sequence snapshot for flash frames, gaps, overlaps, disabled clips, repeated shots, video without audio, extreme speed, invalid times, empty tracks, leading black, and trailing gaps; returns a 0..100 score, findings with timecodes, and fix routes. Local-only; never changes Premiere.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "expected_duration_seconds": {
+    "description": "Optional target duration; clips past it and trailing gaps before it are flagged.",
+    "maximum": 86400,
+    "minimum": 0,
+    "type": "number"
+   },
+   "expected_frame_rate": {
+    "description": "Optional expected frame rate; a mismatch is an error.",
+    "maximum": 240,
+    "minimum": 1,
+    "type": "number"
+   },
+   "flash_frame_max_frames": {
+    "description": "Clips lasting this many frames or fewer are flagged as flash frames (default 3).",
+    "maximum": 12,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "frame_rate": {
+    "description": "Frame rate override for frame math and timecodes (1..240). Defaults to the snapshot frame rate or 30.",
+    "maximum": 240,
+    "minimum": 1,
+    "type": "number"
+   },
+   "gap_min_frames": {
+    "description": "Minimum gap length in frames to report (default 1).",
+    "maximum": 10000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "max_speed_percent": {
+    "description": "Absolute speed above this percentage is flagged (default 400).",
+    "maximum": 100000,
+    "minimum": 1,
+    "type": "number"
+   },
+   "snapshot": {
+    "description": "Sequence snapshot to audit.",
+    "properties": {
+     "audioTracks": {
+      "description": "Raw get_sequence_structure audio tracks.",
+      "items": {
+       "description": "One track with its clips. Accepts type/index/clips or raw mediaType/trackIndex/items keys.",
+       "properties": {
+        "clips": {
+         "description": "Clips on this track.",
+         "items": {
+          "description": "One timeline clip. Accepts the normalized keys below or raw get_sequence_structure / inspect_sequence_structure_uxp keys (nodeId, startSeconds, endSeconds, inPointSeconds, outPointSeconds, enabled, speed, sourceProjectItemId).",
+          "properties": {
+           "disabled": {
+            "description": "True when the clip is disabled.",
+            "type": "boolean"
+           },
+           "end_seconds": {
+            "description": "Timeline end in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           },
+           "id": {
+            "description": "Stable clip id (nodeId). Synthesized from position when omitted.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+           },
+           "in_seconds": {
+            "description": "Source in point in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           },
+           "linked_ids": {
+            "description": "Ids of linked clips.",
+            "items": {
+             "description": "Linked clip id.",
+             "maxLength": 128,
+             "minLength": 1,
+             "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+           },
+           "media_path": {
+            "description": "Optional media path; only its basename and sha256 are ever returned.",
+            "maxLength": 4096,
+            "type": "string"
+           },
+           "name": {
+            "description": "Clip display name.",
+            "maxLength": 255,
+            "type": "string"
+           },
+           "out_seconds": {
+            "description": "Source out point in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           },
+           "project_item_id": {
+            "description": "Source project-item id used for move and repeated-shot matching.",
+            "maxLength": 512,
+            "type": "string"
+           },
+           "speed_percent": {
+            "description": "Playback speed as a percentage (100 = normal).",
+            "maximum": 100000,
+            "minimum": -100000,
+            "type": "number"
+           },
+           "start_seconds": {
+            "description": "Timeline start in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           }
+          },
+          "type": "object"
+         },
+         "maxItems": 5000,
+         "type": "array"
+        },
+        "index": {
+         "description": "Zero-based track index.",
+         "maximum": 1023,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "name": {
+         "description": "Track name.",
+         "maxLength": 255,
+         "type": "string"
+        },
+        "type": {
+         "description": "Track media type.",
+         "enum": [
+          "video",
+          "audio"
+         ],
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "duration_seconds": {
+      "description": "Sequence duration in seconds.",
+      "maximum": 1000000,
+      "minimum": 0,
+      "type": "number"
+     },
+     "frame_rate": {
+      "description": "Sequence frame rate; defaults to the tool frame_rate or 30.",
+      "maximum": 240,
+      "minimum": 1,
+      "type": "number"
+     },
+     "name": {
+      "description": "Sequence name.",
+      "maxLength": 255,
+      "type": "string"
+     },
+     "sequence_id": {
+      "description": "Sequence id.",
+      "maxLength": 128,
+      "type": "string"
+     },
+     "tracks": {
+      "description": "Normalized tracks (video and audio).",
+      "items": {
+       "description": "One track with its clips. Accepts type/index/clips or raw mediaType/trackIndex/items keys.",
+       "properties": {
+        "clips": {
+         "description": "Clips on this track.",
+         "items": {
+          "description": "One timeline clip. Accepts the normalized keys below or raw get_sequence_structure / inspect_sequence_structure_uxp keys (nodeId, startSeconds, endSeconds, inPointSeconds, outPointSeconds, enabled, speed, sourceProjectItemId).",
+          "properties": {
+           "disabled": {
+            "description": "True when the clip is disabled.",
+            "type": "boolean"
+           },
+           "end_seconds": {
+            "description": "Timeline end in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           },
+           "id": {
+            "description": "Stable clip id (nodeId). Synthesized from position when omitted.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+           },
+           "in_seconds": {
+            "description": "Source in point in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           },
+           "linked_ids": {
+            "description": "Ids of linked clips.",
+            "items": {
+             "description": "Linked clip id.",
+             "maxLength": 128,
+             "minLength": 1,
+             "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+           },
+           "media_path": {
+            "description": "Optional media path; only its basename and sha256 are ever returned.",
+            "maxLength": 4096,
+            "type": "string"
+           },
+           "name": {
+            "description": "Clip display name.",
+            "maxLength": 255,
+            "type": "string"
+           },
+           "out_seconds": {
+            "description": "Source out point in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           },
+           "project_item_id": {
+            "description": "Source project-item id used for move and repeated-shot matching.",
+            "maxLength": 512,
+            "type": "string"
+           },
+           "speed_percent": {
+            "description": "Playback speed as a percentage (100 = normal).",
+            "maximum": 100000,
+            "minimum": -100000,
+            "type": "number"
+           },
+           "start_seconds": {
+            "description": "Timeline start in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           }
+          },
+          "type": "object"
+         },
+         "maxItems": 5000,
+         "type": "array"
+        },
+        "index": {
+         "description": "Zero-based track index.",
+         "maximum": 1023,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "name": {
+         "description": "Track name.",
+         "maxLength": 255,
+         "type": "string"
+        },
+        "type": {
+         "description": "Track media type.",
+         "enum": [
+          "video",
+          "audio"
+         ],
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "videoTracks": {
+      "description": "Raw get_sequence_structure video tracks.",
+      "items": {
+       "description": "One track with its clips. Accepts type/index/clips or raw mediaType/trackIndex/items keys.",
+       "properties": {
+        "clips": {
+         "description": "Clips on this track.",
+         "items": {
+          "description": "One timeline clip. Accepts the normalized keys below or raw get_sequence_structure / inspect_sequence_structure_uxp keys (nodeId, startSeconds, endSeconds, inPointSeconds, outPointSeconds, enabled, speed, sourceProjectItemId).",
+          "properties": {
+           "disabled": {
+            "description": "True when the clip is disabled.",
+            "type": "boolean"
+           },
+           "end_seconds": {
+            "description": "Timeline end in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           },
+           "id": {
+            "description": "Stable clip id (nodeId). Synthesized from position when omitted.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+           },
+           "in_seconds": {
+            "description": "Source in point in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           },
+           "linked_ids": {
+            "description": "Ids of linked clips.",
+            "items": {
+             "description": "Linked clip id.",
+             "maxLength": 128,
+             "minLength": 1,
+             "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+           },
+           "media_path": {
+            "description": "Optional media path; only its basename and sha256 are ever returned.",
+            "maxLength": 4096,
+            "type": "string"
+           },
+           "name": {
+            "description": "Clip display name.",
+            "maxLength": 255,
+            "type": "string"
+           },
+           "out_seconds": {
+            "description": "Source out point in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           },
+           "project_item_id": {
+            "description": "Source project-item id used for move and repeated-shot matching.",
+            "maxLength": 512,
+            "type": "string"
+           },
+           "speed_percent": {
+            "description": "Playback speed as a percentage (100 = normal).",
+            "maximum": 100000,
+            "minimum": -100000,
+            "type": "number"
+           },
+           "start_seconds": {
+            "description": "Timeline start in seconds.",
+            "maximum": 1000000,
+            "minimum": -1000000,
+            "type": "number"
+           }
+          },
+          "type": "object"
+         },
+         "maxItems": 5000,
+         "type": "array"
+        },
+        "index": {
+         "description": "Zero-based track index.",
+         "maximum": 1023,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "name": {
+         "description": "Track name.",
+         "maxLength": 255,
+         "type": "string"
+        },
+        "type": {
+         "description": "Track media type.",
+         "enum": [
+          "video",
+          "audio"
+         ],
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "maxItems": 64,
+      "type": "array"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "snapshot"
+  ],
+  "type": "object"
+ },
+ "name": "audit_timeline_health",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "data": {
+    "description": "Tool-specific result data when ok is true."
+   },
+   "error": {
+    "description": "Failure detail when ok is false.",
+    "type": "string"
+   },
+   "ok": {
+    "description": "Whether the tool completed successfully.",
+    "type": "boolean"
+   },
+   "tool": {
+    "description": "The registered MCP tool name.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "tool"
+  ],
+  "type": "object"
+ },
+ "title": "Audit Timeline Health"
+}
