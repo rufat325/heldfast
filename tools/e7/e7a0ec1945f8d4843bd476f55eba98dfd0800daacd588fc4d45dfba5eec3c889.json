@@ -1,0 +1,817 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Create one receipt-driven workflow. Callers must explicitly pass caller_approved=true, the exact approval_v3 selected as session, the same idempotency_key, a caller-local session token, and verification_context copied from the selected quote/public wallets. Example: validate and pass the exact context saved with the selected quote. The adapter validates approval and context before the upstream request. Every returned action is deeply verified and receives a self-verifying wallet handoff. AssetFare never signs or submits.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "amount_usd": {
+    "description": "Requested input value in USD, minimum 1. USD 1 is reachability/schema smoke only. A USD 50 competitive bucket was observed only for dated 2026-09-23 Solana USDC to Base USDC evidence and must not be generalized to another corridor. USD 1,000 is the primary representative amount. SOL input includes a swap. Always quote the actual intended amount.",
+    "minimum": 1,
+    "type": "number"
+   },
+   "approval_v3": {
+    "additionalProperties": false,
+    "description": "Strict Core 2.4.1 session quote-bound selection from the exact unexpired quote. Required for every remote session flow.",
+    "properties": {
+     "direct_route_summary_sha256": {
+      "$ref": "#/properties/approval_v3/properties/quote_fingerprint"
+     },
+     "idempotency_key": {
+      "pattern": "^[A-Za-z0-9._:-]{8,128}$",
+      "type": "string"
+     },
+     "maximum_input_base": {
+      "pattern": "^[1-9][0-9]*$",
+      "type": "string"
+     },
+     "minimum_output_base": {
+      "$ref": "#/properties/approval_v3/properties/maximum_input_base"
+     },
+     "quote_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+     },
+     "quote_id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "selected_mode": {
+      "const": "session",
+      "type": "string"
+     },
+     "selection_status": {
+      "const": "selected",
+      "type": "string"
+     },
+     "version": {
+      "const": "assetfare-quote-bound-approval-v3",
+      "type": "string"
+     }
+    },
+    "required": [
+     "version",
+     "quote_id",
+     "quote_fingerprint",
+     "selection_status",
+     "selected_mode",
+     "maximum_input_base",
+     "minimum_output_base",
+     "direct_route_summary_sha256",
+     "idempotency_key"
+    ],
+    "type": "object"
+   },
+   "caller_approved": {
+    "const": true,
+    "description": "Legacy caller assertion that MUST be supplied explicitly. It is not human-proof and is never auto-inserted; approval_v3 adds server-enforced quote binding.",
+    "type": "boolean"
+   },
+   "event_signer_public": {
+    "$ref": "#/properties/wallets/additionalProperties",
+    "description": "Solana CCTP only: caller-generated ephemeral public key. Keep the matching private key client-side and use it to co-sign the returned unsigned event-account transaction; never send the private key."
+   },
+   "from_chain": {
+    "description": "Source chain for the v2 route. Polygon and Optimism are source-only and cannot be used as to_chain.",
+    "enum": [
+     "solana",
+     "base",
+     "arbitrum",
+     "robinhood",
+     "polygon",
+     "optimism"
+    ],
+    "type": "string"
+   },
+   "from_token": {
+    "description": "Input token symbol on from_chain. The chain-token pair must appear in current v2 capabilities.",
+    "enum": [
+     "SOL",
+     "ETH",
+     "USDC",
+     "USDG"
+    ],
+    "type": "string"
+   },
+   "idempotency_key": {
+    "description": "Caller-generated retry key, 8-128 characters. Reuse it only when retrying the same logical mutation; choose a new key for a new operation. Strict approval_v3 requests additionally enforce its ASCII key pattern.",
+    "maxLength": 128,
+    "minLength": 8,
+    "type": "string"
+   },
+   "session_token": {
+    "description": "Sensitive caller-generated v2 session capability: at least 32 CSPRNG bytes encoded as 43-128 URL-safe base64 characters. Generate it locally; never log it or substitute a private key or legacy access token.",
+    "pattern": "^[A-Za-z0-9_-]{43,128}$",
+    "type": "string"
+   },
+   "to_chain": {
+    "description": "Destination chain for the v2 route: Solana, Base, Arbitrum, or Robinhood Chain. Polygon and Optimism are not destinations.",
+    "enum": [
+     "solana",
+     "base",
+     "arbitrum",
+     "robinhood"
+    ],
+    "type": "string"
+   },
+   "to_token": {
+    "description": "Output token symbol on to_chain. The chain-token pair must appear in current v2 capabilities.",
+    "enum": [
+     "SOL",
+     "ETH",
+     "USDC",
+     "USDG"
+    ],
+    "type": "string"
+   },
+   "verification_context": {
+    "additionalProperties": false,
+    "description": "Strict caller-held context copied from the selected quote and approval. It contains public intent/wallet data only, never the raw session token or a private key, and is required whenever a remote MCP session call can return current_action.",
+    "properties": {
+     "approval_v3": {
+      "additionalProperties": false,
+      "properties": {
+       "direct_route_summary_sha256": {
+        "$ref": "#/properties/approval_v3/properties/quote_fingerprint"
+       },
+       "idempotency_key": {
+        "$ref": "#/properties/approval_v3/properties/idempotency_key"
+       },
+       "maximum_input_base": {
+        "$ref": "#/properties/approval_v3/properties/maximum_input_base"
+       },
+       "minimum_output_base": {
+        "$ref": "#/properties/approval_v3/properties/maximum_input_base"
+       },
+       "quote_fingerprint": {
+        "$ref": "#/properties/approval_v3/properties/quote_fingerprint"
+       },
+       "quote_id": {
+        "$ref": "#/properties/approval_v3/properties/quote_id"
+       },
+       "selected_mode": {
+        "$ref": "#/properties/approval_v3/properties/selected_mode"
+       },
+       "selection_status": {
+        "$ref": "#/properties/approval_v3/properties/selection_status"
+       },
+       "version": {
+        "$ref": "#/properties/approval_v3/properties/version"
+       }
+      },
+      "required": [
+       "version",
+       "quote_id",
+       "quote_fingerprint",
+       "selection_status",
+       "selected_mode",
+       "maximum_input_base",
+       "minimum_output_base",
+       "direct_route_summary_sha256",
+       "idempotency_key"
+      ],
+      "type": "object"
+     },
+     "direct_route_summary": {
+      "additionalProperties": false,
+      "properties": {
+       "assetfare_fee_bps": {
+        "const": 1,
+        "type": "number"
+       },
+       "classification": {
+        "enum": [
+         "direct_protocol_only",
+         "external_intent"
+        ],
+        "type": "string"
+       },
+       "economic_eligibility": {
+        "enum": [
+         "not_asserted_by_capability",
+         "coverage_only_not_primary"
+        ],
+        "type": "string"
+       },
+       "external_intent_protocol_used": {
+        "type": "boolean"
+       },
+       "fee_collection_step_index": {
+        "maximum": 7,
+        "minimum": 0,
+        "type": "integer"
+       },
+       "from": {
+        "enum": [
+         "solana:SOL",
+         "solana:USDC",
+         "solana:USDG",
+         "base:ETH",
+         "base:USDC",
+         "arbitrum:ETH",
+         "arbitrum:USDC",
+         "robinhood:ETH",
+         "robinhood:USDG",
+         "polygon:USDC",
+         "optimism:USDC"
+        ],
+        "type": "string"
+       },
+       "mode": {
+        "enum": [
+         "cctp_direct_composition",
+         "optimism_source_cctp",
+         "polygon_source_cctp",
+         "robinhood_across_ingress_composition",
+         "robinhood_paxos_egress_composition",
+         "robinhood_paxos_ingress_composition",
+         "same_chain_direct",
+         "same_chain_direct_composition"
+        ],
+        "type": "string"
+       },
+       "primary_selection_eligible": {
+        "type": "boolean"
+       },
+       "product_classification": {
+        "enum": [
+         "primary_direct",
+         "external_coverage_only"
+        ],
+        "type": "string"
+       },
+       "provider_internal_dex_aggregation_possible": {
+        "type": "boolean"
+       },
+       "public_execution_eligible": {
+        "type": "boolean"
+       },
+       "route": {
+        "enum": [
+         "solana:SOL->solana:USDC",
+         "solana:SOL->solana:USDG",
+         "solana:SOL->base:ETH",
+         "solana:SOL->base:USDC",
+         "solana:SOL->arbitrum:ETH",
+         "solana:SOL->arbitrum:USDC",
+         "solana:SOL->robinhood:ETH",
+         "solana:SOL->robinhood:USDG",
+         "solana:USDC->solana:SOL",
+         "solana:USDC->solana:USDG",
+         "solana:USDC->base:ETH",
+         "solana:USDC->base:USDC",
+         "solana:USDC->arbitrum:ETH",
+         "solana:USDC->arbitrum:USDC",
+         "solana:USDC->robinhood:ETH",
+         "solana:USDC->robinhood:USDG",
+         "solana:USDG->solana:SOL",
+         "solana:USDG->solana:USDC",
+         "solana:USDG->base:ETH",
+         "solana:USDG->base:USDC",
+         "solana:USDG->arbitrum:ETH",
+         "solana:USDG->arbitrum:USDC",
+         "solana:USDG->robinhood:ETH",
+         "solana:USDG->robinhood:USDG",
+         "base:ETH->solana:SOL",
+         "base:ETH->solana:USDC",
+         "base:ETH->solana:USDG",
+         "base:ETH->base:USDC",
+         "base:ETH->arbitrum:ETH",
+         "base:ETH->arbitrum:USDC",
+         "base:ETH->robinhood:ETH",
+         "base:ETH->robinhood:USDG",
+         "base:USDC->solana:SOL",
+         "base:USDC->solana:USDC",
+         "base:USDC->solana:USDG",
+         "base:USDC->base:ETH",
+         "base:USDC->arbitrum:ETH",
+         "base:USDC->arbitrum:USDC",
+         "base:USDC->robinhood:ETH",
+         "base:USDC->robinhood:USDG",
+         "arbitrum:ETH->solana:SOL",
+         "arbitrum:ETH->solana:USDC",
+         "arbitrum:ETH->solana:USDG",
+         "arbitrum:ETH->base:ETH",
+         "arbitrum:ETH->base:USDC",
+         "arbitrum:ETH->arbitrum:USDC",
+         "arbitrum:ETH->robinhood:ETH",
+         "arbitrum:ETH->robinhood:USDG",
+         "arbitrum:USDC->solana:SOL",
+         "arbitrum:USDC->solana:USDC",
+         "arbitrum:USDC->solana:USDG",
+         "arbitrum:USDC->base:ETH",
+         "arbitrum:USDC->base:USDC",
+         "arbitrum:USDC->arbitrum:ETH",
+         "arbitrum:USDC->robinhood:ETH",
+         "arbitrum:USDC->robinhood:USDG",
+         "robinhood:ETH->solana:SOL",
+         "robinhood:ETH->solana:USDC",
+         "robinhood:ETH->solana:USDG",
+         "robinhood:ETH->base:ETH",
+         "robinhood:ETH->base:USDC",
+         "robinhood:ETH->arbitrum:ETH",
+         "robinhood:ETH->arbitrum:USDC",
+         "robinhood:ETH->robinhood:USDG",
+         "robinhood:USDG->solana:SOL",
+         "robinhood:USDG->solana:USDC",
+         "robinhood:USDG->solana:USDG",
+         "robinhood:USDG->base:ETH",
+         "robinhood:USDG->base:USDC",
+         "robinhood:USDG->arbitrum:ETH",
+         "robinhood:USDG->arbitrum:USDC",
+         "robinhood:USDG->robinhood:ETH",
+         "polygon:USDC->base:USDC",
+         "polygon:USDC->arbitrum:USDC",
+         "optimism:USDC->base:USDC",
+         "optimism:USDC->arbitrum:USDC"
+        ],
+        "type": "string"
+       },
+       "route_aggregator_used": {
+        "const": false,
+        "type": "boolean"
+       },
+       "route_minimum_guard_bps": {
+        "anyOf": [
+         {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "server_signing": {
+        "const": false,
+        "type": "boolean"
+       },
+       "server_submission": {
+        "const": false,
+        "type": "boolean"
+       },
+       "step_count": {
+        "maximum": 8,
+        "minimum": 1,
+        "type": "integer"
+       },
+       "steps": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "action": {
+           "enum": [
+            "swap",
+            "bridge",
+            "receive"
+           ],
+           "type": "string"
+          },
+          "aggregator_api_used": {
+           "const": false,
+           "type": "boolean"
+          },
+          "assetfare_fee_bps": {
+           "enum": [
+            0,
+            1
+           ],
+           "type": "number"
+          },
+          "direct_protocol": {
+           "type": "boolean"
+          },
+          "expected_input_base": {
+           "pattern": "^[1-9][0-9]*$",
+           "type": "string"
+          },
+          "expected_output_base": {
+           "pattern": "^[1-9][0-9]*$",
+           "type": "string"
+          },
+          "external_intent_protocol": {
+           "type": "boolean"
+          },
+          "from": {
+           "enum": [
+            "solana:SOL",
+            "solana:USDC",
+            "solana:USDG",
+            "base:ETH",
+            "base:USDC",
+            "arbitrum:ETH",
+            "arbitrum:USDC",
+            "robinhood:ETH",
+            "robinhood:USDG",
+            "polygon:USDC",
+            "optimism:USDC"
+           ],
+           "type": "string"
+          },
+          "index": {
+           "maximum": 7,
+           "minimum": 0,
+           "type": "integer"
+          },
+          "minimum_guard_bps": {
+           "maximum": 500,
+           "minimum": 1,
+           "type": "integer"
+          },
+          "minimum_input_base": {
+           "pattern": "^[1-9][0-9]*$",
+           "type": "string"
+          },
+          "minimum_output_base": {
+           "pattern": "^[1-9][0-9]*$",
+           "type": "string"
+          },
+          "provider": {
+           "enum": [
+            "raydium_clmm",
+            "orca_whirlpool",
+            "uniswap_v3",
+            "circle_cctp",
+            "circle_cctp_receive",
+            "paxos_usdg_layerzero_oft",
+            "across_intent_bridge"
+           ],
+           "type": "string"
+          },
+          "to": {
+           "enum": [
+            "solana:SOL",
+            "solana:USDC",
+            "solana:USDG",
+            "base:ETH",
+            "base:USDC",
+            "arbitrum:ETH",
+            "arbitrum:USDC",
+            "robinhood:ETH",
+            "robinhood:USDG"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "index",
+          "action",
+          "provider",
+          "from",
+          "to",
+          "expected_input_base",
+          "minimum_input_base",
+          "expected_output_base",
+          "minimum_output_base",
+          "assetfare_fee_bps",
+          "direct_protocol",
+          "external_intent_protocol",
+          "aggregator_api_used"
+         ],
+         "type": "object"
+        },
+        "maxItems": 8,
+        "minItems": 1,
+        "type": "array"
+       },
+       "to": {
+        "enum": [
+         "solana:SOL",
+         "solana:USDC",
+         "solana:USDG",
+         "base:ETH",
+         "base:USDC",
+         "arbitrum:ETH",
+         "arbitrum:USDC",
+         "robinhood:ETH",
+         "robinhood:USDG"
+        ],
+        "type": "string"
+       },
+       "version": {
+        "const": "assetfare-direct-route-summary-v1",
+        "type": "string"
+       }
+      },
+      "required": [
+       "version",
+       "route",
+       "from",
+       "to",
+       "classification",
+       "mode",
+       "route_aggregator_used",
+       "external_intent_protocol_used",
+       "provider_internal_dex_aggregation_possible",
+       "assetfare_fee_bps",
+       "fee_collection_step_index",
+       "server_signing",
+       "server_submission",
+       "step_count",
+       "steps"
+      ],
+      "type": "object"
+     },
+     "event_signer_public": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/event_signer_public"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Solana CCTP only: caller-generated ephemeral public key. Keep the matching private key client-side and use it to co-sign the returned unsigned event-account transaction; never send the private key."
+     },
+     "intent": {
+      "additionalProperties": false,
+      "properties": {
+       "amount_usd": {
+        "$ref": "#/properties/amount_usd"
+       },
+       "from_chain": {
+        "$ref": "#/properties/from_chain"
+       },
+       "from_token": {
+        "$ref": "#/properties/from_token"
+       },
+       "to_chain": {
+        "$ref": "#/properties/to_chain"
+       },
+       "to_token": {
+        "$ref": "#/properties/to_token"
+       }
+      },
+      "required": [
+       "from_chain",
+       "from_token",
+       "to_chain",
+       "to_token",
+       "amount_usd"
+      ],
+      "type": "object"
+     },
+     "verification_context_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+     },
+     "version": {
+      "const": "assetfare-session-verification-context-v1",
+      "type": "string"
+     },
+     "wallets": {
+      "$ref": "#/properties/wallets"
+     }
+    },
+    "required": [
+     "version",
+     "intent",
+     "wallets",
+     "event_signer_public",
+     "approval_v3",
+     "direct_route_summary",
+     "verification_context_sha256"
+    ],
+    "type": "object"
+   },
+   "wallets": {
+    "additionalProperties": {
+     "description": "Caller-owned public wallet address: 0x plus 40 hex characters for EVM, or 32-44 base58 characters for Solana. Never provide secret key material.",
+     "type": "string"
+    },
+    "description": "Map each chain needed by this route to the caller's public wallet address. Include public addresses only; one to six entries, never private keys or seed phrases.",
+    "propertyNames": {
+     "enum": [
+      "solana",
+      "base",
+      "arbitrum",
+      "robinhood",
+      "polygon",
+      "optimism"
+     ]
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "caller_approved",
+   "from_chain",
+   "from_token",
+   "to_chain",
+   "to_token",
+   "amount_usd",
+   "wallets",
+   "approval_v3",
+   "session_token",
+   "idempotency_key",
+   "verification_context"
+  ],
+  "type": "object"
+ },
+ "name": "assetfare_v2_session_create",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "action_available": {
+    "type": "boolean"
+   },
+   "current_action": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "action_id": {
+        "format": "uuid",
+        "type": "string"
+       },
+       "expires_at": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "payload_sha256": {
+        "description": "sha256(UTF-8 JSON with sorted keys and compact separators, excluding payload_sha256 itself)",
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+       },
+       "payload_sha256_spec": {
+        "const": "sha256(UTF-8 JSON with sorted keys and compact separators, excluding payload_sha256 itself)",
+        "type": "string"
+       },
+       "server_signing": {
+        "const": false,
+        "type": "boolean"
+       },
+       "server_submission": {
+        "const": false,
+        "type": "boolean"
+       },
+       "signed": {
+        "const": false,
+        "type": "boolean"
+       },
+       "step_index": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "submitted": {
+        "const": false,
+        "type": "boolean"
+       },
+       "unsigned_action": {
+        "additionalProperties": {},
+        "type": "object"
+       },
+       "version": {
+        "const": "assetfare-direct-multichain-action-v2",
+        "type": "string"
+       },
+       "workflow_id": {
+        "format": "uuid",
+        "type": "string"
+       }
+      },
+      "required": [
+       "version",
+       "workflow_id",
+       "action_id",
+       "step_index",
+       "expires_at",
+       "unsigned_action",
+       "payload_sha256",
+       "payload_sha256_spec",
+       "server_signing",
+       "server_submission",
+       "signed",
+       "submitted"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "quote_binding": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "quote_fingerprint": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+       },
+       "quote_id": {
+        "format": "uuid",
+        "type": "string"
+       },
+       "selected_mode": {
+        "const": "session",
+        "type": "string"
+       },
+       "server_signing": {
+        "const": false,
+        "type": "boolean"
+       },
+       "server_submission": {
+        "const": false,
+        "type": "boolean"
+       },
+       "version": {
+        "const": "assetfare-quote-bound-session-constraints-v1",
+        "type": "string"
+       },
+       "whole_session_path_and_bounds_enforced": {
+        "const": true,
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "version",
+       "quote_id",
+       "quote_fingerprint",
+       "selected_mode",
+       "whole_session_path_and_bounds_enforced",
+       "server_signing",
+       "server_submission"
+      ],
+      "type": "object"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "server_signing": {
+        "const": false,
+        "type": "boolean"
+       },
+       "server_submission": {
+        "const": false,
+        "type": "boolean"
+       },
+       "version": {
+        "const": "legacy_advisory",
+        "type": "string"
+       },
+       "whole_session_path_and_bounds_enforced": {
+        "const": false,
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "version",
+       "whole_session_path_and_bounds_enforced",
+       "server_signing",
+       "server_submission"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "server_signing": {
+    "const": false,
+    "type": "boolean"
+   },
+   "server_submission": {
+    "const": false,
+    "type": "boolean"
+   },
+   "session_id": {
+    "format": "uuid",
+    "type": "string"
+   },
+   "signed": {
+    "const": false,
+    "type": "boolean"
+   },
+   "status": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "submitted": {
+    "const": false,
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "session_id",
+   "status",
+   "action_available",
+   "current_action",
+   "quote_binding",
+   "server_signing",
+   "server_submission",
+   "signed",
+   "submitted"
+  ],
+  "type": "object"
+ }
+}

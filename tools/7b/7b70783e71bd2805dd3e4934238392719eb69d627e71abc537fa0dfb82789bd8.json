@@ -1,0 +1,175 @@
+{
+ "_meta": {
+  "securitySchemes": [
+   {
+    "scopes": [
+     "mcp"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Create database sync"
+ },
+ "description": "Register a saved schema for relational synchronization to PostgreSQL, MySQL or SQLite. Requires owner and a sync-enabled plan. Starts a billed classification job when available; returns database ID, classification_job_id or classification_skipped, stamped_keys and registration_notices. The webhook signing secret stays outside the MCP response and can be managed in the web app. The schema is initially unpublished: wait for classification, review keys/options/notices, then publish_schema before any data can sync. pk_strategy locks once the physical model ships. Owned child arrays replace previous membership, so omitted children are deleted on re-enrichment. purge_entity_state transfers custody to replicas; relay custody_warning. A connected host may provision automatically; otherwise get_database_setup_instructions starts browser-confirmed client pairing. Modeling, publication and delivery: enricher://docs/database-sync.",
+ "inputSchema": {
+  "properties": {
+   "dialect": {
+    "default": "postgres",
+    "description": "SQL dialect the deltas are rendered in: postgres | mysql | sqlite.",
+    "title": "Dialect",
+    "type": "string"
+   },
+   "index_scalars": {
+    "default": "filterable",
+    "description": "none: identity/feed indexes; keys: add natural keys and relation access paths; filterable (default): add dates, search intent, spatial/range roles and entity query indexes; all: every scalar. Later changes queue index migrations.",
+    "title": "Index Scalars",
+    "type": "string"
+   },
+   "key_language": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Language of multilingual identity tokens (ISO 639-1), shared by all schemas of this database. Usually defaults to schema language when needed; publication may request it after classification. Locked once chosen for the database.",
+    "title": "Key Language"
+   },
+   "name": {
+    "description": "Name of the physical database (existing on the user's server, or created by `ee-database run --create-missing`); shared by every schema linked to this database sync. Also used (snake-cased) as the conventional replica database name by the ee-database CLI.",
+    "maxLength": 255,
+    "minLength": 1,
+    "title": "Name",
+    "type": "string"
+   },
+   "notify_debounce_s": {
+    "default": 5,
+    "description": "Quiet period (seconds) before a delta-available notification fires: each new delta resets the timer, so a burst is announced once. Default 5 for MCP callers (agent workflows expect near-immediate reaction); the web app defaults to 30 to coalesce human-scale editing bursts.",
+    "maximum": 600,
+    "minimum": 0,
+    "title": "Notify Debounce S",
+    "type": "integer"
+   },
+   "on_gaps": {
+    "default": "skip_children",
+    "description": "Admission gate \u2014 what is written when an enrichment has gaps (non-nullable fields unfilled). 'reject_entity': nothing \u2014 one gap anywhere refuses the whole enrichment. 'skip_children' (default): the entity without its incomplete children \u2014 an array item is dropped, a shared 1-1 reference is detached (child not written, parent's foreign key NULL); gaps with no such child above them still reject. 'accept_partial': everything \u2014 gaps land as NULLs, and under last-write-wins a later partial run erases what an earlier one filled.",
+    "title": "On Gaps",
+    "type": "string"
+   },
+   "pattern_index_localized_keys": {
+    "default": false,
+    "description": "Add per-language pattern-match indexes on indexed localized keys/labels (default false). Useful for prefix autocomplete; increases write/index cost. Concrete SQL depends on the selected dialect.",
+    "title": "Pattern Index Localized Keys",
+    "type": "boolean"
+   },
+   "pk_strategy": {
+    "default": "surrogate",
+    "description": "surrogate (default): physical surrogate IDs with unique schema keys; natural: use schema keys as physical primary keys and restrict later re-keying. Locks once the physical model ships; decide before publication. See enricher://docs/database-sync.",
+    "title": "Pk Strategy",
+    "type": "string"
+   },
+   "propagate_not_null": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Mirror required schema fields as SQL NOT NULL. Omitted: on for strict gap policies, off for accept_partial. True with accept_partial is refused. Later tightening requires validating existing replica rows; violations can quarantine the migration.",
+    "title": "Propagate Not Null"
+   },
+   "purge_entity_state": {
+    "default": false,
+    "description": "Delete fully delivered entity state after every linked database acknowledges it. Transfers custody to replicas, makes server snapshots incomplete and limits duplicate checks. Relay custody_warning and obtain agreement before enabling. Default false.",
+    "title": "Purge Entity State",
+    "type": "boolean"
+   },
+   "purge_entity_state_delay_days": {
+    "anyOf": [
+     {
+      "maximum": 365,
+      "minimum": 1,
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Grace period for purge_entity_state: a fully-delivered entity row is kept until it has gone this many days without an update, then the hourly purge deletes it. Omit to delete it as soon as every database of the schema acknowledged it.",
+    "title": "Purge Entity State Delay Days"
+   },
+   "purge_on_ack": {
+    "default": false,
+    "description": "Delete delivered delta copies once acknowledged.",
+    "title": "Purge On Ack",
+    "type": "boolean"
+   },
+   "purge_on_ack_delay_days": {
+    "anyOf": [
+     {
+      "maximum": 365,
+      "minimum": 1,
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Grace period for purge_on_ack: keep acknowledged delta copies this many days (from acknowledgement) before the hourly purge deletes them. Omit to delete them at acknowledgement. Bounded by the plan's delta retention ceiling.",
+    "title": "Purge On Ack Delay Days"
+   },
+   "schema_id": {
+    "description": "Saved schema UUID to connect the database to.",
+    "title": "Schema Id",
+    "type": "string"
+   },
+   "target_host": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Sync host (id or name) that should provision and sync this registration automatically (managed ee-database mode). Omitted: auto-assigned when exactly one eligible host is connected; otherwise the response's connected_hosts lists the candidates \u2014 relay the choice to the user and call assign_sync_host, or fall back to get_database_setup_instructions for browser-confirmed manual pairing.",
+    "title": "Target Host"
+   }
+  },
+  "required": [
+   "schema_id",
+   "name"
+  ],
+  "title": "create_database_syncArguments",
+  "type": "object"
+ },
+ "name": "create_database_sync",
+ "outputSchema": {
+  "additionalProperties": true,
+  "title": "create_database_syncDictOutput",
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "mcp"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "Create database sync"
+}

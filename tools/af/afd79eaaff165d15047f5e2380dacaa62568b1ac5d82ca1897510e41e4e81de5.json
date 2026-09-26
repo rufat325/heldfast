@@ -1,0 +1,1340 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Assess the risk of doing business with a company in any country using corporate, financial, compliance, reputation, operational and digital evidence. Returns a 0\u2013100 risk score (100 = highest detected risk), a separate 0\u20131 confidence, per-category component scores, evidence-backed risk flags and positive signals, sanctions/restricted-party screening with match strength, and machine-readable due-diligence guidance (proceed / proceed_with_monitoring / enhanced_due_diligence / manual_review / avoid_automated_transaction). Use before onboarding a supplier or vendor, paying a new business, entering a B2B transaction, approving a marketplace seller, extending credit or insurance, or recommending a company \u2014 whenever an autonomous agent needs structured, evidence-backed business due diligence it cannot reliably generate from its own model knowledge.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "address": {
+    "description": "Street address as supplied by the company (checked against the registered address when the registry publishes one).",
+    "maxLength": 300,
+    "minLength": 3,
+    "type": "string"
+   },
+   "city": {
+    "description": "City of registration/headquarters (helps disambiguation).",
+    "maxLength": 80,
+    "minLength": 2,
+    "type": "string"
+   },
+   "companyName": {
+    "description": "Company name as known to the caller (trading or legal name). Required.",
+    "maxLength": 200,
+    "minLength": 2,
+    "type": "string"
+   },
+   "country": {
+    "description": "Country of registration/operation \u2014 ISO 3166 alpha-2 (e.g. GB), alpha-3 or English name. Strongly recommended: prevents same-name companies in other countries from being confused.",
+    "maxLength": 60,
+    "minLength": 2,
+    "type": "string"
+   },
+   "includeDigitalSignals": {
+    "description": "Default true. false skips website, domain-registration and threat-feed checks (digital coverage becomes 'none').",
+    "type": "boolean"
+   },
+   "includeNews": {
+    "description": "Default true. false skips news, customer-review and regulator web searches (faster, cheaper; reputation coverage becomes 'none').",
+    "type": "boolean"
+   },
+   "industry": {
+    "description": "Claimed industry/business activity (checked for consistency with the company's public presence; never scored by itself).",
+    "maxLength": 100,
+    "minLength": 2,
+    "type": "string"
+   },
+   "knownAliases": {
+    "description": "Other names the company trades or traded under (max 5). Screened against sanctions/restricted-party lists and used to attribute media.",
+    "items": {
+     "maxLength": 200,
+     "minLength": 2,
+     "type": "string"
+    },
+    "maxItems": 5,
+    "type": "array"
+   },
+   "lei": {
+    "description": "Legal Entity Identifier (ISO 17442), if known \u2014 decisive for entity resolution.",
+    "maxLength": 24,
+    "minLength": 20,
+    "type": "string"
+   },
+   "registrationNumber": {
+    "description": "Company registration number in its home registry (e.g. UK Companies House number, Oman CR number). The strongest disambiguator.",
+    "maxLength": 64,
+    "minLength": 2,
+    "pattern": "^[A-Za-z0-9][A-Za-z0-9 ./-]*$",
+    "type": "string"
+   },
+   "website": {
+    "description": "Company website or domain, e.g. https://example.com (normalized to its https origin).",
+    "maxLength": 300,
+    "minLength": 4,
+    "type": "string"
+   }
+  },
+  "required": [
+   "companyName"
+  ],
+  "type": "object"
+ },
+ "name": "business_risk_score",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "assessmentId": {
+    "description": "Deterministic id of (company identity, scoring model version, evidence snapshot).",
+    "type": "string"
+   },
+   "assumptions": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "business": {
+    "additionalProperties": false,
+    "properties": {
+     "city": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "country": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "countryName": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "domain": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "entityMatchConfidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "identityVerifiedAgainstRegistry": {
+      "type": "boolean"
+     },
+     "incorporationDate": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "industry": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "legalName": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "lei": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "matchedOn": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "name": {
+      "type": "string"
+     },
+     "registrationNumber": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "registrationStatus": {
+      "enum": [
+       "active",
+       "inactive",
+       "dissolved",
+       "liquidation",
+       "unknown",
+       "not_verified"
+      ],
+      "type": "string"
+     },
+     "registry": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "resolutionStatus": {
+      "enum": [
+       "resolved",
+       "probable",
+       "unverified"
+      ],
+      "type": "string"
+     },
+     "website": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "name",
+     "legalName",
+     "country",
+     "countryName",
+     "registrationNumber",
+     "lei",
+     "registrationStatus",
+     "incorporationDate",
+     "registry",
+     "website",
+     "domain",
+     "city",
+     "industry",
+     "entityMatchConfidence",
+     "resolutionStatus",
+     "identityVerifiedAgainstRegistry",
+     "matchedOn"
+    ],
+    "type": "object"
+   },
+   "components": {
+    "additionalProperties": false,
+    "description": "Per-category risk scores (0\u2013100). null = no data coverage for that category (never guessed).",
+    "properties": {
+     "complianceRisk": {
+      "anyOf": [
+       {
+        "maximum": 100,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "corporateRisk": {
+      "anyOf": [
+       {
+        "maximum": 100,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "digitalRisk": {
+      "anyOf": [
+       {
+        "maximum": 100,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "financialRisk": {
+      "anyOf": [
+       {
+        "maximum": 100,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "operationalRisk": {
+      "anyOf": [
+       {
+        "maximum": 100,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "reputationRisk": {
+      "anyOf": [
+       {
+        "maximum": 100,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "corporateRisk",
+     "financialRisk",
+     "complianceRisk",
+     "reputationRisk",
+     "operationalRisk",
+     "digitalRisk"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "description": "0\u20131: how strongly the evidence supports the result. Separate from risk: a low score with low confidence means little evidence, not a safe company.",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "confidenceBreakdown": {
+    "additionalProperties": false,
+    "properties": {
+     "authoritativeRecords": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "capsApplied": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "categoryCoverage": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "consistency": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "contradictions": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "entityResolution": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "freshness": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "sourceQuality": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "entityResolution",
+     "categoryCoverage",
+     "sourceQuality",
+     "authoritativeRecords",
+     "freshness",
+     "consistency",
+     "contradictions",
+     "capsApplied"
+    ],
+    "type": "object"
+   },
+   "dataCoverage": {
+    "additionalProperties": false,
+    "properties": {
+     "compliance": {
+      "enum": [
+       "high",
+       "medium",
+       "low",
+       "none"
+      ],
+      "type": "string"
+     },
+     "corporate": {
+      "enum": [
+       "high",
+       "medium",
+       "low",
+       "none"
+      ],
+      "type": "string"
+     },
+     "digital": {
+      "enum": [
+       "high",
+       "medium",
+       "low",
+       "none"
+      ],
+      "type": "string"
+     },
+     "financial": {
+      "enum": [
+       "high",
+       "medium",
+       "low",
+       "none"
+      ],
+      "type": "string"
+     },
+     "operational": {
+      "enum": [
+       "high",
+       "medium",
+       "low",
+       "none"
+      ],
+      "type": "string"
+     },
+     "reputation": {
+      "enum": [
+       "high",
+       "medium",
+       "low",
+       "none"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "corporate",
+     "financial",
+     "compliance",
+     "reputation",
+     "operational",
+     "digital"
+    ],
+    "type": "object"
+   },
+   "evaluatedAt": {
+    "description": "As-of time of the evidence snapshot the assessment was computed from (latest retrieval time among the providers used; cached evidence keeps its original retrieval time). Re-evaluating the same snapshot yields the same result. null when nothing could be checked.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "evidence": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "ageDays": {
+       "anyOf": [
+        {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "claim": {
+       "type": "string"
+      },
+      "evidenceClass": {
+       "enum": [
+        "official_record",
+        "regulatory_action",
+        "court_record",
+        "credible_journalism",
+        "other_publication",
+        "user_generated",
+        "allegation",
+        "self_published"
+       ],
+       "type": "string"
+      },
+      "freshness": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "fromCache": {
+       "type": "boolean"
+      },
+      "id": {
+       "type": "string"
+      },
+      "observedAt": {
+       "type": "string"
+      },
+      "publishedAt": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "recordType": {
+       "description": "source_record: something a source returned. lookup_result: the documented outcome of a successful check that found nothing (so clean findings are traceable too).",
+       "enum": [
+        "source_record",
+        "lookup_result"
+       ],
+       "type": "string"
+      },
+      "relevance": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "reliability": {
+       "enum": [
+        "authoritative",
+        "high",
+        "medium",
+        "low"
+       ],
+       "type": "string"
+      },
+      "retrievedAt": {
+       "type": "string"
+      },
+      "sourceName": {
+       "type": "string"
+      },
+      "sourceRecordId": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "sourceUrl": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "stale": {
+       "type": "boolean"
+      },
+      "type": {
+       "enum": [
+        "company_registry",
+        "lei_registry",
+        "company_filing",
+        "sanctions_list",
+        "export_control_or_debarment_list",
+        "regulatory_publication",
+        "court_record",
+        "news",
+        "review_platform",
+        "forum_or_social",
+        "company_website",
+        "domain_registration",
+        "threat_intelligence"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "recordType",
+      "type",
+      "evidenceClass",
+      "sourceName",
+      "sourceUrl",
+      "sourceRecordId",
+      "publishedAt",
+      "observedAt",
+      "retrievedAt",
+      "ageDays",
+      "stale",
+      "freshness",
+      "claim",
+      "reliability",
+      "relevance",
+      "fromCache"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "limitations": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "methodology": {
+    "additionalProperties": false,
+    "properties": {
+     "categoryWeights": {
+      "additionalProperties": false,
+      "properties": {
+       "compliance": {
+        "type": "number"
+       },
+       "corporate": {
+        "type": "number"
+       },
+       "digital": {
+        "type": "number"
+       },
+       "financial": {
+        "type": "number"
+       },
+       "operational": {
+        "type": "number"
+       },
+       "reputation": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "corporate",
+       "financial",
+       "compliance",
+       "reputation",
+       "operational",
+       "digital"
+      ],
+      "type": "object"
+     },
+     "formula": {
+      "type": "string"
+     },
+     "highRiskJurisdictionsSource": {
+      "type": "string"
+     },
+     "missingDataPolicy": {
+      "type": "string"
+     },
+     "missingDataRiskRules": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "code": {
+         "type": "string"
+        },
+        "rule": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "code",
+        "rule"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "riskLevelBands": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "level": {
+         "enum": [
+          "low",
+          "moderate",
+          "elevated",
+          "high",
+          "critical"
+         ],
+         "type": "string"
+        },
+        "max": {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "min": {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "level",
+        "min",
+        "max"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "scoringModelVersion": {
+      "type": "string"
+     },
+     "severityPoints": {
+      "additionalProperties": false,
+      "properties": {
+       "critical": {
+        "type": "number"
+       },
+       "high": {
+        "type": "number"
+       },
+       "info": {
+        "type": "number"
+       },
+       "low": {
+        "type": "number"
+       },
+       "medium": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "info",
+       "low",
+       "medium",
+       "high",
+       "critical"
+      ],
+      "type": "object"
+     },
+     "weightsSource": {
+      "enum": [
+       "default",
+       "env",
+       "default_env_invalid"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "scoringModelVersion",
+     "categoryWeights",
+     "weightsSource",
+     "severityPoints",
+     "riskLevelBands",
+     "missingDataPolicy",
+     "missingDataRiskRules",
+     "highRiskJurisdictionsSource",
+     "formula"
+    ],
+    "type": "object"
+   },
+   "positiveSignals": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "category": {
+       "enum": [
+        "corporate",
+        "financial",
+        "compliance",
+        "reputation",
+        "operational",
+        "digital"
+       ],
+       "type": "string"
+      },
+      "code": {
+       "type": "string"
+      },
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "description": {
+       "type": "string"
+      },
+      "evidenceIds": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "mitigationPoints": {
+       "minimum": 0,
+       "type": "number"
+      },
+      "title": {
+       "type": "string"
+      },
+      "weight": {
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "code",
+      "category",
+      "title",
+      "description",
+      "evidenceIds",
+      "weight",
+      "confidence",
+      "mitigationPoints"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "providers": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "evidenceCount": {
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "fromCache": {
+       "type": "boolean"
+      },
+      "provider": {
+       "type": "string"
+      },
+      "reason": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "retrievedAt": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "role": {
+       "enum": [
+        "corporate",
+        "financial",
+        "sanctions",
+        "news",
+        "regulatory",
+        "digital"
+       ],
+       "type": "string"
+      },
+      "stage": {
+       "anyOf": [
+        {
+         "const": 1,
+         "type": "number"
+        },
+        {
+         "const": 2,
+         "type": "number"
+        }
+       ]
+      },
+      "status": {
+       "enum": [
+        "ok",
+        "not_configured",
+        "not_applicable",
+        "unavailable",
+        "timeout",
+        "rate_limited",
+        "stale_cache"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "provider",
+      "role",
+      "stage",
+      "status",
+      "fromCache",
+      "retrievedAt",
+      "evidenceCount",
+      "reason"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "recommendation": {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "enum": [
+       "proceed",
+       "proceed_with_monitoring",
+       "enhanced_due_diligence",
+       "manual_review",
+       "avoid_automated_transaction"
+      ],
+      "type": "string"
+     },
+     "rationale": {
+      "type": "string"
+     },
+     "reasonCodes": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "action",
+     "reasonCodes",
+     "rationale"
+    ],
+    "type": "object"
+   },
+   "riskFlags": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "category": {
+       "enum": [
+        "corporate",
+        "financial",
+        "compliance",
+        "reputation",
+        "operational",
+        "digital"
+       ],
+       "type": "string"
+      },
+      "code": {
+       "type": "string"
+      },
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "description": {
+       "type": "string"
+      },
+      "evidenceIds": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "factStatus": {
+       "anyOf": [
+        {
+         "enum": [
+          "established",
+          "reported",
+          "alleged",
+          "observed"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "What the source establishes: observed (a record/check), reported (an outcome reported by a source), alleged (allegation, investigation, lawsuit, unconfirmed match)."
+      },
+      "requiresVerification": {
+       "type": "boolean"
+      },
+      "scoreImpactPoints": {
+       "description": "SEVERITY_POINTS[severity] \u00d7 weight \u00d7 confidence \u2014 this flag's contribution to its category's negative points.",
+       "minimum": 0,
+       "type": "number"
+      },
+      "severity": {
+       "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+       ],
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      },
+      "weight": {
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "code",
+      "category",
+      "severity",
+      "title",
+      "description",
+      "evidenceIds",
+      "weight",
+      "confidence",
+      "scoreImpactPoints",
+      "factStatus",
+      "requiresVerification"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "riskLevel": {
+    "anyOf": [
+     {
+      "enum": [
+       "low",
+       "moderate",
+       "elevated",
+       "high",
+       "critical"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "riskScore": {
+    "anyOf": [
+     {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "0 = lowest detected risk, 100 = highest. null only when status is insufficient_data."
+   },
+   "sanctionsScreening": {
+    "additionalProperties": false,
+    "properties": {
+     "listsChecked": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "listsUnavailable": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "matches": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "contradictions": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "corroboratingIdentifiers": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "evidenceId": {
+         "type": "string"
+        },
+        "list": {
+         "type": "string"
+        },
+        "listType": {
+         "enum": [
+          "sanctions",
+          "export_control_or_debarment"
+         ],
+         "type": "string"
+        },
+        "listedName": {
+         "type": "string"
+        },
+        "matchScore": {
+         "maximum": 1,
+         "minimum": 0,
+         "type": "number"
+        },
+        "matchStrength": {
+         "description": "possible: name similarity only \u2014 NOT a confirmed listing. high: exact normalized name corroborated by a list identifier/country with nothing contradicting it \u2014 still verify at the source list.",
+         "enum": [
+          "possible",
+          "high"
+         ],
+         "type": "string"
+        },
+        "matchType": {
+         "enum": [
+          "exact_normalized_name",
+          "fuzzy_name"
+         ],
+         "type": "string"
+        },
+        "matchedAlias": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "reference": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "sourceUrl": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "listedName",
+        "matchedAlias",
+        "list",
+        "listType",
+        "reference",
+        "sourceUrl",
+        "matchScore",
+        "matchType",
+        "matchStrength",
+        "corroboratingIdentifiers",
+        "contradictions",
+        "evidenceId"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "namesScreened": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "status": {
+      "enum": [
+       "no_match_found",
+       "possible_match",
+       "high_confidence_match",
+       "not_checked",
+       "unavailable",
+       "partial"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "listsChecked",
+     "listsUnavailable",
+     "namesScreened",
+     "matches"
+    ],
+    "type": "object"
+   },
+   "scoreBreakdown": {
+    "additionalProperties": false,
+    "properties": {
+     "complianceContribution": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "corporateContribution": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "digitalContribution": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "effectiveWeights": {
+      "additionalProperties": false,
+      "properties": {
+       "compliance": {
+        "type": "number"
+       },
+       "corporate": {
+        "type": "number"
+       },
+       "digital": {
+        "type": "number"
+       },
+       "financial": {
+        "type": "number"
+       },
+       "operational": {
+        "type": "number"
+       },
+       "reputation": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "corporate",
+       "financial",
+       "compliance",
+       "reputation",
+       "operational",
+       "digital"
+      ],
+      "type": "object"
+     },
+     "financialContribution": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "floorsApplied": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "code": {
+         "type": "string"
+        },
+        "minimumScore": {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "reason": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "code",
+        "minimumScore",
+        "reason"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "operationalContribution": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "rawWeightedScore": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "reputationContribution": {
+      "type": [
+       "number",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "corporateContribution",
+     "financialContribution",
+     "complianceContribution",
+     "reputationContribution",
+     "operationalContribution",
+     "digitalContribution",
+     "rawWeightedScore",
+     "effectiveWeights",
+     "floorsApplied"
+    ],
+    "type": "object"
+   },
+   "status": {
+    "enum": [
+     "assessed",
+     "insufficient_data"
+    ],
+    "type": "string"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "provider": {
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "provider"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "status",
+   "assessmentId",
+   "business",
+   "riskScore",
+   "riskLevel",
+   "confidence",
+   "components",
+   "scoreBreakdown",
+   "riskFlags",
+   "positiveSignals",
+   "sanctionsScreening",
+   "evidence",
+   "recommendation",
+   "dataCoverage",
+   "confidenceBreakdown",
+   "providers",
+   "warnings",
+   "assumptions",
+   "limitations",
+   "methodology",
+   "evaluatedAt"
+  ],
+  "type": "object"
+ }
+}

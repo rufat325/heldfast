@@ -1,0 +1,134 @@
+{
+ "_meta": {
+  "openai/outputTemplate": "ui://widgets.gojinko.com/202512112048/trip-unified.html",
+  "openai/toolInvocation/invoked": "Booking Updated",
+  "openai/toolInvocation/invoking": "Processing booking...",
+  "openai/widgetAccessible": true,
+  "ui": {
+   "csp": {
+    "connectDomains": [
+     "https://api.mapbox.com",
+     "https://events.mapbox.com",
+     "https://checkout.stripe.com/",
+     "https://www.gojinko.com",
+     "https://mcp.gojinko.com",
+     "https://app.gojinko.com",
+     "https://widgets.gojinko.com"
+    ],
+    "resourceDomains": [
+     "https://api.mapbox.com/",
+     "https://cdn.openai.com",
+     "https://static.cupid.travel",
+     "https://photos.hotelbeds.com",
+     "https://fonts.googleapis.com",
+     "https://fonts.gstatic.com",
+     "https://statics.gojinko.com",
+     "https://widgets.gojinko.com"
+    ]
+   },
+   "resourceUri": "ui://widgets.gojinko.com/202512112048/trip-unified.html"
+  },
+  "ui/resourceUri": "ui://widgets.gojinko.com/202512112048/trip-unified.html"
+ },
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Unified tool for booking a trip. Actions are determined by which object you provide.\n\nSCHEMA:\n{\n  create?: {                      // Initiate booking\n    trip_id: string,              // Required: ID of the trip to book\n    buyer_contact?: {             // Optional: buyer contact info\n      email: string,\n      phone?: string\n    }\n  },\n  status?: {                      // Check booking status\n    booking_id: string            // Required: ID of the booking to check\n  },\n  idempotency_key?: string        // Prevent duplicate processing\n}\n\nACTIONS:\n\n1. CREATE BOOKING (create object):\nQuotes the trip and returns a Stripe Checkout URL for payment authorization.\n{\n  \"create\": {\n    \"trip_id\": \"trip_xxx\"\n  }\n}\n\nReturns:\n{\n  \"checkout_session\": {\n    \"id\": \"cs_xxx\",\n    \"url\": \"https://checkout.stripe.com/...\",  // Open this URL for payment\n    \"expires_at\": \"2026-01-08T15:30:00Z\"  // quote deadline \u2014 payment is refused past it, not re-priced. Not a price hold. Absent if the quote names none\n  },\n  \"pending_booking\": {\n    \"id\": \"bkg_xxx\",\n    \"status\": \"awaiting_payment\",\n    \"trip_id\": \"trip_xxx\"\n  }\n}\n\n2. CHECK STATUS (status object):\nRetrieves booking status. If payment is authorized but fulfillment hasn't started,\nautomatically triggers fulfillment.\n{\n  \"status\": {\n    \"booking_id\": \"bkg_xxx\"\n  }\n}\n\nReturns: Full booking object with status, items, passengers, totals, payment info.\n\nPREREQUISITES:\n\u2022 Trip must have at least one item (use trip tool with add_item)\n\u2022 Trip must have travelers assigned (use trip tool with upsert_travelers)\n\u2022 Trip must pass validation\n\nWORKFLOW (flights):\n1. flight_calendar \u2192 offer_token\n2. flight_search \u2192 trip_item_token\n3. trip(add_item) \u2192 trip created\n4. trip(upsert_travelers) \u2192 travelers set\n5. book(create={trip_id}) \u2192 checkout URL\n\nWORKFLOW (hotels):\n1. hotel_search \u2192 htl_* offer_id\n2. trip(add_item, trip_item_token=htl_*) \u2192 trip created\n3. trip(upsert_travelers) \u2192 travelers set\n4. book(create={trip_id}) \u2192 checkout URL\n\nFlights and hotels can be in the same trip (single checkout).\nAfter book(create), poll with book(status={booking_id}) for confirmation.\n\nEXAMPLES:\n\n1. Create booking:\n{\n  \"create\": {\n    \"trip_id\": \"trip_xyz789\"\n  }\n}\n\n2. Create booking with buyer contact:\n{\n  \"create\": {\n    \"trip_id\": \"trip_xyz789\",\n    \"buyer_contact\": {\n      \"email\": \"john@example.com\",\n      \"phone\": \"+1-555-123-4567\"\n    }\n  }\n}\n\n3. Check booking status:\n{\n  \"status\": {\n    \"booking_id\": \"bkg_xxx\"\n  }\n}\n\n**Cost: 1 credit per call.**",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "create": {
+    "additionalProperties": false,
+    "description": "Initiate booking for a trip. Quotes the trip and returns a Stripe Checkout URL for payment. Mutually exclusive with `status` \u2014 provide exactly one action per call.",
+    "properties": {
+     "buyer_contact": {
+      "additionalProperties": false,
+      "description": "Buyer contact information. If omitted, uses lead traveler contact.",
+      "properties": {
+       "email": {
+        "description": "Email address for booking confirmations",
+        "format": "email",
+        "type": "string"
+       },
+       "phone": {
+        "description": "Phone number with country code",
+        "type": "string"
+       }
+      },
+      "required": [
+       "email"
+      ],
+      "type": "object"
+     },
+     "trip_id": {
+      "description": "ID of the trip to book. The trip must have items and travelers.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "trip_id"
+    ],
+    "type": "object"
+   },
+   "idempotency_key": {
+    "description": "Idempotency key to prevent duplicate processing",
+    "type": "string"
+   },
+   "status": {
+    "additionalProperties": false,
+    "description": "Check the status of an existing booking. If payment is authorized, triggers fulfillment automatically. Mutually exclusive with `create` \u2014 provide exactly one action per call.",
+    "properties": {
+     "booking_id": {
+      "description": "ID of the booking to check status for.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "booking_id"
+    ],
+    "type": "object"
+   },
+   "user_intent": {
+    "description": "A concise summary of what the user is trying to accomplish, derived from their message or the\nconversation context that triggered this tool call.\nThis is used to understand the user's intent and context to improve the overall user experience.\n\n- For short, self-contained prompts (e.g. \"I want new shoes\"), copy the user message as-is.\n- For longer conversations or detailed requests, summarize the core goal and any relevant\n  context in 1-2 sentences. Focus on intent, constraints, and preferences - not the full\n  dialogue.\n\nBefore sending, strip all personally identifiable information (PII), including but not\nlimited to:\n  - Names (first, last, usernames, handles)\n  - Email addresses\n  - Phone numbers\n  - Physical addresses (street, city, zip/postal code, country when tied to an individual)\n  - Dates of birth or exact ages\n  - Government-issued ID numbers (SSN, passport, driver's license, etc.)\n  - Payment or financial information (card numbers, bank accounts, etc.)\n  - IP addresses or device identifiers\n  - Account credentials (passwords, tokens, API keys)\n  - Health or biometric data\n  - Any other information that could identify a specific individual\n\nReplace stripped values with a generic placeholder (e.g. \"[name]\", \"[email]\", \"[address]\").\n\nExamples:\n  User: \"I want red running shoes under $100\"\n  -> \"I want red running shoes under $100\"\n\n  User: \"Hi, I'm John Smith, john@example.com, and I'm looking for flights from Paris to\n         Tokyo for 2 adults departing around mid-June, budget around EUR2000 total\"\n  -> \"Looking for flights from Paris to Tokyo for 2 adults, mid-June, budget ~EUR2000\"\n\n  User: \"I need help resetting my password for account ID acct_12345\"\n  -> \"I need help resetting my password for account ID [account_id]\"",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "book",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "action": {
+    "type": "string"
+   },
+   "booking": {},
+   "checkout_session": {},
+   "error_code": {
+    "type": "string"
+   },
+   "error_message": {
+    "type": "string"
+   },
+   "hint": {
+    "type": "string"
+   },
+   "pending_booking": {},
+   "quoted_offer": {},
+   "status": {
+    "type": "string"
+   },
+   "trip": {}
+  },
+  "type": "object"
+ },
+ "title": "book"
+}

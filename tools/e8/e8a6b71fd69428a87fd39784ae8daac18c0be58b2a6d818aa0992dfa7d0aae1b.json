@@ -1,0 +1,153 @@
+{
+ "_meta": {
+  "fastmcp": {
+   "tags": [
+    "Video Projects",
+    "generation",
+    "magic-hour",
+    "write-operation"
+   ]
+  }
+ },
+ "description": "Automatically generate subtitles for your video in multiple languages.\n\nMCP guidance:\n- This starts an async video generation job and returns `id` plus `credits_charged` immediately. If the user wants the finished result, call the `wait_for_video_project` helper with the returned id, or poll the matching `GET /v1/video-projects/{id}` endpoint until status is `complete`, `error`, or `canceled`. Completed projects include `downloads` with direct URLs. The custom wait helper also returns `exact_download_urls` separately from expiration metadata.\n- For `*_file_path` values, prefer an existing Magic Hour file path or a `file_path` returned by the upload-URL endpoint after the file bytes are uploaded. Direct public media URLs may work when they are stable, fetchable, and return raw file bytes, but hotlinked URLs can fail; when in doubt, use the presigned upload flow first and pass the returned `file_path`.",
+ "inputSchema": {
+  "properties": {
+   "assets": {
+    "description": "Provide the assets for auto subtitle generator",
+    "properties": {
+     "video_file_path": {
+      "description": "This is the video used to add subtitles. This value is either\n- a direct URL to the video file\n- `file_path` field from the response of the [upload urls API](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls).\n\nSee the [file upload guide](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls#input-file) for details.\n",
+      "example": "api-assets/id/1234.mp4",
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "video_file_path"
+    ],
+    "type": "object"
+   },
+   "end_seconds": {
+    "description": "End time of your clip (seconds). Must be greater than start_seconds.",
+    "example": 15,
+    "format": "float",
+    "minimum": 0.1,
+    "type": "number"
+   },
+   "name": {
+    "default": "Auto Subtitle - dateTime",
+    "description": "Give your video a custom name for easy identification.",
+    "example": "My Auto Subtitle video",
+    "type": "string"
+   },
+   "start_seconds": {
+    "description": "Start time of your clip (seconds). Must be \u2265 0.",
+    "example": 0,
+    "format": "float",
+    "minimum": 0.0,
+    "type": "number"
+   },
+   "style": {
+    "description": "Style of the subtitle. At least one of `.style.template` or `.style.custom_config` must be provided. \n* If only `.style.template` is provided, default values for the template will be used.\n* If both are provided, the fields in `.style.custom_config` will be used to overwrite the fields in `.style.template`.\n* If only `.style.custom_config` is provided, then all fields in `.style.custom_config` will be used.\n\nTo use custom config only, the following `custom_config` params are required:\n* `.style.custom_config.font`\n* `.style.custom_config.text_color`\n* `.style.custom_config.vertical_position`\n* `.style.custom_config.horizontal_position`\n",
+    "properties": {
+     "custom_config": {
+      "description": "Custom subtitle configuration.",
+      "properties": {
+       "font": {
+        "description": "Font name from Google Fonts. Not all fonts support all languages or character sets. \nWe recommend verifying language support and appearance directly on https://fonts.google.com before use.",
+        "example": "Noto Sans",
+        "type": "string"
+       },
+       "font_size": {
+        "description": "Font size in pixels. If not provided, the font size is automatically calculated based on the video resolution.",
+        "example": 24,
+        "type": "number"
+       },
+       "font_style": {
+        "description": "Font style (e.g., normal, italic, bold)",
+        "example": "normal",
+        "type": "string"
+       },
+       "highlighted_text_color": {
+        "description": "Color used to highlight the current spoken text",
+        "example": "#FFD700",
+        "type": "string"
+       },
+       "horizontal_position": {
+        "description": "Horizontal alignment of the text (e.g., left, center, right)",
+        "example": "center",
+        "type": "string"
+       },
+       "stroke_color": {
+        "description": "Stroke (outline) color of the text",
+        "example": "#000000",
+        "type": "string"
+       },
+       "stroke_width": {
+        "description": "Width of the text stroke in pixels. If `stroke_color` is provided, but `stroke_width` is not, the `stroke_width` will be calculated automatically based on the font size.",
+        "example": 1,
+        "type": "number"
+       },
+       "text_color": {
+        "description": "Primary text color in hex format",
+        "example": "#FFFFFF",
+        "type": "string"
+       },
+       "vertical_position": {
+        "description": "Vertical alignment of the text (e.g., top, center, bottom)",
+        "example": "bottom",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "template": {
+      "description": "Preset subtitle templates. Please visit https://magichour.ai/create/auto-subtitle-generator to see the style of the existing templates.",
+      "enum": [
+       "karaoke",
+       "cinematic",
+       "minimalist",
+       "highlight"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "start_seconds",
+   "end_seconds",
+   "assets",
+   "style"
+  ],
+  "type": "object"
+ },
+ "name": "auto_subtitle_generator_create_video",
+ "outputSchema": {
+  "description": "Success",
+  "properties": {
+   "credits_charged": {
+    "description": "The amount of credits deducted from your account to generate the video. If the status is not 'complete', this value is an estimate and may be adjusted upon completion based on the actual FPS of the output video. \n\nIf video generation fails, credits will be refunded, and this field will be updated to include the refund.",
+    "example": 450,
+    "type": "integer"
+   },
+   "id": {
+    "description": "Unique ID of the video. Use it with the [Get video Project API](https://docs.magichour.ai/api-reference/video-projects/get-video-details) to fetch status and downloads.",
+    "example": "cuid-example",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id",
+   "credits_charged"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [],
+   "type": "oauth2"
+  }
+ ]
+}

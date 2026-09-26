@@ -1,0 +1,563 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "List Wallets"
+ },
+ "description": "List wallets in a portfolio with sync status and transaction counts. Pass chainId and walletAddress to check one wallet instead \u2014 safe codes/messages show whether to retry or reconnect credentials. EVM addresses are normalized; other networks may be case-sensitive.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "chainId": {
+    "description": "Optional chain filter, or with walletAddress",
+    "type": "string"
+   },
+   "limit": {
+    "anyOf": [
+     {
+      "description": "Maximum items to return, maximum 100. Preferred MCP pagination field.",
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     {
+      "description": "Maximum items to return, maximum 100. Preferred MCP pagination field. Numeric strings are accepted for MCP client compatibility.",
+      "pattern": "^(?:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100)$",
+      "type": "string"
+     }
+    ],
+    "description": "Maximum items to return, maximum 100. Preferred MCP pagination field."
+   },
+   "page": {
+    "description": "Page number, starting at 1",
+    "type": "integer"
+   },
+   "pageSize": {
+    "anyOf": [
+     {
+      "description": "Deprecated alias for limit, maximum 100. Prefer limit for new MCP calls.",
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     {
+      "description": "Deprecated alias for limit, maximum 100. Prefer limit for new MCP calls. Numeric strings are accepted for MCP client compatibility.",
+      "pattern": "^(?:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91|92|93|94|95|96|97|98|99|100)$",
+      "type": "string"
+     }
+    ],
+    "description": "Deprecated alias for limit, maximum 100. Prefer limit for new MCP calls."
+   },
+   "portfolioRef": {
+    "description": "Portfolio exact name or slug",
+    "type": "string"
+   },
+   "walletAddress": {
+    "description": "Look up one wallet; requires chainId",
+    "type": "string"
+   },
+   "workspaceRef": {
+    "description": "Workspace exact name or slug",
+    "type": "string"
+   }
+  },
+  "required": [
+   "workspaceRef",
+   "portfolioRef"
+  ],
+  "type": "object"
+ },
+ "name": "list_wallets",
+ "outputSchema": {
+  "$defs": {
+   "WalletDetailsResponseDto": {
+    "additionalProperties": false,
+    "properties": {
+     "address": {
+      "type": "string"
+     },
+     "chainId": {
+      "type": "string"
+     },
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "lastSyncAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "syncMessages": {
+      "items": {
+       "oneOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "code": {
+           "const": "EXCHANGE_RECONNECT_REQUIRED",
+           "type": "string"
+          },
+          "details": {
+           "additionalProperties": false,
+           "properties": {
+            "errorType": {
+             "const": "ExternalServiceAuthenticationError",
+             "type": "string"
+            },
+            "provider": {
+             "minLength": 1,
+             "type": "string"
+            },
+            "reconnectRequired": {
+             "const": true,
+             "type": "boolean"
+            }
+           },
+           "required": [
+            "provider",
+            "reconnectRequired",
+            "errorType"
+           ],
+           "type": "object"
+          },
+          "message": {
+           "minLength": 1,
+           "type": "string"
+          },
+          "severity": {
+           "default": "ERROR",
+           "enum": [
+            "ERROR",
+            "WARN"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "code",
+          "message",
+          "severity",
+          "details"
+         ],
+         "type": "object"
+        },
+        {
+         "additionalProperties": false,
+         "properties": {
+          "code": {
+           "const": "SYNC_PROCESSING_FAILED",
+           "type": "string"
+          },
+          "details": {
+           "additionalProperties": false,
+           "properties": {
+            "errorType": {
+             "const": "SyncProcessingError",
+             "type": "string"
+            },
+            "retryable": {
+             "const": true,
+             "type": "boolean"
+            }
+           },
+           "required": [
+            "retryable",
+            "errorType"
+           ],
+           "type": "object"
+          },
+          "message": {
+           "minLength": 1,
+           "type": "string"
+          },
+          "severity": {
+           "default": "ERROR",
+           "enum": [
+            "ERROR",
+            "WARN"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "code",
+          "message",
+          "severity",
+          "details"
+         ],
+         "type": "object"
+        },
+        {
+         "additionalProperties": false,
+         "properties": {
+          "code": {
+           "const": "SYNC_WARNING",
+           "type": "string"
+          },
+          "details": {
+           "additionalProperties": false,
+           "properties": {
+            "errorType": {
+             "const": "SyncWarning",
+             "type": "string"
+            }
+           },
+           "required": [
+            "errorType"
+           ],
+           "type": "object"
+          },
+          "message": {
+           "minLength": 1,
+           "type": "string"
+          },
+          "severity": {
+           "default": "ERROR",
+           "enum": [
+            "ERROR",
+            "WARN"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "code",
+          "message",
+          "severity",
+          "details"
+         ],
+         "type": "object"
+        }
+       ]
+      },
+      "type": "array"
+     },
+     "syncStatus": {
+      "enum": [
+       "pending",
+       "syncing",
+       "synced",
+       "failed"
+      ],
+      "type": "string"
+     },
+     "transactionCount": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "chainId",
+     "address",
+     "createdAt",
+     "syncMessages",
+     "syncStatus",
+     "transactionCount"
+    ],
+    "type": "object"
+   }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "additionalProperties": false,
+    "properties": {
+     "data": {
+      "$ref": "#/properties/data"
+     },
+     "pagination": {
+      "$ref": "#/properties/pagination"
+     },
+     "resultType": {
+      "const": "walletList",
+      "type": "string"
+     }
+    },
+    "required": [
+     "data",
+     "pagination",
+     "resultType"
+    ],
+    "type": "object"
+   },
+   {
+    "additionalProperties": false,
+    "properties": {
+     "address": {
+      "$ref": "#/properties/address"
+     },
+     "chainId": {
+      "$ref": "#/properties/chainId"
+     },
+     "createdAt": {
+      "$ref": "#/properties/createdAt"
+     },
+     "lastSyncAt": {
+      "$ref": "#/properties/lastSyncAt"
+     },
+     "name": {
+      "$ref": "#/properties/name"
+     },
+     "resultType": {
+      "const": "wallet",
+      "type": "string"
+     },
+     "syncMessages": {
+      "$ref": "#/properties/syncMessages"
+     },
+     "syncStatus": {
+      "$ref": "#/properties/syncStatus"
+     },
+     "transactionCount": {
+      "$ref": "#/properties/transactionCount"
+     }
+    },
+    "required": [
+     "chainId",
+     "address",
+     "createdAt",
+     "syncMessages",
+     "syncStatus",
+     "transactionCount",
+     "resultType"
+    ],
+    "type": "object"
+   }
+  ],
+  "properties": {
+   "address": {
+    "type": "string"
+   },
+   "chainId": {
+    "type": "string"
+   },
+   "createdAt": {
+    "format": "date-time",
+    "type": "string"
+   },
+   "data": {
+    "items": {
+     "$ref": "#/$defs/WalletDetailsResponseDto"
+    },
+    "type": "array"
+   },
+   "lastSyncAt": {
+    "format": "date-time",
+    "type": "string"
+   },
+   "name": {
+    "type": "string"
+   },
+   "pagination": {
+    "additionalProperties": false,
+    "properties": {
+     "page": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "pageSize": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "totalCount": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "totalPages": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "page",
+     "pageSize",
+     "totalCount",
+     "totalPages"
+    ],
+    "type": "object"
+   },
+   "resultType": {
+    "enum": [
+     "walletList",
+     "wallet"
+    ],
+    "type": "string"
+   },
+   "syncMessages": {
+    "items": {
+     "oneOf": [
+      {
+       "additionalProperties": false,
+       "properties": {
+        "code": {
+         "const": "EXCHANGE_RECONNECT_REQUIRED",
+         "type": "string"
+        },
+        "details": {
+         "additionalProperties": false,
+         "properties": {
+          "errorType": {
+           "const": "ExternalServiceAuthenticationError",
+           "type": "string"
+          },
+          "provider": {
+           "minLength": 1,
+           "type": "string"
+          },
+          "reconnectRequired": {
+           "const": true,
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "provider",
+          "reconnectRequired",
+          "errorType"
+         ],
+         "type": "object"
+        },
+        "message": {
+         "minLength": 1,
+         "type": "string"
+        },
+        "severity": {
+         "default": "ERROR",
+         "enum": [
+          "ERROR",
+          "WARN"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "code",
+        "message",
+        "severity",
+        "details"
+       ],
+       "type": "object"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "code": {
+         "const": "SYNC_PROCESSING_FAILED",
+         "type": "string"
+        },
+        "details": {
+         "additionalProperties": false,
+         "properties": {
+          "errorType": {
+           "const": "SyncProcessingError",
+           "type": "string"
+          },
+          "retryable": {
+           "const": true,
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "retryable",
+          "errorType"
+         ],
+         "type": "object"
+        },
+        "message": {
+         "minLength": 1,
+         "type": "string"
+        },
+        "severity": {
+         "default": "ERROR",
+         "enum": [
+          "ERROR",
+          "WARN"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "code",
+        "message",
+        "severity",
+        "details"
+       ],
+       "type": "object"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "code": {
+         "const": "SYNC_WARNING",
+         "type": "string"
+        },
+        "details": {
+         "additionalProperties": false,
+         "properties": {
+          "errorType": {
+           "const": "SyncWarning",
+           "type": "string"
+          }
+         },
+         "required": [
+          "errorType"
+         ],
+         "type": "object"
+        },
+        "message": {
+         "minLength": 1,
+         "type": "string"
+        },
+        "severity": {
+         "default": "ERROR",
+         "enum": [
+          "ERROR",
+          "WARN"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "code",
+        "message",
+        "severity",
+        "details"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "type": "array"
+   },
+   "syncStatus": {
+    "enum": [
+     "pending",
+     "syncing",
+     "synced",
+     "failed"
+    ],
+    "type": "string"
+   },
+   "transactionCount": {
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "resultType"
+  ],
+  "type": "object"
+ },
+ "title": "List Wallets"
+}

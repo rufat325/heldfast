@@ -1,0 +1,520 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Publish a post"
+ },
+ "description": "Post to social channels. Channels open today: threads, instagram, youtube, facebook, bluesky, telegram, naver_blog, tiktok. Get accountIds from select_channels \u2014 do not guess which channel the person meant. Naver Blog caps how many posts one ID publishes; when it does, this returns 429 naver_rate_limited with retryAfterSeconds. Do not call again before that, the draft is already in Naver. Naver Blog asks which form to publish with, every post: if options.naver_blog.form is missing this returns 400 naver_form_required with forms (id, name, when). The form is the house style to use when the person has no style of their own, so read the conversation first. If they dictated the structure or you laid it out yourself, pass options.naver_blog.layout: \"as-is\" and the markdown goes out unchanged. Otherwise show them the forms (naver_layout with forms: \"all\" lays every one out side by side) and call again with the one they pick. Do not pick for them. Naver Blog goes out through the user's browser extension. If the response carries a bridge object, read bridge.state: offline means that Chrome is closed and the post is queued (up to 7 days); logged_out means Chrome is on but not logged in to Naver. Either way relay bridge.userMessage to the person word for word, do not say it was published, and know that delete_post cancels a queued post and update_post rewrites it before it goes out. If the extension in that Chrome is too old for what you asked (update_post), this returns 422 extension_outdated with the installed and required versions; ask the person to update the extension. Text limits differ per channel: Threads 500 characters, Instagram 2200 characters, YouTube 5000 UTF-8 bytes, Facebook 63206 characters, Bluesky 300 graphemes and 3000 UTF-8 bytes, Telegram 4096 characters (1024 with media attached), Naver Blog 30000 characters, TikTok 2200 characters. Over the limit nothing goes out to any channel, so shorten it before calling. Images and video both work on the channels that take them. How several items sit in one post differs per channel: Threads groups up to 20 items in one post, Instagram groups up to 10 items in one post, YouTube takes 1 video and no images, Facebook groups up to 10 items in one post, Bluesky has no carousel and places up to 4 images in the post itself, Telegram groups up to 10 items in one post, Naver Blog has no carousel and places up to 40 images in the post itself, TikTok groups up to 35 items in one post. More than a channel takes is not refused: the first items up to its limit go out and that target's warning says what was left out. A channel that cannot mix images and video keeps the video. YouTube is different: it takes exactly one video, no images, and it needs options.youtube.title. Its description is measured in UTF-8 bytes, so Korean and Japanese cost three per character. Instagram cannot publish text alone: every post needs at least one image or video. A single video becomes a reel there. Set options.instagram.contentType to story for a story; stories show no caption. Non-JPEG images are converted for Instagram automatically. Facebook publishes to a Page, never a personal profile. options.facebook.link makes a link post (no media alongside), and a single video becomes a reel (3-90 seconds). Bluesky counts graphemes, not characters, and also caps UTF-8 bytes, so a post of 300 emoji can fail on the byte limit. Set options.bluesky.langs to the language of the text (1-3 BCP-47 codes like [\"ko\"]): without it the post never appears in language-scoped feeds, and Bluesky has no post editing to fix it later. Links, @mentions and #hashtags in the text are made clickable for you, and a link gets a preview card, so write the URL plainly. There are three ways to get a media id, pick by where the file is: media_from_url when it already has a public https address, media_upload_link when it is on the person's own device, media_presign plus media_complete when you can PUT the bytes yourself. Then pass the media ids here. On Naver Blog the body can also place media itself with ![alt](media:<id>) and @video(media:<id>), each on a line of its own. Ids you reference that way are picked up even if you leave them out of mediaIds, and media you pass but never reference goes at the end of the post. Those references only work when every target is Naver Blog: other channels would publish the markup as literal text, so we refuse instead. This publishes immediately unless you pass scheduledAt (we hold the post and send it at that time, on every channel) or draft: true (nothing goes out; the person or update_post finishes it later). scheduledAt needs a timezone offset, 10 minutes to a year out; ask the person which timezone they mean instead of guessing. options.naver_blog.scheduledAt means the same as scheduledAt on the post (we hold the post and send it then; Naver's own reservation is not used), so pass the post-level one. A scheduled or draft post comes back with status scheduled or draft, can be changed with update_post, sent early with publish_now, and dropped with delete_post. Every channel also takes options.<channel>.content to send that channel a different text than the shared content, which is how Naver Blog Markdown and a 500-character Threads post fit in one call. On YouTube we pass privacyStatus through as you set it and report back what YouTube actually applied, so read the warning on the result instead of promising the person a visibility we did not confirm. Returns while the post is still publishing. The permalink is null at that moment. Call get_post with the returned id to see the final status and link. Pass wait: true to hold the response until it is really out \u2014 then you can tell the person it is posted instead of guessing. For a long post use threadItems instead of publish-then-reply: we keep the order and wait for each piece to land before sending the next one.",
+ "inputSchema": {
+  "properties": {
+   "accountIds": {
+    "description": "Account ids from select_channels",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "automation": {
+    "description": "Attach an automation to this post in the same call. template defaults to comment_to_dm; params are that template's params (see list_automation_templates) minus post, which is this post. Created as a draft unless enabled: true. Targets on channels without comments or DMs (YouTube, Telegram, Naver Blog, Bluesky, TikTok) are skipped and named in the response.",
+    "properties": {
+     "enabled": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     },
+     "params": {
+      "type": "object"
+     },
+     "template": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "batchId": {
+    "description": "Optional tag (letters, digits, - or _) to group posts made together, for example the same text sent to two workspaces. Pass the same value on each call.",
+    "type": "string"
+   },
+   "content": {
+    "description": "Post text",
+    "type": "string"
+   },
+   "draft": {
+    "description": "true saves the post as a draft on uplika without sending anything. Use it when the person wants to review before it goes out. They finish it in the dashboard, or you call update_post and publish_now.",
+    "type": "boolean"
+   },
+   "mediaIds": {
+    "description": "Media ids from media_presign (confirmed with media_complete), media_from_url or media_upload_link. On Naver Blog you can leave out ids the body already points at with media:<id>; we pick those up from the text.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "options": {
+    "description": "Per-channel settings, keyed by channel id. Only the channels you are posting to need an entry. Every channel takes content to override the shared text for that channel alone.",
+    "properties": {
+     "bluesky": {
+      "description": "Bluesky settings. Optional, but langs is worth setting on every post.",
+      "properties": {
+       "content": {
+        "description": "Text for this channel only. When set it replaces the shared content for this channel, and the length and media checks use it. Leave it out to use the shared content.",
+        "type": "string"
+       },
+       "langs": {
+        "description": "The language of the text, 1-3 BCP-47 codes like [\"ko\"] or [\"en\", \"ko\"]. Feed generators filter on this, so without it the post never appears in language-scoped feeds. Bluesky has no post editing, so this cannot be fixed after publishing. Set it to the language the text is actually written in.",
+        "items": {
+         "description": "One BCP-47 code.",
+         "pattern": "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$",
+         "type": "string"
+        },
+        "maxItems": 3,
+        "type": "array"
+       }
+      },
+      "type": "object"
+     },
+     "facebook": {
+      "description": "Facebook Page settings. Optional: plain text publishes without it.",
+      "properties": {
+       "content": {
+        "description": "Text for this channel only. When set it replaces the shared content for this channel, and the length and media checks use it. Leave it out to use the shared content.",
+        "type": "string"
+       },
+       "contentType": {
+        "description": "What kind of post. Defaults to reel for a single video and feed otherwise. A Facebook story is rejected if you send any text: publish the story with no content, and put the words in a feed post instead. A story also takes exactly one image or video and no first comment.",
+        "enum": [
+         "feed",
+         "story",
+         "reel"
+        ],
+        "type": "string"
+       },
+       "firstComment": {
+        "description": "A comment we post right after publishing. Not on stories, and not on scheduled posts. If it fails the post still goes up, with a warning.",
+        "type": "string"
+       },
+       "link": {
+        "description": "Makes a link post with a preview card. Cannot be combined with media.",
+        "type": "string"
+       },
+       "scheduledPublishTime": {
+        "description": "ISO 8601 time to publish a feed post later, 10 minutes to 28 days from now. Feed posts only, not reels or stories. Cannot be combined with firstComment (a scheduled post is not live yet, so nothing to comment on). This is Facebook's own scheduling; for scheduling across channels use scheduledAt on the post.",
+        "type": "string"
+       },
+       "title": {
+        "description": "Reel title, separate from the caption.",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "instagram": {
+      "description": "Instagram settings. Optional: a plain post with media works without it.",
+      "properties": {
+       "collaborators": {
+        "description": "Up to 3 public professional accounts to invite as collaborators. They appear only after accepting. Not on stories.",
+        "items": {
+         "description": "A public professional account's username, without @.",
+         "type": "string"
+        },
+        "maxItems": 3,
+        "type": "array"
+       },
+       "content": {
+        "description": "Text for this channel only. When set it replaces the shared content for this channel, and the length and media checks use it. Leave it out to use the shared content.",
+        "type": "string"
+       },
+       "contentType": {
+        "description": "What kind of post. Defaults to reel for a single video and feed otherwise. Stories show no caption and take one image or video.",
+        "enum": [
+         "feed",
+         "story",
+         "reel"
+        ],
+        "type": "string"
+       },
+       "coverMediaId": {
+        "description": "Media id of a JPEG up to 8MB to use as the reel cover. Reels only.",
+        "type": "string"
+       },
+       "firstComment": {
+        "description": "A comment we post right after publishing, often used for hashtags. Not on stories. If it fails the post still goes up, with a warning.",
+        "type": "string"
+       },
+       "isAiGenerated": {
+        "description": "Set true to label the media as AI-generated on Instagram. An attached media marked aiGenerated turns this on automatically unless you set it to false.",
+        "type": "boolean"
+       },
+       "shareToFeed": {
+        "description": "Reels only. false keeps the reel out of the main feed.",
+        "type": "boolean"
+       },
+       "thumbOffsetMs": {
+        "description": "Reel cover frame in milliseconds. Ignored when coverMediaId is set.",
+        "minimum": 0,
+        "type": "number"
+       },
+       "userTags": {
+        "description": "Tag accounts on the media. Photos need x and y between 0 and 1; videos take the username alone. mediaIndex picks the carousel slide.",
+        "items": {
+         "description": "One tagged account.",
+         "properties": {
+          "mediaIndex": {
+           "description": "Which carousel slide, from 0.",
+           "type": "number"
+          },
+          "username": {
+           "description": "Username without @.",
+           "type": "string"
+          },
+          "x": {
+           "description": "0 to 1 from the left. Photos only.",
+           "type": "number"
+          },
+          "y": {
+           "description": "0 to 1 from the top. Photos only.",
+           "type": "number"
+          }
+         },
+         "required": [
+          "username"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "type": "object"
+     },
+     "naver_blog": {
+      "description": "Naver Blog settings. Required when a target is a Naver Blog account. Naver Blog has no official API: the post is written by the user's browser extension, so it goes out only while that browser is open. list_accounts tells you whether the extension is online; if it is offline the post queues for up to 7 days and you should say so. The body is Markdown, plus Naver-only markup for things Markdown has no word for (highlighting, styled tables, collages, maps, events): call describe_grammar with platform naver_blog for the syntax and its traps. Reference uploaded media inline with `![alt](media:<id>)`; ids you reference this way do not have to repeat in mediaIds, and media you pass but never reference goes at the end. When other channels are in the same post, put the Markdown in options.naver_blog.content so the shared content stays plain text.",
+      "properties": {
+       "alignCenter": {
+        "description": "Center every paragraph and image.",
+        "type": "boolean"
+       },
+       "category": {
+        "description": "The category name instead of its id, exactly as it appears in naverBlog.categories from list_accounts. If the blog does not have it you get naver_category_unknown with the list to pick from; if the person just created it, call refresh_account first.",
+        "type": "string"
+       },
+       "categoryId": {
+        "description": "The id of a category on the connected blog. list_accounts returns them under naverBlog.categories. Give this or category (the name); there is no default, and without one Naver files the post under the wrong board. Not needed and ignored when draftOnly is true (a draft has no board until it is published).",
+        "type": "string"
+       },
+       "content": {
+        "description": "Text for this channel only. When set it replaces the shared content for this channel, and the length and media checks use it. Leave it out to use the shared content. On Naver Blog this is where the Markdown body goes when the other channels get plain text.",
+        "type": "string"
+       },
+       "draftOnly": {
+        "description": "Save as a draft in Naver instead of publishing. The user finishes it by hand, or you publish it later with publish_naver_draft. categoryId, tags and openType are not stored on a draft; pass them when you publish it. Different from draft on the post, which keeps the whole post on uplika.",
+        "type": "boolean"
+       },
+       "fontFamily": {
+        "description": "Body font, one of nanumgothic, nanummyeongjo, nanumbarungothic, nanumsquare, maruburi. Omit for the editor default.",
+        "enum": [
+         "nanumgothic",
+         "nanummyeongjo",
+         "nanumbarungothic",
+         "nanumsquare",
+         "maruburi"
+        ],
+        "type": "string"
+       },
+       "fontSize": {
+        "description": "Body font size in px, one of the editor's sizes (11-38). Omit for the editor default.",
+        "enum": [
+         "11",
+         "13",
+         "15",
+         "16",
+         "19",
+         "24",
+         "28",
+         "30",
+         "34",
+         "38"
+        ],
+        "maximum": 34,
+        "minimum": 10,
+        "type": "number"
+       },
+       "form": {
+        "description": "Form preset for the template layout (default photo-story). GET /v1/naver/forms lists the presets; naver_layout with forms: \"all\" shows them side by side.",
+        "enum": [
+         "bubble-info",
+         "divider-tutorial",
+         "photo-review",
+         "place-list",
+         "news-event",
+         "table-explain",
+         "mood-review",
+         "photo-story"
+        ],
+        "type": "string"
+       },
+       "layout": {
+        "description": "template (default) reshapes the body into the blog's house form before it goes out: #/## titles become underlined quote headings, a thin rule sits between sections, and photos you did not place with media: references go one per section (leftovers pair up at the end). Text is never changed. Call naver_layout first to see the result. Use as-is when the person dictated the structure or you placed everything yourself.",
+        "enum": [
+         "template",
+         "as-is"
+        ],
+        "type": "string"
+       },
+       "openType": {
+        "description": "Who can see it. public (default), neighbor, mutual (mutual neighbors only), or private. Ignored when draftOnly is true.",
+        "enum": [
+         "public",
+         "neighbor",
+         "mutual",
+         "private"
+        ],
+        "type": "string"
+       },
+       "scheduledAt": {
+        "description": "Same as scheduledAt on the post: ISO 8601 with a timezone offset, 10 minutes to a year out. Uplika holds the post and sends it to Naver at that time; Naver's own reservation is not used. Prefer scheduledAt on the post. Not allowed together with draftOnly or on a post that also targets other channels.",
+        "type": "string"
+       },
+       "seoKeywords": {
+        "description": "The search keywords this post targets, from keyword research (POST /v1/naver/keywords/judge): main is the one keyword the title leads with, subs (2-5) become the section titles one each. Not used when publishing; stored with the post and read by the SEO check.",
+        "properties": {
+         "main": {
+          "description": "The main keyword, verbatim in the title and the first line.",
+          "maxLength": 100,
+          "type": "string"
+         },
+         "measuredAt": {
+          "description": "ISO 8601 date the numbers were measured.",
+          "type": "string"
+         },
+         "subs": {
+          "description": "Sub keywords, one per section title.",
+          "items": {
+           "description": "One sub keyword.",
+           "maxLength": 100,
+           "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+         }
+        },
+        "type": "object"
+       },
+       "tags": {
+        "description": "Up to 30 tags without the # sign and without spaces. Ignored when draftOnly is true.",
+        "items": {
+         "description": "One tag without # and without spaces.",
+         "type": "string"
+        },
+        "maxItems": 30,
+        "type": "array"
+       },
+       "tempLogNo": {
+        "description": "Set by publish_naver_draft: the Naver temp-saved draft to publish as it is. The body is ignored; the extension loads that draft in the editor and presses publish.",
+        "type": "string"
+       },
+       "title": {
+        "description": "Required. The post title, up to 100 characters.",
+        "maxLength": 100,
+        "type": "string"
+       }
+      },
+      "required": [
+       "title"
+      ],
+      "type": "object"
+     },
+     "telegram": {
+      "description": "Telegram has no channel-specific settings. Note the caption limit: with media attached the text is capped at 1,024 characters instead of 4,096.",
+      "properties": {
+       "content": {
+        "description": "Text for this channel only. When set it replaces the shared content for this channel, and the length and media checks use it. Leave it out to use the shared content.",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "threads": {
+      "description": "Threads settings. Optional.",
+      "properties": {
+       "content": {
+        "description": "Text for this channel only. When set it replaces the shared content for this channel, and the length and media checks use it. Leave it out to use the shared content.",
+        "type": "string"
+       },
+       "topicTag": {
+        "description": "One topic to tag the post with, like a category. Threads takes exactly one and rejects periods and ampersands in it. On a thread it goes on the first piece only. Leave it out unless the person asked for a topic.",
+        "maxLength": 64,
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "tiktok": {
+      "description": "TikTok settings. privacyLevel is REQUIRED for a normal post and has no default on purpose: TikTok's rules say the person must choose visibility deliberately, so we ask for it instead of guessing. Call get_publish_options first to see which values this account may use right now, whether it can post at all, and its video length limit. TikTok has no text-only posts, cannot mix a video and photos, and has no API for deleting a post or reading comments. While this app is awaiting TikTok's Content Posting audit a direct post can only be SELF_ONLY and comes back with no link and no metrics; if the person wants it public in the meantime, use postMode draft instead.",
+      "properties": {
+       "brandContentToggle": {
+        "description": "Declare paid partnership content (\"Branded Content\"). TikTok does not allow branded content to be private, so this cannot be combined with privacyLevel SELF_ONLY.",
+        "type": "boolean"
+       },
+       "brandOrganicToggle": {
+        "description": "Declare that the post promotes the creator's own brand (\"Your Brand\"). Leave it out rather than sending false: not declaring and declaring 'no' are different statements.",
+        "type": "boolean"
+       },
+       "content": {
+        "description": "Text for this channel only. When set it replaces the shared content for this channel, and the length and media checks use it. Leave it out to use the shared content.",
+        "type": "string"
+       },
+       "disableComment": {
+        "description": "Turn comments off for this post. Cannot be set to false if the creator disabled comments account-wide.",
+        "type": "boolean"
+       },
+       "disableDuet": {
+        "description": "Turn duets off for this post. Video posts only.",
+        "type": "boolean"
+       },
+       "disableStitch": {
+        "description": "Turn stitches off for this post. Video posts only.",
+        "type": "boolean"
+       },
+       "isAigc": {
+        "description": "Declare that the content was generated by AI. Worth setting when you made the video or images. An attached media marked aiGenerated turns this on automatically unless you set it to false.",
+        "type": "boolean"
+       },
+       "postMode": {
+        "description": "direct (default) posts to the profile. draft sends it to the creator's TikTok inbox; they open the notification and finish it in the app, choosing the visibility themselves. While this app awaits the Content Posting audit this is the only way to get something out publicly: a direct post can only be SELF_ONLY, but on this path we send no visibility at all. The trade is that it is not on the profile until the person finishes it, so there is no link and no metrics in the meantime.",
+        "enum": [
+         "direct",
+         "draft"
+        ],
+        "type": "string"
+       },
+       "privacyLevel": {
+        "description": "Required unless postMode is draft. One of the values that get_publish_options returns for this account, e.g. PUBLIC_TO_EVERYONE, MUTUAL_FOLLOW_FRIENDS, FOLLOWER_OF_CREATOR or SELF_ONLY. The list differs per account, so do not hard-code it.",
+        "type": "string"
+       },
+       "title": {
+        "description": "Required for a photo post, up to 90 characters. A video post has no title field at all and passing one is rejected; a video's text comes from content.",
+        "maxLength": 90,
+        "type": "string"
+       },
+       "videoCoverTimestampMs": {
+        "description": "Which frame to use as the cover, in milliseconds into the video. TikTok does not accept a cover image file, only a timestamp.",
+        "minimum": 0,
+        "type": "number"
+       }
+      },
+      "type": "object"
+     },
+     "youtube": {
+      "description": "Required when a YouTube account is in accountIds. The post content becomes the video description.",
+      "properties": {
+       "categoryId": {
+        "description": "YouTube category id. Defaults to 22 (People & Blogs). Leave it out unless the person named a category.",
+        "type": "string"
+       },
+       "containsSyntheticMedia": {
+        "description": "Set true when the video contains realistic altered or synthetic content, including AI generated footage of real-looking people, places or events. An attached media marked aiGenerated turns this on automatically unless you set it to false.",
+        "type": "boolean"
+       },
+       "content": {
+        "description": "Text for this channel only. When set it replaces the shared content for this channel, and the length and media checks use it. Leave it out to use the shared content.",
+        "type": "string"
+       },
+       "madeForKids": {
+        "description": "Whether this video is directed at children. This is a legal declaration about someone else's channel. Leave it out unless the person tells you, and the channel's own default applies.",
+        "type": "boolean"
+       },
+       "privacyStatus": {
+        "description": "Defaults to private. We pass this through as you set it. If YouTube applies something else, the result carries a warning saying what it actually applied.",
+        "enum": [
+         "public",
+         "unlisted",
+         "private"
+        ],
+        "type": "string"
+       },
+       "publishAt": {
+        "description": "ISO 8601 time to make the video public. Only works with privacyStatus private, and only on a video that was never public. This is YouTube's own scheduling; for scheduling across channels use scheduledAt on the post.",
+        "type": "string"
+       },
+       "tags": {
+        "description": "Search tags. 500 characters across all of them; a tag with a space costs two extra for the quotes YouTube adds.",
+        "items": {
+         "description": "One search tag.",
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "thumbnailMediaId": {
+        "description": "Media id of a JPEG or PNG up to 2MB to use as the thumbnail. Long-form only: YouTube does not take custom thumbnails on Shorts, and a vertical video of three minutes or less becomes a Short. The channel also has to be verified before YouTube accepts one.",
+        "type": "string"
+       },
+       "title": {
+        "description": "Video title, up to 100 characters. Required. Cannot contain < or >.",
+        "maxLength": 100,
+        "type": "string"
+       }
+      },
+      "required": [
+       "title"
+      ],
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "scheduledAt": {
+    "description": "ISO 8601 time with a timezone offset (2026-09-20T09:00:00+09:00) to send the post at, on every channel. 10 minutes to 365 days from now. We keep the post as scheduled until then; the person can still change or cancel it.",
+    "type": "string"
+   },
+   "threadItems": {
+    "description": "Split a long post into a chain instead of calling publish and then reply. The first item is the root and the rest become replies under it, in order. We handle the ordering and the waiting. Each item obeys the character limit on its own. Pass either content or threadItems, not both. If a later item fails, the ones already up stay up and the response tells you where to resume.",
+    "items": {
+     "properties": {
+      "content": {
+       "type": "string"
+      },
+      "mediaIds": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "content"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "topicTag": {
+    "description": "One topic to tag the post with, like a category. Only some channels take one, and those reject periods and ampersands in it. If any channel in accountIds does not take topics the whole call is refused, so publish to it separately. On a thread it goes on the first piece only. Leave it out unless the person asked for a topic.",
+    "type": "string"
+   },
+   "wait": {
+    "description": "Hold the response until the post is really out. Text waits up to 10 seconds, posts with media up to 90 seconds. If it is still going after that you get the usual publishing response and should poll get_post. Defaults to false. Ignored with scheduledAt or draft.",
+    "type": "boolean"
+   },
+   "workspaceId": {
+    "description": "Which workspace this is for. Only needed when the account has more than one \u2014 the error tells you the ids when it matters. Leave it out if it is already decided; do not ask the person again.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "accountIds"
+  ],
+  "type": "object"
+ },
+ "name": "publish",
+ "securitySchemes": [
+  {
+   "scopes": [
+    "posts:write"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "Publish a post"
+}

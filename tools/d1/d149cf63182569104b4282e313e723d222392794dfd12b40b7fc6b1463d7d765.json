@@ -1,0 +1,1387 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Estimate the fair market value of a vehicle using make, model, year, trim, mileage, condition, ownership history, location and available market comparables. Returns a valuation range, private-sale estimate, dealer buy/retail estimates, depreciation, transparent valuation adjustments, confidence and risk flags. Use this capability when an AI agent needs to estimate the current market value of a passenger vehicle, determine whether an asking price is reasonable, estimate private-sale or dealer values, assess depreciation, or evaluate a vehicle using local or regional market comparables.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "accidentHistory": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "enum": [
+       "none",
+       "minor_cosmetic",
+       "repaired",
+       "structural",
+       "reported",
+       "unknown"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "false / \"none\" = no known accident; \"minor_cosmetic\", \"repaired\", \"structural\"; true / \"reported\" = an accident with unstated severity; \"unknown\"."
+   },
+   "askingPrice": {
+    "description": "Asking price to assess, in `currency` (or the market currency). Adds askingPriceAnalysis with the exact difference from the estimated midpoint.",
+    "exclusiveMinimum": 0,
+    "maximum": 100000000,
+    "type": "number"
+   },
+   "bodyType": {
+    "description": "sedan, hatchback, suv, crossover, pickup, coupe, convertible, wagon, van, minivan or other.",
+    "enum": [
+     "sedan",
+     "hatchback",
+     "suv",
+     "crossover",
+     "pickup",
+     "coupe",
+     "convertible",
+     "wagon",
+     "van",
+     "minivan",
+     "other"
+    ],
+    "type": "string"
+   },
+   "city": {
+    "description": "City or region, e.g. Muscat. Strongly recommended \u2014 same-city comparables score higher.",
+    "maxLength": 80,
+    "minLength": 1,
+    "type": "string"
+   },
+   "color": {
+    "description": "Exterior colour (recorded; not priced separately).",
+    "maxLength": 40,
+    "minLength": 1,
+    "type": "string"
+   },
+   "condition": {
+    "description": "Overall condition: excellent, very_good, good, fair, poor or unknown. Strongly recommended.",
+    "enum": [
+     "excellent",
+     "very_good",
+     "good",
+     "fair",
+     "poor",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "country": {
+    "description": "Market the vehicle is sold in \u2014 ISO 3166 alpha-2 (e.g. OM, AE, US, GB) or country name. Required.",
+    "maxLength": 60,
+    "minLength": 2,
+    "type": "string"
+   },
+   "currency": {
+    "description": "Result currency (ISO 4217). Defaults to the market's local currency; askingPrice is interpreted in this currency.",
+    "maxLength": 8,
+    "minLength": 1,
+    "type": "string"
+   },
+   "drivetrain": {
+    "description": "fwd, rwd, awd or 4wd.",
+    "enum": [
+     "fwd",
+     "rwd",
+     "awd",
+     "4wd"
+    ],
+    "type": "string"
+   },
+   "engine": {
+    "description": "Engine description, e.g. 4.0L V6 (recorded; not priced separately).",
+    "maxLength": 60,
+    "minLength": 1,
+    "type": "string"
+   },
+   "fuelType": {
+    "description": "petrol, diesel, hybrid, plug_in_hybrid, electric, lpg, cng, hydrogen or other (synonyms such as gasoline accepted).",
+    "enum": [
+     "petrol",
+     "diesel",
+     "hybrid",
+     "plug_in_hybrid",
+     "electric",
+     "lpg",
+     "cng",
+     "hydrogen",
+     "other"
+    ],
+    "type": "string"
+   },
+   "make": {
+    "description": "Manufacturer, e.g. Toyota. Required. Common aliases are normalized (VW \u2192 Volkswagen, Mercedes \u2192 Mercedes-Benz).",
+    "maxLength": 60,
+    "minLength": 1,
+    "type": "string"
+   },
+   "mileageKm": {
+    "description": "Odometer reading in kilometres. Strongly recommended \u2014 without it no mileage adjustment is possible and confidence drops.",
+    "maximum": 2000000,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "model": {
+    "description": "Model, e.g. Land Cruiser. Required.",
+    "maxLength": 80,
+    "minLength": 1,
+    "type": "string"
+   },
+   "options": {
+    "description": "Notable equipment, e.g. [\"sunroof\", \"leather seats\", \"360 camera\"] (max 40).",
+    "items": {
+     "maxLength": 60,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 40,
+    "type": "array"
+   },
+   "owners": {
+    "description": "Number of previous registered owners (1\u201320).",
+    "maximum": 20,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "serviceHistory": {
+    "description": "full, partial, none or unknown.",
+    "enum": [
+     "full",
+     "partial",
+     "none",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "transmission": {
+    "description": "automatic, manual, cvt, dct or other.",
+    "enum": [
+     "automatic",
+     "manual",
+     "cvt",
+     "dct",
+     "other"
+    ],
+    "type": "string"
+   },
+   "trim": {
+    "description": "Trim / grade, e.g. GXR, VXR, XLE. Strongly recommended \u2014 trim-level comparables are preferred over model-level ones.",
+    "maxLength": 60,
+    "minLength": 1,
+    "type": "string"
+   },
+   "valuationDate": {
+    "description": "Optional as-of date (YYYY-MM-DD, not in the future). Defaults to today (UTC). Market evidence observed after this date is ignored \u2014 useful for insurance or historical valuation.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "vin": {
+    "description": "Optional 17-character VIN. Validated (and decoded when the deployment enables a VIN decoder) to confirm make/model/year, fill missing trim/body/fuel/drivetrain, and exclude the vehicle's own listing from its comparables. Never stored or logged; returned masked.",
+    "type": "string"
+   },
+   "year": {
+    "description": "Model year (1950\u2013next calendar year). Required.",
+    "maximum": 2027,
+    "minimum": 1950,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "make",
+   "model",
+   "year",
+   "country"
+  ],
+  "type": "object"
+ },
+ "name": "vehicle_value_estimate",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "adjustments": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "basis": {
+       "enum": [
+        "market_derived",
+        "heuristic"
+       ],
+       "type": "string"
+      },
+      "factor": {
+       "type": "string"
+      },
+      "impactAmount": {
+       "type": "number"
+      },
+      "impactPercent": {
+       "type": "number"
+      },
+      "reason": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "factor",
+      "impactAmount",
+      "impactPercent",
+      "basis",
+      "reason"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "askingPriceAnalysis": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "askingPrice": {
+        "type": "number"
+       },
+       "differenceFromMid": {
+        "type": "number"
+       },
+       "differencePercent": {
+        "type": "number"
+       },
+       "marketPosition": {
+        "enum": [
+         "well_below_market",
+         "below_market",
+         "near_market",
+         "above_market",
+         "well_above_market"
+        ],
+        "type": "string"
+       },
+       "thresholdsPercent": {
+        "additionalProperties": false,
+        "properties": {
+         "above": {
+          "type": "number"
+         },
+         "below": {
+          "type": "number"
+         },
+         "wellAbove": {
+          "type": "number"
+         },
+         "wellBelow": {
+          "type": "number"
+         }
+        },
+        "required": [
+         "wellBelow",
+         "below",
+         "above",
+         "wellAbove"
+        ],
+        "type": "object"
+       },
+       "withinEstimatedRange": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "askingPrice",
+       "differenceFromMid",
+       "differencePercent",
+       "marketPosition",
+       "withinEstimatedRange",
+       "thresholdsPercent"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "assumptions": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "factors": {
+      "additionalProperties": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low",
+       "very_low"
+      ],
+      "type": "string"
+     },
+     "reasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "score",
+     "level",
+     "reasons",
+     "factors"
+    ],
+    "type": "object"
+   },
+   "currency": {
+    "type": "string"
+   },
+   "currencyConversion": {
+    "additionalProperties": false,
+    "properties": {
+     "conversions": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "from": {
+         "type": "string"
+        },
+        "rate": {
+         "exclusiveMinimum": 0,
+         "type": "number"
+        },
+        "rateDate": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "source": {
+         "type": "string"
+        },
+        "to": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "from",
+        "to",
+        "rate",
+        "source",
+        "rateDate"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "resultCurrency": {
+      "type": "string"
+     },
+     "sourcesConfigured": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "resultCurrency",
+     "sourcesConfigured",
+     "conversions"
+    ],
+    "type": "object"
+   },
+   "dataFreshness": {
+    "additionalProperties": false,
+    "properties": {
+     "latestComparableAt": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "medianComparableAgeDays": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "oldestComparableAt": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "recentListingCount": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "recentWindowDays": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "latestComparableAt",
+     "oldestComparableAt",
+     "medianComparableAgeDays",
+     "recentListingCount",
+     "recentWindowDays"
+    ],
+    "type": "object"
+   },
+   "depreciation": {
+    "additionalProperties": false,
+    "properties": {
+     "estimatedAnnualDepreciationPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "estimatedOriginalPrice": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "marketImpliedAnnualDepreciationPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "originalPriceSource": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "totalDepreciationAmount": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "totalDepreciationPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "estimatedOriginalPrice",
+     "originalPriceSource",
+     "totalDepreciationAmount",
+     "totalDepreciationPercent",
+     "estimatedAnnualDepreciationPercent",
+     "marketImpliedAnnualDepreciationPercent"
+    ],
+    "type": "object"
+   },
+   "disclaimer": {
+    "type": "string"
+   },
+   "estimatedDealerBuyPrice": {
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "estimatedDealerRetailPrice": {
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "estimatedPrivateSalePrice": {
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "estimatedValue": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "currency": {
+        "type": "string"
+       },
+       "high": {
+        "type": "number"
+       },
+       "low": {
+        "type": "number"
+       },
+       "mid": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "low",
+       "mid",
+       "high",
+       "currency"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "marketComparables": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "askingPrice": {
+       "type": "number"
+      },
+      "city": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "country": {
+       "type": "string"
+      },
+      "currency": {
+       "type": "string"
+      },
+      "make": {
+       "type": "string"
+      },
+      "mileageKm": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "model": {
+       "type": "string"
+      },
+      "observedAt": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "originalAskingPrice": {
+       "type": "number"
+      },
+      "originalCurrency": {
+       "type": "string"
+      },
+      "priceType": {
+       "enum": [
+        "listing",
+        "sale"
+       ],
+       "type": "string"
+      },
+      "similarityScore": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "sourceName": {
+       "type": "string"
+      },
+      "sourceUrl": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "trim": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "year": {
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "make",
+      "model",
+      "year",
+      "trim",
+      "mileageKm",
+      "askingPrice",
+      "currency",
+      "originalAskingPrice",
+      "originalCurrency",
+      "country",
+      "city",
+      "sourceName",
+      "sourceUrl",
+      "observedAt",
+      "priceType",
+      "similarityScore"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "marketCoverage": {
+    "additionalProperties": false,
+    "properties": {
+     "country": {
+      "type": "string"
+     },
+     "countryCode": {
+      "type": "string"
+     },
+     "liveMarketDataAvailable": {
+      "type": "boolean"
+     },
+     "marketDataProviders": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "comparablesReturned": {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        "id": {
+         "type": "string"
+        },
+        "status": {
+         "enum": [
+          "ok",
+          "empty",
+          "timeout",
+          "error"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "status",
+        "comparablesReturned"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "region": {
+      "type": "string"
+     },
+     "regionalFallbackCountries": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "valuationParametersConfigured": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "countryCode",
+     "country",
+     "region",
+     "valuationParametersConfigured",
+     "marketDataProviders",
+     "liveMarketDataAvailable",
+     "regionalFallbackCountries"
+    ],
+    "type": "object"
+   },
+   "marketStats": {
+    "additionalProperties": false,
+    "properties": {
+     "averagePrice": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "comparableCount": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "comparablesConsidered": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "currencyExcludedCount": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "medianMileageKm": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "medianPrice": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "outliersExcluded": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "priceDispersionPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "pricePerKmAdjustment": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "recentListingCount": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "comparableCount",
+     "comparablesConsidered",
+     "outliersExcluded",
+     "medianPrice",
+     "averagePrice",
+     "medianMileageKm",
+     "priceDispersionPercent",
+     "recentListingCount",
+     "pricePerKmAdjustment",
+     "currencyExcludedCount"
+    ],
+    "type": "object"
+   },
+   "methodology": {
+    "additionalProperties": false,
+    "properties": {
+     "dealerBuyDiscountPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "dealerRetailMarkupPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "fallbackLevel": {
+      "anyOf": [
+       {
+        "enum": [
+         "same_trim_same_year",
+         "same_trim_year_plus_minus_1",
+         "same_model_year_plus_minus_1",
+         "same_model_year_plus_minus_2",
+         "regional_same_model_year_plus_minus_2"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "fallbackLevelDescription": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "listingNegotiationDiscountPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "mileageEffect": {
+      "additionalProperties": false,
+      "properties": {
+       "basis": {
+        "enum": [
+         "market_derived",
+         "heuristic",
+         "not_applied"
+        ],
+        "type": "string"
+       },
+       "percentPer10000Km": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "basis",
+       "percentPer10000Km"
+      ],
+      "type": "object"
+     },
+     "outlierMethod": {
+      "type": "string"
+     },
+     "privateSaleAdjustmentPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "rangeHalfWidthPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "yearEffect": {
+      "additionalProperties": false,
+      "properties": {
+       "annualPercent": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "basis": {
+        "enum": [
+         "market_derived",
+         "heuristic",
+         "not_needed"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "basis",
+       "annualPercent"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "fallbackLevel",
+     "fallbackLevelDescription",
+     "outlierMethod",
+     "yearEffect",
+     "mileageEffect",
+     "rangeHalfWidthPercent",
+     "dealerBuyDiscountPercent",
+     "privateSaleAdjustmentPercent",
+     "dealerRetailMarkupPercent",
+     "listingNegotiationDiscountPercent"
+    ],
+    "type": "object"
+   },
+   "riskFlags": {
+    "items": {
+     "enum": [
+      "INSUFFICIENT_COMPARABLES",
+      "NO_MARKET_DATA_PROVIDER",
+      "STALE_MARKET_DATA",
+      "HIGH_PRICE_DISPERSION",
+      "MILEAGE_UNKNOWN",
+      "TRIM_UNKNOWN",
+      "CONDITION_UNKNOWN",
+      "ACCIDENT_HISTORY_UNKNOWN",
+      "ACCIDENT_SEVERITY_UNVERIFIED",
+      "STRUCTURAL_DAMAGE_REPORTED",
+      "HIGH_MILEAGE_FOR_AGE",
+      "ASKING_PRICE_SIGNIFICANTLY_ABOVE_MARKET",
+      "ASKING_PRICE_SIGNIFICANTLY_BELOW_MARKET",
+      "CURRENCY_CONVERSION_UNAVAILABLE",
+      "REGIONAL_FALLBACK_USED",
+      "BROADENED_COMPARABLE_SEARCH",
+      "HEURISTIC_ADJUSTMENTS_USED",
+      "PROVIDER_PARTIAL_FAILURE",
+      "OUTLIERS_REMOVED",
+      "VIN_MISMATCH",
+      "VIN_CHECK_DIGIT_INVALID",
+      "VIN_DECODE_UNAVAILABLE",
+      "SUBJECT_LISTING_EXCLUDED"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "status": {
+    "enum": [
+     "estimated",
+     "insufficient_market_data"
+    ],
+    "type": "string"
+   },
+   "valuationDate": {
+    "type": "string"
+   },
+   "vehicle": {
+    "additionalProperties": false,
+    "properties": {
+     "accidentHistory": {
+      "enum": [
+       "none",
+       "minor_cosmetic",
+       "repaired",
+       "structural",
+       "reported",
+       "unknown"
+      ],
+      "type": "string"
+     },
+     "ageYears": {
+      "type": "number"
+     },
+     "bodyType": {
+      "anyOf": [
+       {
+        "enum": [
+         "sedan",
+         "hatchback",
+         "suv",
+         "crossover",
+         "pickup",
+         "coupe",
+         "convertible",
+         "wagon",
+         "van",
+         "minivan",
+         "other"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "city": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "color": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "condition": {
+      "enum": [
+       "excellent",
+       "very_good",
+       "good",
+       "fair",
+       "poor",
+       "unknown"
+      ],
+      "type": "string"
+     },
+     "country": {
+      "type": "string"
+     },
+     "countryCode": {
+      "type": "string"
+     },
+     "drivetrain": {
+      "anyOf": [
+       {
+        "enum": [
+         "fwd",
+         "rwd",
+         "awd",
+         "4wd"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "engine": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "expectedMileageKm": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "fuelType": {
+      "anyOf": [
+       {
+        "enum": [
+         "petrol",
+         "diesel",
+         "hybrid",
+         "plug_in_hybrid",
+         "electric",
+         "lpg",
+         "cng",
+         "hydrogen",
+         "other"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "make": {
+      "type": "string"
+     },
+     "mileageKm": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "mileageVsExpectedPercent": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "model": {
+      "type": "string"
+     },
+     "options": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "owners": {
+      "anyOf": [
+       {
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "serviceHistory": {
+      "enum": [
+       "full",
+       "partial",
+       "none",
+       "unknown"
+      ],
+      "type": "string"
+     },
+     "transmission": {
+      "anyOf": [
+       {
+        "enum": [
+         "automatic",
+         "manual",
+         "cvt",
+         "dct",
+         "other"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "trim": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "year": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "make",
+     "model",
+     "year",
+     "trim",
+     "mileageKm",
+     "condition",
+     "country",
+     "countryCode",
+     "city",
+     "fuelType",
+     "transmission",
+     "bodyType",
+     "drivetrain",
+     "engine",
+     "accidentHistory",
+     "serviceHistory",
+     "owners",
+     "color",
+     "options",
+     "ageYears",
+     "expectedMileageKm",
+     "mileageVsExpectedPercent"
+    ],
+    "type": "object"
+   },
+   "vinCheck": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "checkDigit": {
+        "enum": [
+         "valid",
+         "invalid",
+         "not_applicable"
+        ],
+        "type": "string"
+       },
+       "decodeStatus": {
+        "enum": [
+         "decoded",
+         "not_decoded",
+         "unavailable",
+         "not_configured"
+        ],
+        "type": "string"
+       },
+       "decoded": {
+        "additionalProperties": false,
+        "properties": {
+         "bodyClass": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "driveType": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "engine": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "fuelType": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "make": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "model": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "modelYear": {
+          "anyOf": [
+           {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "transmission": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "trim": {
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "required": [
+         "make",
+         "model",
+         "modelYear",
+         "trim",
+         "bodyClass",
+         "fuelType",
+         "driveType",
+         "transmission",
+         "engine"
+        ],
+        "type": "object"
+       },
+       "decoder": {
+        "type": "string"
+       },
+       "enrichedFields": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "matches": {
+        "additionalProperties": false,
+        "properties": {
+         "make": {
+          "type": [
+           "boolean",
+           "null"
+          ]
+         },
+         "model": {
+          "type": [
+           "boolean",
+           "null"
+          ]
+         },
+         "year": {
+          "type": [
+           "boolean",
+           "null"
+          ]
+         }
+        },
+        "required": [
+         "make",
+         "model",
+         "year"
+        ],
+        "type": "object"
+       },
+       "notes": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "vinMasked": {
+        "type": "string"
+       },
+       "wmiRegion": {
+        "enum": [
+         "north_america",
+         "south_america",
+         "europe",
+         "asia",
+         "africa",
+         "oceania",
+         "unknown"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "vinMasked",
+       "wmiRegion",
+       "checkDigit",
+       "decoder",
+       "decodeStatus",
+       "decoded",
+       "matches",
+       "enrichedFields",
+       "notes"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   }
+  },
+  "required": [
+   "status",
+   "vehicle",
+   "valuationDate",
+   "currency",
+   "estimatedValue",
+   "estimatedPrivateSalePrice",
+   "estimatedDealerBuyPrice",
+   "estimatedDealerRetailPrice",
+   "askingPriceAnalysis",
+   "depreciation",
+   "adjustments",
+   "marketComparables",
+   "marketStats",
+   "methodology",
+   "confidence",
+   "riskFlags",
+   "assumptions",
+   "dataFreshness",
+   "marketCoverage",
+   "vinCheck",
+   "currencyConversion",
+   "disclaimer"
+  ],
+  "type": "object"
+ }
+}

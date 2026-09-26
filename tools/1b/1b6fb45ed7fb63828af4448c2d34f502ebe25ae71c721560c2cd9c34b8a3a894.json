@@ -1,0 +1,411 @@
+{
+ "_meta": {
+  "openai/outputTemplate": "ui://widgets.gojinko.com/202512112048/flight-carousel-unified.html",
+  "openai/toolInvocation/invoked": "Let's Go Jinko",
+  "openai/toolInvocation/invoking": "Crunching Data For You...",
+  "openai/widgetAccessible": true,
+  "ui": {
+   "csp": {
+    "connectDomains": [
+     "https://api.mapbox.com",
+     "https://events.mapbox.com",
+     "https://checkout.stripe.com/",
+     "https://www.gojinko.com",
+     "https://mcp.gojinko.com",
+     "https://app.gojinko.com",
+     "https://widgets.gojinko.com"
+    ],
+    "resourceDomains": [
+     "https://api.mapbox.com/",
+     "https://cdn.openai.com",
+     "https://static.cupid.travel",
+     "https://photos.hotelbeds.com",
+     "https://fonts.googleapis.com",
+     "https://fonts.gstatic.com",
+     "https://statics.gojinko.com",
+     "https://widgets.gojinko.com"
+    ]
+   },
+   "resourceUri": "ui://widgets.gojinko.com/202512112048/flight-carousel-unified.html"
+  },
+  "ui/resourceUri": "ui://widgets.gojinko.com/202512112048/flight-carousel-unified.html"
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Search flights between a known origin and destination using cached pricing. Use this tool whenever the user specifies BOTH where they are flying FROM and where they are flying TO.\n\nWHEN TO USE THIS TOOL (CRITICAL):\n- The user provides both an origin AND a destination (city or airport)\n- Examples: \"Paris to Barcelona\", \"JFK to CDG\", \"London to NYC for a weekend\"\n- Supports loose / flexible dates: single dates, date arrays, date ranges, stay_days\n- ALSO the right tool for \"cheapest flight\", \"best flight\", \"find me a flight\", \"cheapest date\" phrasings \u2014 this tool returns the cheapest cached itineraries for the given route and window.\n\nWHEN TO USE find_destination INSTEAD:\n- The user does NOT specify a destination: \"Where should I go from Paris?\", \"Best deals from NYC\"\n- The user wants inspiration: \"Beach destinations from London\", \"Cheap flights from SF\"\n\nWHEN TO USE flight_search INSTEAD:\n- The user has committed to EXACT dates \u2014 both a single departure date AND a single return date for one specific route.\n- Example: \"Paris \u2192 NYC, June 17 \u2192 June 26\"\n- flight_search hits live pricing (each call has a cost) and is the step immediately before booking. Use it only once route + both dates are locked in.\n- **TRIP-CONTEXT DATES COUNT AS EXACT.** If a trip is already in context with a HOTEL, the hotel's check-in and check-out ARE the exact departure/return dates the user wants \u2014 even if they don't restate the dates in the message. In that case use flight_search (not flight_calendar) with the hotel's check-in as departure_date and check-out as return_date. Examples: cart has hotel May 8 \u2192 May 10 in Madrid; user says \"add a flight from Paris\" \u2192 flight_search with PAR\u2192MAD, dep=2026-05-08, ret=2026-05-10. The trip cross-sell hint confirms this \u2014 when it points you at flight_search, follow it.\n\nIMPORTANT:\n  All dates in query parameters (departure_dates, departure_date_ranges, return_dates, return_date_ranges) MUST be in the future. Never use past dates.\n  Please fill as much as possible search parameters based on user intent to get best results.\n  Origin and destination must be IATA city code by default except if the user specifies IATA Airport code in the search.\n\nROUTE SEARCH:\n- Use exact 3-letter IATA airport codes or IATA city code for both origin and destination\n- Date ranges OR stay duration for flexible trip planning\n- Natural trip duration (stay_days) instead of exact return dates\n- By default, please search roundtrip flights unless user specifies one-way. Use trip_type=\"oneway\" ONLY when the user explicitly asks for a one-way trip\n\nUSE CASES:\n\u2713 \"Find flights from JFK to CDG next month\" - route + flexible date range\n\u2713 \"Fly from LA to Tokyo for a week in December\" - uses departure_date + stay_days\n\u2713 \"Paris to Barcelona for a weekend in April\" - route + loose window\n\u2713 \"Cheapest flight from ORD to LHR in June\" - route + loose month window\n\u2713 \"Direct business-class flight NYC \u2192 LON next month\" - route with preferences\n\nFlow: flight_calendar \u2192 (user picks) \u2192 flight_search (price_check with offer_token) \u2192 trip \u2192 book.\nOr, for precise dates: skip flight_calendar and go straight to flight_search search mode.\n\nThe widget displays flights in a scrollable carousel with options to view detailed itineraries.\n\n**Cost: 1 credit per call.**",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "arrival_time_range": {
+    "additionalProperties": false,
+    "description": "Filter the OUTBOUND leg by local arrival time-of-day. Example: { \"latest\": \"20:00\" } to arrive by 8pm. Use when the user says \"arrive before dinner\", \"land by noon\", etc.",
+    "properties": {
+     "earliest": {
+      "description": "Inclusive earliest local time-of-day (HH:MM, 24-hour).",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "type": "string"
+     },
+     "latest": {
+      "description": "Inclusive latest local time-of-day (HH:MM, 24-hour).",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "cabin_class": {
+    "description": "Cabin class preference. Options: \"economy\" (standard economy), \"premium_economy\" (enhanced economy with more space/amenities), \"business\" (business class), \"first\" (first class). When specified, only shows flights in the requested cabin class.",
+    "enum": [
+     "economy",
+     "premium_economy",
+     "business",
+     "first"
+    ],
+    "type": "string"
+   },
+   "currency": {
+    "description": "ISO 4217 currency code for displaying prices (e.g. \"EUR\", \"USD\", \"GBP\"). Infer from the user's country or locale. If the user mentions a specific currency, use that.",
+    "type": "string"
+   },
+   "departure_date_ranges": {
+    "description": "List of departure date ranges for flexible travel exploration. Use when user says \"next month\", \"spring\", or wants to discover deals across multiple date periods with OR logic. Example: [{start: \"2025-12-10\", end: \"2025-12-15\"}, {start: \"2025-12-20\", end: \"2025-12-25\"}] for non-contiguous periods.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "end": {
+       "description": "Range end date (YYYY-MM-DD)",
+       "type": "string"
+      },
+      "start": {
+       "description": "Range start date (YYYY-MM-DD)",
+       "type": "string"
+      }
+     },
+     "required": [
+      "start",
+      "end"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "departure_dates": {
+    "description": "List of specific departure dates in ISO 8601 format (YYYY-MM-DD). Use for searching multiple specific dates with OR logic. Example: [\"2025-12-15\", \"2025-12-16\", \"2025-12-17\"] for flexible date searches. Useful when user wants to check specific dates like weekends.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "departure_time_range": {
+    "additionalProperties": false,
+    "description": "Filter the OUTBOUND leg by local departure time-of-day. Example: { \"earliest\": \"08:00\", \"latest\": \"12:00\" } for a late-morning departure. Use when the user says \"morning flight\", \"leave after 6pm\", etc.",
+    "properties": {
+     "earliest": {
+      "description": "Inclusive earliest local time-of-day (HH:MM, 24-hour).",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "type": "string"
+     },
+     "latest": {
+      "description": "Inclusive latest local time-of-day (HH:MM, 24-hour).",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "destination": {
+    "description": "REQUIRED: Single origin airport IATA code or IATA City Code. Example for IATA airport code : \"LGW\" for Gatwick in London, \"SFO\" for San Francisco. Example for IATA city code : \"LHR\" for London, \"BJS\" for Beijing.",
+    "maxLength": 3,
+    "minLength": 3,
+    "type": "string"
+   },
+   "direct_only": {
+    "description": "Only show direct/nonstop flights. When true, only flights with no stops are returned. Use for fastest travel or when layovers are not desired.",
+    "type": "boolean"
+   },
+   "locale": {
+    "description": "User's BCP 47 locale inferred from the conversation (e.g. \"fr-FR\", \"en-US\", \"ja-JP\"). Used for formatting dates, numbers, and selecting currency. Infer from the user's language and location context.",
+    "type": "string"
+   },
+   "max_price": {
+    "description": "Maximum price PER PERSON: the cap applies to a one-adult fare, in the requested currency. For a whole-party budget, divide it by the number of ADULTS only and treat the result as a loose pre-filter: children and lap infants usually cost less than an adult, so dividing by every traveller would exclude affordable trips. Send a per-person budget as-is. The exact whole-trip budget check is flight_search with max_price.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "origin": {
+    "description": "REQUIRED: Single origin airport IATA code or IATA City Code. Example for IATA airport code : \"JFK\" for John F.Kennedy in New York, \"LAX\" for Los Angeles. Example for IATA city code : \"NYC\" for New York, \"PAR\" for Paris.",
+    "maxLength": 3,
+    "minLength": 3,
+    "type": "string"
+   },
+   "return_arrival_time_range": {
+    "additionalProperties": false,
+    "description": "Round-trip only. Filter the RETURN leg by local arrival time-of-day.",
+    "properties": {
+     "earliest": {
+      "description": "Inclusive earliest local time-of-day (HH:MM, 24-hour).",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "type": "string"
+     },
+     "latest": {
+      "description": "Inclusive latest local time-of-day (HH:MM, 24-hour).",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "return_date_ranges": {
+    "description": "List of return date ranges for flexible round-trip exploration. Use when user wants flexibility on return timing across multiple periods with OR logic. Example: [{start: \"2025-12-22\", end: \"2025-12-25\"}, {start: \"2025-12-29\", end: \"2026-01-02\"}]",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "end": {
+       "description": "Range end date (YYYY-MM-DD)",
+       "type": "string"
+      },
+      "start": {
+       "description": "Range start date (YYYY-MM-DD)",
+       "type": "string"
+      }
+     },
+     "required": [
+      "start",
+      "end"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "return_dates": {
+    "description": "List of specific return dates for round-trip flights (YYYY-MM-DD). Use for searching multiple return date options with OR logic. Must be after departure dates. Example: [\"2025-12-22\", \"2025-12-23\", \"2025-12-24\"]",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "return_departure_time_range": {
+    "additionalProperties": false,
+    "description": "Round-trip only. Filter the RETURN leg by local departure time-of-day.",
+    "properties": {
+     "earliest": {
+      "description": "Inclusive earliest local time-of-day (HH:MM, 24-hour).",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "type": "string"
+     },
+     "latest": {
+      "description": "Inclusive latest local time-of-day (HH:MM, 24-hour).",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "sort_by": {
+    "description": "Sort results by this criteria. Default: lowest (best deals first). Options: lowest (cheapest flights), recommendation (best overall value considering price, duration, and stops).",
+    "enum": [
+     "lowest",
+     "recommendation"
+    ],
+    "type": "string"
+   },
+   "stay_days": {
+    "description": "Exact number of days to stay at destination. Used with departure_date to calculate return date automatically. Example: 7 for a week-long trip, 3 for a weekend getaway.",
+    "maximum": 365,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "stay_days_range": {
+    "additionalProperties": false,
+    "description": "Flexible stay duration range. Use when user wants flexibility in trip length (e.g., \"5 to 10 days\"). Cannot be combined with exact stay_days or return_date. Example: {min: 5, max: 10}",
+    "properties": {
+     "max": {
+      "description": "Maximum stay duration in days",
+      "maximum": 365,
+      "type": "integer"
+     },
+     "min": {
+      "description": "Minimum stay duration in days",
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "min",
+     "max"
+    ],
+    "type": "object"
+   },
+   "trip_type": {
+    "description": "REQUIRED: Trip type: \"oneway\" for one-way flights or \"roundtrip\" for round-trip flights.",
+    "enum": [
+     "oneway",
+     "roundtrip"
+    ],
+    "type": "string"
+   },
+   "user_intent": {
+    "description": "A concise summary of what the user is trying to accomplish, derived from their message or the\nconversation context that triggered this tool call.\nThis is used to understand the user's intent and context to improve the overall user experience.\n\n- For short, self-contained prompts (e.g. \"I want new shoes\"), copy the user message as-is.\n- For longer conversations or detailed requests, summarize the core goal and any relevant\n  context in 1-2 sentences. Focus on intent, constraints, and preferences - not the full\n  dialogue.\n\nBefore sending, strip all personally identifiable information (PII), including but not\nlimited to:\n  - Names (first, last, usernames, handles)\n  - Email addresses\n  - Phone numbers\n  - Physical addresses (street, city, zip/postal code, country when tied to an individual)\n  - Dates of birth or exact ages\n  - Government-issued ID numbers (SSN, passport, driver's license, etc.)\n  - Payment or financial information (card numbers, bank accounts, etc.)\n  - IP addresses or device identifiers\n  - Account credentials (passwords, tokens, API keys)\n  - Health or biometric data\n  - Any other information that could identify a specific individual\n\nReplace stripped values with a generic placeholder (e.g. \"[name]\", \"[email]\", \"[address]\").\n\nExamples:\n  User: \"I want red running shoes under $100\"\n  -> \"I want red running shoes under $100\"\n\n  User: \"Hi, I'm John Smith, john@example.com, and I'm looking for flights from Paris to\n         Tokyo for 2 adults departing around mid-June, budget around EUR2000 total\"\n  -> \"Looking for flights from Paris to Tokyo for 2 adults, mid-June, budget ~EUR2000\"\n\n  User: \"I need help resetting my password for account ID acct_12345\"\n  -> \"I need help resetting my password for account ID [account_id]\"",
+    "type": "string"
+   }
+  },
+  "required": [
+   "origin",
+   "destination",
+   "trip_type"
+  ],
+  "type": "object"
+ },
+ "name": "flight_calendar",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "availableAirlines": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "destination": {
+    "additionalProperties": true,
+    "properties": {
+     "city_main_image": {
+      "type": "string"
+     },
+     "city_name": {
+      "type": "string"
+     },
+     "iata_code": {
+      "type": "string"
+     },
+     "location": {
+      "additionalProperties": true,
+      "properties": {
+       "latitude": {
+        "type": "number"
+       },
+       "longitude": {
+        "type": "number"
+       }
+      },
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "emissionsInfo": {
+    "additionalProperties": true,
+    "properties": {
+     "avg_co2": {
+      "type": "number"
+     },
+     "lowest_co2": {
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "error_message": {
+    "type": "string"
+   },
+   "flights": {
+    "items": {},
+    "type": "array"
+   },
+   "hasMore": {
+    "type": "boolean"
+   },
+   "priceRange": {
+    "additionalProperties": true,
+    "properties": {
+     "currency": {
+      "type": "string"
+     },
+     "max": {
+      "type": "number"
+     },
+     "min": {
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "searchQuery": {
+    "additionalProperties": true,
+    "properties": {
+     "cabin_class": {
+      "type": "string"
+     },
+     "currency": {
+      "type": "string"
+     },
+     "departure_date_ranges": {
+      "items": {},
+      "type": "array"
+     },
+     "departure_dates": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "direct_only": {
+      "type": "boolean"
+     },
+     "locale": {
+      "type": "string"
+     },
+     "max_price": {
+      "type": "number"
+     },
+     "origins": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "return_date_ranges": {
+      "items": {},
+      "type": "array"
+     },
+     "return_dates": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "stay_days": {
+      "type": "number"
+     },
+     "stay_days_range": {},
+     "trip_type": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "status": {
+    "enum": [
+     "success",
+     "empty",
+     "error"
+    ],
+    "type": "string"
+   },
+   "totalFlights": {
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "flight_calendar"
+}

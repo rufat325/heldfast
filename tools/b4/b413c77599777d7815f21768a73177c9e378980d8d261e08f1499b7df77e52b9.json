@@ -1,0 +1,1100 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Extract structured, evidence-backed facts, entities, dates, amounts, obligations, deadlines and risk indicators from business documents (contracts, invoices, purchase orders, quotations, tenders/RFPs, leases, policies, financial reports, legal documents, CVs, company profiles) from any country. Every fact carries a 0\u20131 extraction confidence and source evidence (verbatim excerpt, character offsets, section, and the page when the document has real pages); dates, amounts, currencies, percentages and durations are normalized only when unambiguous. Accepts an https documentUrl (PDF with a text layer, DOCX, HTML, text) or extracted text, up to 25 pages. Use when an agent needs reliable machine-readable facts from a contract, invoice, tender, lease, purchase order, policy, financial report or other business document instead of a general summary.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "documentType": {
+    "description": "Document type, or \"auto\" (default) to classify automatically. Selects which facts are prioritized.",
+    "enum": [
+     "auto",
+     "contract",
+     "invoice",
+     "purchase_order",
+     "quotation",
+     "tender",
+     "policy",
+     "financial_report",
+     "legal_document",
+     "lease",
+     "resume",
+     "company_profile",
+     "other"
+    ],
+    "type": "string"
+   },
+   "documentUrl": {
+    "description": "https URL of the document (PDF with a text layer, DOCX, HTML, plain text, Markdown or CSV; max 25 pages / 15 MB). Fetched once, server-side, with SSRF protection; private/internal addresses are rejected. Supply this OR text.",
+    "maxLength": 2048,
+    "minLength": 1,
+    "type": "string"
+   },
+   "includeSourceEvidence": {
+    "description": "Default true. false omits sourceEvidence objects to reduce response size (facts remain the same).",
+    "type": "boolean"
+   },
+   "language": {
+    "description": "Document language (ISO 639-1, e.g. en, ar, fr). Detected automatically when omitted.",
+    "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$",
+    "type": "string"
+   },
+   "mode": {
+    "description": "\"auto\" (default): full extraction plus any requestedFacts. \"requested_only\": return only the requested facts (requires requestedFacts).",
+    "enum": [
+     "auto",
+     "requested_only"
+    ],
+    "type": "string"
+   },
+   "requestedFacts": {
+    "description": "Specific facts to establish, in plain language (max 20), e.g. [\"contract expiry date\", \"termination notice period\", \"annual contract value\"]. Each is answered in requestedFacts with status found / not_found \u2014 never fabricated.",
+    "items": {
+     "maxLength": 200,
+     "minLength": 2,
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "text": {
+    "description": "The document's already-extracted text (max 200,000 characters; longer text is rejected with DOCUMENT_TOO_LARGE, never truncated). Separate pages with form-feed characters (\\f) to get page-level evidence; without them evidence carries sections, not page numbers. Supply this OR documentUrl.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "document_facts_extract",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "amounts": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "amount": {
+       "type": "number"
+      },
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "currency": {
+       "description": "ISO 4217 code when stated unambiguously (or declared by a Currency field in the document).",
+       "type": "string"
+      },
+      "currencySymbol": {
+       "description": "The currency marker as written when it maps to more than one currency (e.g. \"$\").",
+       "type": "string"
+      },
+      "frequency": {
+       "enum": [
+        "one_time",
+        "daily",
+        "weekly",
+        "monthly",
+        "quarterly",
+        "annual"
+       ],
+       "type": "string"
+      },
+      "originalValue": {
+       "type": "string"
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      },
+      "type": {
+       "description": "e.g. total, subtotal, tax, contract_value, rent, deposit, bid_bond, penalty, or amount when untyped.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "amount",
+      "originalValue",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "dates": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "normalizedDate": {
+       "description": "ISO 8601 (YYYY-MM-DD, or YYYY-MM for month precision). Absent when the written form is ambiguous.",
+       "type": "string"
+      },
+      "originalValue": {
+       "type": "string"
+      },
+      "precision": {
+       "enum": [
+        "day",
+        "month"
+       ],
+       "type": "string"
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      },
+      "type": {
+       "description": "e.g. effective_date, expiry_date, invoice_date, due_date, submission_deadline, or date when untyped.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "originalValue",
+      "precision",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "deadlines": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "date": {
+       "description": "ISO date when the deadline is a calendar date.",
+       "type": "string"
+      },
+      "description": {
+       "type": "string"
+      },
+      "relative": {
+       "description": "Relative deadline as written, e.g. \"within 30 days of receipt of invoice\".",
+       "type": "string"
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      },
+      "type": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "description",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "documentSubtype": {
+    "description": "Finer classification when evident, e.g. service_agreement, insurance_policy, tax_invoice, rfp.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "documentType": {
+    "enum": [
+     "contract",
+     "invoice",
+     "purchase_order",
+     "quotation",
+     "tender",
+     "policy",
+     "financial_report",
+     "legal_document",
+     "lease",
+     "resume",
+     "company_profile",
+     "other"
+    ],
+    "type": "string"
+   },
+   "documentTypeConfidence": {
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "documentTypeSource": {
+    "enum": [
+     "detected",
+     "caller"
+    ],
+    "type": "string"
+   },
+   "entities": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "name": {
+       "type": "string"
+      },
+      "role": {
+       "description": "Role in the document when stated, e.g. supplier, customer, landlord, tenant, issuer.",
+       "type": "string"
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      },
+      "type": {
+       "enum": [
+        "person",
+        "company",
+        "organization",
+        "government",
+        "location",
+        "other"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "name",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "facts": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "key": {
+       "description": "Stable snake_case fact key, e.g. expiry_date, invoice_number, total_amount, notice_period.",
+       "type": "string"
+      },
+      "label": {
+       "description": "Human-readable label.",
+       "type": "string"
+      },
+      "method": {
+       "description": "How the fact was established. llm_verified = proposed by the optional LLM assist AND verified against a verbatim quote in the document.",
+       "enum": [
+        "labeled_field",
+        "pattern",
+        "clause",
+        "table",
+        "definition",
+        "llm_verified"
+       ],
+       "type": "string"
+      },
+      "normalizedValue": {
+       "description": "Normalized form when unambiguous: ISO date, {amount, currency}, ratio, {value, unit, iso8601}."
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      },
+      "value": {
+       "description": "The value as stated (string, number, boolean, list or object)."
+      }
+     },
+     "required": [
+      "key",
+      "label",
+      "value",
+      "confidence",
+      "method"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "language": {
+    "description": "ISO 639-1 code, or \"und\" when undetermined.",
+    "type": "string"
+   },
+   "limitations": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "metadata": {
+    "additionalProperties": false,
+    "properties": {
+     "characterCount": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "extractionMethod": {
+      "enum": [
+       "deterministic",
+       "deterministic+llm_verified"
+      ],
+      "type": "string"
+     },
+     "extractionMode": {
+      "enum": [
+       "auto",
+       "requested_only"
+      ],
+      "type": "string"
+     },
+     "extractorVersion": {
+      "type": "string"
+     },
+     "format": {
+      "enum": [
+       "pdf",
+       "docx",
+       "html",
+       "text",
+       "markdown",
+       "csv"
+      ],
+      "type": "string"
+     },
+     "llmAssist": {
+      "additionalProperties": false,
+      "properties": {
+       "rejectedFacts": {
+        "description": "LLM proposals discarded because their quote was not found verbatim in the document or did not support the value.",
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       },
+       "status": {
+        "enum": [
+         "not_configured",
+         "disabled",
+         "not_needed",
+         "used",
+         "failed"
+        ],
+        "type": "string"
+       },
+       "verifiedFacts": {
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "status",
+       "verifiedFacts",
+       "rejectedFacts"
+      ],
+      "type": "object"
+     },
+     "pageCount": {
+      "anyOf": [
+       {
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "pageProvenance": {
+      "description": "true when evidence page numbers come from real page boundaries.",
+      "type": "boolean"
+     },
+     "source": {
+      "additionalProperties": false,
+      "properties": {
+       "byteLength": {
+        "anyOf": [
+         {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "contentType": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "kind": {
+        "enum": [
+         "url",
+         "text"
+        ],
+        "type": "string"
+       },
+       "url": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "kind",
+       "url",
+       "contentType",
+       "byteLength"
+      ],
+      "type": "object"
+     },
+     "wordCount": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "pageCount",
+     "characterCount",
+     "wordCount",
+     "format",
+     "source",
+     "pageProvenance",
+     "extractionMode",
+     "extractionMethod",
+     "llmAssist",
+     "extractorVersion"
+    ],
+    "type": "object"
+   },
+   "obligations": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "condition": {
+       "type": "string"
+      },
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "deadline": {
+       "type": "string"
+      },
+      "modality": {
+       "description": "must_not = a prohibition (\"shall not\").",
+       "enum": [
+        "must",
+        "must_not"
+       ],
+       "type": "string"
+      },
+      "obligation": {
+       "type": "string"
+      },
+      "party": {
+       "type": "string"
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "obligation",
+      "modality",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "overallConfidence": {
+    "description": "Overall extraction certainty for this document (text quality \u00d7 fact coverage \u00d7 fact confidence). Not a measure of business risk.",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "percentages": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "originalValue": {
+       "type": "string"
+      },
+      "ratio": {
+       "description": "Normalized ratio, e.g. 0.05.",
+       "type": "number"
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      },
+      "type": {
+       "description": "e.g. tax_rate, late_payment_interest, penalty_rate, discount, uptime, evaluation_weight, or percentage when untyped.",
+       "type": "string"
+      },
+      "value": {
+       "description": "As written, e.g. 5 for 5%.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "type",
+      "value",
+      "ratio",
+      "originalValue",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "requestedFacts": {
+    "description": "One entry per requested fact, in request order (empty when none were requested).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "confidence": {
+       "anyOf": [
+        {
+         "maximum": 1,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Null when not found \u2014 absence is reported, never guessed."
+      },
+      "key": {
+       "description": "The fact key that answers it, when found.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "method": {
+       "anyOf": [
+        {
+         "enum": [
+          "labeled_field",
+          "pattern",
+          "clause",
+          "table",
+          "definition",
+          "llm_verified"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "normalizedValue": {},
+      "note": {
+       "description": "Why it was not found, or a caveat about the match.",
+       "type": "string"
+      },
+      "request": {
+       "description": "The requested fact, as asked.",
+       "type": "string"
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      },
+      "status": {
+       "enum": [
+        "found",
+        "not_found"
+       ],
+       "type": "string"
+      },
+      "value": {
+       "description": "The value when found; null when not found."
+      }
+     },
+     "required": [
+      "request",
+      "status",
+      "key",
+      "value",
+      "confidence",
+      "method"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "requirements": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "category": {
+       "enum": [
+        "eligibility",
+        "technical",
+        "financial",
+        "documentation",
+        "compliance",
+        "general"
+       ],
+       "type": "string"
+      },
+      "confidence": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "deadline": {
+       "type": "string"
+      },
+      "mandatory": {
+       "type": "boolean"
+      },
+      "party": {
+       "type": "string"
+      },
+      "requirement": {
+       "type": "string"
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "requirement",
+      "category",
+      "mandatory",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "riskFlags": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "reason": {
+       "description": "The observable condition in the document \u2014 never a legal conclusion.",
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "low",
+        "medium",
+        "high"
+       ],
+       "type": "string"
+      },
+      "sourceEvidence": {
+       "additionalProperties": false,
+       "properties": {
+        "endOffset": {
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "page": {
+         "description": "1-based page number \u2014 present only when the source has real page boundaries (never inferred).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "section": {
+         "description": "Nearest preceding section heading.",
+         "type": "string"
+        },
+        "startOffset": {
+         "description": "Start character offset of the matched value in the extracted text.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Short verbatim excerpt (whitespace-collapsed) containing the value.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "startOffset",
+        "endOffset"
+       ],
+       "type": "object"
+      },
+      "type": {
+       "description": "Observable condition, e.g. automatic_renewal, missing_expiry_date, contradictory_amounts, unlimited_liability_language, embedded_instructions_detected.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "severity",
+      "reason"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "title": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "warnings": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "documentType",
+   "documentSubtype",
+   "documentTypeConfidence",
+   "documentTypeSource",
+   "language",
+   "title",
+   "facts",
+   "requestedFacts",
+   "entities",
+   "dates",
+   "amounts",
+   "percentages",
+   "obligations",
+   "requirements",
+   "deadlines",
+   "riskFlags",
+   "metadata",
+   "warnings",
+   "overallConfidence",
+   "limitations"
+  ],
+  "type": "object"
+ }
+}

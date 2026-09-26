@@ -1,0 +1,162 @@
+{
+ "_meta": {
+  "fastmcp": {
+   "tags": [
+    "Video Projects",
+    "generation",
+    "magic-hour",
+    "write-operation"
+   ]
+  }
+ },
+ "description": "**What this API does**\n\nCreate the same Character Replace you can make in the browser, but programmatically, so you can automate it, run it at scale, or connect it to your own app or workflow.\n    \n**Good for**\n- Automation and batch processing  \n- Adding character replace into apps, pipelines, or tools  \n\n**How it works (3 steps)**\n1) Upload your inputs (video, image, or audio) with [Generate Upload URLs](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls) and copy the `file_path`.  \n2) Send a request to create a character replace job with the basic fields.  \n3) Check the job status until it's `complete`, then download the result from `downloads`.\n\n**Key options**\n- Inputs: usually a file, sometimes a YouTube link, depending on project type  \n- Resolution: free users are limited to 576px; higher plans unlock HD and larger sizes  \n- Extra fields: e.g. `face_swap_mode`, `start_seconds`/`end_seconds`, or a text prompt  \n\n**Cost**  \nCredits are only charged for the frames that actually render. You'll see an estimate when the job is queued, and the final total after it's done.\n\nFor detailed examples, see the [product page](https://magichour.ai/products/character-replace).\n\nMCP guidance:\n- This starts an async video generation job and returns `id` plus `credits_charged` immediately. If the user wants the finished result, call the `wait_for_video_project` helper with the returned id, or poll the matching `GET /v1/video-projects/{id}` endpoint until status is `complete`, `error`, or `canceled`. Completed projects include `downloads` with direct URLs. The custom wait helper also returns `exact_download_urls` separately from expiration metadata.\n- For `*_file_path` values, prefer an existing Magic Hour file path or a `file_path` returned by the upload-URL endpoint after the file bytes are uploaded. Direct public media URLs may work when they are stable, fetchable, and return raw file bytes, but hotlinked URLs can fail; when in doubt, use the presigned upload flow first and pass the returned `file_path`.",
+ "inputSchema": {
+  "properties": {
+   "assets": {
+    "description": "Source video and reference character image for the job.",
+    "properties": {
+     "image_file_path": {
+      "description": "Reference character image used as the replacement or animation target. This value is either\n- a direct URL to the video file\n- `file_path` field from the response of the [upload urls API](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls).\n\nSee the [file upload guide](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls#input-file) for details.\n",
+      "example": "api-assets/id/5678.png",
+      "minLength": 1,
+      "type": "string"
+     },
+     "video_file_path": {
+      "description": "Source video containing the subject to replace or animate. This value is either\n- a direct URL to the video file\n- `file_path` field from the response of the [upload urls API](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls).\n\nSee the [file upload guide](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls#input-file) for details.\n",
+      "example": "api-assets/id/1234.mp4",
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "video_file_path",
+     "image_file_path"
+    ],
+    "type": "object"
+   },
+   "end_seconds": {
+    "description": "End time of your clip (seconds). Must be greater than start_seconds.",
+    "example": 15,
+    "format": "float",
+    "minimum": 0.1,
+    "type": "number"
+   },
+   "name": {
+    "default": "Character Replace - dateTime",
+    "description": "Give your video a custom name for easy identification.",
+    "example": "My Character Replace video",
+    "type": "string"
+   },
+   "resolution": {
+    "description": "Output video resolution. Defaults to 480p, the lowest resolution available on your plan.",
+    "enum": [
+     "480p",
+     "720p"
+    ],
+    "example": "720p",
+    "type": "string"
+   },
+   "start_seconds": {
+    "default": 0,
+    "description": "Start time of your clip (seconds). Must be \u2265 0.",
+    "example": 0,
+    "format": "float",
+    "minimum": 0.0,
+    "type": "number"
+   },
+   "style": {
+    "description": "Optional style controls for replace vs animate mode and subject selection.",
+    "example": {
+     "mode": "replace",
+     "selection_mode": "auto"
+    },
+    "properties": {
+     "mode": {
+      "description": "Processing mode. `replace` swaps the detected subject with your reference character. `animate` transfers motion from the video onto your character image.",
+      "enum": [
+       "replace",
+       "animate"
+      ],
+      "example": "replace",
+      "type": "string"
+     },
+     "points": {
+      "description": "On-frame markers for manual subject selection. Required when `selection_mode` is `point`. Ignored when `selection_mode` is `auto` or omitted.",
+      "items": {
+       "properties": {
+        "position_x": {
+         "description": "Horizontal pixel coordinate in the source video frame at `time_seconds`, measured from the left edge.",
+         "example": 320,
+         "minimum": 0.0,
+         "type": "integer"
+        },
+        "position_y": {
+         "description": "Vertical pixel coordinate in the source video frame at `time_seconds`, measured from the top edge.",
+         "example": 180,
+         "minimum": 0.0,
+         "type": "integer"
+        },
+        "time_seconds": {
+         "description": "Timestamp on the source video timeline in seconds. Uses the same clock as `start_seconds` and `end_seconds`.",
+         "example": 2.5,
+         "format": "float",
+         "minimum": 0.0,
+         "type": "number"
+        }
+       },
+       "required": [
+        "position_x",
+        "position_y",
+        "time_seconds"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "selection_mode": {
+      "description": "How to locate the subject in the source video. `auto` detects a person automatically. `point` uses your `points` to mark the subject. Defaults to `auto`.",
+      "enum": [
+       "auto",
+       "point"
+      ],
+      "example": "auto",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "end_seconds",
+   "assets"
+  ],
+  "type": "object"
+ },
+ "name": "character_replace_create_video",
+ "outputSchema": {
+  "description": "Success",
+  "properties": {
+   "credits_charged": {
+    "description": "The amount of credits deducted from your account to generate the video. If the status is not 'complete', this value is an estimate and may be adjusted upon completion based on the actual FPS of the output video. \n\nIf video generation fails, credits will be refunded, and this field will be updated to include the refund.",
+    "example": 450,
+    "type": "integer"
+   },
+   "id": {
+    "description": "Unique ID of the video. Use it with the [Get video Project API](https://docs.magichour.ai/api-reference/video-projects/get-video-details) to fetch status and downloads.",
+    "example": "cuid-example",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id",
+   "credits_charged"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [],
+   "type": "oauth2"
+  }
+ ]
+}

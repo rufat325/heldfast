@@ -1,0 +1,341 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Verify claims against sources"
+ },
+ "description": "Fact check: up to 10 claims checked against up to 4 source URLs you name; each claim comes back SUPPORTED, CONTRADICTED or UNSUPPORTED with the quote the verdict rests on. Input: claims and sources. Use research.web when you have a question but no sources yet. $5.00 per call. Returns: claims[], verdicts[{claim,verdict,quote,source_n}], sources_read[], sources_unread[], model.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "claims": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "sources": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "claims",
+   "sources"
+  ],
+  "type": "object"
+ },
+ "name": "hubvibe_verify_claims",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The 200 body of every paid /work call. `result` is the worker's own output (its schema is per route); everything else is the same on all 38 routes. A receipt for the job is at `receipt_url`.",
+  "properties": {
+   "billing_warning": {
+    "description": "Present only when the charge was recorded with a caveat.",
+    "examples": [
+     "settlement pending"
+    ],
+    "type": "string"
+   },
+   "price_usd": {
+    "description": "What this call cost, in USD.",
+    "examples": [
+     0.02
+    ],
+    "type": "number"
+   },
+   "provenance": {
+    "description": "How the result was produced: which providers ran and how long each took.",
+    "properties": {
+     "attempts": {
+      "description": "Provider attempts made, including retries and failovers.",
+      "examples": [
+       1
+      ],
+      "type": "integer"
+     },
+     "elapsed_ms": {
+      "description": "Wall-clock milliseconds for the whole job.",
+      "examples": [
+       340
+      ],
+      "type": "integer"
+     },
+     "providers_used": {
+      "description": "Providers that served the job.",
+      "examples": [
+       [
+        "coinbase-advanced-trade-public"
+       ]
+      ],
+      "items": {
+       "description": "Provider name.",
+       "examples": [
+        "coinbase-advanced-trade-public"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "steps": {
+      "description": "Every step the job ran, in order.",
+      "items": {
+       "description": "One step of the job.",
+       "properties": {
+        "ms": {
+         "description": "Milliseconds the step took.",
+         "examples": [
+          312
+         ],
+         "type": "integer"
+        },
+        "ok": {
+         "description": "Whether the step succeeded.",
+         "examples": [
+          true
+         ],
+         "type": "boolean"
+        },
+        "provider": {
+         "description": "Provider that served the step.",
+         "examples": [
+          "coinbase-advanced-trade-public"
+         ],
+         "type": "string"
+        },
+        "reason": {
+         "description": "Failure reason, on a failed step.",
+         "examples": [
+          "provider_timeout"
+         ],
+         "type": "string"
+        },
+        "step": {
+         "description": "Step name inside the worker.",
+         "examples": [
+          "quote"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "step",
+        "ok",
+        "ms"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "steps",
+     "providers_used",
+     "attempts",
+     "elapsed_ms"
+    ],
+    "type": "object"
+   },
+   "receipt_id": {
+    "description": "Receipt id for this job.",
+    "examples": [
+     "rcpt_9f1c2b3a4d5e6f70"
+    ],
+    "type": "string"
+   },
+   "receipt_url": {
+    "description": "Where to fetch the machine-readable receipt (free, no payment).",
+    "examples": [
+     "/work/receipts/rcpt_9f1c2b3a4d5e6f70"
+    ],
+    "type": "string"
+   },
+   "result": {
+    "properties": {
+     "claims": {
+      "description": "The claims checked, in order.",
+      "examples": [
+       [
+        "HubVibe sells machine-payable site audits."
+       ]
+      ],
+      "items": {
+       "description": "A claim, as given.",
+       "examples": [
+        "HubVibe sells machine-payable site audits."
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "model": {
+      "description": "The model that produced the answer.",
+      "examples": [
+       "gemini-2.5-flash"
+      ],
+      "type": "string"
+     },
+     "sources_read": {
+      "description": "Sources read, numbered as cited in source_n.",
+      "items": {
+       "description": "One source the answer cites.",
+       "properties": {
+        "n": {
+         "description": "Citation number used as [n] in the text.",
+         "examples": [
+          1
+         ],
+         "type": "integer"
+        },
+        "title": {
+         "description": "Page title, when the page had one.",
+         "examples": [
+          "About Example"
+         ],
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "url": {
+         "description": "Source URL.",
+         "examples": [
+          "https://example.com/about"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "n",
+        "url"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "sources_unread": {
+      "description": "Sources that could not be read, with the reason.",
+      "examples": [
+       []
+      ],
+      "items": {
+       "description": "A source that was found but not read; disclosed, never silently dropped.",
+       "properties": {
+        "reason": {
+         "description": "Why it could not be read.",
+         "examples": [
+          "HTTP 403 from the target"
+         ],
+         "type": "string"
+        },
+        "url": {
+         "description": "Source that could not be read.",
+         "examples": [
+          "https://example.com/paywalled"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "url",
+        "reason"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "verdicts": {
+      "description": "One verdict per claim, same order.",
+      "items": {
+       "description": "One claim and its verdict.",
+       "properties": {
+        "claim": {
+         "description": "The claim, as given.",
+         "examples": [
+          "HubVibe sells machine-payable site audits."
+         ],
+         "type": "string"
+        },
+        "quote": {
+         "description": "The sentence the verdict rests on; null when UNSUPPORTED.",
+         "examples": [
+          "Every check is priced per call over HTTP 402."
+         ],
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "source_n": {
+         "description": "Which source (by n) the quote is from; null when UNSUPPORTED.",
+         "examples": [
+          1
+         ],
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "verdict": {
+         "description": "Whether the sources support, contradict, or do not address the claim.",
+         "enum": [
+          "SUPPORTED",
+          "CONTRADICTED",
+          "UNSUPPORTED"
+         ],
+         "examples": [
+          "SUPPORTED"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "claim",
+        "verdict"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "claims",
+     "verdicts",
+     "sources_read",
+     "sources_unread",
+     "model"
+    ],
+    "type": "object"
+   },
+   "status": {
+    "const": "ok",
+    "description": "Present only on a delivered result.",
+    "type": "string"
+   },
+   "worker": {
+    "description": "Catalog name of the worker that ran.",
+    "examples": [
+     "market.quote"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "status",
+   "worker",
+   "price_usd",
+   "result",
+   "provenance",
+   "receipt_id",
+   "receipt_url"
+  ],
+  "title": "verify.claims response",
+  "type": "object"
+ },
+ "title": "Verify claims against sources"
+}

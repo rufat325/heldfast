@@ -1,0 +1,142 @@
+{
+ "_meta": {
+  "fastmcp": {
+   "tags": [
+    "Video Projects",
+    "generation",
+    "magic-hour",
+    "write-operation"
+   ]
+  }
+ },
+ "description": "**What this API does**\n\nCreate the same Image To Video you can make in the browser, but programmatically, so you can automate it, run it at scale, or connect it to your own app or workflow.\n    \n**Good for**\n- Automation and batch processing  \n- Adding image to video into apps, pipelines, or tools  \n\n**How it works (3 steps)**\n1) Upload your inputs (video, image, or audio) with [Generate Upload URLs](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls) and copy the `file_path`.  \n2) Send a request to create a image to video job with the basic fields.  \n3) Check the job status until it's `complete`, then download the result from `downloads`.\n\n**Key options**\n- Inputs: usually a file, sometimes a YouTube link, depending on project type  \n- Resolution: free users are limited to 576px; higher plans unlock HD and larger sizes  \n- Extra fields: e.g. `face_swap_mode`, `start_seconds`/`end_seconds`, or a text prompt  \n\n**Cost**  \nCredits are only charged for the frames that actually render. You'll see an estimate when the job is queued, and the final total after it's done.\n\nFor detailed examples, see the [product page](https://magichour.ai/products/image-to-video).\n\nMCP guidance:\n- This starts an async video generation job and returns `id` plus `credits_charged` immediately. If the user wants the finished result, call the `wait_for_video_project` helper with the returned id, or poll the matching `GET /v1/video-projects/{id}` endpoint until status is `complete`, `error`, or `canceled`. Completed projects include `downloads` with direct URLs. The custom wait helper also returns `exact_download_urls` separately from expiration metadata.\n- For `*_file_path` values, prefer an existing Magic Hour file path or a `file_path` returned by the upload-URL endpoint after the file bytes are uploaded. Direct public media URLs may work when they are stable, fetchable, and return raw file bytes, but hotlinked URLs can fail; when in doubt, use the presigned upload flow first and pass the returned `file_path`.",
+ "inputSchema": {
+  "properties": {
+   "assets": {
+    "description": "Provide the assets for image-to-video. Sora 2 only supports images with an aspect ratio of `9:16` or `16:9`.",
+    "properties": {
+     "end_image_file_path": {
+      "description": "The image to use as the last frame of the video.\n\n* **`gemini-omni-1.1`**: Supports 360p, 720p, 1080p, 4k.\n* **`kling-2.6`**: Supports 1080p.\n* **`kling-3.0`**: Supports 720p, 1080p, 4k.\n* **`ltx-2.5`**: Supports 480p, 720p, 1080p.\n* **`minimax-h3`**: Not supported\n* **`seedance-1.5`**: Supports 480p, 720p, 1080p.\n* **`seedance-2.0`**: Supports 480p, 720p, 1080p, 4k.\n* **`seedance-2.0-mini`**: Supports 480p, 720p.\n* **`seedance-2.5`**: Supports 480p, 720p, 1080p.\n* **`sora-2`**: Not supported\n* **`veo3.1`**: Supports 720p, 1080p. Requires a duration of 8 seconds or less.\n* **`veo3.1-lite`**: Supports 720p, 1080p. Requires a duration of 8 seconds or less.\n* **`wan-2.2`**: Not supported\n* **`wan-3.0`**: Supports 480p, 720p, 1080p.\n",
+      "example": "api-assets/id/1234.png",
+      "minLength": 1,
+      "type": "string"
+     },
+     "image_file_path": {
+      "description": "The path of the image file. This value is either\n- a direct URL to the video file\n- `file_path` field from the response of the [upload urls API](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls).\n\nSee the [file upload guide](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls#input-file) for details.\n",
+      "example": "api-assets/id/1234.png",
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "image_file_path"
+    ],
+    "type": "object"
+   },
+   "audio": {
+    "description": "Whether to include audio in the video. Defaults to `false` if not specified.\n\nAudio support varies by model:\n* **`gemini-omni-1.1`**: Not supported\n* **`kling-2.6`**: Not supported\n* **`kling-3.0`**: Toggle-able: audio adds extra credits when enabled\n* **`ltx-2.5`**: Toggle-able: no additional credits for audio\n* **`minimax-h3`**: Toggle-able: no additional credits for audio\n* **`seedance-1.5`**: Toggle-able: audio adds extra credits when enabled\n* **`seedance-2.0`**: Toggle-able: no additional credits for audio\n* **`seedance-2.0-mini`**: Toggle-able: no additional credits for audio\n* **`seedance-2.5`**: Toggle-able: no additional credits for audio\n* **`sora-2`**: Toggle-able: no additional credits for audio\n* **`veo3.1`**: Toggle-able: audio adds extra credits when enabled\n* **`veo3.1-lite`**: Toggle-able: audio adds extra credits when enabled\n* **`wan-2.2`**: Not supported\n* **`wan-3.0`**: Toggle-able: no additional credits for audio\n",
+    "example": true,
+    "type": "boolean"
+   },
+   "end_seconds": {
+    "description": "The total duration of the output video in seconds. Supported durations depend on the chosen model:\n\n* **`gemini-omni-1.1`**: any integer from 3 to 10\n* **`kling-2.6`**: 5, 10\n* **`kling-3.0`**: any integer from 3 to 15\n* **`ltx-2.5`**: any integer from 1 to 60\n* **`minimax-h3`**: any integer from 1 to 30\n* **`seedance-1.5`**: any integer from 4 to 12\n* **`seedance-2.0`**: any integer from 4 to 15\n* **`seedance-2.0-mini`**: any integer from 4 to 15\n* **`seedance-2.5`**: any integer from 4 to 30\n* **`sora-2`**: 4, 8, 12, 24, 36, 48, 60\n* **`veo3.1`**: 4, 6, 8, 16, 24, 32, 40, 48, 56\n* **`veo3.1-lite`**: 4, 6, 8, 16, 24, 32, 40, 48, 56\n* **`wan-2.2`**: 3, 4, 5, 6, 7, 8, 9, 10, 15\n* **`wan-3.0`**: 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30\n",
+    "example": 5,
+    "format": "float",
+    "maximum": 60.0,
+    "minimum": 1.0,
+    "type": "number"
+   },
+   "model": {
+    "default": "default",
+    "description": "The AI model to use for video generation.\n\n* `default`: uses our currently recommended model for general use. For paid tiers, defaults to `kling-3.0`. For free tiers, it defaults to `ltx-2.5`.\n* `gemini-omni-1.1`: Best for precise short clips, first/last frames, and high-resolution output.\n* `kling-2.6`: Best for action, motion blur, and controlled camera moves.\n* `kling-3.0`: Best for cinematic stories, references, and optional audio.\n* `ltx-2.5`: Fastest for general scenes, long clips, audio, and rapid iteration.\n* `minimax-h3`: Great for reference-driven clips with native audio and longer durations.\n* `seedance-1.5`: Best for smooth, consistent motion with an end frame.\n* `seedance-2.0`: Best for reference-led clips with precise subject control.\n* `seedance-2.0-mini`: Faster reference-led clips with consistent motion and audio.\n* `seedance-2.5`: Best for premium realism, detail, and natural motion.\n* `sora-2`: Best for creative concepts and longer clips with audio.\n* `veo3.1`: Best for romantic interactions and expressive action, with realistic detail.\n* `veo3.1-lite`: Balanced realism and audio at a lower cost than Veo 3.1.\n* `wan-2.2`: Best for physical motion, action, and camera movement.\n* `wan-3.0`: High-quality video with native audio, long clips, and end-frame control.\n\nIf you specify the deprecated model value that includes the `-audio` suffix, this will be the same as included `audio` as `true`.",
+    "enum": [
+     "default",
+     "kling-3.0",
+     "gemini-omni-1.1",
+     "seedance-2.0",
+     "ltx-2.5",
+     "minimax-h3",
+     "wan-3.0",
+     "wan-2.2",
+     "seedance-1.5",
+     "seedance-2.0-mini",
+     "seedance-2.5",
+     "kling-2.6",
+     "veo3.1-lite",
+     "veo3.1",
+     "sora-2",
+     "ltx-2.3",
+     "ltx-2",
+     "kling-2.5",
+     "kling-1.6",
+     "seedance",
+     "kling-2.5-audio",
+     "veo3.1-audio"
+    ],
+    "example": "kling-3.0",
+    "type": "string"
+   },
+   "name": {
+    "default": "Image To Video - dateTime",
+    "description": "Give your video a custom name for easy identification.",
+    "example": "My Image To Video video",
+    "type": "string"
+   },
+   "resolution": {
+    "description": "Controls the output video resolution. Defaults to `720p` on paid tiers and `480p` on free tiers.\n\n* **`gemini-omni-1.1`**: Supports 360p, 720p, 1080p, 4k.\n* **`kling-2.6`**: Supports 720p, 1080p.\n* **`kling-3.0`**: Supports 720p, 1080p, 4k.\n* **`ltx-2.5`**: Supports 480p, 720p, 1080p.\n* **`minimax-h3`**: Supports 480p, 720p, 1080p.\n* **`seedance-1.5`**: Supports 480p, 720p, 1080p.\n* **`seedance-2.0`**: Supports 480p, 720p, 1080p, 4k.\n* **`seedance-2.0-mini`**: Supports 480p, 720p.\n* **`seedance-2.5`**: Supports 480p, 720p, 1080p.\n* **`sora-2`**: Supports 720p.\n* **`veo3.1`**: Supports 720p, 1080p.\n* **`veo3.1-lite`**: Supports 720p, 1080p.\n* **`wan-2.2`**: Supports 480p, 720p, 1080p.\n* **`wan-3.0`**: Supports 480p, 720p, 1080p.\n",
+    "enum": [
+     "360p",
+     "480p",
+     "720p",
+     "1080p",
+     "4k"
+    ],
+    "example": "720p",
+    "type": "string"
+   },
+   "style": {
+    "description": "Attributed used to dictate the style of the output",
+    "properties": {
+     "prompt": {
+      "description": "The prompt used for the video.",
+      "example": "a dog running",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "end_seconds",
+   "assets"
+  ],
+  "type": "object"
+ },
+ "name": "image_to_video_create_video",
+ "outputSchema": {
+  "description": "Success",
+  "properties": {
+   "credits_charged": {
+    "description": "The amount of credits deducted from your account to generate the video. If the status is not 'complete', this value is an estimate and may be adjusted upon completion based on the actual FPS of the output video. \n\nIf video generation fails, credits will be refunded, and this field will be updated to include the refund.",
+    "example": 450,
+    "type": "integer"
+   },
+   "id": {
+    "description": "Unique ID of the video. Use it with the [Get video Project API](https://docs.magichour.ai/api-reference/video-projects/get-video-details) to fetch status and downloads.",
+    "example": "cuid-example",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id",
+   "credits_charged"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [],
+   "type": "oauth2"
+  }
+ ]
+}

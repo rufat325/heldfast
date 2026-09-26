@@ -1,0 +1,1296 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Detect duplicate, inconsistent, unusual or potentially fraudulent invoices before payment using arithmetic, supplier-history, purchase-order and payment-detail checks. Returns a 0\u2013100 risk score, a risk level, an advisory decision (continue / review / hold) and machine-readable anomalies (e.g. DUPLICATE_INVOICE, POSSIBLE_DUPLICATE, BANK_ACCOUNT_CHANGED, PO_AMOUNT_EXCEEDED, SPLIT_INVOICE_PATTERN, SUBTOTAL_MISMATCH), each with severity, confidence and structured evidence. Works on a single invoice (standalone) or with optional historical invoices, supplier profile, purchase order, contract, approval threshold and payment history (context-aware). Deterministic, decimal-safe, any country and currency. Use before approving, paying, booking, reconciling or auditing an invoice, especially when an agent needs to determine whether the invoice requires human review.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "approvalContext": {
+    "additionalProperties": false,
+    "properties": {
+     "approvalThreshold": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Single-invoice amount above which additional approval is required. Enables split-invoice detection."
+     },
+     "currency": {
+      "description": "Currency of approvalThreshold (default: the invoice currency).",
+      "maxLength": 10,
+      "minLength": 1,
+      "type": "string"
+     },
+     "splitWindowDays": {
+      "description": "Window for grouping same-supplier invoices in split detection (default 7).",
+      "maximum": 90,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "contract": {
+    "additionalProperties": false,
+    "description": "The governing contract.",
+    "properties": {
+     "contractId": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "currency": {
+      "maxLength": 10,
+      "minLength": 1,
+      "type": "string"
+     },
+     "endDate": {
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+     },
+     "invoicedToDate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Amount already invoiced under the contract (excluding this invoice). When omitted, supplied historicalInvoices for the supplier inside the contract period are summed instead."
+     },
+     "maxAmount": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Contract value cap."
+     },
+     "maxInvoiceAmount": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Maximum amount allowed on a single invoice."
+     },
+     "paymentTermsDays": {
+      "description": "Payment terms in days (e.g. 30 for net 30).",
+      "maximum": 3650,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "startDate": {
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+     },
+     "supplierId": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "supplierName": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "historicalInvoices": {
+    "description": "Previously received invoices (any supplier; up to 1000). Enables duplicate, supplier-behavior, payment-detail and split checks.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "bankAccount": {
+       "maxLength": 80,
+       "minLength": 1,
+       "type": "string"
+      },
+      "currency": {
+       "maxLength": 10,
+       "minLength": 1,
+       "type": "string"
+      },
+      "dueDate": {
+       "maxLength": 40,
+       "minLength": 1,
+       "type": "string"
+      },
+      "invoiceDate": {
+       "maxLength": 40,
+       "minLength": 1,
+       "type": "string"
+      },
+      "invoiceId": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "invoiceNumber": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "lineItems": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+         },
+         "quantity": {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+           }
+          ]
+         },
+         "sku": {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+         },
+         "total": {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+           }
+          ]
+         },
+         "unitPrice": {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+           }
+          ]
+         }
+        },
+        "type": "object"
+       },
+       "maxItems": 200,
+       "type": "array"
+      },
+      "paymentTermsDays": {
+       "description": "Payment terms in days (e.g. 30 for net 30).",
+       "maximum": 3650,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "poNumber": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "status": {
+       "description": "Processing status. cancelled / void / rejected invoices are still used for duplicate matching (resubmissions) but excluded from behavior baselines, contract consumption and split detection.",
+       "enum": [
+        "paid",
+        "approved",
+        "pending",
+        "disputed",
+        "rejected",
+        "cancelled",
+        "void",
+        "unknown"
+       ],
+       "type": "string"
+      },
+      "subtotal": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "maxLength": 40,
+         "minLength": 1,
+         "type": "string"
+        }
+       ]
+      },
+      "supplierId": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "supplierName": {
+       "maxLength": 200,
+       "minLength": 1,
+       "type": "string"
+      },
+      "total": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "maxLength": 40,
+         "minLength": 1,
+         "type": "string"
+        }
+       ]
+      }
+     },
+     "required": [
+      "total"
+     ],
+     "type": "object"
+    },
+    "maxItems": 1000,
+    "type": "array"
+   },
+   "invoice": {
+    "additionalProperties": false,
+    "description": "The invoice to check. Only `total` is required. Amounts: number or plain decimal string (\"9200.50\"); dates: ISO 8601; currency: ISO 4217 code; bankAccount is never echoed unmasked.",
+    "properties": {
+     "bankAccount": {
+      "maxLength": 80,
+      "minLength": 1,
+      "type": "string"
+     },
+     "contractId": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "currency": {
+      "maxLength": 10,
+      "minLength": 1,
+      "type": "string"
+     },
+     "discount": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Invoice-level discount amount."
+     },
+     "dueDate": {
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+     },
+     "invoiceDate": {
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+     },
+     "invoiceId": {
+      "description": "Your system's internal record id for this invoice. A historical invoice with the same invoiceId is treated as this same record and excluded from duplicate matching.",
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "invoiceNumber": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "lineItems": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "description": {
+         "maxLength": 500,
+         "minLength": 1,
+         "type": "string"
+        },
+        "discount": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "maxLength": 40,
+           "minLength": 1,
+           "type": "string"
+          }
+         ],
+         "description": "Line discount amount (subtracted from quantity \u00d7 unitPrice)."
+        },
+        "quantity": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "maxLength": 40,
+           "minLength": 1,
+           "type": "string"
+          }
+         ]
+        },
+        "sku": {
+         "description": "Item/SKU code, used to match purchase-order lines.",
+         "maxLength": 100,
+         "minLength": 1,
+         "type": "string"
+        },
+        "taxRate": {
+         "description": "Tax rate in percent (e.g. 5 for 5%).",
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        "total": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "maxLength": 40,
+           "minLength": 1,
+           "type": "string"
+          }
+         ],
+         "description": "Line total EXCLUDING tax (quantity \u00d7 unitPrice \u2212 discount)."
+        },
+        "unitPrice": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "maxLength": 40,
+           "minLength": 1,
+           "type": "string"
+          }
+         ]
+        }
+       },
+       "type": "object"
+      },
+      "maxItems": 500,
+      "type": "array"
+     },
+     "paymentTermsDays": {
+      "description": "Payment terms in days (e.g. 30 for net 30).",
+      "maximum": 3650,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "poNumber": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "shipping": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Shipping / other charges added to the total."
+     },
+     "subtotal": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Sum of line totals, before invoice-level discount, tax and shipping."
+     },
+     "supplierId": {
+      "description": "Your vendor/supplier master id. Preferred over the name for matching history.",
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "supplierName": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     },
+     "tax": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Total tax amount."
+     },
+     "taxRate": {
+      "description": "Invoice-level tax rate, used when lines carry no taxRate.",
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+     },
+     "total": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Invoice total payable (subtotal \u2212 discount + tax + shipping). Required."
+     }
+    },
+    "required": [
+     "total"
+    ],
+    "type": "object"
+   },
+   "options": {
+    "additionalProperties": false,
+    "properties": {
+     "asOfDate": {
+      "description": "Reference date for date checks (default: today, UTC). Supplying it makes the output fully reproducible.",
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+     },
+     "duplicateWindowDays": {
+      "description": "Maximum date gap for near-duplicate matching (default 14).",
+      "maximum": 365,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "minHistoryForPatterns": {
+      "description": "Minimum same-supplier invoices required before supplier-behavior baselines are used (default 3).",
+      "maximum": 50,
+      "minimum": 2,
+      "type": "integer"
+     },
+     "roundingTolerance": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Absolute arithmetic tolerance in currency units, replacing the default of one minor unit per rounding step."
+     }
+    },
+    "type": "object"
+   },
+   "paymentHistory": {
+    "description": "Past payments (any supplier). Used for known payment accounts and already-paid detection.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "amount": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "maxLength": 40,
+         "minLength": 1,
+         "type": "string"
+        }
+       ]
+      },
+      "bankAccount": {
+       "maxLength": 80,
+       "minLength": 1,
+       "type": "string"
+      },
+      "currency": {
+       "maxLength": 10,
+       "minLength": 1,
+       "type": "string"
+      },
+      "invoiceNumber": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "paymentDate": {
+       "maxLength": 40,
+       "minLength": 1,
+       "type": "string"
+      },
+      "supplierId": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "supplierName": {
+       "maxLength": 200,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "maxItems": 1000,
+    "type": "array"
+   },
+   "purchaseOrder": {
+    "additionalProperties": false,
+    "description": "The purchase order the invoice is billed against.",
+    "properties": {
+     "amountsIncludeTax": {
+      "description": "Default true: PO amounts are compared with the invoice total. false: compared with the invoice net amount (subtotal \u2212 discount).",
+      "type": "boolean"
+     },
+     "currency": {
+      "maxLength": 10,
+      "minLength": 1,
+      "type": "string"
+     },
+     "invoicedToDate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Amount already invoiced against this PO (excluding this invoice)."
+     },
+     "issueDate": {
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+     },
+     "lineItems": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "description": {
+         "maxLength": 500,
+         "minLength": 1,
+         "type": "string"
+        },
+        "quantity": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "maxLength": 40,
+           "minLength": 1,
+           "type": "string"
+          }
+         ]
+        },
+        "sku": {
+         "maxLength": 100,
+         "minLength": 1,
+         "type": "string"
+        },
+        "unitPrice": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "maxLength": 40,
+           "minLength": 1,
+           "type": "string"
+          }
+         ]
+        }
+       },
+       "type": "object"
+      },
+      "maxItems": 500,
+      "type": "array"
+     },
+     "poNumber": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "remainingAmount": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ],
+      "description": "Remaining PO balance before this invoice; takes precedence over totalAmount \u2212 invoicedToDate."
+     },
+     "status": {
+      "enum": [
+       "open",
+       "partially_invoiced",
+       "closed",
+       "cancelled"
+      ],
+      "type": "string"
+     },
+     "supplierId": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "supplierName": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     },
+     "totalAmount": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+       }
+      ]
+     }
+    },
+    "type": "object"
+   },
+   "supplierProfile": {
+    "additionalProperties": false,
+    "description": "Supplier master data for the invoice's supplier.",
+    "properties": {
+     "aliases": {
+      "items": {
+       "maxLength": 200,
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 10,
+      "type": "array"
+     },
+     "bankAccounts": {
+      "description": "Payment accounts on file for this supplier.",
+      "items": {
+       "anyOf": [
+        {
+         "maxLength": 80,
+         "minLength": 1,
+         "type": "string"
+        },
+        {
+         "additionalProperties": false,
+         "properties": {
+          "account": {
+           "maxLength": 80,
+           "minLength": 1,
+           "type": "string"
+          },
+          "addedDate": {
+           "description": "When the account was added/changed in the supplier master.",
+           "maxLength": 40,
+           "minLength": 1,
+           "type": "string"
+          },
+          "verified": {
+           "description": "false = on file but not yet verified (e.g. by call-back).",
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "account"
+         ],
+         "type": "object"
+        }
+       ]
+      },
+      "maxItems": 20,
+      "type": "array"
+     },
+     "country": {
+      "maxLength": 60,
+      "minLength": 1,
+      "type": "string"
+     },
+     "createdDate": {
+      "description": "When the supplier record was created.",
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+     },
+     "currencies": {
+      "description": "Currencies this supplier normally invoices in.",
+      "items": {
+       "maxLength": 10,
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 10,
+      "type": "array"
+     },
+     "paymentTermsDays": {
+      "description": "Agreed standard payment terms.",
+      "maximum": 3650,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "status": {
+      "enum": [
+       "active",
+       "inactive",
+       "blocked",
+       "suspended",
+       "pending_verification"
+      ],
+      "type": "string"
+     },
+     "supplierId": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "supplierName": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "invoice"
+  ],
+  "type": "object"
+ },
+ "name": "invoice_anomaly_check",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "anomalies": {
+    "description": "Most severe first. At most one record per anomaly code; sub-findings are in evidence.issues.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Stable machine code of the anomaly type.",
+       "enum": [
+        "SUBTOTAL_MISMATCH",
+        "TAX_MISMATCH",
+        "TOTAL_MISMATCH",
+        "LINE_TOTAL_MISMATCH",
+        "DUPLICATE_INVOICE",
+        "POSSIBLE_DUPLICATE",
+        "UNUSUAL_AMOUNT",
+        "SUPPLIER_PATTERN_DEVIATION",
+        "UNUSUAL_CURRENCY",
+        "UNUSUAL_PAYMENT_TERMS",
+        "INVOICE_NUMBER_ANOMALY",
+        "BANK_ACCOUNT_CHANGED",
+        "UNKNOWN_BANK_ACCOUNT",
+        "PO_MISMATCH",
+        "PO_AMOUNT_EXCEEDED",
+        "CONTRACT_LIMIT_EXCEEDED",
+        "APPROVAL_THRESHOLD_EXCEEDED",
+        "SPLIT_INVOICE_PATTERN",
+        "DATE_ANOMALY",
+        "DUE_DATE_ANOMALY",
+        "DUPLICATE_LINE_ITEM",
+        "MISSING_REQUIRED_FIELD"
+       ],
+       "type": "string"
+      },
+      "confidence": {
+       "description": "0\u20131 strength of the supporting evidence (not a probability of fraud).",
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "evidence": {
+       "additionalProperties": {},
+       "description": "Structured, factual evidence for the finding (matched records, expected vs stated values, baselines, thresholds). Bank accounts appear only masked (****1234).",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "explanation": {
+       "description": "One factual sentence, phrased as a risk indicator (never an accusation).",
+       "type": "string"
+      },
+      "field": {
+       "description": "Primary invoice field concerned (e.g. invoiceNumber, bankAccount, total), or null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "severity": {
+       "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "severity",
+      "confidence",
+      "field",
+      "explanation",
+      "evidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "anomalyCount": {
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "asOfDate": {
+    "description": "Reference date (UTC) used for date checks.",
+    "type": "string"
+   },
+   "checkedAt": {
+    "description": "ISO timestamp of the as-of date (UTC start of day). Deliberately day-granular so identical inputs give identical output; pass options.asOfDate for full reproducibility.",
+    "type": "string"
+   },
+   "contextUsed": {
+    "additionalProperties": false,
+    "properties": {
+     "approvalContext": {
+      "type": "boolean"
+     },
+     "contract": {
+      "type": "boolean"
+     },
+     "historicalInvoices": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "paymentHistory": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "purchaseOrder": {
+      "type": "boolean"
+     },
+     "supplierHistoryMatched": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "supplierProfile": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "historicalInvoices",
+     "supplierHistoryMatched",
+     "paymentHistory",
+     "supplierProfile",
+     "purchaseOrder",
+     "contract",
+     "approvalContext"
+    ],
+    "type": "object"
+   },
+   "dataCompleteness": {
+    "additionalProperties": false,
+    "properties": {
+     "missingRecommendedFields": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "missingRequiredFields": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "missingRequiredFields",
+     "missingRecommendedFields"
+    ],
+    "type": "object"
+   },
+   "decision": {
+    "description": "Advisory only: low \u2192 continue, medium/high \u2192 review, critical \u2192 hold. Not a payment approval or rejection.",
+    "enum": [
+     "continue",
+     "review",
+     "hold"
+    ],
+    "type": "string"
+   },
+   "financialChecks": {
+    "additionalProperties": false,
+    "properties": {
+     "computed": {
+      "additionalProperties": false,
+      "properties": {
+       "expectedTax": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "expectedTotal": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "lineItemsSum": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "tolerance": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "lineItemsSum",
+       "expectedTax",
+       "expectedTotal",
+       "tolerance"
+      ],
+      "type": "object"
+     },
+     "lineTotalsValid": {
+      "description": "quantity \u00d7 unitPrice \u2212 discount \u2248 line total for every line that states all three; null when none does.",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "subtotalValid": {
+      "description": "\u03a3 line totals \u2248 subtotal; null when not checkable (no lines or no subtotal).",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "taxValid": {
+      "description": "Stated tax \u2248 tax implied by the stated rate(s); null when no rate or no tax is stated.",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "totalValid": {
+      "description": "subtotal \u2212 discount + tax + shipping \u2248 total; null when not checkable.",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "subtotalValid",
+     "taxValid",
+     "totalValid",
+     "lineTotalsValid",
+     "computed"
+    ],
+    "type": "object"
+   },
+   "invoiceSummary": {
+    "additionalProperties": false,
+    "description": "Normalized key fields of the checked invoice (bank account masked).",
+    "properties": {
+     "bankAccountMasked": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "currency": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "dueDate": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "invoiceDate": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "invoiceNumber": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "lineItemCount": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "supplierId": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "supplierName": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "total": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "invoiceNumber",
+     "supplierName",
+     "supplierId",
+     "invoiceDate",
+     "dueDate",
+     "currency",
+     "total",
+     "lineItemCount",
+     "bankAccountMasked"
+    ],
+    "type": "object"
+   },
+   "limitations": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "mode": {
+    "enum": [
+     "standalone",
+     "context_aware"
+    ],
+    "type": "string"
+   },
+   "recommendedAction": {
+    "type": "string"
+   },
+   "riskLevel": {
+    "description": "low 0\u201314, medium 15\u201339, high 40\u201364, critical 65\u2013100.",
+    "enum": [
+     "low",
+     "medium",
+     "high",
+     "critical"
+    ],
+    "type": "string"
+   },
+   "riskScore": {
+    "description": "0\u2013100, higher = more risk indicators; see scoring for the exact computation.",
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "scoring": {
+    "additionalProperties": false,
+    "description": "Exact score derivation: per-anomaly points = basePoints \u00d7 confidence, severity-group caps, correlation bonus, severity ceiling.",
+    "properties": {
+     "cappedBySeverity": {
+      "type": "boolean"
+     },
+     "components": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "basePoints": {
+         "type": "number"
+        },
+        "code": {
+         "type": "string"
+        },
+        "confidence": {
+         "type": "number"
+        },
+        "points": {
+         "type": "number"
+        },
+        "severity": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "code",
+        "severity",
+        "confidence",
+        "basePoints",
+        "points"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "escalationBonus": {
+      "type": "number"
+     },
+     "escalationReasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "highSeverityPoints": {
+      "type": "number"
+     },
+     "levelBands": {
+      "additionalProperties": false,
+      "properties": {
+       "critical": {
+        "type": "string"
+       },
+       "high": {
+        "type": "string"
+       },
+       "low": {
+        "type": "string"
+       },
+       "medium": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "low",
+       "medium",
+       "high",
+       "critical"
+      ],
+      "type": "object"
+     },
+     "lowSeverityPoints": {
+      "type": "number"
+     },
+     "mediumSeverityPoints": {
+      "type": "number"
+     },
+     "model": {
+      "type": "string"
+     },
+     "rawScore": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "model",
+     "components",
+     "lowSeverityPoints",
+     "mediumSeverityPoints",
+     "highSeverityPoints",
+     "escalationBonus",
+     "escalationReasons",
+     "cappedBySeverity",
+     "rawScore",
+     "levelBands"
+    ],
+    "type": "object"
+   },
+   "summary": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "riskScore",
+   "riskLevel",
+   "decision",
+   "anomalyCount",
+   "anomalies",
+   "financialChecks",
+   "recommendedAction",
+   "summary",
+   "mode",
+   "contextUsed",
+   "invoiceSummary",
+   "dataCompleteness",
+   "scoring",
+   "limitations",
+   "asOfDate",
+   "checkedAt"
+  ],
+  "type": "object"
+ }
+}

@@ -1,0 +1,97 @@
+{
+ "_meta": {
+  "fastmcp": {
+   "tags": [
+    "Image Projects",
+    "generation",
+    "magic-hour",
+    "write-operation"
+   ]
+  }
+ },
+ "description": "Upscale your image using AI. Each 2x upscale costs 50 credits for balanced/creative modes, and 25 credits for preserve. 4x upscale costs 200 and 100 credits respectively.\n\nMCP guidance:\n- This starts an async image generation job and returns `id` plus `credits_charged` immediately. If the user wants the finished result, call the `wait_for_image_project` helper with the returned id, or poll the matching `GET /v1/image-projects/{id}` endpoint until status is `complete`, `error`, or `canceled`. Completed projects include `downloads` with direct URLs. The custom wait helper also returns `exact_download_urls` separately from expiration metadata.\n- For `*_file_path` values, prefer an existing Magic Hour file path or a `file_path` returned by the upload-URL endpoint after the file bytes are uploaded. Direct public media URLs may work when they are stable, fetchable, and return raw file bytes, but hotlinked URLs can fail; when in doubt, use the presigned upload flow first and pass the returned `file_path`.",
+ "inputSchema": {
+  "properties": {
+   "assets": {
+    "description": "Provide the assets for upscaling",
+    "properties": {
+     "image_file_path": {
+      "description": "The image to upscale. This value is either\n- a direct URL to the video file\n- `file_path` field from the response of the [upload urls API](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls).\n\nSee the [file upload guide](https://docs.magichour.ai/api-reference/files/generate-asset-upload-urls#input-file) for details.\n. The maximum input image size is 4096x4096px.",
+      "example": "api-assets/id/1234.png",
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "image_file_path"
+    ],
+    "type": "object"
+   },
+   "name": {
+    "default": "Image Upscaler - dateTime",
+    "description": "Give your image a custom name for easy identification.",
+    "example": "My Image Upscaler image",
+    "type": "string"
+   },
+   "scale_factor": {
+    "description": "How much to scale the image. Must be either 2 or 4.\n            \nNote: 4x upscale is only available on Creator, Pro, or Business tier.",
+    "example": 2,
+    "type": "number"
+   },
+   "style": {
+    "default": {},
+    "description": "Style settings for the upscale. Use `mode` (`\"preserve\"`, `\"balanced\"`, or `\"creative\"`). Defaults to `\"balanced\"`.",
+    "properties": {
+     "mode": {
+      "description": "The upscaling mode. `\"preserve\"` uses the fast pro pipeline (1\u00d7 credit multiplier). `\"balanced\"` and `\"creative\"` use the creative pipeline (2\u00d7 credit multiplier). `\"pro\"` is deprecated and maps to `\"preserve\"`. Defaults to `\"balanced\"`.",
+      "enum": [
+       "pro",
+       "preserve",
+       "balanced",
+       "creative"
+      ],
+      "example": "balanced",
+      "type": "string"
+     },
+     "prompt": {
+      "description": "A prompt to guide the final image. Only used when mode is `creative`.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "scale_factor",
+   "assets"
+  ],
+  "type": "object"
+ },
+ "name": "ai_image_upscaler_create_image",
+ "outputSchema": {
+  "description": "Success",
+  "properties": {
+   "credits_charged": {
+    "description": "The amount of credits deducted from your account to generate the image. We charge credits right when the request is made. \n\nIf an error occurred while generating the image(s), credits will be refunded and this field will be updated to include the refund.",
+    "example": 50,
+    "type": "integer"
+   },
+   "id": {
+    "description": "Unique ID of the image. Use it with the [Get image Project API](https://docs.magichour.ai/api-reference/image-projects/get-image-details) to fetch status and downloads.",
+    "example": "cuid-example",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id",
+   "credits_charged"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [],
+   "type": "oauth2"
+  }
+ ]
+}

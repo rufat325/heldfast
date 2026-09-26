@@ -1,0 +1,1270 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Use this when: a contract artifact (OpenAPI, GraphQL, protobuf, AsyncAPI, MCP manifests, or agent tool schemas) changes before merge, deploy, publish, or tool registration; AND any agent-executed operation with no supported contract type \u2014 send type agent_operation. Do not call for documentation-only changes, static readiness scoring, or receipt verification. Use analyze for risk only; authorize requires context.operation. Skipping this call is not permission. Absence of a key is not permission. Inputs: preflight_mode is required: \"analyze\" (risk only; no receipt, no execution_action) or \"authorize\" (may mint a receipt; requires context.operation \u2014 merge is not deploy is not publish). Supply exactly one artifact source: artifacts[] (1\u201320 items, each {id, type, before, after} as the FULL spec/schema text, not a path or URL; type is openapi|graphql|grpc|asyncapi|mcp_manifest|agent_tools|agent_operation) XOR derivation=\"server\" (server reads GitHub Compare; needs context.repository + context.base + context.head; sending artifacts[] together is 400). Grant fields sit in one object, execution_grant_request {include_execution_grant, grant_version, tenant_id, executor_id, adapter_id, target_uri, expected_state_token, state_nonce, audience, policy_hash}; analyze ignores it; required is preflight_mode only. previous_receipt is a chain token base64url(body).base64url(signature) to LINK a prior decision \u2014 it does not re-verify; use coderifts.verify_receipt instead; for details of a past decision use coderifts.get_decision_details instead. idempotency_key replays authorize only (24h), never analyze.",
+ "inputSchema": {
+  "if": {
+   "properties": {
+    "preflight_mode": {
+     "const": "authorize"
+    }
+   },
+   "required": [
+    "preflight_mode"
+   ]
+  },
+  "properties": {
+   "artifacts": {
+    "description": "1\u201320 contract documents analyzed together. Each item is {id, type, before, after} where before/after are the FULL document strings (YAML/JSON/proto text), not URLs or file paths. Omit this array entirely when derivation=\"server\".",
+    "items": {
+     "properties": {
+      "after": {
+       "description": "The proposed document as raw text, same kind as before. Must be the bytes you intend to merge/deploy/publish, not a diff.",
+       "type": "string"
+      },
+      "before": {
+       "description": "The baseline document as raw text (the spec/schema/manifest body). Empty string means \"no prior version\" (create), not \"load from disk\".",
+       "type": "string"
+      },
+      "id": {
+       "description": "Caller-chosen id, unique within the bundle",
+       "type": "string"
+      },
+      "type": {
+       "description": "Artifact kind. One of openapi, graphql, grpc, asyncapi, mcp_manifest, agent_tools, agent_operation. Contract types determine how before/after text is parsed. agent_operation: An opaque proposed agent operation for which no supported contract-artifact type applies. CodeRifts does not semantically analyze this content and does not issue an execution grant. Not inferred from the filename.",
+       "enum": [
+        "openapi",
+        "graphql",
+        "grpc",
+        "asyncapi",
+        "mcp_manifest",
+        "agent_tools",
+        "agent_operation"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "type",
+      "before",
+      "after"
+     ],
+     "type": "object"
+    },
+    "maxItems": 20,
+    "minItems": 1,
+    "type": "array"
+   },
+   "context": {
+    "description": "Optional apply-site context folded into the bundle fingerprint. operation distinguishes merge vs deploy vs publish (and other labels); the server accepts any non-empty string; conventional values: merge, deploy, tool_call, publish. The receipt/gate must match this label.",
+    "properties": {
+     "audience": {
+      "description": "Optional audience (IntentContext parity; REST/MCP accept, server-derived audience still wins on the envelope)",
+      "type": "string"
+     },
+     "base": {
+      "description": "Base commit/ref SHA the change set was computed against (optional; PR/commit identity)",
+      "type": "string"
+     },
+     "branch": {
+      "description": "Branch name (optional; fingerprint context)",
+      "type": "string"
+     },
+     "environment": {
+      "description": "Target environment (e.g. production, staging, npm) \u2014 optional; folded into fingerprint when set.",
+      "type": "string"
+     },
+     "fingerprint": {
+      "description": "Optional change fingerprint (IntentContext parity; not folded into the bundle fingerprint)",
+      "type": "string"
+     },
+     "head": {
+      "description": "Head commit/ref SHA of the proposed change (optional; PR/commit identity)",
+      "type": "string"
+     },
+     "operation": {
+      "description": "Application operation for this change set (fingerprint + envelope). Server accepts any non-empty string; conventional values: merge, deploy, tool_call, publish. Merge is not deploy is not publish \u2014 the receipt/gate must match this label.",
+      "type": "string"
+     },
+     "policy_profile": {
+      "description": "Policy profile name (optional; fingerprint context)",
+      "type": "string"
+     },
+     "pull_request": {
+      "description": "Pull request id when applicable (optional; fingerprint context)",
+      "oneOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "repository": {
+      "description": "Repository identity (optional; fingerprint context)",
+      "type": "string"
+     },
+     "target_id": {
+      "description": "Optional apply-site target (IntentContext parity; not folded into the bundle fingerprint)",
+      "type": "string"
+     },
+     "target_uri": {
+      "description": "Optional apply-site URI the cr.exec.v2 grant binds (handler fallback: input.target_uri, then context.target_uri, then repository/head-derived). Distinct from target_id.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "decision_spec_version": {
+    "description": "Optional. Omit or '2.0' = current contract. '1.0' retired (INVALID_INPUT); do not pin 1.0.",
+    "enum": [
+     "2.0"
+    ],
+    "type": "string"
+   },
+   "derivation": {
+    "description": "\"server\" = the server derives artifacts[] from GitHub Compare via the App installation. Allowed only when context.repository, context.base and context.head are all present and the tenant has a proven binding for that repository. Do not send artifacts[] in the same call (400 \u2014 one source of truth). Omit this field for the caller-supplied artifacts[] path.",
+    "enum": [
+     "server"
+    ],
+    "type": "string"
+   },
+   "execution_grant_request": {
+    "description": "Authorize + include_execution_grant only: the execution-grant request fields. Analyze ignores them. Flat root-level spellings are also accepted; the same field sent both ways with different values is INVALID_INPUT.",
+    "properties": {
+     "adapter_id": {
+      "description": "Authorize+grant v2 only. Adapter that will apply the change. Conventional values: fs, postgres, git. Must match the adapter the executor actually uses; a git grant does not authorize an fs write.",
+      "type": "string"
+     },
+     "audience": {
+      "description": "Requester identity for the decision envelope. Accepted here; the server-derived audience wins when both are present.",
+      "type": "string"
+     },
+     "executor_id": {
+      "description": "Authorize+grant v2 only. Executor identity the grant is bound to (example: agent:ci-bot, host:github-actions). Empty/absent is not \"any executor\".",
+      "type": "string"
+     },
+     "expected_state_token": {
+      "description": "Authorize+grant v2 only. Compare-and-swap token the executor must observe at apply time (the \"before\" state). Signed as its own field. Omit only if the adapter has no prior state; do not send a placeholder.",
+      "type": "string"
+     },
+     "grant_version": {
+      "description": "Grant envelope to mint when include_execution_grant is true. Omitting this yields cr.exec.v1 until 2026-09-18 and cr.exec.v2 on and after it (see x-coderifts-effective-default / x-coderifts-default-changes-at). The response meta.grant_version is the version actually issued. An explicit value always wins \u2014 pin \"v1\" to keep current behaviour with no code change on the date.",
+      "enum": [
+       "v1",
+       "v2"
+      ],
+      "type": "string",
+      "x-coderifts-default-changes-at": "2026-09-18",
+      "x-coderifts-effective-default": "v2"
+     },
+     "include_execution_grant": {
+      "description": "Authorize only. When true on an allow-class authorize, the response includes a signed execution_grant, or HTTP 503 SIGNER_UNAVAILABLE \u2014 never an unsigned grant. Default false. Analyze ignores this flag. Ignored unless preflight_mode=\"authorize\".",
+      "type": "boolean"
+     },
+     "policy_hash": {
+      "description": "Authorize+grant v2 only. Policy identity bound into the grant, sha256: + 64 hex. When supplied, apply must use that same policy; a different policy is a different grant.",
+      "type": "string"
+     },
+     "state_nonce": {
+      "description": "Authorize+grant only. Opaque nonce copied into the signed grant as its own field (not folded into scope_hash). Absent \u2192 BEARER grant. Ignored unless include_execution_grant is true.",
+      "type": "string"
+     },
+     "target_uri": {
+      "description": "Authorize+grant v2 only. URI the grant binds (example: git://owner/repo.git/refs/heads/main). Fallback if omitted: context.target_uri, then repository/head-derived. Distinct from context.target_id.",
+      "type": "string"
+     },
+     "tenant_id": {
+      "description": "Authorize+grant v2 only. Tenant the grant is issued under. ASCII slug. When omitted the server uses \"default\" \u2014 pin it if you are not on the default tenant.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "idempotency_key": {
+    "description": "Optional client key; in authorize mode, a repeat with the same key + body replays the original decision (24h). Analyze responses are not replayed.",
+    "type": "string"
+   },
+   "preflight_mode": {
+    "description": "REQUIRED. \"analyze\" = informational risk only (no decision/execution_action/safe_for_agent; analysis_outcome + may_execute:false). \"authorize\" = operation-bound path; may mint a receipt (requires context.operation). Decision Spec 2.0: omission is INVALID_INPUT. Do not pin 1.0 \u2014 that pin retired.",
+    "enum": [
+     "analyze",
+     "authorize"
+    ],
+    "type": "string"
+   },
+   "previous_receipt": {
+    "description": "Optional prior chain token to LINK this call into a receipt chain: base64url(body).base64url(signature). Linking is not verification \u2014 a linked token is not re-checked here; use verify_receipt.",
+    "type": "string"
+   },
+   "response_detail": {
+    "description": "How much of the response to return. control = the fields an agent branches on; standard = control + the human report and labelled break rows (the MCP default); full = everything (the REST default). Every value is copied from the full response.",
+    "enum": [
+     "control",
+     "standard",
+     "full"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "preflight_mode"
+  ],
+  "then": {
+   "properties": {
+    "context": {
+     "properties": {
+      "operation": {
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "operation"
+     ],
+     "type": "object"
+    }
+   },
+   "required": [
+    "context"
+   ]
+  },
+  "type": "object"
+ },
+ "name": "preflight_change_set",
+ "outputSchema": {
+  "oneOf": [
+   {
+    "additionalProperties": true,
+    "description": "ANALYZE mode (Decision Spec 2.0): informational only. MUST NOT contain decision, execution_action, safe_for_agent, chain_receipt, execution_grant, decision_result, control_envelope, or required_action_core. Branch on analysis_outcome; never treat as permission. Field set GENERATED from preflight-response.v2.producer.json (agent-facing allowlist).",
+    "not": {
+     "anyOf": [
+      {
+       "required": [
+        "decision"
+       ]
+      },
+      {
+       "required": [
+        "execution_action"
+       ]
+      },
+      {
+       "required": [
+        "safe_for_agent"
+       ]
+      },
+      {
+       "required": [
+        "chain_receipt"
+       ]
+      },
+      {
+       "required": [
+        "execution_grant"
+       ]
+      },
+      {
+       "required": [
+        "decision_result"
+       ]
+      },
+      {
+       "required": [
+        "control_envelope"
+       ]
+      },
+      {
+       "required": [
+        "required_action_core"
+       ]
+      }
+     ]
+    },
+    "properties": {
+     "analysis": {
+      "additionalProperties": true,
+      "description": "Tier-2 analysis mirror, assembled by the response builder alongside the control surface. Dual-write of the flat analysis fields present on the verdict, plus remediations[]. PROPERTIES ARE GENERATED \u2014 do not hand-edit them. OPEN BY DESIGN: additionalProperties stays TRUE and this is not an oversight. The fields above are copied conditionally, so which of them appear depends on the input \u2014 a verdict with no PII findings simply omits pii_findings. Closing this object would turn every future analysis field into a breaking change that fails inside the consumer, and would reject exactly the verdict paths that no one sampled when the union was built. Declared, not closed: you can now see what you may get, and you must still tolerate more.",
+      "properties": {
+       "breaking_changes": {
+        "type": "integer"
+       },
+       "breaking_changes_details": {
+        "type": "array"
+       },
+       "change_ir": {
+        "type": "array"
+       },
+       "changelog": {
+        "type": "array"
+       },
+       "compatibility_suggestions": {
+        "type": "array"
+       },
+       "coverage_gap": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "coverage_gap_reason": {
+        "type": "string"
+       },
+       "decision_basis": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "degraded": {
+        "type": "boolean"
+       },
+       "detected_patterns": {
+        "type": "array"
+       },
+       "evidence_quality": {
+        "type": "string"
+       },
+       "fallback_reason": {
+        "type": "string"
+       },
+       "non_breaking_changes": {
+        "type": "array"
+       },
+       "pattern_sources": {
+        "type": "array"
+       },
+       "patterns": {
+        "type": "array"
+       },
+       "pii_findings": {
+        "type": "array"
+       },
+       "policy_violations": {
+        "type": "array"
+       },
+       "remediations": {
+        "items": {
+         "additionalProperties": true,
+         "description": "One remediation for one detected breaking change. `instruction` is imperative prose that a model may read and act on; it is generated per input and is NOT a fixed string, so the schema declares that the field exists and does not pin its text.",
+         "properties": {
+          "change_type": {
+           "type": "string"
+          },
+          "effort": {
+           "type": "string"
+          },
+          "evidence": {
+           "additionalProperties": true,
+           "type": "object"
+          },
+          "instruction": {
+           "description": "Imperative remediation text. Model-visible. Generated per input; not a closed vocabulary.",
+           "type": "string"
+          },
+          "precise_label": {
+           "type": "string"
+          },
+          "recommended_transform": {
+           "type": "string"
+          },
+          "target": {
+           "type": "string"
+          },
+          "target_ref": {
+           "additionalProperties": true,
+           "type": "object"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "requires_migration": {
+        "type": "boolean"
+       },
+       "risk_dimensions": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "risk_level": {
+        "type": "string"
+       },
+       "risk_score": {
+        "type": "integer"
+       },
+       "security_findings": {
+        "type": "array"
+       },
+       "semver_suggestion": {
+        "type": "string"
+       },
+       "should_block": {
+        "type": "boolean"
+       },
+       "stats": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "token_cost_impact": {
+        "additionalProperties": true,
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "analysis_control": {
+      "type": "object"
+     },
+     "analysis_outcome": {
+      "description": "Closed analysis outcome set derived from engine-visible state only. NOT_SUPPORTED = no analyzer (agent_operation / type outside the published enum). ANALYSIS_FAILED = an analyzer ran and failed.",
+      "enum": [
+       "NO_BREAK_DETECTED",
+       "BREAKS_DETECTED",
+       "ANALYSIS_FAILED",
+       "NOT_SUPPORTED"
+      ],
+      "type": "string"
+     },
+     "artifacts": {
+      "type": "array"
+     },
+     "authorization_effect": {
+      "const": "NONE",
+      "description": "Analyze never authorizes; always NONE."
+     },
+     "blast_radius": {
+      "additionalProperties": false,
+      "description": "Additive COUNTS (not a score). Pure function of the change-set + request graphs. Not in the verdict_fingerprint preimage.",
+      "properties": {
+       "consumers_declared": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "consumers_observed": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "endpoints": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "fields": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "graph_source": {
+        "enum": [
+         "none",
+         "declared",
+         "observed",
+         "declared+observed"
+        ],
+        "type": "string"
+       },
+       "params": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "endpoints",
+       "fields",
+       "params",
+       "consumers_declared",
+       "consumers_observed",
+       "graph_source"
+      ],
+      "type": "object"
+     },
+     "breaking_changes": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "breaking_changes_details": {
+      "description": "Per-change IR/detail rows, mapped from the engine's change IR. Measured row keys: type, path, method, field, severity, description. Distinct from breaking_changes (integer count).",
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "description": {
+         "type": "string"
+        },
+        "field": {
+         "type": "string"
+        },
+        "method": {
+         "type": "string"
+        },
+        "path": {
+         "type": "string"
+        },
+        "severity": {
+         "type": "string"
+        },
+        "type": {
+         "description": "Change kind / IR type code (e.g. response.body.property.remove).",
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "bundle_fingerprint": {
+      "type": "string"
+     },
+     "calibration_version": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "decision_basis": {},
+     "decision_spec_version": {
+      "description": "Decision Spec major for this response (typically '2.0').",
+      "type": "string"
+     },
+     "detected_patterns": {
+      "description": "GOVERNANCE detector detail rows, emitted by the pattern detectors and validated against the decision-spec field contract before they leave the server. Row shape measured live: name, severity, description, consequence, affected_path, affected_field; optional side (request|response) on ENUM_NARROWING. Names \u2286 patterns (not equality). Agent-detector names may appear only in patterns. Free-text fields are untrusted.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "affected_field": {
+         "description": "Field within affected_path. Empty string when the detector had none \u2014 the key is always emitted.",
+         "type": "string"
+        },
+        "affected_path": {
+         "description": "Contract path this row is about. Empty string when the detector had none \u2014 the key is always emitted.",
+         "type": "string"
+        },
+        "consequence": {
+         "description": "What breaks for a consumer if this ships. Untrusted free text.",
+         "type": "string"
+        },
+        "description": {
+         "description": "What the detector matched. Untrusted free text.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Governance pattern name; appears in patterns when both are carried.",
+         "type": "string"
+        },
+        "severity": {
+         "description": "Row severity from the pattern catalog (observed set: CRITICAL, HIGH, MEDIUM). NOT a closed control enum \u2014 branch on execution_action, never on this.",
+         "type": "string"
+        },
+        "side": {
+         "description": "Optional; currently set on ENUM_NARROWING only. Request-side narrowing is agent-breaking (threaded so safe_for_agent can distinguish it). Absent when the detector did not set it.",
+         "enum": [
+          "request",
+          "response"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "severity",
+        "description",
+        "consequence",
+        "affected_path",
+        "affected_field"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "evidence": {
+      "type": "array"
+     },
+     "evidence_quality": {
+      "type": "string"
+     },
+     "human_report": {
+      "additionalProperties": false,
+      "description": "Human-readable report tier, assembled by the response builder; analyze returns a reduced form. Measured keys: summary, breaking_highlights, suggestions, next_steps_prose.",
+      "properties": {
+       "breaking_highlights": {
+        "type": "array"
+       },
+       "next_steps_prose": {
+        "type": "string"
+       },
+       "suggestions": {
+        "type": "array"
+       },
+       "summary": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "may_execute": {
+      "const": false,
+      "description": "Analyze never grants execute permission."
+     },
+     "operation": {},
+     "pattern_sources": {
+      "type": "array"
+     },
+     "patterns": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "policy_pin_status": {
+      "additionalProperties": true,
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "preflight_mode": {
+      "const": "analyze"
+     },
+     "receipt_kind": {
+      "const": "NONE",
+      "description": "Analyze never mints a receipt."
+     },
+     "requires_migration": {
+      "type": "boolean"
+     },
+     "risk_score": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "scorer_version": {
+      "description": "Fingerprint-bound scorerVersion() (observation; not permission).",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "severity_summary": {
+      "additionalProperties": false,
+      "description": "Bundle severity axes, computed once per change set. Distinct axes, not contradictory. Measured keys: diff_severity, governance_severity, policy_effect, note.",
+      "properties": {
+       "diff_severity": {
+        "description": "Structural size of the schema change.",
+        "type": "string"
+       },
+       "governance_severity": {
+        "description": "How the rule engine rates the change.",
+        "type": "string"
+       },
+       "note": {
+        "type": "string"
+       },
+       "policy_effect": {
+        "description": "Resulting decision effect label.",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "timestamp": {
+      "type": "string"
+     },
+     "verdict_fingerprint": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "preflight_mode",
+     "analysis_outcome",
+     "authorization_effect",
+     "may_execute",
+     "receipt_kind",
+     "decision_spec_version"
+    ],
+    "type": "object"
+   },
+   {
+    "additionalProperties": true,
+    "allOf": [
+     {
+      "if": {
+       "properties": {
+        "receipt_kind": {
+         "const": "operation_authorization"
+        }
+       },
+       "required": [
+        "receipt_kind"
+       ]
+      },
+      "then": {
+       "required": [
+        "chain_receipt"
+       ]
+      }
+     },
+     {
+      "if": {
+       "properties": {
+        "execution_action": {
+         "enum": [
+          "CONTINUE",
+          "CONTINUE_WITH_MONITORING"
+         ]
+        }
+       },
+       "required": [
+        "execution_action"
+       ]
+      },
+      "then": {
+       "properties": {
+        "receipt_kind": {
+         "const": "operation_authorization"
+        }
+       },
+       "required": [
+        "receipt_kind",
+        "chain_receipt",
+        "decision_result"
+       ]
+      }
+     }
+    ],
+    "description": "AUTHORIZE mode: operation-bound decision. Branch on execution_action (not decision, not safe_for_agent). Field set GENERATED from preflight-response.v2.producer.json (agent-facing allowlist). Compatibility: https://coderifts.com/schemas/decision-result.v1.consumer.json",
+    "properties": {
+     "analysis": {
+      "additionalProperties": true,
+      "properties": {
+       "breaking_changes": {
+        "type": "integer"
+       },
+       "breaking_changes_details": {
+        "type": "array"
+       },
+       "change_ir": {
+        "type": "array"
+       },
+       "changelog": {
+        "type": "array"
+       },
+       "compatibility_suggestions": {
+        "type": "array"
+       },
+       "coverage_gap": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "coverage_gap_reason": {
+        "type": "string"
+       },
+       "decision_basis": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "degraded": {
+        "type": "boolean"
+       },
+       "detected_patterns": {
+        "type": "array"
+       },
+       "evidence_quality": {
+        "type": "string"
+       },
+       "fallback_reason": {
+        "type": "string"
+       },
+       "non_breaking_changes": {
+        "type": "array"
+       },
+       "pattern_sources": {
+        "type": "array"
+       },
+       "patterns": {
+        "type": "array"
+       },
+       "pii_findings": {
+        "type": "array"
+       },
+       "policy_violations": {
+        "type": "array"
+       },
+       "remediations": {
+        "items": {
+         "additionalProperties": true,
+         "properties": {
+          "change_type": {
+           "type": "string"
+          },
+          "effort": {
+           "type": "string"
+          },
+          "evidence": {
+           "additionalProperties": true,
+           "type": "object"
+          },
+          "instruction": {
+           "type": "string"
+          },
+          "precise_label": {
+           "type": "string"
+          },
+          "recommended_transform": {
+           "type": "string"
+          },
+          "target": {
+           "type": "string"
+          },
+          "target_ref": {
+           "additionalProperties": true,
+           "type": "object"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "requires_migration": {
+        "type": "boolean"
+       },
+       "risk_dimensions": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "risk_level": {
+        "type": "string"
+       },
+       "risk_score": {
+        "type": "integer"
+       },
+       "security_findings": {
+        "type": "array"
+       },
+       "semver_suggestion": {
+        "type": "string"
+       },
+       "should_block": {
+        "type": "boolean"
+       },
+       "stats": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "token_cost_impact": {
+        "additionalProperties": true,
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "artifacts": {
+      "type": "array"
+     },
+     "blast_radius": {
+      "additionalProperties": false,
+      "properties": {
+       "consumers_declared": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "consumers_observed": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "endpoints": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "fields": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "graph_source": {
+        "enum": [
+         "none",
+         "declared",
+         "observed",
+         "declared+observed"
+        ],
+        "type": "string"
+       },
+       "params": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "endpoints",
+       "fields",
+       "params",
+       "consumers_declared",
+       "consumers_observed",
+       "graph_source"
+      ],
+      "type": "object"
+     },
+     "breaking_changes": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "breaking_changes_details": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "description": {
+         "type": "string"
+        },
+        "field": {
+         "type": "string"
+        },
+        "method": {
+         "type": "string"
+        },
+        "path": {
+         "type": "string"
+        },
+        "severity": {
+         "type": "string"
+        },
+        "type": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "bundle_fingerprint": {
+      "type": "string"
+     },
+     "calibration_version": {
+      "description": "Calibration model version when set; null until a calibrated model ships.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "chain_receipt": {
+      "type": "string"
+     },
+     "chain_status": {
+      "type": "string"
+     },
+     "coderifts_version": {
+      "type": "string"
+     },
+     "control_envelope": {
+      "description": "Branch source (control/1.0). Machine-control surface from attachControlSurface / buildControlEnvelope. Agents and @coderifts/agent-guard branch on control_envelope.execution_action. Top-level decision/safe_for_agent/execution_action mirror these values for compatibility. Includes next_agent_step (structured remediation SUGGESTION derived from execution_action + required_action; null on CONTINUE*; not permission \u2014 still branch on execution_action).",
+      "type": "object"
+     },
+     "decision": {
+      "description": "Compatibility mirror of control_envelope.decision (same value). Prefer control_envelope for branching; use decision as explanation only.",
+      "enum": [
+       "ALLOW",
+       "WARN",
+       "REQUIRE_APPROVAL",
+       "BLOCK"
+      ],
+      "type": "string"
+     },
+     "decision_basis": {},
+     "decision_result": {
+      "additionalProperties": true,
+      "description": "decision-result.v1 envelope (control enums closed). Additive fields may appear and are not permission. Full schema: https://coderifts.com/schemas/decision-result.v1.consumer.json (producer: https://coderifts.com/schemas/decision-result.v1.producer.json).",
+      "properties": {
+       "audience": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "authority": {
+        "description": "Additive. { audience, tenant_scope: bound|unbound, binding_proven_at? }. Informational \u2014 not permission, not a verify-receipt gate, not an ACL.",
+        "type": [
+         "object",
+         "null"
+        ]
+       },
+       "base": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "blast_radius": {
+        "description": "Additive COUNTS (not a score). Not permission.",
+        "properties": {
+         "consumers_declared": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "consumers_observed": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "endpoints": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "fields": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "graph_source": {
+          "type": "string"
+         },
+         "params": {
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "decision": {
+        "enum": [
+         "ALLOW",
+         "WARN",
+         "REQUIRE_APPROVAL",
+         "BLOCK"
+        ],
+        "type": "string"
+       },
+       "decision_body_hash": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "decision_id": {
+        "type": "string"
+       },
+       "derivation": {
+        "description": "Additive. Present only when derivation:\"server\" produced this envelope. { source, platform?, base_sha, head_sha }. Covered by body_hash; not fingerprint.",
+        "type": [
+         "object",
+         "null"
+        ]
+       },
+       "environment": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "execution_action": {
+        "enum": [
+         "CONTINUE",
+         "CONTINUE_WITH_MONITORING",
+         "REQUEST_APPROVAL",
+         "STOP"
+        ],
+        "type": "string"
+       },
+       "expires_at": {
+        "type": "string"
+       },
+       "fingerprint": {
+        "type": "string"
+       },
+       "head": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "input_fingerprint": {
+        "type": "string"
+       },
+       "operation": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "receipt": {
+        "type": "object"
+       },
+       "repository": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "safe_for_agent": {
+        "type": "boolean"
+       },
+       "spec_version": {
+        "pattern": "^decision-result\\.v1(\\.[0-9]+)?$",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "decision_spec_version": {
+      "type": "string"
+     },
+     "detected_patterns": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "affected_field": {
+         "type": "string"
+        },
+        "affected_path": {
+         "type": "string"
+        },
+        "consequence": {
+         "type": "string"
+        },
+        "description": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "severity": {
+         "type": "string"
+        },
+        "side": {
+         "enum": [
+          "request",
+          "response"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "severity",
+        "description",
+        "consequence",
+        "affected_path",
+        "affected_field"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "evidence": {
+      "type": "array"
+     },
+     "evidence_quality": {
+      "type": "string"
+     },
+     "execution_action": {
+      "description": "Compatibility mirror of control_envelope.execution_action (same value). Canonical branch key; unrecognised values are not permission (fail closed).",
+      "enum": [
+       "CONTINUE",
+       "CONTINUE_WITH_MONITORING",
+       "REQUEST_APPROVAL",
+       "STOP"
+      ],
+      "type": "string"
+     },
+     "execution_grant": {
+      "description": "Opt-in cr.exec.v1 execution grant (PHASE-0). Issued only when include_execution_grant is true on authorize. Short-lived mutation-bound sibling of chain_receipt; never unsigned. Optional inner state_nonce (ATOMIC profile) is additive and is NOT in scope_hash.",
+      "type": "string"
+     },
+     "human_report": {
+      "additionalProperties": false,
+      "properties": {
+       "breaking_highlights": {
+        "type": "array"
+       },
+       "next_steps_prose": {
+        "type": "string"
+       },
+       "suggestions": {
+        "type": "array"
+       },
+       "summary": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "operation": {},
+     "pattern_sources": {
+      "type": "array"
+     },
+     "patterns": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "policy_pin_status": {
+      "additionalProperties": true,
+      "description": "policy_pin observation (898). match null=no pin; false=drift warning (non-blocking).",
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "preflight_mode": {
+      "const": "authorize"
+     },
+     "receipt_kind": {
+      "description": "operation_authorization when a chain receipt was issued; NONE if signer unconfigured.",
+      "enum": [
+       "operation_authorization",
+       "NONE"
+      ],
+      "type": "string"
+     },
+     "requires_migration": {
+      "type": "boolean"
+     },
+     "risk_score": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "safe_for_agent": {
+      "description": "Compatibility mirror of control_envelope.safe_for_agent (same value). Not a branch key \u2014 do not branch on safe_for_agent (use execution_action).",
+      "type": "boolean"
+     },
+     "scorer_version": {
+      "description": "Fingerprint-bound scorerVersion() (same as decision_result.scorer_version / FP preimage).",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "severity_summary": {
+      "additionalProperties": false,
+      "properties": {
+       "diff_severity": {
+        "type": "string"
+       },
+       "governance_severity": {
+        "type": "string"
+       },
+       "note": {
+        "type": "string"
+       },
+       "policy_effect": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "timestamp": {
+      "type": "string"
+     },
+     "verdict_fingerprint": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "preflight_mode",
+     "decision",
+     "execution_action",
+     "safe_for_agent",
+     "receipt_kind",
+     "decision_spec_version"
+    ],
+    "type": "object"
+   }
+  ],
+  "type": "object"
+ }
+}
