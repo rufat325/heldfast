@@ -92,3 +92,97 @@ class TestReplyOrdering(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestHostedEras(unittest.TestCase):
+    """Over HTTP, where the two eras cannot be sent together.
+
+    Until this, hosted servers were only ever asked `initialize`: a server
+    that speaks nothing but 2026-07-28 read as broken to `--probe`, to
+    `verify`, and to the drift feed, which had recorded it that way.
+    """
+
+    def setUp(self) -> None:
+        sys.path.insert(0, str(ROOT / "tests" / "fixtures"))
+        sys.path.insert(0, str(ROOT / "research" / "feed"))
+        import http_server
+        self.fixture = http_server
+
+    def probe_url(self, url: str):
+        spec = ServerSpec(name="notes", source="<test>", client="test", transport="http",
+                          url=url)
+        return probe_mod.probe_http(spec, timeout=10)
+
+    def test_a_modern_only_server_is_read(self) -> None:
+        with self.fixture.serve(era="modern") as url:
+            r = self.probe_url(url)
+            asked = self.fixture.requests_made()
+        self.assertIsNone(r.error)
+        self.assertEqual(("modern", ["2026-07-28"]), (r.protocol_era, r.supported_versions))
+        self.assertEqual(["list_invoices", "read_invoice"], sorted(t.name for t in r.tools))
+        self.assertIn("read-only", r.instructions)
+        listed = next(a for a in asked if a["method"] == "tools/list")
+        self.assertEqual("2026-07-28", listed["version"])
+        self.assertEqual("2026-07-28",
+                         listed["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"])
+        self.assertNotIn("initialize", [a["method"] for a in asked])
+
+    def test_a_legacy_server_that_errors_on_discover_falls_back(self) -> None:
+        with self.fixture.serve() as url:
+            r = self.probe_url(url)
+        self.assertEqual(("legacy", None), (r.protocol_era, r.error))
+        self.assertTrue(r.tools)
+
+    def test_a_legacy_server_that_answers_discover_with_an_http_error_falls_back(self) -> None:
+        for status in (400, 404, 405):
+            with self.subTest(status):
+                with self.fixture.serve(discover_status=status) as url:
+                    r = self.probe_url(url)
+                self.assertEqual(("legacy", None), (r.protocol_era, r.error))
+
+    def test_the_watcher_reads_both_eras_and_records_which(self) -> None:
+        import watch
+        for era, expected in (("modern", "2026-07-28"), ("legacy", "2025-06-18")):
+            with self.subTest(era):
+                seen: dict = {}
+                with self.fixture.serve(era=era) as url:
+                    tools, why = watch.measure_remote(url, timeout=10, seen=seen)
+                self.assertIsNone(why)
+                self.assertTrue(tools)
+                self.assertEqual(expected, seen["protocol"])
+
+
+class TestWatcherStdioEras(unittest.TestCase):
+    """The drift feed launches npm servers with its own client (measure.py)."""
+
+    def catalogue(self, script: Path) -> tuple:
+        import os
+        import tempfile
+        from unittest import mock
+        sys.path.insert(0, str(ROOT / "research" / "churn"))
+        import measure
+        tmp = tempfile.mkdtemp()
+        # Stands in for npx: whatever it is asked to run, it runs the fixture.
+        if os.name == "nt":
+            shim = Path(tmp) / "npx.cmd"
+            shim.write_text(f'@"{sys.executable}" "{script}"\n', encoding="utf-8")
+        else:
+            shim = Path(tmp) / "npx"
+            shim.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}"\n', encoding="utf-8")
+            shim.chmod(0o755)
+        seen: dict = {}
+        with mock.patch.object(measure.shutil, "which", return_value=str(shim)):
+            tools, why = measure.catalogue("pkg", "1.0.0", [], [], boot_timeout=30, seen=seen)
+        return tools, why, seen
+
+    def test_a_modern_only_server_is_measured(self) -> None:
+        tools, why, seen = self.catalogue(MODERN)
+        self.assertIsNone(why)
+        self.assertEqual(["read_note"], [t["name"] for t in tools])
+        self.assertEqual("2026-07-28", seen["protocol"])
+
+    def test_a_legacy_server_still_is(self) -> None:
+        tools, why, seen = self.catalogue(LEGACY)
+        self.assertIsNone(why)
+        self.assertTrue(tools)
+        self.assertNotEqual("2026-07-28", seen["protocol"])

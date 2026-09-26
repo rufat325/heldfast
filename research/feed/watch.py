@@ -457,6 +457,17 @@ class Budget:
             return True
 
 
+# 2: both protocol eras. A server that never answered `initialize` may only
+# speak 2026-07-28; those failures, recorded before this, get one more try.
+HANDSHAKE = 2
+_HANDSHAKE_FAILURES = ("no initialize answer", "initialized, no tools/list answer")
+
+
+def _handshake_retry(attempted: dict) -> bool:
+    return (attempted.get("handshake", 1) < HANDSHAKE
+            and str(attempted.get("why") or "").startswith(_HANDSHAKE_FAILURES))
+
+
 def check_one(data: str, row: dict, budget: Budget | None = None) -> dict | None:
     """Measure the newest stable release if it is new. Returns an event or None."""
     import measure
@@ -472,8 +483,10 @@ def check_one(data: str, row: dict, budget: Budget | None = None) -> dict | None
     if version == state.get("version") or not SAFE_VERSION.match(version):
         return None
     # A release that already failed to start is not retried every day; the
-    # next release gets a fresh attempt.
-    if (state.get("attempted") or {}).get("version") == version:
+    # next release gets a fresh attempt -- unless it failed in a way the
+    # handshake explains and was tried before the watcher spoke 2026-07-28.
+    attempted = state.get("attempted") or {}
+    if attempted.get("version") == version and not _handshake_retry(attempted):
         return None
     if budget is not None and not budget.take():
         return None
@@ -481,15 +494,19 @@ def check_one(data: str, row: dict, budget: Budget | None = None) -> dict | None
     if package.endswith("/server-filesystem"):
         import tempfile
         tail = [tempfile.gettempdir()]
-    tools, why = measure.catalogue(package, version, tail, row.get("required_env") or [])
+    seen: dict = {}
+    tools, why = measure.catalogue(package, version, tail, row.get("required_env") or [],
+                                   seen=seen)
     if tools is None:
-        state["attempted"] = {"version": version, "at": now(), "why": why}
+        state["attempted"] = {"version": version, "at": now(), "why": why,
+                              "handshake": HANDSHAKE}
         save_state(data, package, state)
         print(f"  {package}@{version}: {why}", flush=True)
         return None
     after = snapshot(package, version, published, tools)
     before = load_snapshot(data, package, state["version"]) if state.get("version") else None
-    write_catalogue(data, after, tail, measured_at=now())
+    write_catalogue(data, after, tail, measured_at=now(),
+                    extra={"protocol": seen["protocol"]} if seen.get("protocol") else None)
     event = diff(before, after, observed_at=now()) if before else None
     save_state(data, package, dict(after, checked_at=now()))
     print(f"  {package} {state.get('version') or '(first)'} -> {version}: "
@@ -544,19 +561,26 @@ def check(args: argparse.Namespace) -> int:
 
 # -- check-remote ----------------------------------------------------------
 
-def measure_remote(url: str, timeout: float = 20.0) -> tuple[list | None, str | None]:
-    """(raw tools, None) or (None, why), over Streamable HTTP. Runs nothing."""
+def measure_remote(url: str, timeout: float = 20.0,
+                   seen: dict | None = None) -> tuple[list | None, str | None]:
+    """(raw tools, None) or (None, why), over Streamable HTTP. Runs nothing.
+
+    Speaks both protocol eras, through the same handshake `--probe` uses:
+    `server/discover` first, `initialize` when that is not answered. A server
+    that only speaks 2026-07-28 never answers `initialize`, so reading every
+    endpoint the old way recorded those servers as broken. `seen["protocol"]`
+    gets the version the conversation ran in.
+    """
     import http.client
     import urllib.error
-    from heldfast.probe import SESSION_HEADER, _initialize_params, _post_jsonrpc, post_rpc
+    from heldfast.probe import (PROTOCOL_VERSION, HandshakeFailed, _post_jsonrpc,
+                                http_handshake, request_params)
     try:
-        init, headers = post_rpc(url, {}, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                                           "params": _initialize_params()}, timeout)
-        if "error" in init:
-            return None, "initialize failed"
-        onward = {k: v for k, v in headers.items() if k.lower() == SESSION_HEADER.lower() and v}
-        listed = _post_jsonrpc(url, onward, {"jsonrpc": "2.0", "id": 2,
-                                             "method": "tools/list", "params": {}}, timeout)
+        init, onward, era = http_handshake(url, {}, timeout)
+        listed = _post_jsonrpc(url, onward, {"jsonrpc": "2.0", "id": 2, "method": "tools/list",
+                                             "params": request_params(era)}, timeout)
+    except HandshakeFailed:
+        return None, "initialize failed"
     except urllib.error.HTTPError as exc:
         return None, f"HTTP {exc.code}"
     except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:
@@ -566,6 +590,9 @@ def measure_remote(url: str, timeout: float = 20.0) -> tuple[list | None, str | 
         return None, "no tools/list answer"
     if len(json.dumps(tools)) > MAX_REMOTE_BYTES:
         return None, "catalogue too large to read"
+    if seen is not None:
+        answered = (init.get("result") or {}).get("protocolVersion")
+        seen["protocol"] = PROTOCOL_VERSION if era == "modern" else str(answered or "legacy")
     return tools, None
 
 
@@ -573,7 +600,8 @@ def check_remote_one(data: str, row: dict) -> dict | None:
     """Read one hosted endpoint; record it only if what it says has moved."""
     key, stamp = row["package"], now()
     state = load_state(data, key) or {"package": key, "tools": {}}
-    tools, why = measure_remote(row["url"])
+    seen: dict = {}
+    tools, why = measure_remote(row["url"], seen=seen)
     if tools is None:
         # Written once per reason, not once per day: an endpoint that has
         # wanted a login for a month is one fact, not thirty.
@@ -591,7 +619,9 @@ def check_remote_one(data: str, row: dict) -> dict | None:
             save_state(data, key, state)
         return None
     before = load_snapshot(data, key, state["version"]) if state.get("version") else None
-    write_catalogue(data, after, [], measured_at=stamp, extra={"url": row["url"]})
+    write_catalogue(data, after, [], measured_at=stamp,
+                    extra={"url": row["url"], **({"protocol": seen["protocol"]}
+                                                 if seen.get("protocol") else {})})
     event = diff(before, after, observed_at=stamp) if before else None
     save_state(data, key, dict(after, url=row["url"]))
     return event

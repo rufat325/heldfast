@@ -52,6 +52,13 @@ class _Handler(BaseHTTPRequestHandler):
     mode = "benign"
     sse = False
     require_session = True
+    # "legacy": the initialize handshake. "modern": 2026-07-28 only --
+    # server/discover, per-request _meta, and initialize refused.
+    era = "legacy"
+    # What a legacy server does with server/discover before any session:
+    # 0 answers a JSON-RPC error; an HTTP status answers that status instead.
+    discover_status = 0
+    requests: list[dict[str, Any]] = []
     seen_sessions: list[str] = []
     calls: list[dict[str, Any]] = []
 
@@ -84,6 +91,15 @@ class _Handler(BaseHTTPRequestHandler):
         method = message.get("method")
         request_id = message.get("id")
         type(self).seen_sessions.append(self.headers.get("Mcp-Session-Id") or "")
+        type(self).requests.append({"method": method, "params": message.get("params"),
+                                    "version": self.headers.get("MCP-Protocol-Version")})
+        if self.era == "modern":
+            self._modern(method, request_id, message.get("params") or {})
+            return
+        if method == "server/discover" and self.discover_status:
+            self.send_response(self.discover_status)
+            self.end_headers()
+            return
 
         if method == "initialize":
             self._write({"jsonrpc": "2.0", "id": request_id, "result": {
@@ -124,12 +140,38 @@ class _Handler(BaseHTTPRequestHandler):
                      "error": {"code": -32601, "message": f"no {method}"}})
 
 
+    def _modern(self, method: str, request_id: Any, params: dict[str, Any]) -> None:
+        """2026-07-28: no handshake; every request states its version in _meta."""
+        if method == "server/discover":
+            self._write({"jsonrpc": "2.0", "id": request_id, "result": {
+                "serverInfo": {"name": "hosted-notes", "version": "2.0.0"},
+                "capabilities": {"tools": {}},
+                "supportedVersions": ["2026-07-28"],
+                "instructions": BENIGN_INSTRUCTIONS}})
+            return
+        meta = params.get("_meta") or {}
+        if meta.get("io.modelcontextprotocol/protocolVersion") != "2026-07-28":
+            self._write({"jsonrpc": "2.0", "id": request_id, "error": {
+                "code": -32600, "message": "no protocol version in _meta"}})
+            return
+        if method == "tools/list":
+            self._write({"jsonrpc": "2.0", "id": request_id,
+                         "result": {"tools": _tools(self.mode)}})
+            return
+        self._write({"jsonrpc": "2.0", "id": request_id,
+                     "error": {"code": -32601, "message": f"no {method}"}})
+
+
 @contextlib.contextmanager
-def serve(mode: str = "benign", *, sse: bool = False, require_session: bool = True):
+def serve(mode: str = "benign", *, sse: bool = False, require_session: bool = True,
+          era: str = "legacy", discover_status: int = 0):
     """Run the stub on loopback and yield its URL."""
     _Handler.mode = mode
     _Handler.sse = sse
     _Handler.require_session = require_session
+    _Handler.era = era
+    _Handler.discover_status = discover_status
+    _Handler.requests = []
     _Handler.seen_sessions = []
     _Handler.calls = []
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
@@ -158,3 +200,7 @@ def sessions_seen() -> list[str]:
 
 def calls_made() -> list[dict[str, Any]]:
     return list(_Handler.calls)
+
+
+def requests_made() -> list[dict[str, Any]]:
+    return list(_Handler.requests)

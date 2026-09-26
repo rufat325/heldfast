@@ -131,6 +131,17 @@ class TestCheckSkips(unittest.TestCase):
         self._run(state, "2.0.0").assert_not_called()
         self._run(None, "2.0.1").assert_called_once()
 
+    def test_a_release_the_old_handshake_could_not_open_gets_one_more_try(self) -> None:
+        """Recorded before the watcher spoke 2026-07-28: a modern-only server
+        never answers initialize, so that failure says nothing about it."""
+        state = {"package": "pkg", "tools": {}, "attempted": {
+            "version": "2.0.0", "why": "no initialize answer in 240s: "}}
+        self._run(state, "2.0.0").assert_called_once()
+        self._run(None, "2.0.0").assert_not_called()   # now recorded with handshake 2
+        other = {"package": "pkg", "tools": {}, "attempted": {
+            "version": "3.0.0", "why": "exited 1 before initialize: missing API key"}}
+        self._run(other, "3.0.0").assert_not_called()
+
     def test_a_first_measurement_records_state_and_no_event(self) -> None:
         self._run(None, "1.0.0").assert_called_once()
         self.assertEqual("1.0.0", watch.load_state(self.data, "pkg")["version"])
@@ -523,7 +534,7 @@ class TestIsolation(unittest.TestCase):
         with open(os.path.join(self.data, "watchlist.json"), "w", encoding="utf-8") as fh:
             json.dump({"packages": rows}, fh)
 
-        def flaky(url, timeout=20.0):
+        def flaky(url, timeout=20.0, seen=None):
             if url.endswith(("/1", "/4")):
                 raise RuntimeError("malformed answer")
             return [tool("read", APPROVED)], None

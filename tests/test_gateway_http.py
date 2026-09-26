@@ -262,8 +262,11 @@ class TestTheScannerCarriesTheSessionToo(unittest.TestCase):
         with http_server.serve() as url:
             probe_http(hosted(url), timeout=10)
         seen = http_server.sessions_seen()
-        self.assertGreater(len(seen), 1, "nothing followed initialize")
-        self.assertTrue(all(v == http_server.SESSION_ID for v in seen[1:]), seen)
+        # server/discover is asked first, before any session exists.
+        methods = [r["method"] for r in http_server.requests_made()]
+        after = seen[methods.index("initialize") + 1:]
+        self.assertTrue(after, "nothing followed initialize")
+        self.assertTrue(all(v == http_server.SESSION_ID for v in after), seen)
 
 
 if __name__ == "__main__":

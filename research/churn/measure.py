@@ -126,8 +126,16 @@ def stop(p):
             pass
 
 
-def catalogue(package, version, argv_tail, required, boot_timeout=240):
-    """(tools, why). tools is None when the catalogue could not be read."""
+def catalogue(package, version, argv_tail, required, boot_timeout=240, seen=None):
+    """(tools, why). tools is None when the catalogue could not be read.
+
+    Speaks both protocol eras the way `--probe` does: `server/discover` and
+    `initialize` are sent together and whichever is answered decides. A
+    server that only speaks 2026-07-28 never answers `initialize`, so asking
+    only that recorded it as "no initialize answer" after four minutes.
+    `seen["protocol"]` gets the version the conversation ran in.
+    """
+    from heldfast.probe import PROTOCOL_VERSION, _modern_meta
     npx = shutil.which("npx") or shutil.which("npx.cmd")
     if not npx:
         return None, "npx not found"
@@ -162,7 +170,9 @@ def catalogue(package, version, argv_tail, required, boot_timeout=240):
                     m = json.loads(line)
                 except ValueError:
                     continue
-                if m.get("id") == 1:
+                if m.get("id") == 0 and isinstance(m.get("result"), dict):
+                    got["discover"] = m["result"]
+                elif m.get("id") == 1:
                     got["init"] = m.get("result") or {"error": m.get("error")}
                 elif m.get("id") == 2:
                     if "error" in m:
@@ -190,16 +200,26 @@ def catalogue(package, version, argv_tail, required, boot_timeout=240):
         except OSError:
             pass
 
+    send({"jsonrpc": "2.0", "id": 0, "method": "server/discover",
+          "params": {"_meta": _modern_meta()}})
     send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
         "protocolVersion": "2025-06-18", "capabilities": {},
         "clientInfo": {"name": "heldfast-churn", "version": "2"}}})
     t0 = time.time()
-    while "init" not in got and p.poll() is None and time.time() - t0 < boot_timeout:
+    while ("init" not in got and "discover" not in got and p.poll() is None
+           and time.time() - t0 < boot_timeout):
         time.sleep(0.1)
-    if "init" in got:
+    # An error answering initialize is how a modern-only server says no.
+    modern = "discover" in got and ("init" not in got or "error" in got["init"])
+    if modern:
+        got["init"] = got["discover"]
+        send({"jsonrpc": "2.0", "id": 2, "method": "tools/list",
+              "params": {"_meta": _modern_meta()}})
+    elif "init" in got:
         send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         time.sleep(0.4)
         send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+    if "init" in got:
         t0 = time.time()
         while ("tools" not in got and "tools_error" not in got
                and p.poll() is None and time.time() - t0 < 60):
@@ -209,6 +229,9 @@ def catalogue(package, version, argv_tail, required, boot_timeout=240):
     shutil.rmtree(workdir, ignore_errors=True)
 
     if "tools" in got:
+        if seen is not None:
+            answered = (got.get("init") or {}).get("protocolVersion")
+            seen["protocol"] = PROTOCOL_VERSION if modern else str(answered or "2025-06-18")
         return got["tools"], None
     tail = " | ".join(err[-3:])[-300:]
     if "tools_error" in got:

@@ -435,6 +435,59 @@ def _post_jsonrpc(url: str, headers: dict[str, str], payload: dict[str, Any],
     return post_rpc(url, headers, payload, timeout)[0]
 
 
+# What a 2026-07-28 request carries over HTTP beside the `_meta` in its body.
+VERSION_HEADER = "MCP-Protocol-Version"
+
+
+class HandshakeFailed(Exception):
+    """The server answered, and refused to open a conversation."""
+
+
+def http_handshake(url: str, headers: dict[str, str],
+                   timeout: float) -> tuple[dict[str, Any], dict[str, str], str]:
+    """Open a Streamable HTTP conversation in whichever era the server speaks.
+
+    Returns (the handshake reply, the headers every later request needs,
+    "modern" or "legacy"). Over HTTP each request is its own exchange, so the
+    two eras cannot be pipelined the way stdio does. `server/discover` goes
+    first, as the spec says a dual-era client should; anything short of a
+    result -- an error object, an HTTP error status, a body that is not
+    JSON-RPC -- falls back to `initialize`. The fallback is not keyed to one
+    error code: a legacy server answers a method it does not know however it
+    likes, often with 400 for want of a session. A connection that fails
+    outright is not retried as legacy: a dead host is dead in both eras, and
+    trying twice would only double the wait.
+    """
+    try:
+        found, _ = post_rpc(url, headers, {"jsonrpc": "2.0", "id": 0, "method": "server/discover",
+                                           "params": {"_meta": _modern_meta()}}, timeout)
+    except urllib.error.HTTPError as exc:
+        exc.close()
+        found = {}
+    if isinstance(found.get("result"), dict):
+        onward = dict(headers)
+        onward[VERSION_HEADER] = PROTOCOL_VERSION
+        return found, onward, "modern"
+    init, got = post_rpc(url, headers, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                                        "params": _initialize_params()}, timeout)
+    if "error" in init:
+        raise HandshakeFailed(f"initialize failed: {init['error']}")
+    # Streamable HTTP hands out a session on initialize and requires it on
+    # everything after. Without this the probe worked against servers that
+    # do not bother and failed on every server that does -- which reads as
+    # "the endpoint is broken" and is the scanner's fault. Found when the
+    # gateway gained the same transport and a stub enforced the rule.
+    onward = dict(headers)
+    onward.update({k: v for k, v in got.items() if k.lower() == SESSION_HEADER.lower() and v})
+    return init, onward, "legacy"
+
+
+def request_params(era: str) -> dict[str, Any]:
+    """Params for a request after the handshake: 2026-07-28 carries its version
+    on every request, the handshake era carried it once."""
+    return {"_meta": _modern_meta()} if era == "modern" else {}
+
+
 def _describe_connection_error(exc: Exception) -> str:
     """Describe a failed connection without blaming the wrong party.
 
@@ -460,54 +513,45 @@ def probe_http(s: ServerSpec, timeout: float = 20.0) -> ProbeResult:
     if not s.url:
         return ProbeResult(_obs_id(s), [], "no url configured")
     try:
-        init, headers = post_rpc(
-            s.url, s.headers,
-            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": _initialize_params()},
-            timeout,
-        )
-        if "error" in init:
-            return ProbeResult(_obs_id(s), [], f"initialize failed: {init['error']}")
-        # Streamable HTTP hands out a session on initialize and requires it on
-        # everything after. Without this the probe worked against servers that
-        # do not bother and failed on every server that does -- which reads as
-        # "the endpoint is broken" and is the scanner's fault. Found when the
-        # gateway gained the same transport and a stub enforced the rule.
-        session = {k: v for k, v in headers.items()
-                   if k.lower() == SESSION_HEADER.lower() and v}
-        onward = dict(s.headers)
-        onward.update(session)
+        init, onward, era = http_handshake(s.url, s.headers, timeout)
         listed = _post_jsonrpc(
             s.url, onward,
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": request_params(era)},
             timeout,
         )
         if "error" in listed:
             return ProbeResult(_obs_id(s), [], f"tools/list failed: {listed['error']}")
 
-        caps = (init.get("result") or {}).get("capabilities") or {}
+        opened = init.get("result") or {}
+        caps = opened.get("capabilities") or {}
         prompts_payload: dict[str, Any] = {}
         resources_payload: dict[str, Any] = {}
         if isinstance(caps, dict):
             if isinstance(caps.get("prompts"), dict):
                 reply = _post_jsonrpc(s.url, onward,
                                       {"jsonrpc": "2.0", "id": 3, "method": "prompts/list",
-                                       "params": {}}, timeout)
+                                       "params": request_params(era)}, timeout)
                 if "error" not in reply:
                     prompts_payload = reply
             if isinstance(caps.get("resources"), dict):
                 reply = _post_jsonrpc(s.url, onward,
                                       {"jsonrpc": "2.0", "id": 4, "method": "resources/list",
-                                       "params": {}}, timeout)
+                                       "params": request_params(era)}, timeout)
                 if "error" not in reply:
                     resources_payload = reply
 
+        versions = opened.get("supportedVersions")
         return ProbeResult(
             _obs_id(s),
             _parse_tools(_obs_id(s), listed),
-            instructions=str((init.get("result") or {}).get("instructions") or ""),
+            instructions=str(opened.get("instructions") or ""),
             prompts=_parse_prompts(_obs_id(s), prompts_payload),
             resources=_parse_resources(_obs_id(s), resources_payload),
+            protocol_era=era,
+            supported_versions=[str(v) for v in versions] if isinstance(versions, list) else [],
         )
+    except HandshakeFailed as exc:
+        return ProbeResult(_obs_id(s), [], str(exc))
     except urllib.error.HTTPError as exc:
         return ProbeResult(_obs_id(s), [], f"HTTP {exc.code} {exc.reason}")
     except (urllib.error.URLError, OSError, ValueError) as exc:

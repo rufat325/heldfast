@@ -910,6 +910,15 @@ first, rather than waiting on either. Waiting deadlocks: a modern server never r
 spec is explicit that the fallback must not be keyed to a particular error code, since
 legacy servers answer unknown pre-handshake requests with whatever they like.
 
+Over HTTP the two cannot be sent together, since each request is its own exchange. A
+hosted server is asked `server/discover` first, and anything short of a result -- an error,
+an HTTP error status, a body that is not JSON-RPC -- falls back to `initialize`. A
+connection that fails outright is not retried the old way: a dead host is dead in both eras.
+The same handshake is used by `verify` and by the drift feed, whose catalogues record the
+protocol each server answered in. The gateway does not use it yet: it still opens a hosted
+backend with `initialize` only, so it cannot front a server that speaks nothing but
+2026-07-28.
+
 `inspect` reports which era each server speaks.
 
 ## What a server actually controls
@@ -1542,7 +1551,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1396 tests, stdlib unittest, nothing to install.
+1403 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from
