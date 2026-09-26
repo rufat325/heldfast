@@ -149,6 +149,41 @@ def snapshot(package: str, version: str, published: str, tools: list) -> dict:
     }
 
 
+def schema_lines(node: object, path: str = "", depth: int = 0) -> list[str]:
+    """What a person reads in a schema, one line per fact: each parameter's
+    name, and every description, title, allowed value and default, under the
+    path to it. A change to a parameter moves one of these lines."""
+    if depth > 64:
+        return [f"{path} (nested past the depth this reads)"]
+    out: list[str] = []
+    if isinstance(node, dict):
+        for key in sorted(node, key=str):
+            value = node[key]
+            if key in ("description", "title") and isinstance(value, str):
+                out.append(f"{path or '.'} {key}: {value}")
+            elif key == "properties" and isinstance(value, dict):
+                for name in sorted(value, key=str):
+                    out.append(f"{path}.{name}")
+                    out.extend(schema_lines(value[name], f"{path}.{name}", depth + 1))
+            elif key in ("enum", "const", "default", "examples"):
+                out.append(f"{path or '.'} {key}: {json.dumps(value, sort_keys=True)}")
+            else:
+                out.extend(schema_lines(value, path, depth + 1))
+    elif isinstance(node, list):
+        for value in node:
+            out.extend(schema_lines(value, path, depth + 1))
+    return out
+
+
+def _schema_words(old: dict, new: dict) -> str:
+    """The words that moved in either schema -- parameter names, their
+    descriptions, allowed values -- which `words` (the description) misses."""
+    def text(raw: dict) -> str:
+        return "\n".join(schema_lines(raw.get("inputSchema") or {}, "input")
+                         + schema_lines(raw.get("outputSchema") or {}, "output"))
+    return word_diff(text(old), text(new))[:600]
+
+
 def diff(before: dict, after: dict, observed_at: str) -> dict | None:
     """The event for one release, or None when no definition moved."""
     A, B = before["tools"], after["tools"]
@@ -164,6 +199,7 @@ def diff(before: dict, after: dict, observed_at: str) -> dict | None:
             "fields": [f for f in FIELDS if old.get(f) != new.get(f)],
             "words": word_diff(str(old.get("description") or ""),
                                str(new.get("description") or ""))[:600],
+            "schema_words": _schema_words(old, new),
             "introduced": [{"kind": s.kind, "match": s.match} for s in found],
         })
     # A new tool is compared with everything the old catalogue said: text the
@@ -790,7 +826,9 @@ def atom(events: list, generated: str) -> str:
         if e["grade"] == "review":
             title = "[review] " + title
         lines = [f"{c['tool']}: {', '.join(c['fields'])}"
-                 + (f"  {c['words']}" if c["words"] else "") for c in e["changed"]]
+                 + (f"  {c['words']}" if c["words"] else "")
+                 + (f"  parameters: {c['schema_words']}" if c.get("schema_words") else "")
+                 for c in e["changed"]]
         lines += [f"added {a['tool']}" for a in e["added"]]
         lines += [f"removed {r}" for r in e["removed"]]
         lines += [f"introduced -- {f}" for f in flagged(e)]
