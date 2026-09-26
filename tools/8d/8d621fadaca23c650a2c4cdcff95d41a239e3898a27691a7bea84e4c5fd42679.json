@@ -1,0 +1,84 @@
+{
+ "_meta": {
+  "anthropic/alwaysLoad": true,
+  "anthropic/searchHint": "wait await poll until visible hidden exists text appears disappears timeout element condition settle"
+ },
+ "description": "Block until a UI element reaches an expected state or a timeout elapses, so you don't have to poll screenshot/describe yourself.\n\nConditions:\n  exists   \u2014 the selector matches an element anywhere in the tree.\n  visible  \u2014 the selector matches an element with a non-zero on-screen frame.\n  hidden   \u2014 the selector matches nothing, or only a zero-area element (e.g. a spinner that disappeared).\n  text     \u2014 the first VISIBLE match in reading order (topmost, then leftmost; falling back to the first match\n             overall if none is visible) contains expectedText (case-insensitive substring), or exactly matches\n             it when textMatch is `equals`. A loose selector can match several elements; only that one is\n             inspected, so if a different match is the one holding the text the wait still reports failure \u2014\n             narrow the selector to target it.\n\nThe selector is { text?, identifier?, role? }; every provided field must match. text and role match as\ncase-insensitive substrings of the element's label/value and role; identifier matches exactly (case-insensitive),\nalso accepting the unqualified Android resource-id name ('submit' matches 'com.example.app:id/submit').\nIt polls the same accessibility / DOM tree as `describe`\n(iOS simulator AXRuntime, physical-iOS runner snapshot, Android uiautomator, Chromium CDP,\nVega automation toolkit) every pollIntervalMs\n(default 400ms) until timeoutMs (default 5000ms).\n\nReturns { success: boolean, elapsed: number, note?, cause? } \u2014 success=false means the wait ended without the\ncondition holding, which is not always a verdict on the condition: `cause` says which it was \u2014 `unmet` (the tree\nwas read and the condition was false there), `unreadable` (no trustworthy read, so nothing was judged) or\n`cancelled` \u2014 and `note` describes what was seen. Only `unmet` licenses rewriting the check. Use this after a\ntap/navigation to wait for the next screen, or before tapping an element that appears asynchronously.",
+ "inputSchema": {
+  "properties": {
+   "bundleId": {
+    "description": "Optional iOS app bundle id, passed to the describe fallback (see `describe`). Ignored on Android / Chromium, and on physical iOS.",
+    "type": "string"
+   },
+   "condition": {
+    "description": "What to wait for. `exists`: selector is anywhere in the tree. `visible`: selector is present with a non-zero on-screen frame. `hidden`: selector is absent or zero-area. `text`: the first visible match in reading order (topmost), falling back to the first match overall if none is visible, contains (or, with textMatch `equals`, exactly matches) expectedText \u2014 if a loose selector hits several elements, only that one is checked, so narrow it to target the intended element.",
+    "enum": [
+     "exists",
+     "visible",
+     "hidden",
+     "text"
+    ],
+    "type": "string"
+   },
+   "expectedText": {
+    "description": "For condition `text`: the string the first visible matched element (topmost in reading order; the first match overall if none is visible) must contain (default) or equal \u2014 see `textMatch`. Case-insensitive.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "pollIntervalMs": {
+    "description": "How often to re-check the tree (default 400).",
+    "maximum": 5000,
+    "minimum": 50,
+    "type": "integer"
+   },
+   "selector": {
+    "additionalProperties": false,
+    "description": "Element to match (text / identifier / role).",
+    "properties": {
+     "identifier": {
+      "description": "The element's identifier (accessibilityIdentifier / resource-id / testid), matched case-insensitively as the exact identifier or the unqualified resource-id name ('submit' matches 'com.example.app:id/submit').",
+      "minLength": 1,
+      "type": "string"
+     },
+     "role": {
+      "description": "Case-insensitive substring of the element's role (e.g. AXButton, button, TextView).",
+      "minLength": 1,
+      "type": "string"
+     },
+     "text": {
+      "description": "Case-insensitive substring of the element's visible label or value.",
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "textMatch": {
+    "description": "For condition `text`: how expectedText is compared. `contains` (default) is a case-insensitive substring; `equals` is a case-insensitive full-string match.",
+    "enum": [
+     "contains",
+     "equals"
+    ],
+    "type": "string"
+   },
+   "timeoutMs": {
+    "description": "Max time to wait for the condition before giving up (default 5000).",
+    "exclusiveMinimum": 0,
+    "maximum": 120000,
+    "type": "integer"
+   },
+   "udid": {
+    "description": "Target device id from `list-devices` (iOS UDID, Android serial, or Chromium id).",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "udid",
+   "condition",
+   "selector"
+  ],
+  "type": "object"
+ },
+ "name": "await-ui-element"
+}

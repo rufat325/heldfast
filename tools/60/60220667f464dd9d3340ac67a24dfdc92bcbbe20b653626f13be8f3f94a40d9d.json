@@ -1,0 +1,154 @@
+{
+ "description": "Record or retract consensus performance signals. Use action \"record\" (default) to record signals after cross-referencing agent findings \u2014 call IMMEDIATELY when you verify. Use action \"retract\" to undo a previously recorded signal.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "action": {
+    "default": "record",
+    "description": "Action: \"record\" to add signals, \"retract\" to undo a previous signal or an entire consensus round, \"bulk_from_consensus\" to auto-record signals for all findings in a consensus report, \"resolve\" to mark an open finding as fixed-by-commit (NOT a retraction \u2014 agent score is untouched), \"unresolve\" to revert a bad auto-resolve back to open status",
+    "enum": [
+     "record",
+     "retract",
+     "bulk_from_consensus",
+     "resolve",
+     "unresolve"
+    ],
+    "type": "string"
+   },
+   "agent_id": {
+    "description": "Agent whose signal to retract (required for per-signal action: \"retract\"; mutually exclusive with consensus_id round-scope form)",
+    "type": "string"
+   },
+   "consensus_id": {
+    "description": "Consensus report ID (8-8 hex format, e.g. \"5e8a7194-73e240da\"). Required for action: \"bulk_from_consensus\". For action: \"retract\" \u2014 supplying this (with `reason`) retracts ALL signals in that consensus round; mutually exclusive with agent_id+task_id per-signal retraction.",
+    "pattern": "^[0-9a-f]{8}-[0-9a-f]{8}$",
+    "type": "string"
+   },
+   "finding_id": {
+    "description": "Finding ID for action: \"resolve\" or \"unresolve\". Format <consensus_id>:<agent>:fN.",
+    "type": "string"
+   },
+   "operator": {
+    "description": "Orchestrator ID recorded in the audit log for manual resolutions. Defaults to \"manual\" when omitted.",
+    "type": "string"
+   },
+   "reason": {
+    "description": "Why this signal/round is being retracted, manually resolved, or unresolved (required for action: \"retract\", action: \"unresolve\", and resolved_by:\"manual\"; 1-1024 chars)",
+    "maxLength": 1024,
+    "minLength": 1,
+    "type": "string"
+   },
+   "resolved_by": {
+    "anyOf": [
+     {
+      "enum": [
+       "stale_anchor",
+       "manual"
+      ],
+      "type": "string"
+     },
+     {
+      "pattern": "^commit:[0-9a-f]{7,40}$",
+      "type": "string"
+     }
+    ],
+    "description": "How the finding was resolved (required for action: \"resolve\"). One of: \"commit:<sha>\" (auto-resolved by code change), \"stale_anchor\" (cited line no longer exists), \"manual\" (operator explicitly marked it fixed; requires reason)."
+   },
+   "retracted_signal": {
+    "description": "For per-signal action: \"retract\" \u2014 the specific signal TYPE to void (e.g. \"hallucination_caught\"). When supplied (with finding_id), the reader scopes the retraction to that one signal; when omitted, ALL signals for the agent+task are voided (wildcard, back-compat).",
+    "type": "string"
+   },
+   "signals": {
+    "description": "Array of consensus signals (required for action: \"record\")",
+    "items": {
+     "properties": {
+      "agent_id": {
+       "description": "Agent being evaluated",
+       "type": "string"
+      },
+      "category": {
+       "description": "Finding category for ATI competency profiles (e.g., concurrency, trust_boundaries, injection_vectors, resource_exhaustion, type_safety, error_handling, data_integrity, input_validation)",
+       "type": "string"
+      },
+      "counterpart_id": {
+       "description": "The other agent involved (e.g., who won the disagreement)",
+       "type": "string"
+      },
+      "cross_cutting": {
+       "description": "Explicit opt-in (no heuristic), VALID ONLY on signal \"operational_lesson\": file this signal's lesson card in the shared .gossip/agents/_project/memory/knowledge/ instead of the recording agent's own knowledge dir. Use for lessons every contributor needs (e.g. \"a dist-mcp bundle built inside a git worktree is always broken\"). Ignored (with a log line) on consensus verdict signals such as hallucination_caught \u2014 those are per-agent findings and must not be published as shared blame cards. The signal row itself stays attributed to agent_id; only the card moves, and it records origin_agent in frontmatter.",
+       "type": "boolean"
+      },
+      "evidence": {
+       "description": "Supporting evidence or reasoning",
+       "type": "string"
+      },
+      "finding": {
+       "description": "Brief description of the finding",
+       "type": "string"
+      },
+      "finding_id": {
+       "description": "Finding ID. Two accepted shapes: (a) consensus-scoped \"<8hex>-<8hex>:<agent>:fN\" \u2014 links this signal to a specific finding in a consensus report, enabling the dashboard to resolve UNVERIFIED findings; (b) session-scoped \"session:<sessionId>:<slug>\" \u2014 REQUIRED for signal \"operational_lesson\", OPTIONAL for \"design_split\" (which accepts either shape, so splits from parallel non-consensus dispatches need no synthetic consensus id), and rejected on every other signal. Both <sessionId> and <slug> must be safe path segments; a path-unsafe value is rejected, never sanitized.",
+       "type": "string"
+      },
+      "lesson": {
+       "description": "Root-cause narrative for a terminal correction signal \u2014 1-2 sentences on why it failed and the check that would have caught it. Written verbatim into the discovering agent's lesson card (issue #642 A).",
+       "type": "string"
+      },
+      "severity": {
+       "description": "Finding severity for impact scoring. If omitted, defaults to medium.",
+       "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+       ],
+       "type": "string"
+      },
+      "signal": {
+       "description": "Signal type: agreement (both agree), disagreement (one wrong), unique_confirmed (only one found it + verified), unique_unconfirmed (only one found it, unverified), new_finding (discovered during cross-review), hallucination_caught (fabricated finding), impl_test_pass/fail (write-mode task outcome), impl_peer_approved/rejected (peer code review verdict), operational_lesson (operator-authored PROCESS failure \u2014 no consensus round; requires finding_id \"session:<sessionId>:<slug>\" and a non-empty lesson; never affects accuracy scoring), design_split (two agents reached OPPOSED but DEFENSIBLE conclusions on a trade-off that reading code cannot settle \u2014 records BOTH sides and scores NEITHER. counterpart_id is REQUIRED; `finding` must state BOTH positions, not just one; category is optional. Accepts either finding_id shape, so a split from a parallel non-consensus dispatch can use \"session:<sessionId>:<slug>\". Use this INSTEAD of disagreement whenever no side has been shown wrong \u2014 \"disagreement\" means \"one wrong\" and debits accuracy. RESOLUTION IS A SEPARATE, LATER SIGNAL: if one side is subsequently shown wrong, record a normal scoring disagreement/hallucination_caught against the SAME finding_id; the split row stays as the audit trail of what was unresolved at the time)",
+       "enum": [
+        "agreement",
+        "disagreement",
+        "unique_confirmed",
+        "unique_unconfirmed",
+        "new_finding",
+        "hallucination_caught",
+        "impl_test_pass",
+        "impl_test_fail",
+        "impl_peer_approved",
+        "impl_peer_rejected",
+        "operational_lesson",
+        "design_split"
+       ],
+       "type": "string"
+      },
+      "timestamp": {
+       "description": "ISO-8601 timestamp of when this specific finding occurred. Highest precedence; overrides task_start_time. Use for per-finding chronology when known.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "signal",
+      "agent_id",
+      "finding"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "task_id": {
+    "description": "Task ID to link signals to. For record: optional (synthetic ID if omitted). For per-signal retract: required.",
+    "type": "string"
+   },
+   "task_start_time": {
+    "description": "ISO-8601 timestamp of the underlying task/consensus round. Used as the per-batch fallback timestamp so bulk-recording from a backlog preserves true chronology. Falls back to wall-clock if omitted.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "gossip_signals"
+}

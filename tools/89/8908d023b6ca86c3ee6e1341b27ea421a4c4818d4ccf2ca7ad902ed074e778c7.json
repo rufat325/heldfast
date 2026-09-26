@@ -1,0 +1,370 @@
+{
+ "category": "core",
+ "description": "Unreal Engine editor automation: one tool, four operations. Always in this order: (1) search with query = 2-4 plain words naming the verb and the object, e.g. 'spawn actor', 'add variable blueprint', 'save level'; every result row carries a one-line summary, its effect and a ready-made nextCall. (2) describe: send the chosen row's nextCall unchanged; the reply is the exact contract: parameters (name, type, required), inputSchema, a working example and, when required, consentGrant. (3) execute: send describe's nextCall with params filled in, using ONLY the parameter names describe listed. Rules: never guess capability ids, tool names, action names or parameter names; never put action or subAction inside params; a failed call returns suggestions and an executable nextCall, so send that nextCall instead of retrying blindly. To browse instead of search, call describe with no selector and follow the nextCall on each row one level down. configure only enables or disables internal tool groups; it never performs editor work.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "action": {
+    "description": "Exact action name copied from a search row or describe response. For configure, this is a manage_tools action.",
+    "type": "string"
+   },
+   "capability": {
+    "description": "Exact canonical capability id (or declared alias) copied from a search row or describe response, e.g. blueprint.create. Preferred selector for describe and execute; never guessed.",
+    "type": "string"
+   },
+   "consent": {
+    "additionalProperties": false,
+    "description": "Per-call consent grant for a capability whose policy.consent is not 'none'. Bound to one capability and one call; never persisted, inherited or reused. Read the exact grant from describe.consentGrant. Use with execute only.",
+    "properties": {
+     "acknowledge": {
+      "description": "Acknowledgement strength. 'explicit' satisfies an explicit policy; 'elevated' is required by a destructive policy and also satisfies explicit.",
+      "enum": [
+       "explicit",
+       "elevated"
+      ],
+      "type": "string"
+     },
+     "capability": {
+      "description": "Exact canonical capability ID this grant authorizes, as returned by describe.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "capability",
+     "acknowledge"
+    ],
+    "type": "object"
+   },
+   "cursor": {
+    "description": "Opaque search cursor from a previous response nextCursor. Supersedes offset.",
+    "type": "string"
+   },
+   "domain": {
+    "description": "Capability domain to browse or filter by. Call describe with no selector to list domains.",
+    "type": "string"
+   },
+   "effect": {
+    "description": "Filter search results by declared behavior effect.",
+    "enum": [
+     "read",
+     "write",
+     "destructive"
+    ],
+    "type": "string"
+   },
+   "family": {
+    "description": "Capability family inside a domain. Call describe with a domain to list its families.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Maximum rows per page: search results (default 12) or describe action rows (default 20). Defaults to 12.",
+    "maximum": 25,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "maxBytes": {
+    "description": "Serialized byte ceiling for a search response. Results are dropped from the end until the response fits.",
+    "maximum": 262144,
+    "minimum": 512,
+    "type": "integer"
+   },
+   "offset": {
+    "description": "Zero-based offset into search results or into a described tool's action list. Defaults to 0.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "operation": {
+    "description": "search finds capabilities by plain words. describe returns one capability's exact contract, or browses one level when given no selector. execute runs one validated action. configure enables or disables internal tool groups.",
+    "enum": [
+     "search",
+     "describe",
+     "execute",
+     "configure"
+    ],
+    "type": "string"
+   },
+   "options": {
+    "additionalProperties": false,
+    "description": "Execution controls for execute only; never put these inside params. Honored keys: idempotencyKey, expectedCatalogRevision, expectedRevisions, timeoutMs.",
+    "properties": {
+     "expectedCatalogRevision": {
+      "description": "Refuse to run unless the catalog revision still equals this value; read it from any search or describe response.",
+      "type": "string"
+     },
+     "expectedRevisions": {
+      "additionalProperties": false,
+      "description": "Live editor-state revisions to pin; the call is refused with STALE_STATE when one has moved.",
+      "properties": {
+       "assetRegistry": {
+        "minimum": 1,
+        "type": "integer"
+       },
+       "level": {
+        "minimum": 1,
+        "type": "integer"
+       },
+       "package": {
+        "minimum": 1,
+        "type": "integer"
+       },
+       "selection": {
+        "minimum": 1,
+        "type": "integer"
+       }
+      },
+      "type": "object"
+     },
+     "idempotencyKey": {
+      "description": "Client-chosen key. A repeated execute with the same key and params returns the recorded receipt instead of running the action again.",
+      "type": "string"
+     },
+     "timeoutMs": {
+      "description": "Deadline for this call in milliseconds.",
+      "maximum": 600000,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "param": {
+    "description": "Exact parameter name to inspect on one capability. Use with describe plus tool and action; returns that single parameter's schema plus the consent grant, when the capability needs one.",
+    "type": "string"
+   },
+   "params": {
+    "additionalProperties": true,
+    "description": "Parameters for execute or configure: an object whose keys are exactly the parameter names describe listed for this action, with the same casing. Never include action or subAction here.",
+    "type": "object"
+   },
+   "query": {
+    "description": "2-4 plain words naming the verb and the object, e.g. 'spawn actor', 'add variable blueprint', 'save level'. Matched against action names, topics, family, domain and summary; full sentences and filler words rank worse.",
+    "type": "string"
+   },
+   "tool": {
+    "description": "Exact parent tool name copied from a search row (parentTool) or a describe response. Always paired with action; never guessed.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "operation"
+  ],
+  "type": "object"
+ },
+ "name": "unreal",
+ "outputSchema": {
+  "additionalProperties": true,
+  "properties": {
+   "action": {
+    "type": "string"
+   },
+   "actionCount": {
+    "type": "integer"
+   },
+   "actionHasMore": {
+    "type": "boolean"
+   },
+   "actionLimit": {
+    "type": "integer"
+   },
+   "actionOffset": {
+    "type": "integer"
+   },
+   "actions": {
+    "description": "Paginated/filterable action list on tool-only describe.",
+    "type": "array"
+   },
+   "availability": {
+    "description": "Whether the capability is available, disabled or unavailable, and why."
+   },
+   "availableActions": {
+    "type": "array"
+   },
+   "availableParameters": {
+    "type": "array"
+   },
+   "behavior": {
+    "type": "object"
+   },
+   "browse": {
+    "description": "On a tool-only describe: a search call filtered to that tool, whose rows carry per-action summaries.",
+    "type": "object"
+   },
+   "capabilities": {
+    "description": "Bounded capability list on a family-level describe.",
+    "type": "array"
+   },
+   "capability": {
+    "description": "Canonical capability ID this response describes.",
+    "type": "string"
+   },
+   "catalogRevision": {
+    "description": "Revision of the generated canonical capability catalog this response was served from.",
+    "type": "string"
+   },
+   "consentGrant": {
+    "description": "Exact consent grant this capability requires, ready to pass back as the execute call's consent sibling. Absent when policy.consent is 'none'.",
+    "type": "object"
+   },
+   "cost": {
+    "type": "object"
+   },
+   "data": {
+    "description": "Execute payload projected against the capability's declared output schema. Bound to receipt.dataDigest, and the same location the native /mcp surface publishes."
+   },
+   "deprecation": {
+    "type": "object"
+   },
+   "domain": {
+    "type": "string"
+   },
+   "domains": {
+    "description": "Bounded domain list on a catalog-level describe.",
+    "type": "array"
+   },
+   "drillDown": {
+    "description": "Example nextCall payload to drill one level deeper.",
+    "type": "object"
+   },
+   "error": {
+    "type": "string"
+   },
+   "errorCode": {
+    "type": "string"
+   },
+   "families": {
+    "description": "Bounded family list on a domain-level describe.",
+    "type": "array"
+   },
+   "family": {
+    "type": "string"
+   },
+   "filters": {
+    "description": "Filters applied to this search.",
+    "type": "object"
+   },
+   "hasMore": {
+    "type": "boolean"
+   },
+   "hashes": {
+    "description": "Per-record schema and content hashes from the generated catalog.",
+    "type": "object"
+   },
+   "inputSchema": {
+    "description": "Exact input schema of the described capability. Never a parent-tool union.",
+    "type": "object"
+   },
+   "limit": {
+    "type": "integer"
+   },
+   "maxBytes": {
+    "type": "integer"
+   },
+   "message": {
+    "type": "string"
+   },
+   "migratedFrom": {
+    "description": "Legacy tool/action pair that resolved to this capability.",
+    "type": "object"
+   },
+   "nextCall": {
+    "description": "Directly-invokable gateway request for guided self-correction.",
+    "type": "object"
+   },
+   "nextCursor": {
+    "description": "Cursor to pass back as cursor to continue a search.",
+    "type": "string"
+   },
+   "offset": {
+    "type": "integer"
+   },
+   "operation": {
+    "type": "string"
+   },
+   "outputSchema": {
+    "description": "Exact output schema of the described capability.",
+    "type": "object"
+   },
+   "outputs": {
+    "type": "array"
+   },
+   "param": {
+    "type": "string"
+   },
+   "parameterCount": {
+    "type": "integer"
+   },
+   "parameterHasMore": {
+    "type": "boolean"
+   },
+   "parameterLimit": {
+    "type": "integer"
+   },
+   "parameterOffset": {
+    "type": "integer"
+   },
+   "parameters": {
+    "description": "Paginated/filterable compact parameter catalog on tool+action describe.",
+    "type": "array"
+   },
+   "parentTool": {
+    "description": "Legacy parent tool that dispatches the described capability.",
+    "type": "string"
+   },
+   "perActionSchemas": {
+    "type": "boolean"
+   },
+   "policy": {
+    "type": "object"
+   },
+   "reasons": {
+    "type": "array"
+   },
+   "required": {
+    "description": "Whether the described param is required.",
+    "type": "boolean"
+   },
+   "resolvedFromAlias": {
+    "description": "Declared alias that resolved to this capability.",
+    "type": "string"
+   },
+   "result": {},
+   "results": {
+    "type": "array"
+   },
+   "runnable": {
+    "description": "False when the capability cannot currently be executed; nextCall then points at the fix.",
+    "type": "boolean"
+   },
+   "schema": {
+    "description": "Full schema of the single described param.",
+    "type": "object"
+   },
+   "scope": {
+    "description": "Catalog scope: 'tool' for a tool summary, 'union' for the tool-union parameter catalog.",
+    "type": "string"
+   },
+   "success": {
+    "type": "boolean"
+   },
+   "suggestions": {
+    "description": "Closest-match names for an invalid tool/action/param call.",
+    "type": "array"
+   },
+   "tool": {
+    "type": "string"
+   },
+   "total": {
+    "type": "integer"
+   },
+   "truncated": {
+    "description": "True when results were dropped to fit the byte budget.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "success",
+   "operation"
+  ],
+  "type": "object"
+ }
+}

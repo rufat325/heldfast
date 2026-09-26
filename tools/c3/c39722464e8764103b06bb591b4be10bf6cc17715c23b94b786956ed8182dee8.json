@@ -1,0 +1,273 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Live and final scores for a league on a given date, optionally filtered by team name. Returns home and away teams, current score, status, period or clock, and UTC start time. Omit date for today's games.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "date": {
+    "description": "Date in YYYY-MM-DD format. Omit for today's games.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "league": {
+    "description": "League identifier. Supported: nfl, nba, mlb, nhl, epl, mls, laliga, bundesliga, seriea, ligue1, ucl, ncaaf, ncaab.",
+    "enum": [
+     "nfl",
+     "nba",
+     "mlb",
+     "nhl",
+     "epl",
+     "mls",
+     "laliga",
+     "bundesliga",
+     "seriea",
+     "ligue1",
+     "ucl",
+     "ncaaf",
+     "ncaab"
+    ],
+    "type": "string"
+   },
+   "team_name": {
+    "description": "Filter results to games involving this team. Fuzzy match on team name or abbreviation.",
+    "maxLength": 200,
+    "type": "string"
+   }
+  },
+  "required": [
+   "league"
+  ],
+  "type": "object"
+ },
+ "name": "sports_get_scores",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "games",
+     "date",
+     "league"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "date": {
+    "description": "The effective date queried (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode.",
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "games": {
+    "description": "List of games for the requested date and league.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single game record.",
+     "properties": {
+      "awayTeam": {
+       "additionalProperties": false,
+       "description": "Away team details and score.",
+       "properties": {
+        "abbreviation": {
+         "description": "Team abbreviation, e.g. \"SEA\" or \"NYY\".",
+         "type": "string"
+        },
+        "id": {
+         "description": "Source-prefixed team ID.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Full team name.",
+         "type": "string"
+        },
+        "score": {
+         "description": "Current or final score, null if not yet started.",
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "abbreviation",
+        "score"
+       ],
+       "type": "object"
+      },
+      "clock": {
+       "description": "Game clock or inning half display (e.g. \"2:34\", \"Top\"). Null if not applicable.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "homeTeam": {
+       "additionalProperties": false,
+       "description": "Home team details and score.",
+       "properties": {
+        "abbreviation": {
+         "description": "Team abbreviation, e.g. \"SEA\" or \"NYY\".",
+         "type": "string"
+        },
+        "id": {
+         "description": "Source-prefixed team ID.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Full team name.",
+         "type": "string"
+        },
+        "score": {
+         "description": "Current or final score, null if not yet started.",
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "abbreviation",
+        "score"
+       ],
+       "type": "object"
+      },
+      "id": {
+       "description": "Source-prefixed game ID, e.g. espn:401872656 or mlb:823457.",
+       "type": "string"
+      },
+      "period": {
+       "description": "Current period, quarter, or inning. Null if not started.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "shortName": {
+       "description": "Short matchup string, e.g. \"SEA @ NYY\".",
+       "type": "string"
+      },
+      "source": {
+       "description": "Source provenance for this game record.",
+       "enum": [
+        "espn",
+        "mlbstats"
+       ],
+       "type": "string"
+      },
+      "startTimeUtc": {
+       "description": "Game start time in UTC ISO 8601 format.",
+       "type": "string"
+      },
+      "status": {
+       "description": "Game status.",
+       "enum": [
+        "scheduled",
+        "in-progress",
+        "final",
+        "postponed",
+        "cancelled"
+       ],
+       "type": "string"
+      },
+      "venue": {
+       "description": "Venue name, if available.",
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "id",
+      "shortName",
+      "homeTeam",
+      "awayTeam",
+      "status",
+      "period",
+      "clock",
+      "startTimeUtc",
+      "venue",
+      "source"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "league": {
+    "description": "The league queried.",
+    "type": "string"
+   },
+   "reason": {
+    "description": "Human-readable note when no games are found.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Sports Get Scores"
+}

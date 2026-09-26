@@ -1,0 +1,188 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch the conversation for a post by AT-URI \u2014 the parent chain upward and the reply tree downward. Enter the thread at any point and traverse the discussion. AT-URIs have the format \"at://<handle-or-did>/<collection>/<rkey>\" and are returned in the \"uri\" field of every post the other post-returning tools emit, such as bsky_get_feed and bsky_get_author_feed; a bsky.app post URL (https://bsky.app/profile/<handle-or-did>/post/<rkey>) works as-is. Returns the root post, parent chain, and nested replies with per-post author and engagement data. Replies only: quote posts are not part of a thread \u2014 read them with bsky_get_post_quotes. The response is often a fraction of the conversation: Bluesky holds replies back past a per-post limit and offers no way to page the rest, so a thread with thousands of replies commonly returns a few hundred. Any node returning fewer replies than its own replyCount carries \"truncated: true\" with \"unreturnedReplies\" and a \"truncationReason\" \u2014 \"depth\" means the reply tree ended there and fetching that node's AT-URI as its own thread continues below it, \"unavailable\" means no request closes the gap. Read \"unreturnedReplies\" as an upper bound on what is missing rather than a count of readable replies: Bluesky's counter also includes replies that have left the index, so a small difference often means nothing is left to fetch. The parent chain is disclosed the same way: when it stops at parent_height instead of at the start of the conversation, the topmost node carries \"parentChainTruncated: true\" and fetching its AT-URI as its own thread continues upward. The enrichment fields total the difference for the whole thread; check them before describing a conversation as complete or naming its first post. A thread that would pass this server's 48,000-byte response budget is cut between whole posts \u2014 the target kept first, then its parents nearest-first, then replies level by level \u2014 with \"budgetCapped: true\" and the cut marked where it happened: \"budgetOmittedReplyUris\" on the target and \"budgetOmittedReplies\" on a kept reply name the replies left out, \"budgetOmittedParents\" on the topmost parent the ancestors; fetching those AT-URIs as their own threads reads the rest. In the rendered text nothing is indented: a reply's author heading carries how far it sits below the top-level reply it descends from (\"### \u21b32\"), and every post also names its own parent on a \"Reply to\" line.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "depth": {
+    "default": 6,
+    "description": "How many levels of replies to include below the target post. Default 6, maximum 10 \u2014 Bluesky itself returns no more than 10 levels however deep the request. Depth does not widen the reply tree either: the per-post reply limit is independent of it. To read below the deepest level returned, fetch an edge node's AT-URI as its own thread.",
+    "maximum": 10,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "parent_height": {
+    "default": 80,
+    "description": "How many parent posts to include in the parent chain above the target post. Default 80, maximum 100. The chain is returned level for level up to this many posts and stops early at the conversation root. When it stops at this bound instead, the topmost node carries \"parentChainTruncated: true\" \u2014 fetch that node's AT-URI as its own thread to read above it. Set to 0 to skip the chain entirely; a reply target then reports the same marker on itself, since its own parent was not returned either.",
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "uri": {
+    "description": "AT-URI of the post to fetch, e.g. \"at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/abc123\". All three segments are required \u2014 authority (handle or DID), collection, and record key. Obtain from the \"uri\" field of a post returned by bsky_get_feed or bsky_get_author_feed. The post's bsky.app page, e.g. \"https://bsky.app/profile/bsky.app/post/abc123\", is accepted and read as the AT-URI it names; a trailing \"/\", \"?\u2026\", or \"#\u2026\" on it is ignored.",
+    "maxLength": 2048,
+    "pattern": "^(?:at:\\/\\/(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?|did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-])\\/[a-zA-Z]+(?:\\.[a-zA-Z0-9-]+)+\\/[a-zA-Z0-9._~:-]{1,512}|https:\\/\\/bsky\\.app\\/profile\\/(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?|did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-])\\/post\\/[a-zA-Z0-9._~:-]{1,512}\\/?(?:[?#].*)?)$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "uri"
+  ],
+  "type": "object"
+ },
+ "name": "bsky_get_post_thread",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "thread",
+     "totalReturned"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "budgetCapped": {
+    "description": "True when the whole thread would have passed this server's 48,000-byte response budget, so posts Bluesky returned were left out whole \u2014 the target first kept, then its parents nearest-first, then replies level by level. The nodes at the cut carry budgetOmittedReplyUris, budgetOmittedReplies, or budgetOmittedParents, and fetching those AT-URIs reads everything left out. Independent of \"truncated\" and \"parentChainTruncated\", which describe what Bluesky did not return.",
+    "type": "boolean"
+   },
+   "budgetOmitted": {
+    "description": "How many posts Bluesky returned that the response budget left out, set alongside budgetCapped. totalReturned counts the posts kept.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_at_uri`: The AppView rejected the AT-URI \u2014 the shape passed the input pattern but the authority, collection, or record key is not one it can resolve. `post_not_found`: The AT-URI is well-formed but the post was deleted or never existed. `uri_is_feed`: The AT-URI names a feed generator (app.bsky.feed.generator), not a post. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_at_uri",
+         "post_not_found",
+         "uri_is_feed"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "What this response is missing, how much of the gap is explained, and which part of it can still be reached by a further request.",
+    "type": "string"
+   },
+   "parentChainTruncated": {
+    "description": "True when the parent chain stopped at parent_height instead of reaching the start of the conversation, so the topmost post returned above the target is not the conversation root. Independent of \"truncated\", which covers the reply tree, and unlike it fully recoverable: fetch the topmost parent's AT-URI as its own thread to continue upward.",
+    "type": "boolean"
+   },
+   "thread": {
+    "additionalProperties": {},
+    "description": "The conversation thread rooted at the requested post \u2014 a recursive node tree. Each node has: post: { uri, cid, text, author: { did, handle, displayName?, avatar?, verification? }, replyCount?, repostCount?, likeCount?, quoteCount?, indexedAt?, createdAt?, labels?: [{ val, src?, cts? }], embed?, replyToUri?, replyRootUri? }. author.verification: { verifiedStatus, trustedVerifierStatus } \u2014 whether a trusted verifier verified the author and whether the author is one, each \"valid\", \"invalid\" (verified once, no longer holds), or \"none\", passed through as Bluesky sends it; absent when Bluesky sent none. quoteCount counts quote posts, which are not part of the thread \u2014 read them with bsky_get_post_quotes. parent?: parent thread node. replies?: array of child thread nodes. truncated?: true when the node's own post.replyCount exceeds the replies returned for it, with unreturnedReplies: the size of that difference, and truncationReason: \"depth\" (the reply tree ends at this node \u2014 fetch its post.uri as its own thread to continue below it) or \"unavailable\" (no request closes the gap). unreturnedReplies is an upper bound on what is missing, not a count of readable replies: Bluesky's counter keeps including replies that have left the index, so a node reporting one unreturned reply often has none left to fetch. Only reply-tree nodes carry these; a parent-chain node is linear by construction and never reports a reply shortfall. parentChainTruncated?: true on the topmost node above the target when the chain stopped at parent_height rather than at the start of the conversation \u2014 that node is a reply to a post this response does not contain, so it is not the conversation root. Fetch that node's post.uri as its own thread to continue upward; parent_height is honored level for level, so the ancestors above it are one request away. Set on the target itself when no parent was returned at all. notFound?: true when the post was deleted or never existed. blocked?: true when its author blocks this view. Both stubs carry the reported AT-URI on post.uri and no content \u2014 a blocked node also carries the author DID on post.author.did. Set only when this server's 48,000-byte response budget cut the thread (budgetCapped), on the posts Bluesky did return: budgetOmittedReplyUris?: on the target, the AT-URIs of its direct replies left out, in Bluesky order \u2014 fetch each as its own thread (parent_height 0) to read it and everything below it. budgetOmittedReplies?: on any other node, how many of its direct replies were left out, each with everything below it \u2014 fetch the node's post.uri as its own thread (parent_height 0). budgetOmittedParents?: on the topmost parent kept, or the target when none was, how many ancestors above it were left out \u2014 fetch the node's post.uri with depth 0 to read them. Independent of truncated / unreturnedReplies / parentChainTruncated, which describe what Bluesky itself did not return.",
+    "properties": {},
+    "type": "object"
+   },
+   "threadgate": {
+    "additionalProperties": false,
+    "description": "The thread author's reply restrictions, present only when they set one. Hidden replies are counted in replyCount whether or not they were returned, so a gated thread is one reason the counts run ahead of the tree.",
+    "properties": {
+     "allow": {
+      "description": "Who may reply. Omitted when anyone may; an empty array means the author turned replies off. Replies posted before the rule was set stay in the thread.",
+      "items": {
+       "enum": [
+        "follower",
+        "following",
+        "list",
+        "mentioned",
+        "unknown"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "hiddenReplies": {
+      "description": "AT-URIs of replies the thread author hid. Some are still present in the returned tree \u2014 compare against the node URIs rather than assuming every entry is absent.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "uri": {
+      "description": "AT-URI of the threadgate record itself.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "uri",
+     "hiddenReplies"
+    ],
+    "type": "object"
+   },
+   "totalReturned": {
+    "description": "Thread nodes in this response \u2014 the target post, its parent chain, and every reply returned.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when at least one post in the reply tree returned fewer replies than Bluesky counts for it \u2014 counted over every post Bluesky returned, including any the response budget left out.",
+    "type": "boolean"
+   },
+   "unreturnedReplies": {
+    "description": "How far the reply counts run ahead of the replies returned, summed across the reply tree. An upper bound on what is missing, not a count of readable replies \u2014 Bluesky's counters keep including replies that have left the index. Summed over every post Bluesky returned, including any the response budget left out. Compare against the root post replyCount to judge how much of the conversation is present.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Bluesky Post Thread"
+}

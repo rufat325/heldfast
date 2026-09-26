@@ -1,0 +1,135 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Create a structured block (table) on a sheet. fields[0] is the row-key column \u2014 the value BLOCKREF matches on, so it has to be unique per record; it is ordinary data you can write. Block ref name (`name`) is used as the first arg to BLOCKREF/BLOCKREFS in formulas.\n\nField types supported:\n  - 'string' / 'number'   \u2014 plain text/numeric cells.\n  - 'boolean'             \u2014 cell stores 0/1 or TRUE/FALSE; UI renders \u2705/\u274c if host has the widget set.\n  - 'enum' (+ enum_id)    \u2014 cell stores variant id; UI renders dropdown if host has the widget set. Watson auto-injects a variant-whitelist validation formula on the field so out-of-set writes light up as warnings even without widget rendering. Requires a prior define_enum_set call with matching id.\n\nRules (value_formula / validation / editability) are set separately via set_field_rule \u2014 this call only declares structure + initial rows. Auto-creates the target sheet if missing.",
+ "inputSchema": {
+  "properties": {
+   "description": {
+    "description": "What this table is for, in a sentence or two: what a row represents, what the fields mean where the names are not obvious, and anything a later reader must not do to it (e.g. a field the craft maintains). Saved with the block and returned by describe_block, so write it for whoever opens the file next rather than for this conversation.",
+    "type": "string"
+   },
+   "fields": {
+    "description": "Column definitions in order. fields[0] is the row-key column.",
+    "items": {
+     "properties": {
+      "description": {
+       "description": "What this field means, in a sentence, where the name alone does not say it \u2014 the unit it is in (\"in units of 10k\"), the convention it follows, or something a later reader must not do to it. Saved on the schema and returned by describe_block, so write it for whoever opens the file next rather than for this conversation.",
+       "type": "string"
+      },
+      "enum_id": {
+       "description": "Enum set id. Required when field_type=enum. Must match an id passed to define_enum_set.",
+       "type": "string"
+      },
+      "field_type": {
+       "description": "Optional. Set it explicitly when the field's MEANING implies a type \u2014 e.g. a column called deadline / due date / birthday / created_at is 'date' (or 'datetime' if it carries a time). 'date'/'datetime' render with a calendar-style format (override via num_fmt). If omitted, the type is inferred from initial_rows values: booleans \u2192 boolean, numerics \u2192 number, date-like strings \u2192 date, low-cardinality categorical strings \u2192 an auto-created enum set, otherwise string.",
+       "enum": [
+        "string",
+        "number",
+        "boolean",
+        "enum",
+        "date",
+        "datetime"
+       ],
+       "type": "string"
+      },
+      "name": {
+       "description": "Field (column) name.",
+       "type": "string"
+      },
+      "num_fmt": {
+       "description": "Excel number format, e.g. \"0\", \"0.00\", \"0.00%\", \"#,##0\". Only meaningful when field_type=number.",
+       "type": "string"
+      },
+      "required": {
+       "default": false,
+       "description": "Every record must carry a value here. Declared on the schema, so every host and every later reader sees it.",
+       "type": "boolean"
+      },
+      "unique": {
+       "default": false,
+       "description": "No two records may carry the same value here. Declared on the schema.",
+       "type": "boolean"
+      },
+      "user_editable": {
+       "default": false,
+       "description": "Whether the user can edit this cell directly. Use editability formula via set_field_rule for conditional editing.",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "initial_rows": {
+    "description": "Optional initial rows.",
+    "items": {
+     "properties": {
+      "key": {
+       "description": "Row key (first column). Used as the row selector elsewhere. Must be unique within the block.",
+       "type": "string"
+      },
+      "values": {
+       "description": "Optional initial values keyed by field name. Fields with a value_formula should be omitted. For date/datetime fields, supply ISO strings (\"YYYY-MM-DD\" or \"YYYY-MM-DDTHH:MM\") \u2014 Watson converts them to the numeric form cells store.",
+       "type": "object"
+      }
+     },
+     "required": [
+      "key"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "name": {
+    "description": "Block ref name. Used as the first arg to BLOCKREF/BLOCKREFS in formulas. Must be unique within the workbook.",
+    "type": "string"
+   },
+   "position": {
+    "description": "Top-left cell of the block (0-indexed).",
+    "properties": {
+     "col": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "row": {
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "row",
+     "col"
+    ],
+    "type": "object"
+   },
+   "sheet": {
+    "description": "Target sheet name.",
+    "type": "string"
+   },
+   "unique_together": {
+    "description": "Field groups whose values must not repeat in COMBINATION \u2014 a rule about the TABLE, not about one cell. `unique` on a field covers one column; this covers several together, which nothing else can say. Reach for it on a fact table: a repeated (region, quarter) is an error nowhere, it just makes every total over that table quietly count twice. Violations show up in inspect__list_violations like any other rule.",
+    "items": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "sheet",
+   "name",
+   "position",
+   "fields"
+  ],
+  "type": "object"
+ },
+ "name": "create_block"
+}

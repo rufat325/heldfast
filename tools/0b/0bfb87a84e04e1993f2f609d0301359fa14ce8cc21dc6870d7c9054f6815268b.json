@@ -1,0 +1,77 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search French BODACC legal announcements by CRITERIA instead of by company \u2014 the monitoring question no other Sirenic tool answers: WHICH companies entered insolvency proceedings in department 59 this week? Pick a family (collective/insolvency proceedings, deregistrations, sales and transfers, incorporations, accounts filings, conciliation, professional recovery, modifications, registrations, miscellaneous), a date window (`depuis`, optional `jusqu_a`) and optionally a French department code. Returns up to 100 announcements, newest first, each with SIREN, court, town, department and a STRUCTURED judgment (nature, date, family), plus `tronque` when there were more. The judgment's operative FREE TEXT is deliberately removed everywhere \u2014 it names court-appointed administrators with their address \u2014 so facts living only in that text (the date of cessation of payments, for one) are NOT here: follow `url_bodacc`, or get_french_company_alerts for a single company. Announcements about SOLE TRADERS are deliberately EXCLUDED (their name is personal data) and their count is returned in `exclues_personnes_physiques`, and records whose person type was unreadable are counted apart in `exclues_type_indetermine` (fail-closed guard). An announcement is not a verdict: the insolvency family also contains closures and cancellations \u2014 read the CURRENT state with get_french_company_alerts or get_french_company_failure_score. Paid via x402 ($0.03 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "departement": {
+    "description": "Optional French department code: 01-95 except 20, 2A, 2B, 971-978 (e.g. 59 for Nord)",
+    "type": "string"
+   },
+   "depuis": {
+    "description": "Start of the publication window, YYYY-MM-DD, e.g. 2026-08-04",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "famille": {
+    "description": "Family code (upstream BODACC codes): dpc (accounts filings, the largest family), modification, creation, radiation, collective (insolvency proceedings), vente, immatriculation, divers, conciliation, retablissement_professionnel",
+    "type": "string"
+   },
+   "jusqu_a": {
+    "description": "Optional end of the window, YYYY-MM-DD",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "famille",
+   "depuis"
+  ],
+  "type": "object"
+ },
+ "name": "search_bodacc_announcements",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Search BODACC announcements"
+}

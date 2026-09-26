@@ -1,0 +1,662 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Schedule a post for later"
+ },
+ "description": "Queue a post for a future time on one or more connected channels at once: facebook, instagram, threads, tiktok, youtube, linkedin, x, pinterest, bluesky, telegram \u2014 TEN channels, every one live. google_business is in the schema but HELD BACK (Google\u2019s API allowlist) and is refused at enqueue. A MULTI-SLIDE creative goes in imageUrls[] as a CAROUSEL, in order \u2014 never schedule just its first slide. Name the time in `at`, or pass `useQueue:true` for the brand\u2019s next free POSTING SLOT (what \u201cjust queue it\u201d means). imageUrl/videoUrl take a Hermoso render URL or an upload_file URL. `captions` gives a channel its own wording; the rest use `message`. PINTEREST AND YOUTUBE SHOW A TITLE: `title` (max 100 chars), derived from the caption when omitted; YOUTUBE also takes `description`, `tags`, `thumbnailUrl`. Every PER-CHANNEL SETTING is a parameter below, carried straight to the real publisher \u2014 TikTok\u2019s `brandedContent` / `yourBrand` disclosures (set them whenever the post is commercial), Google Business `topicType` / `event` / `offer` / `actionType`, an X `thread` / `poll`, Instagram `collaborators`, and the rest. Channels are attempted INDEPENDENTLY: one failing never blocks the others. SOME CHANNELS MUST BE TOLD WHICH ACCOUNT, and Hermoso never guesses: Pinterest needs `boardId` (list_pinterest_boards) or is refused; a LinkedIn COMPANY PAGE post needs `linkedinOrganizationId` (list_linkedin_pages) or it goes to the person\u2019s own profile; several Facebook Pages need `pageId` (list_meta_pages), several Google Business listings `locationId` (list_business_locations) \u2014 resolve those FIRST and let the user pick, or the post is refused when it fires. A scheduled post GOES LIVE PUBLICLY by default on every channel, never quietly downgraded. Only if the user asks, set `visibility` (or `visibilityByChannel`): \u2018unlisted\u2019 (YouTube) \u00b7 \u2018private\u2019 (YouTube, or TikTok SELF_ONLY) \u00b7 \u2018draft\u2019 (TikTok, or an unpublished Facebook Page post). A visibility a channel cannot do is REFUSED now, never posted weaker later.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "accounts": {
+    "additionalProperties": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "const": "all",
+       "type": "string"
+      }
+     ]
+    },
+    "description": "WHICH accounts of a multi-account channel to post to, e.g. { \"tiktok\": [\"@a\", \"@b\"] } or { \"tiktok\": \"all\" } \u2014 one row per account at fire time, each with its own result. Omit for channels with one account (several and none named is refused by name).",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "actionType": {
+    "description": "GOOGLE BUSINESS \u2014 the call-to-action button. Every button except CALL needs `link` (CALL dials the number on the listing and takes none). Google IGNORES the button link on an OFFER post \u2014 put the destination in offer.redeemOnlineUrl. Omit and a post carrying a link gets LEARN_MORE.",
+    "enum": [
+     "BOOK",
+     "ORDER",
+     "SHOP",
+     "LEARN_MORE",
+     "SIGN_UP",
+     "CALL"
+    ],
+    "type": "string"
+   },
+   "aiGenerated": {
+    "description": "INSTAGRAM / FACEBOOK REEL \u2014 Meta\u2019s is_ai_generated self-disclosure. OMIT IT and Hermoso decides from provenance: a Hermoso render is declared, media that came through upload_file or from an external URL (the user\u2019s own photographs or footage) is NOT \u2014 a real photo must never carry Instagram\u2019s \u201cAI info\u201d label. Pass true or false only to override: false strips the label from something Hermoso would otherwise declare, true declares a render the user uploaded themselves.",
+    "type": "boolean"
+   },
+   "altText": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    ],
+    "description": "ACCESSIBILITY \u2014 the screen-reader description of the attached image. ONE STRING describes the picture; on a CAROUSEL it describes EVERY slide. Pass an ARRAY of strings instead to describe each slide separately, aligned to the slide order \u2014 that is strictly better on a multi-slide post, because one sentence read out over six different pictures is wrong for five of them. More descriptions than pictures is refused rather than dropped. Write one whenever the post carries an image: describe what is IN the picture, never a repeat of the caption, which a screen reader already reads. CARRIED BY: X (max 1000, one per media), Pinterest (max 500 \u2014 PIN-LEVEL only, since its API has no per-item alt text, so slide 1\u2019s description is used for the whole Pin and the result says the others were not sent), LinkedIn COMPANY PAGES (max 4086, one per slide), INSTAGRAM image posts and image slides (max 1000), FACEBOOK photos and albums, and BLUESKY, whose lexicon makes it REQUIRED on every image. The schedule is REFUSED if the LONGEST description exceeds the tightest of the channels on it, rather than truncated on the way out. NOT CARRIED, and none of these is a refusal \u2014 the post still publishes, just undescribed there, and the per-channel result says which: TikTok (its photo post has no alt field at any level), a THREADS CAROUSEL, an INSTAGRAM Reel or video slide, and a LinkedIn PERSONAL-profile post."
+   },
+   "at": {
+    "description": "when to post \u2014 ISO timestamp (2026-08-01T09:00:00Z) or epoch milliseconds. Must be in the future, at most 365 days out. Give this OR useQueue, never both.",
+    "type": "string"
+   },
+   "audience": {
+    "description": "FACEBOOK PAGE POST ONLY \u2014 limit who can see this organic post to people in these places and/or over this age (Facebook allows 13, 15, 18, 21 or 25). Not on Instagram, Threads or a Facebook Reel (a vertical clip becomes a Reel): those are refused. Region and city keys come from the Meta ads location search.",
+    "properties": {
+     "cities": {
+      "description": "Meta location keys for cities",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "countries": {
+      "description": "two-letter codes, e.g. [\"CA\",\"US\"]",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "minAge": {
+      "anyOf": [
+       {
+        "const": 13,
+        "type": "number"
+       },
+       {
+        "const": 15,
+        "type": "number"
+       },
+       {
+        "const": 18,
+        "type": "number"
+       },
+       {
+        "const": 21,
+        "type": "number"
+       },
+       {
+        "const": 25,
+        "type": "number"
+       }
+      ]
+     },
+     "regions": {
+      "description": "Meta location keys for regions/states",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "audioId": {
+    "description": "INSTAGRAM REEL \u2014 put one of Instagram\u2019s OWN licensed music tracks under the Reel: the `id` search_instagram_audio returns. Instagram mixes it in when the Reel is published; nothing is downloaded or re-rendered. REELS ONLY, and only on an Instagram account connected through Meta (a Facebook Page with a linked Instagram), which is Instagram\u2019s own rule \u2014 the Instagram connector cannot take it and is refused by name.",
+    "type": "string"
+   },
+   "audioName": {
+    "description": "INSTAGRAM REEL \u2014 the name of the Reel\u2019s audio track, which is what viewers tap through to. REELS ONLY.",
+    "type": "string"
+   },
+   "audioVolume": {
+    "description": "INSTAGRAM REEL \u2014 how loud that track plays, 0\u2013100 (Instagram\u2019s default 100). Needs audioId.",
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "boardId": {
+    "description": "PINTEREST \u2014 REQUIRED whenever pinterest is a channel: the board the Pin goes on, from list_pinterest_boards. The user picks it; a Pin on the wrong board is a public mistake. Scheduling pinterest without one is refused immediately.",
+    "type": "string"
+   },
+   "brand": {
+    "description": "WHICH BRAND this post belongs to \u2014 id or exact name from list_brands (a shared workspace: its profile id). Beats the connection's pin for THIS CALL ONLY; a name that matches no brand, or two, is REFUSED and nothing is posted.",
+    "type": "string"
+   },
+   "brandedContent": {
+    "description": "TIKTOK \u2014 the PAID-PARTNERSHIP disclosure (TikTok\u2019s brand_content_toggle): true when this post promotes a THIRD-PARTY business. It is a compliance declaration, not a preference \u2014 set it whenever the post is sponsored. TikTok only accepts branded content on a public or friends-only post, so it cannot ride a private/SELF_ONLY or draft TikTok item and the schedule is refused with the reason.",
+    "type": "boolean"
+   },
+   "brandedContentSponsorIds": {
+    "description": "INSTAGRAM \u2014 the numeric Instagram USER IDS of the brands behind that label (at most 2, and ids rather than @handles). Naming sponsors IS asking for the label, so setting these with `paidPartnership:false` is refused instead of publishing brand credits with no disclosure.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "callToAction": {
+    "description": "FACEBOOK \u2014 a real call-to-action BUTTON on the Page post. The types that open a destination (SHOP_NOW, LEARN_MORE, SIGN_UP, BUY_NOW, DOWNLOAD, OPEN_LINK, WATCH_MORE, BOOK_TRAVEL) need somewhere to go: the post\u2019s own `link`, or `callToActionLink`. CALL_NOW, MESSAGE_PAGE, LIKE_PAGE and GET_DIRECTIONS act on the Page itself and take none.",
+    "enum": [
+     "BOOK_TRAVEL",
+     "BUY_NOW",
+     "CALL_NOW",
+     "DOWNLOAD",
+     "GET_DIRECTIONS",
+     "LEARN_MORE",
+     "LIKE_PAGE",
+     "MESSAGE_PAGE",
+     "NO_BUTTON",
+     "OPEN_LINK",
+     "SHOP_NOW",
+     "SIGN_UP",
+     "WATCH_MORE"
+    ],
+    "type": "string"
+   },
+   "callToActionLink": {
+    "description": "FACEBOOK \u2014 where the button goes, when that is not the post\u2019s own `link`.",
+    "type": "string"
+   },
+   "captions": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "per-channel caption overrides, e.g. { \"instagram\": \"\u2026\", \"threads\": \"\u2026\" } \u2014 platforms want different lengths and hashtag conventions",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "channels": {
+    "description": "one or more channels to post to at that time",
+    "items": {
+     "enum": [
+      "facebook",
+      "instagram",
+      "threads",
+      "tiktok",
+      "youtube",
+      "linkedin",
+      "x",
+      "pinterest",
+      "google_business",
+      "bluesky",
+      "telegram"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "chatId": {
+    "description": "TELEGRAM \u2014 REQUIRED whenever telegram is a channel: WHICH chat, group or channel the bot posts to. A public channel\u2019s @username (@hermosoai) or the numeric id (a group is negative; a supergroup or channel starts with -100). There is no default and there cannot be one \u2014 the Telegram Bot API publishes no method that lists a bot\u2019s chats \u2014 so scheduling telegram without one is refused up front. list_telegram_chats finds ids for chats that have messaged the bot in the last 24 hours.",
+    "type": "string"
+   },
+   "collaborators": {
+    "description": "INSTAGRAM \u2014 a COLLAB post: up to 3 Instagram usernames invited to CO-AUTHOR it, so it appears on their profile too once they accept, with both handles in the header and the engagement shared. Handles only (\"hermosoai\"); a leading @ is fine. Instagram must be one of the `channels` \u2014 asking for collaborators on a schedule Instagram is not on is REFUSED now rather than discovered when it fires, and the other channels in a mixed schedule simply publish without co-authors. THE INVITE IS SENT WHEN THE POST FIRES, not when you schedule it, and it is PENDING until the other account accepts in their notifications; check with instagram_collaborators afterwards rather than telling the user it is live on both profiles.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "commercialContent": {
+    "description": "TIKTOK \u2014 the COMMERCIAL CONTENT DISCLOSURE toggle: true when the post promotes a brand, product or service at all. TikTok requires at least one of yourBrand / brandedContent alongside it, and a post declaring itself commercial without naming which kind is refused. Setting either disclosure already implies this, so it is only needed to be explicit.",
+    "type": "boolean"
+   },
+   "communityId": {
+    "description": "X \u2014 publish into an X COMMUNITY instead of the main timeline: the number in the community\u2019s own URL (x.com/i/communities/<id>). The connected account must be a MEMBER of it.",
+    "type": "string"
+   },
+   "countryCodes": {
+    "description": "THREADS ONLY \u2014 two-letter country codes to limit who can see the post. Omit to show it everywhere.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "coverAtMs": {
+    "description": "THE VIDEO COVER on EVERY channel of this post, as ONE frame: milliseconds from the start (7000 = the frame at 7s). Instagram, TikTok, Facebook, LinkedIn Page, Pinterest, Telegram and YouTube all get that frame; X, Threads and Bluesky have no cover setting. A channel\u2019s own field (thumbOffset, coverTimestampMs, coverUrl) wins there and otherwise counts as this.",
+    "type": "number"
+   },
+   "coverImageUrl": {
+    "description": "THE VIDEO COVER as a picture instead of a frame \u2014 a Hermoso-hosted image (upload_file). Every channel that takes a cover image gets it (Instagram, Facebook, LinkedIn Page, Pinterest, Telegram, YouTube); TikTok takes only a frame. Never together with coverAtMs.",
+    "type": "string"
+   },
+   "coverTimestampMs": {
+    "description": "TIKTOK VIDEO ONLY \u2014 which frame TikTok uses as the cover, in milliseconds from the start. Omit and Hermoso uses the video\u2019s best frame (platformCover:true leaves it to TikTok, which uses the first frame).",
+    "type": "number"
+   },
+   "coverUrl": {
+    "description": "INSTAGRAM REEL COVER \u2014 a public image url Instagram fetches and uses as the cover in the Reels tab. REELS ONLY, and the alternative to `thumbOffset`: passing both is refused, since they are two answers to the same question. Run a local file through upload_file first.",
+    "type": "string"
+   },
+   "crossreshareDarkMode": {
+    "description": "THREADS ONLY \u2014 render that Instagram Story in dark mode. Needs crossreshareToIg.",
+    "type": "boolean"
+   },
+   "crossreshareToIg": {
+    "description": "THREADS ONLY \u2014 when this fires, ALSO share it to the linked Instagram account as a STORY. Refused on a Threads carousel. No confirmation exists that the Story was created, so the result says it was requested.",
+    "type": "boolean"
+   },
+   "description": {
+    "description": "YOUTUBE: the video DESCRIPTION, max 5000 characters, carrying the links, the CTA and what YouTube search reads. Omit it and the caption is used.",
+    "type": "string"
+   },
+   "disableComment": {
+    "description": "TIKTOK \u2014 turn comments off on this post.",
+    "type": "boolean"
+   },
+   "disableDuet": {
+    "description": "TIKTOK VIDEO ONLY \u2014 block Duets. TikTok\u2019s photo-post API has no Duets, so this is refused on a photo/slideshow item rather than silently dropped.",
+    "type": "boolean"
+   },
+   "disableStitch": {
+    "description": "TIKTOK VIDEO ONLY \u2014 block Stitches. Same photo-post rule as disableDuet.",
+    "type": "boolean"
+   },
+   "event": {
+    "description": "GOOGLE BUSINESS \u2014 required for an EVENT or OFFER post: {title, startDate:\"YYYY-MM-DD\", endDate, startTime:\"HH:MM\", endTime}. `title` is the EVENT\u2019s headline, a different thing from the post `title` (which is the Pinterest/YouTube one). Google documents its TimeInterval as needing all four date/time parts to be valid, so send the times whenever you know them.",
+    "properties": {
+     "endDate": {
+      "type": "string"
+     },
+     "endTime": {
+      "type": "string"
+     },
+     "startDate": {
+      "type": "string"
+     },
+     "startTime": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "hook": {
+    "description": "WHAT ANGLE this post is built on, recorded only at publish time. post_performance ranks hooks on it (a winner needs 5 posts sharing ONE hook), so pass a list_hooks id (e.g. \"direct_callout\", \"before_after\") or reuse your own wording EXACTLY across a campaign. Omit it and this post never votes on which hook works.",
+    "type": "string"
+   },
+   "ideaId": {
+    "description": "short id of the content-plan idea this post came from",
+    "type": "string"
+   },
+   "imageUrl": {
+    "description": "a Hermoso render URL (a /generated path, or what upload_file returned), a data: URI, or a public https URL. NOTE: only Facebook/Instagram/Threads accept an arbitrary public URL \u2014 X, TikTok, YouTube, LinkedIn, Pinterest and Google Business re-host the bytes and REFUSE anything that is not a Hermoso render, so run an external file through upload_file first and schedule that url.",
+    "type": "string"
+   },
+   "imageUrls": {
+    "description": "CAROUSEL \u2014 an ORDERED list of image URLs to publish as ONE swipeable post on every channel that supports it (Instagram 2\u201310, Threads 2\u201320, Facebook, LinkedIn company Pages 2\u201320, Pinterest 2\u20135, TikTok up to 35 as a photo post). Use this whenever the creative is a multi-slide deck: a scheduled post carrying only slide 1 of a \u201c1/6 \u00b7 SWIPE\u201d set is a broken ad that nobody is watching when it fires. THE ORDER IS THE PRODUCT. A channel on this schedule that cannot do carousels \u2014 X, YouTube, Google Business Profile \u2014 is REFUSED NOW, with the reason, so you can drop it or give it its own single image; it is never quietly downgraded hours later.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "instagramLocationId": {
+    "description": "INSTAGRAM \u2014 tag a place (called locationId on post_to_meta; locationId here is the Google Business listing). It is the NUMERIC ID OF A FACEBOOK PAGE associated with that location, not a place name and not coordinates; a non-numeric value is refused rather than sent.",
+    "type": "string"
+   },
+   "link": {
+    "description": "a link to attach (Facebook)",
+    "type": "string"
+   },
+   "linkAttachment": {
+    "description": "THREADS ONLY \u2014 a full http(s) URL rendered as a link card. This is the ONLY way a Threads post carries a destination, and Threads attaches it to TEXT-ONLY posts (a post with media cannot also carry a card).",
+    "type": "string"
+   },
+   "linkDescription": {
+    "description": "FACEBOOK \u2014 override the DESCRIPTION of the link preview. Needs `link`. MEASURED 2026-09-17: Facebook only honours these when the Page\u2019s business has VERIFIED the domain (Business Manager > Brand safety > Domains) \u2014 without that Meta refuses the post outright with \u201cOnly owners of the URL\u2026\u201d, so leave them out unless the brand owns and has verified that link\u2019s domain.",
+    "type": "string"
+   },
+   "linkName": {
+    "description": "FACEBOOK \u2014 override the HEADLINE of the link preview. Without it the post shows whatever Open Graph title the destination carries, which on a bare landing page is often nothing. Needs `link`. MEASURED 2026-09-17: Facebook only honours these when the Page\u2019s business has VERIFIED the domain (Business Manager > Brand safety > Domains) \u2014 without that Meta refuses the post outright with \u201cOnly owners of the URL\u2026\u201d, so leave them out unless the brand owns and has verified that link\u2019s domain.",
+    "type": "string"
+   },
+   "linkPicture": {
+    "description": "FACEBOOK \u2014 override the IMAGE of the link preview: a public http(s) url Facebook fetches itself. Needs `link`. MEASURED 2026-09-17: Facebook only honours these when the Page\u2019s business has VERIFIED the domain (Business Manager > Brand safety > Domains) \u2014 without that Meta refuses the post outright with \u201cOnly owners of the URL\u2026\u201d, so leave them out unless the brand owns and has verified that link\u2019s domain.",
+    "type": "string"
+   },
+   "linkedinOrganizationId": {
+    "description": "LINKEDIN \u2014 publish as a COMPANY PAGE instead of the connected personal profile. The organization id from list_linkedin_pages. Omit and it posts as the person: an unset id means the profile, never \u201cprobably the company\u201d. A Page can also carry VIDEO, which a personal profile cannot.",
+    "type": "string"
+   },
+   "locationId": {
+    "description": "GOOGLE BUSINESS PROFILE \u2014 which listing, e.g. 'locations/123' from list_business_locations. Needed when the account manages more than one storefront; it is never chosen for the user.",
+    "type": "string"
+   },
+   "madeWithAi": {
+    "description": "X \u2014 X\u2019s AI-media label on this post. Opt-in: X treats it as the poster\u2019s own claim about their media, so it is never set on the user\u2019s behalf.",
+    "type": "boolean"
+   },
+   "message": {
+    "description": "the caption/text used for every channel unless overridden in captions",
+    "type": "string"
+   },
+   "offer": {
+    "description": "GOOGLE BUSINESS \u2014 OFFER posts only: {couponCode, redeemOnlineUrl, termsConditions}. redeemOnlineUrl is where an offer actually sends people, since the button link is ignored on an Offer.",
+    "properties": {
+     "couponCode": {
+      "type": "string"
+     },
+     "redeemOnlineUrl": {
+      "type": "string"
+     },
+     "termsConditions": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "optimizeCopy": {
+    "description": "RECOMMENDED when one caption goes to several channels: fit the shared caption to each channel\u2019s own rules when you schedule it (the fitted caption is stored on the scheduled post, so what you scheduled is what publishes) wherever no per-channel caption was written. The angle and every claim stay the author\u2019s; a channel with its own caption is left exactly as written. Off by default so nobody\u2019s words are rewritten unasked.",
+    "type": "boolean"
+   },
+   "pageId": {
+    "description": "FACEBOOK / INSTAGRAM / THREADS \u2014 which connected Facebook Page (and its linked Instagram) publishes, from list_meta_pages. Needed when the brand has more than one Page connected; with several and no id the post is refused at fire time rather than sent from the wrong brand.",
+    "type": "string"
+   },
+   "paidPartnership": {
+    "description": "INSTAGRAM AND X \u2014 the PAID PARTNERSHIP label, a compliance declaration: set it when the post is sponsored, gifted or otherwise paid for. OPT-IN ONLY, never assume it on the user\u2019s behalf. On Instagram, brandedContentSponsorIds names the brands behind it.",
+    "type": "boolean"
+   },
+   "place": {
+    "description": "FACEBOOK \u2014 tag a location on the Page post. The NUMERIC ID OF THE FACEBOOK PAGE for that place, not a place name and not coordinates.",
+    "type": "string"
+   },
+   "platformCover": {
+    "description": "VIDEO COVER. Omit it (the default) and Hermoso sets the video\u2019s best frame \u2014 the same frame as its Library thumbnail \u2014 as the cover on every channel that allows one (Instagram, Facebook, TikTok direct posts, LinkedIn Pages, Pinterest, Telegram, YouTube) \u2014 and on X, Threads and Bluesky, which have none, a blank first frame is replaced on a copy sent there only. true = send no cover and let the platform pick (usually the first frame). A cover you pass yourself always wins.",
+    "type": "boolean"
+   },
+   "poll": {
+    "description": "X \u2014 attach a poll: {options:[\"\u2026\",\"\u2026\"], durationMinutes}. 2\u20134 options of at most 25 characters each; voting runs 5\u201310080 minutes (7 days), default 1440. X makes a poll MUTUALLY EXCLUSIVE with media, so an item carrying an image or video is refused \u2014 schedule the poll as its own X-only post.",
+    "properties": {
+     "durationMinutes": {
+      "type": "number"
+     },
+     "options": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "options"
+    ],
+    "type": "object"
+   },
+   "privacyLevel": {
+    "description": "TIKTOK \u2014 WHICH PRIVACY LEVEL the post goes out at, in TikTok\u2019s own vocabulary. TikTok requires the USER to choose this from the levels their own account allows: call tiktok_creator_info, show them the real options, and pass back the one they picked \u2014 never a default and never a guess, which TikTok refuses at init. Omit it and the post falls back to the coarse `visibility` (private -> SELF_ONLY, otherwise PUBLIC_TO_EVERYONE), which cannot express MUTUAL_FOLLOW_FRIENDS or FOLLOWER_OF_CREATOR at all. It must agree with the TikTok visibility (SELF_ONLY is the private one) and it is refused on a TikTok DRAFT, which carries no post info.",
+    "enum": [
+     "PUBLIC_TO_EVERYONE",
+     "MUTUAL_FOLLOW_FRIENDS",
+     "FOLLOWER_OF_CREATOR",
+     "SELF_ONLY"
+    ],
+    "type": "string"
+   },
+   "quotePostId": {
+    "description": "THREADS ONLY \u2014 the id of the Threads post this one quotes.",
+    "type": "string"
+   },
+   "recipe": {
+    "description": "the post's FORMAT id, e.g. \"slideshow\" or \"imessage_chat\" \u2014 post_performance groups by it, so reuse one id per format",
+    "type": "string"
+   },
+   "replyControl": {
+    "description": "THREADS ONLY \u2014 who may reply. Omit for Threads' own default (everyone).",
+    "enum": [
+     "everyone",
+     "accounts_you_follow",
+     "mentioned_only",
+     "parent_post_author_only",
+     "followers_only"
+    ],
+    "type": "string"
+   },
+   "replySettings": {
+    "description": "X \u2014 who may reply. Omit for everyone, which is the right default for a brand post.",
+    "enum": [
+     "following",
+     "mentionedUsers",
+     "subscribers",
+     "verified"
+    ],
+    "type": "string"
+   },
+   "shareToFeed": {
+    "description": "INSTAGRAM REEL \u2014 true puts the Reel in the Feed grid as well as the Reels tab. REELS ONLY. Left unset it follows Instagram\u2019s own default; Hermoso does not flip it either way on the user\u2019s behalf.",
+    "type": "boolean"
+   },
+   "slideText": {
+    "description": "PINTEREST CAROUSEL ONLY \u2014 per-slide title / description / link, aligned to slide order. Every other platform takes ONE caption for the whole carousel.",
+    "items": {
+     "properties": {
+      "description": {
+       "type": "string"
+      },
+      "link": {
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "story": {
+    "description": "INSTAGRAM STORY \u2014 publish this as a 24-hour Story instead of a feed post. One image OR one video: Instagram has no carousel story, so a carousel is REFUSED BY NAME rather than quietly posted to the feed. A Story carries NO CAPTION (there is nowhere to show one), no collaborators, no product tags and no trialReel \u2014 passing any of those is refused by name and nothing is posted, because a story that silently drops the words is worse than one that never went. INSTAGRAM ONLY: a Facebook Page story is a different upload and is not built, so a Facebook channel with `story` set is refused rather than published to the feed.",
+    "type": "boolean"
+   },
+   "subject": {
+    "description": "WHAT THIS POST IS ABOUT \u2014 product, feature, offer or theme (e.g. \"winter coat\", \"free trial\"). post_performance's second grouping axis: reuse the exact wording, as with hook.",
+    "type": "string"
+   },
+   "tags": {
+    "description": "YOUTUBE \u2014 up to 30 search tags for the video (plain words, no #).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "targetAudience": {
+    "description": "LINKEDIN COMPANY PAGE POST ONLY \u2014 show the post only to Page followers matching these facets (URNs or bare numeric ids; search_linkedin_ads_targeting finds them). LinkedIn requires the matching audience to be over 300 followers and refuses a smaller one. Personal-profile posts cannot be targeted.",
+    "properties": {
+     "degrees": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "fieldsOfStudy": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "geoLocations": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "industries": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "jobFunctions": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "organizations": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "seniorities": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "staffCountRanges": {
+      "items": {
+       "enum": [
+        "SIZE_1",
+        "SIZE_2_TO_10",
+        "SIZE_11_TO_50",
+        "SIZE_51_TO_200",
+        "SIZE_201_TO_500",
+        "SIZE_501_TO_1000",
+        "SIZE_1001_TO_5000",
+        "SIZE_5001_TO_10000",
+        "SIZE_10001_OR_MORE"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "thread": {
+    "description": "X \u2014 publish a THREAD, one entry per post, each replying to the one before (at most 25). 280 characters per part without X Premium, up to 25,000 with it; nothing is truncated. It REPLACES the X caption: with a thread set, `message`/`captions.x` is not sent to X at all. A thread cannot carry a poll.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "thumbOffset": {
+    "description": "INSTAGRAM REEL COVER, the other way \u2014 which frame becomes the cover, in MILLISECONDS from the start of the video. REELS ONLY. Use it instead of `coverUrl` when the right cover is already a frame of the clip.",
+    "type": "number"
+   },
+   "thumbnailUrl": {
+    "description": "YOUTUBE: the custom thumbnail, a Hermoso-hosted image (make_thumbnail, or upload_file for the user\u2019s own). Omit it and a frame of the video is used; \"auto\" keeps YouTube\u2019s pick.",
+    "type": "string"
+   },
+   "timezone": {
+    "description": "IANA zone for the queue, e.g. \"America/New_York\" \u2014 only meaningful with useQueue, and it overrides the brand\u2019s saved zone for this one post. A saved slot of \"09:00\" is a WALL-CLOCK time, so the zone is what turns it into an instant; without either the brand\u2019s saved zone or this, the queue resolves in UTC.",
+    "type": "string"
+   },
+   "title": {
+    "description": "PINTEREST / YOUTUBE \u2014 the headline, max 100 characters. Pinterest shows it in search and under the pin; YouTube requires one. Leave it out and Hermoso derives one from that channel\u2019s caption (first sentence, cut on a word boundary, trailing hashtags dropped) \u2014 set a real one whenever the caption does not open with a usable headline.",
+    "type": "string"
+   },
+   "topicTag": {
+    "description": "THREADS ONLY \u2014 one topic tag for the post, without the leading #.",
+    "type": "string"
+   },
+   "topicType": {
+    "description": "GOOGLE BUSINESS \u2014 the KIND of Post. STANDARD is the default; EVENT and OFFER both REQUIRE `event` (title + start date), and OFFER also takes `offer`.",
+    "enum": [
+     "STANDARD",
+     "EVENT",
+     "OFFER",
+     "ALERT"
+    ],
+    "type": "string"
+   },
+   "trialReel": {
+    "description": "INSTAGRAM TRIAL REEL \u2014 publish this Reel to NON-FOLLOWERS ONLY at first (Instagram allows trials only on accounts above its follower threshold \u2014 about 1,000 followers; an ineligible account is refused by name and nothing is posted), so a hook can be tested on a cold audience without spending it on the people who already follow the brand; Instagram shows it to followers only if it graduates. MANUAL = the creator graduates it by hand in the Instagram app; SS_PERFORMANCE = Instagram graduates it automatically if it performs. REELS ONLY and INSTAGRAM ONLY: an image, a carousel, or a Facebook/Threads channel is REFUSED BY NAME rather than quietly published as an ordinary post \u2014 a trial that silently goes to every follower is the exact opposite of what was asked for, so Instagram must be one of the `channels` and the item must carry a video. Omit it for a normal Reel.",
+    "enum": [
+     "MANUAL",
+     "SS_PERFORMANCE"
+    ],
+    "type": "string"
+   },
+   "useQueue": {
+    "description": "instead of naming a minute, drop this into the brand\u2019s POSTING QUEUE: Hermoso takes the earliest of its saved posting times that is still free (skipping any slot another queued post already holds). This is the natural answer to \u201cjust queue it\u201d / \u201cpost it at my next opening\u201d. Mutually exclusive with `at` \u2014 passing both is refused rather than one being silently preferred. If the brand has no posting times set, or every slot for the next 90 days is taken, it is refused by name and nothing is scheduled.",
+    "type": "boolean"
+   },
+   "videoUrl": {
+    "description": "a Hermoso render URL (a /generated path, or what upload_file returned), a data: URI, or a public https URL \u2014 required for youtube, and for tiktok unless you pass an imageUrl (TikTok takes a photo post too). Same origin rule as imageUrl: everything except Facebook/Instagram/Threads REFUSES a non-Hermoso URL, so pass external video through upload_file first.",
+    "type": "string"
+   },
+   "videoVolume": {
+    "description": "INSTAGRAM REEL \u2014 how loud the video\u2019s own sound plays under the track, 0\u2013100 (Instagram\u2019s default 100; 0 = the track alone). Needs audioId.",
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "visibility": {
+    "description": "how it should be published \u2014 DEFAULT 'public' (live). Only pass something else if the user explicitly asked to stage/hide it. Not every channel supports every value; an impossible combination is refused when you schedule it, with the reason.",
+    "enum": [
+     "public",
+     "unlisted",
+     "private",
+     "draft"
+    ],
+    "type": "string"
+   },
+   "visibilityByChannel": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "override visibility for one channel, e.g. { \"tiktok\": \"draft\" } to go live everywhere but stage TikTok for review",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "xArticle": {
+    "description": "X: publish the X item as a long-form X ARTICLE. title is its headline, the X text (message or captions.x) its markdown body, the image its cover. Refused now if the markdown has formatting X cannot hold. X allows about 5 Articles a day; one that fires into that cap fails with the reset time and can be retried.",
+    "properties": {
+     "headings": {
+      "enum": [
+       "blocks",
+       "text"
+      ],
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "title"
+    ],
+    "type": "object"
+   },
+   "xQuotePostId": {
+    "description": "X \u2014 the numeric id of an X post this one QUOTES: the last part of its URL. NAMED xQuotePostId, NOT quotePostId, because `quotePostId` on this same schedule belongs to THREADS. Billed at X\u2019s higher LINK rate.",
+    "type": "string"
+   },
+   "yourBrand": {
+    "description": "TIKTOK \u2014 the OWN-BRAND disclosure (brand_organic_toggle): true when the post promotes the creator\u2019s own business. TikTok asks for at least one of this and brandedContent once a post is commercial.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "channels"
+  ],
+  "type": "object"
+ },
+ "name": "schedule_post",
+ "title": "Schedule a post for later"
+}

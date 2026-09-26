@@ -1,0 +1,141 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Pro/Teams: first-pass doctrine review of agentic code/workflow against the 10-principle AI Design Blueprint doctrine. ON CLIENT TIMEOUT: DO NOT RETRY THIS TOOL. Long-running LLM call (60-180s typical); MCP clients commonly close the call before the server returns. Retrying re-runs the 60-180s LLM call from scratch and burns compute. RECOVERY: the run_id is emitted in the FIRST notifications/progress event at t=0s (before the LLM call begins), capture it. On timeout, call `me.validation_history(run_id='<that-id>')` to fetch the persisted result; the server-side run completes independently within a 6-minute budget. Edge case: if the transport dropped before the first progress notification (very rare; sub-second window), call `me.validation_history(repository='<same value you passed here>')` to find your most recent run. TASK-AUGMENTED INVOCATION (MCP 2025-11-25, SEP-1686): clients that advertise the `tasks` capability can task-augment this call by including `task: {ttl: <ms>}` inside the JSON-RPC request's `params` (NOT as a tool argument; alongside `arguments`, `_meta`, etc.). The server returns a `CreateTaskResult` immediately (taskId equals the run_id above) and runs the validation in the background. Spec-correct long-running pattern: poll via `tasks/get` for state, fetch the terminal payload via `tasks/result`, listen for `notifications/tasks/status` for push updates, and cancel via `tasks/cancel`. `_meta.progressToken` from the original request stays valid for the entire task lifetime. Sync (non-augmented) calls behave exactly as before, backwards-compatible by construction. The me.validation_history(run_id=...) recovery path remains the canonical recovery handle for clients that don't yet advertise the tasks capability. Returns code_classification (autonomous_agentic_workflow vs non_agentic_component), per-principle findings (verdict, severity_score 0-100, severity_class, code-cited evidence, recommendation), severity-weighted readiness (score|null, grade|null, tier \u2208 {production_ready, emerging, draft, not_applicable}), recommended examples, reproducibility envelope (model, seed, doctrine_fingerprint, prompt_template_fingerprint), persistence_status with shareable run_id/badge_url/review_url. Those two URLs 404 until the run's owner publishes it: runs are private by default. Read `public_review` in the response before embedding either one. WHEN TO CALL: the user wants a governance audit, readiness score, or production_ready badge on an agent/workflow they just built or changed. WHEN NOT TO CALL: non-agentic plumbing (math utilities, type aliases, event-loop helpers, single-shot request/response handlers) returns tier=not_applicable with score=null/grade=null, that's not a failure, the doctrine simply doesn't grade non-agentic code, and architect.certify will refuse with not_agentic_component. Submit the OWNING agentic workflow instead. BEHAVIOR: long-running LLM call (~60-180s typical at high reasoning effort, single-pass; server-side budget 6 min). Mints run_id at t=0; first notifications/progress event carries run_id as recovery handle; keepalive every 30s. Persists ValidationRun + UserValidationRun + AIValidationRunLog + LLMUsageLog atomically; on rollback, badge/review URLs are stripped. Auth: sign-in required, with an active Pro, Pro Plus, Teams, Enterprise, beta, or trial plan. Data at rest in the UK; OpenAI (US) processing (no-training); prompt-injection in code is inert. INPUTS: send FULL file contents verbatim as `implementation_context` (NO truncation, NO `...` placeholders, NO comment removal, the architect treats your `...` as literal code and hallucinates bugs that don't exist). If too large, split into MULTIPLE calls scoped by file/module; never truncate one call. Pass repository=\"<name>\" to group runs into a project trend. Pass private_session=true to skip the stored run (persistence + recovery disabled); operational security + cost logs are still kept. focus_area narrows scope; unmatched focus_area fails explicitly rather than silently widening. PAYLOAD COMPLETENESS (load-bearing if you intend to architect.certify this run): the validate first-pass is permissive, it scores on doctrine alignment + structural patterns visible in the submitted code. Cert's adversarial second-pass is rigorous: it scores on cert-payload-completeness as well as code correctness. A run that scores 100/A at validate can cert-reject pre-LLM with `payload_incomplete` when imported modules' surfaces aren't visible. To validate with INTENT TO CERT, also bundle verbatim public-surface stubs for every imported module: `from sqlalchemy.exc import SQLAlchemyError` \u2192 include a stub class; `from app.db import models` \u2192 include a `class models:` namespace stub with the columns/methods the code references; module-level imports of `dataclass`, `Literal`, `json`, `datetime`, `timezone` MUST also be in the payload (cert correctly catches when they're omitted, the module would NameError on import as submitted). 'Submit Like Production': the payload should be the code as it would actually run. TWO COMPLETENESS AXES. (1) IMPORTS: stub the public surface of every dependency (above). (2) ENFORCEMENT BRANCHES: the code under cert itself (approval gates, policy checks, recovery paths) must be the REAL logic, fully written. A placeholder body (`# ... execute approved action ...`, `pass  # TODO`, a bare `...`) is graded as a MISSING control, not shorthand; cert scores what would actually run. Never sketch the agent you are certifying. Empirically reconfirmed PR #157 iter8 \u2192 iter9 cert downgrades. SCORE VARIANCE DISCLOSURE (anomaly #10: empirically documented): validate scores are POINT ESTIMATES with an observed empirical variance band of ~20-67 pts on BYTE-IDENTICAL input. Runs against the same repository, same code, same deterministic seed (the seed is derived from input: same input \u2192 same seed) can produce materially different scores AND different top-blocker rankings, because OpenAI's reasoning models at reasoning_effort=high are not strictly deterministic even with the seed parameter pinned. The `reproducibility_mode='best_effort'` field on every response is the platform's honest disclosure of this property. For decisions where stability matters more than speed, call `architect.validate_consensus` (N=3-5 aggregated, median verdict + per-principle stability metrics) instead: collapses the variance, surfaces unstable principles explicitly. A single validate run is a single roll; consensus is the right tool when one score isn't enough. ITERATION LOOP: repository keying. Pass the SAME `repository` value across calls to chain iteration rounds; the validator auto-resolves the most recent prior run on (user, repository, scope) as `prior_run_baseline` and the LLM grades the new submission with iteration context (per-principle severity deltas surface in the response). Changing the `repository` string between calls, even subtly with an `iter-2` suffix, silently severs the chain and yields a fresh blind first-shot. Round numbering belongs in `task` or commit messages, never in `repository`. See the `architect-validation-orchestration` skill in the agent-asset pack for the full validate \u2192 consensus \u2192 certify sequence. VERIFICATION LAYERS (the two-layer doctrine this platform practices on itself): validate verifies DOCTRINE ALIGNMENT against the 10-principle Blueprint, design patterns, hand-off explicitness, operational-state inspectability, race/blocker handling at the architectural level. validate does NOT guarantee runtime correctness. cert verifies PAYLOAD COMPLETENESS and runs an adversarial second pass over the submitted code: catches production_blockers the first pass missed, name-errors on import, missing module surfaces, etc. cert does NOT verify runtime correctness either. Passing validate is a NECESSARY condition for production_ready, not a sufficient one. Runtime correctness (does this actually execute and behave?) is verified at the THIRD layer: your tests, types, walks. The platform's own recursive-integrity practice: every PR runs validate against its own primitives, then cert. Real bugs surfaced via this practice in PR #157, NULL-UUID false-positive (iter3) and tie-breaker mismatch (iter5), that 25 unit tests had missed. Two-layer verification is the discipline, not 'either/or'. TYPED FAILURES: timed_out, rate_limited, dependency_unavailable, schema_mismatch (each carries retryable + next_action). NEXT STEP: if tier=production_ready (A or B grade), the response carries certification_status='not_evaluated', call architect.certify(run_id, code) to mint the certified production_ready badge (separate ~60-150s adversarial review, eligibility-gated). See Payload Completeness above for the common pre-cert pitfall.",
+ "inputSchema": {
+  "properties": {
+   "example_limit": {
+    "default": 3,
+    "description": "Maximum number of curated examples to include in recommendations.",
+    "minimum": 1,
+    "title": "Example Limit",
+    "type": "integer"
+   },
+   "files": {
+    "anyOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "List of file paths relevant to the implementation context.",
+    "title": "Files"
+   },
+   "focus_area": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Narrow the evaluation to a specific principle cluster or slug (e.g. 'delegation', 'visibility', 'establish-trust-through-inspectability').",
+    "title": "Focus Area"
+   },
+   "goals": {
+    "anyOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Specific safety or quality goals to evaluate against (e.g. 'prevent irreversible actions', 'explicit approvals').",
+    "title": "Goals"
+   },
+   "implementation_context": {
+    "description": "The artifact under review. SEND FULL FILE CONTENTS VERBATIM: the architect cites per-line evidence (identifiers, branch ordering, structural choices); any compression destroys evidence and produces hallucinated findings on code that isn't there. CONCRETE DON'TS: do NOT replace docstrings/comments with `...`; do NOT condense multi-line statements; do NOT replace dict/set comprehensions with `{...}`; do NOT remove explanatory comments to save tokens. If the file is large, split into MULTIPLE architect.validate calls scoped by file/module: never truncate one call. Architecture summaries (high-level prose) accepted ONLY for greenfield (no code yet); never as a substitute for code that already exists.",
+    "title": "Implementation Context",
+    "type": "string"
+   },
+   "language": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Programming language of the code being evaluated (e.g. 'python', 'typescript').",
+    "title": "Language"
+   },
+   "private_session": {
+    "default": false,
+    "description": "Set to true to skip the stored run AND prior-run anchoring AND run_id recovery for this call. Operational security and cost logs are still kept, per the Privacy Policy. The request is also not persisted in the model provider's response store; the provider's abuse-monitoring retention still applies. Use for private one-shots that don't participate in the iteration arc. Default false.",
+    "title": "Private Session",
+    "type": "boolean"
+   },
+   "repository": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Iteration key. SAME value across calls auto-resolves the most recent prior run as `prior_run_baseline` for iteration-aware grading (per-principle severity deltas, regressions/improvements). CHANGING the value (even subtly with an `iter-2` suffix) silently severs the chain and yields a fresh blind first-shot. Round numbering belongs in `task`, not here. Empirical evidence of why anchoring matters: PR #157 iter1 33/F vs iter2 100/A on byte-identical baseline-race primitives (+67 spread); invoice-payment-manager #158 38/F vs #159 74/C (+36 spread), same code, score variance from non-deterministic LLM at reasoning_effort=high; the baseline anchor collapses this onto a stable arc.",
+    "title": "Repository"
+   },
+   "session_id": {
+    "anyOf": [
+     {
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Optional Governed Session to attach this run to (GEP-M2). Must reference a session YOU own (list via me.sessions; sessions are created in the web app at /app/sessions): foreign ids are refused before any model call. The run then appears on the session's timeline alongside the other lenses. With private_session=true no run is stored so nothing attaches, but the ownership check still runs FIRST: a session id you don't own fails the call either way.",
+    "title": "Session Id"
+   },
+   "task": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "What the agent or workflow is trying to accomplish. Adds evaluation context.",
+    "title": "Task"
+   }
+  },
+  "required": [
+   "implementation_context"
+  ],
+  "title": "validate_agent_architectureArguments",
+  "type": "object"
+ },
+ "name": "architect.validate",
+ "outputSchema": {
+  "additionalProperties": true,
+  "title": "validate_agent_architectureDictOutput",
+  "type": "object"
+ },
+ "taskSupport": "optional",
+ "title": "Validate Agent Architecture"
+}

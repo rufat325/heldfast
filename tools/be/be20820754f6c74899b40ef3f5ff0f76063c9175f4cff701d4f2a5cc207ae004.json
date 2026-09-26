@@ -1,0 +1,267 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Inspect one autonomous HTTP purchase before the calling agent pays it. This $0.01 machine-payment operation validates a real 402 challenge, compares advertised price/protocol/network/asset/payment destination when supplied, checks x402 v2 exact resource binding when available, and surfaces retry or settled-delivery recovery signals. ExitProof never forwards payment credentials and never sends a live POST, PUT, PATCH, or DELETE probe; for those methods the caller supplies an already-observed 402 challenge. Conflicting, malformed, inaccessible, non-402, or unsafe targets are rejected before ExitProof issues its own payment challenge. Use check_reversibility instead for cancellation/refund terms on a real-world commitment, create_exit_manifest to preserve an eligible exit path, and build_exit_pack when an exit is actually needed. A successful check is not a recommendation, merchant-identity guarantee, delivery guarantee, legal opinion, or authorization to spend.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "description": "Pre-payment safety check for one autonomous HTTP purchase. ExitProof either performs a credential-free GET/HEAD probe or analyzes a 402 challenge already observed by the caller. It never forwards payment credentials or sends state-changing probe requests.",
+  "properties": {
+   "advertised": {
+    "additionalProperties": false,
+    "description": "Optional payment facts advertised by discovery metadata. ExitProof compares these to the observed 402 challenge and rejects material conflicts before its own payment challenge.",
+    "properties": {
+     "asset": {
+      "description": "Advertised asset symbol or address.",
+      "maxLength": 120,
+      "type": "string"
+     },
+     "currency": {
+      "description": "Advertised currency or asset code.",
+      "type": "string"
+     },
+     "network": {
+      "description": "Advertised payment network, for example eip155:8453.",
+      "maxLength": 120,
+      "type": "string"
+     },
+     "pay_to": {
+      "description": "Advertised payment destination.",
+      "maxLength": 200,
+      "type": "string"
+     },
+     "price_cents": {
+      "description": "Advertised price in whole USD cents.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "protocol": {
+      "description": "Advertised machine-payment protocol.",
+      "enum": [
+       "x402",
+       "mpp"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "live_probe": {
+    "description": "Whether ExitProof may make one anonymous, credential-free request to target_url. Defaults true for GET/HEAD and false for state-changing methods.",
+    "type": "boolean"
+   },
+   "observed_response": {
+    "additionalProperties": false,
+    "description": "A 402 response already observed by the calling agent. Required when live_probe is false. Supply payment challenge headers only, never a payment credential.",
+    "properties": {
+     "http_status": {
+      "const": 402,
+      "description": "HTTP 402 status from the target.",
+      "type": "integer"
+     },
+     "observed_at": {
+      "description": "RFC 3339 timestamp with explicit timezone for when the caller observed this response.",
+      "format": "date-time",
+      "type": "string"
+     },
+     "payment_required": {
+      "description": "PAYMENT-REQUIRED response header for x402 v2, when present.",
+      "maxLength": 32768,
+      "type": "string"
+     },
+     "www_authenticate": {
+      "description": "WWW-Authenticate response header containing an MPP Payment challenge, when present.",
+      "maxLength": 32768,
+      "type": "string"
+     }
+    },
+    "required": [
+     "http_status"
+    ],
+    "type": "object"
+   },
+   "operation": {
+    "description": "Optional caller label for the target operation. This is descriptive only and is included in the check digest.",
+    "maxLength": 160,
+    "type": "string"
+   },
+   "request_method": {
+    "default": "GET",
+    "description": "HTTP method of the contemplated purchase. Live probing is allowed only for GET or HEAD. For state-changing methods supply observed_response instead.",
+    "enum": [
+     "GET",
+     "HEAD",
+     "POST",
+     "PUT",
+     "PATCH",
+     "DELETE"
+    ],
+    "type": "string"
+   },
+   "retry_contract": {
+    "additionalProperties": false,
+    "description": "Optional retry, settled-delivery recovery, and refund/reversal facts advertised by the target. These remain caller-supplied unless independently verified elsewhere.",
+    "properties": {
+     "idempotent_retry": {
+      "description": "Whether the target advertises safe idempotent retry semantics.",
+      "type": "boolean"
+     },
+     "refund_or_reversal_url": {
+      "description": "Public HTTPS refund, reversal, or recovery documentation URL, when published.",
+      "format": "uri",
+      "type": "string"
+     },
+     "settled_delivery_recovery": {
+      "description": "Whether the target advertises recovery after settlement if delivery fails without requiring a second payment.",
+      "type": "boolean"
+     },
+     "source_url": {
+      "description": "Public HTTPS source supporting the retry/recovery claims.",
+      "format": "uri",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "target_url": {
+    "description": "Public HTTPS endpoint the agent is considering paying. Credentials, localhost, private-address literals, and non-HTTPS URLs are rejected.",
+    "format": "uri",
+    "type": "string"
+   }
+  },
+  "required": [
+   "target_url"
+  ],
+  "type": "object"
+ },
+ "name": "check_agent_purchase",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "Point-in-time pre-payment safety result. eligible_to_attempt means the observed payment requirements are internally consistent and a positive retry/recovery signal was supplied; review_required means no contradiction was found but one or more safety facts remain unknown.",
+  "properties": {
+   "advertised": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Normalized caller-supplied advertised terms used for consistency checks."
+   },
+   "assessment": {
+    "description": "Bounded pre-payment status. This is not a recommendation to buy.",
+    "enum": [
+     "eligible_to_attempt",
+     "review_required"
+    ],
+    "type": "string"
+   },
+   "availablePaymentOffers": {
+    "description": "All parseable x402 or MPP offers found in the observed response.",
+    "items": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "checkDigest": {
+    "description": "SHA-256 digest of the normalized target, payment facts, recovery facts, and evidence provenance.",
+    "pattern": "^[a-f0-9]{64}$",
+    "type": "string"
+   },
+   "checkedAt": {
+    "description": "Time the check result was produced.",
+    "format": "date-time",
+    "type": "string"
+   },
+   "checks": {
+    "description": "Individual safety checks. Conflicts reject before payment and therefore never appear as a paid result.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "detail": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "status": {
+       "enum": [
+        "pass",
+        "unknown"
+       ]
+      }
+     },
+     "required": [
+      "id",
+      "status",
+      "detail"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "evidence": {
+    "description": "Evidence provenance, including whether the 402 challenge was independently observed by ExitProof.",
+    "items": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "limitations": {
+    "description": "Boundaries on what the paid result establishes.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "nextStep": {
+    "additionalProperties": true,
+    "description": "Machine-readable status and bounded instruction for the calling agent.",
+    "type": "object"
+   },
+   "observedPayment": {
+    "additionalProperties": true,
+    "description": "Selected machine-payment offer normalized from the observed 402 challenge.",
+    "type": "object"
+   },
+   "reversibility": {
+    "additionalProperties": true,
+    "description": "Published retry, settled-delivery recovery, and reversal metadata supplied for this target.",
+    "type": "object"
+   },
+   "schemaVersion": {
+    "const": "exitproof-agent-purchase-check.v1",
+    "description": "Agent purchase check schema version."
+   },
+   "target": {
+    "additionalProperties": true,
+    "description": "Normalized target endpoint and contemplated method.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "schemaVersion",
+   "checkedAt",
+   "assessment",
+   "target",
+   "observedPayment",
+   "availablePaymentOffers",
+   "checks",
+   "reversibility",
+   "evidence",
+   "limitations",
+   "nextStep",
+   "checkDigest"
+  ],
+  "type": "object"
+ },
+ "title": "Check agent purchase"
+}

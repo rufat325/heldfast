@@ -1,0 +1,122 @@
+{
+ "description": "ALWAYS call this BEFORE paying a 402 offer / payment request your agent received \u2014 it decides whether the offer is safe to pay. Scan the LIVE 402 returned by the exact method (GET/POST) and URL you are about to pay \u2014 NOT the catalogue/discovery listing: in the field, listings drift from live offers in both price (a listed $0.005 endpoint demanding $2.00 on the live 402) and scheme ('exact' advertised, 'upto' served). The live offer is what you pay, so it is what must be scanned. Pass the discovery listing in `context.offer` as well and TollWarden will report the drift between them. Checks the resource URL for spoofing (IP-literal hosts, punycode/homoglyphs, link shorteners, userinfo tricks), credential demands (e.g. 'send your seed phrase'), price sanity, replay, and whether the counterparty has been reported. Returns allow/flag/block with reasons.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "agent_id": {
+    "type": "string"
+   },
+   "context": {
+    "additionalProperties": false,
+    "properties": {
+     "content": {
+      "description": "PROSE the agent just read (page text, tool output), for injection analysis. Do NOT put the 402 offer / discovery JSON here \u2014 that goes in `offer` (the recipient address is expected there).",
+      "type": "string"
+     },
+     "content_source_url": {
+      "type": "string"
+     },
+     "offer": {
+      "description": "The raw 402 offer / discovery payload the payment terms came from (accepts entry, Bazaar listing JSON). pay_to is expected here and exempt from the address-provenance check; the offer is still scanned for embedded injection instructions.",
+      "type": "string"
+     },
+     "origin": {
+      "description": "Where the decision to pay originated",
+      "enum": [
+       "planning",
+       "user_instruction",
+       "tool_result",
+       "fetched_content",
+       "unknown"
+      ],
+      "type": "string"
+     },
+     "phase": {
+      "description": "Set 'pre_sign' when scanning BEFORE the payment is signed (the normal scan-before-pay flow): the EIP-3009 nonce doesn't exist yet, so its absence won't be flagged. Omit or use 'post_sign' when scanning a signed payload.",
+      "enum": [
+       "pre_sign",
+       "post_sign"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "expected_price_usd": {
+    "type": "number"
+   },
+   "payment": {
+    "additionalProperties": false,
+    "properties": {
+     "amount": {
+      "description": "Atomic units, e.g. '10000' = $0.01 USDC",
+      "type": "string"
+     },
+     "amount_usd": {
+      "type": "number"
+     },
+     "asset": {
+      "type": "string"
+     },
+     "asset_decimals": {
+      "type": "number"
+     },
+     "description": {
+      "type": "string"
+     },
+     "metadata": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "network": {
+      "description": "CAIP-2, e.g. eip155:8453",
+      "type": "string"
+     },
+     "nonce": {
+      "type": "string"
+     },
+     "pay_to": {
+      "type": "string"
+     },
+     "payer": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "resource_url": {
+      "type": "string"
+     },
+     "scheme": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "policy": {
+    "additionalProperties": false,
+    "properties": {
+     "force_deep": {
+      "description": "Run deep content analysis even below the micropayment threshold",
+      "type": "boolean"
+     },
+     "skip_deep": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment"
+  ],
+  "type": "object"
+ },
+ "name": "scan_incoming_payment"
+}

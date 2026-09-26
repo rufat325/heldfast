@@ -1,0 +1,265 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Earnings data in two modes. 'history': a symbol's past quarters \u2014 actual vs. estimate EPS, surprise %, period (the surprise is the market-moving signal, surfaced prominently); requires `symbol`. 'calendar': upcoming releases in a date window \u2014 date, EPS/revenue estimates, symbol; uses `from`/`to` and optionally filters by `symbol`. Resolve a company name with finnhub_search_symbols first.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "from": {
+    "description": "Calendar mode: window start (YYYY-MM-DD). Defaults to today when omitted.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 50,
+    "description": "Max rows returned (history quarters or calendar entries). Default 50.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "mode": {
+    "description": "'history' = one symbol's past quarters with actual-vs-estimate surprises (requires `symbol`). 'calendar' = upcoming releases in a date window, optionally filtered by `symbol` (uses `from`/`to`).",
+    "enum": [
+     "history",
+     "calendar"
+    ],
+    "type": "string"
+   },
+   "symbol": {
+    "description": "Required for `history`; optionally filters `calendar` mode. US ticker. Resolve a name with finnhub_search_symbols first.",
+    "type": "string"
+   },
+   "to": {
+    "description": "Calendar mode: window end (YYYY-MM-DD). Defaults to today + 14 days when omitted.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "mode"
+  ],
+  "type": "object"
+ },
+ "name": "finnhub_get_earnings",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "mode",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "calendar": {
+    "description": "Present in `calendar` mode. Sorted by date. Note: `epsActual` and `revenueActual` are not surfaced here \u2014 this tool is for the upcoming-releases workflow; actuals are available in `history` mode for a specific symbol.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One upcoming earnings release.",
+     "properties": {
+      "date": {
+       "description": "Expected report date (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "epsEstimate": {
+       "description": "Consensus EPS estimate. Null for distant future dates or uncovered symbols.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "hour": {
+       "description": "\"bmo\" (before open) / \"amc\" (after close) / \"\" when unknown.",
+       "type": "string"
+      },
+      "quarter": {
+       "description": "Fiscal quarter (1\u20134).",
+       "type": "number"
+      },
+      "revenueEstimate": {
+       "description": "Consensus revenue estimate in the reporting currency. Null when unavailable.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "symbol": {
+       "description": "Stock ticker.",
+       "type": "string"
+      },
+      "year": {
+       "description": "Fiscal year.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "symbol",
+      "date",
+      "hour",
+      "epsEstimate",
+      "revenueEstimate",
+      "year",
+      "quarter"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "cap": {
+    "description": "The limit that was applied.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `missing_symbol`: mode 'history' was requested without a symbol. `not_us_or_paid`: Upstream HTTP 403 on the symbol. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "missing_symbol",
+         "not_us_or_paid"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "history": {
+    "description": "Present in `history` mode. Newest quarter first.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One past earnings quarter.",
+     "properties": {
+      "actualEPS": {
+       "description": "Reported EPS. Null if not yet reported.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "estimateEPS": {
+       "description": "Consensus estimate EPS.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "period": {
+       "description": "Fiscal period end (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "quarter": {
+       "description": "Fiscal quarter (1\u20134).",
+       "type": "number"
+      },
+      "surprise": {
+       "description": "actual \u2212 estimate (absolute).",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "surprisePercent": {
+       "description": "Surprise as % of estimate \u2014 the market-moving signal. Positive = beat, negative = miss.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "year": {
+       "description": "Fiscal year.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "period",
+      "year",
+      "quarter",
+      "actualEPS",
+      "estimateEPS",
+      "surprise",
+      "surprisePercent"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "mode": {
+    "description": "The mode used (echo of input).",
+    "enum": [
+     "history",
+     "calendar"
+    ],
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when the result set is empty.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of rows returned.",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Total rows available before the limit.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when rows were capped at the limit.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Finnhub Get Earnings"
+}

@@ -1,0 +1,139 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Resolve an EU legal citation \u2014 a CELEX number, ELI URI, ECLI, or an OJ citation naming its act type and year (e.g. \"Regulation (EU) 2016/679\", \"Directive 95/46/EC\") \u2014 to its canonical CELLAR work, confirming it exists before you fetch or traverse it. Returns the work URI, confirmed CELEX number, document type, date, and the ECLI of a case that carries one. A CELEX that CELLAR holds under several works resolves to the one the EUR-Lex content resolver serves. An ECLI shared by several records (a judgment and its abstract or extract, or a joined AG opinion) resolves to the primary record with the lowest CELEX.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "identifier": {
+    "description": "The EU legal citation to resolve: a CELEX number (e.g. 32016R0679), a work-level ELI URI (e.g. http://data.europa.eu/eli/reg/2016/679, with or without the /oj suffix), an ECLI (e.g. ECLI:EU:C:2014:317), or an OJ citation that names its act type and year, resolved to the CELEX it names under identifier_type \"auto\": Regulation (EU) 2016/679, Regulation (EC) No 1049/2001, Directive 95/46/EC, Decision No 1313/2013/EU, Council Framework Decision 2002/584/JHA, Council Joint Action 2008/124/CFSP, Common Position 2003/444/CFSP. \"No\" before the numbers means number/year, otherwise year/number; a two-digit year is 19YY. A citation without its act type (95/46/EC) or year (Regulation No 17) is not parsed.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "identifier_type": {
+    "default": "auto",
+    "description": "Format of the identifier. \"auto\" detects a CELEX, an ELI URI, an ECLI (by its ECLI: prefix, in any letter case), or an OJ citation; \"celex\", \"eli\", or \"ecli\" forces that lookup. An OJ citation is recognized only under \"auto\".",
+    "enum": [
+     "celex",
+     "eli",
+     "ecli",
+     "auto"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "identifier"
+  ],
+  "type": "object"
+ },
+ "name": "eurlex_lookup_celex",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "found"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "celex_number": {
+    "description": "Confirmed CELEX number for the resolved work.",
+    "type": "string"
+   },
+   "date": {
+    "description": "Document date in ISO 8601 format (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "ecli": {
+    "description": "European Case Law Identifier of the case (e.g. \"ECLI:EU:C:2014:317\"), as CELLAR stores it \u2014 the resolved work's own, or the one another work holding the same CELEX records. Present for case law that carries one; absent for legislation and judicial notices.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `ambiguous_identifier`: identifier_type is \"auto\" and the identifier, after trimming, is neither an ECLI (ECLI: prefix), an ELI URI, CELEX-shaped (uppercase), nor an OJ citation naming its act type and year (e.g. \"Regulation No 17\" names no year), so no lookup branch applies. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "ambiguous_identifier"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "found": {
+    "description": "True when the identifier resolves to a CELLAR work; false when a well-formed CELEX, ELI, ECLI, or OJ citation matches no work in the corpus, with a notice naming what was tried. Only an identifier_type \"auto\" value that, after trimming, is neither an ECLI, an ELI URI, CELEX-shaped (uppercase), nor an OJ citation naming its act type and year raises ambiguous_identifier instead.",
+    "type": "boolean"
+   },
+   "notice": {
+    "description": "Present only when found is false: the CELEX, ELI, or ECLI looked up, the accepted forms, and the search to use instead.",
+    "type": "string"
+   },
+   "resource_type": {
+    "description": "Human-readable document category resolved from the CDM resource type (e.g. \"Regulation\", \"Directive\", \"Judgment\"). An authority value with no known label falls back to its code (e.g. \"BUDGET\"). Absent for some works.",
+    "type": "string"
+   },
+   "work_uri": {
+    "description": "CELLAR work URI (stable resource identifier).",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Resolve EU Legal Citation"
+}

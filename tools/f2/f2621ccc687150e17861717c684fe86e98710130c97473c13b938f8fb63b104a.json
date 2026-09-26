@@ -1,0 +1,115 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Resolves a DOI prefix \u2014 the registrant portion of a DOI, e.g. \"10.1038\" \u2014 to its owning Crossref member: the publisher name and numeric member ID. Answers \"who publishes DOIs starting with 10.1038?\" The Crossref prefix record carries only these three facts (no counts, coverage, or flags); the returned memberId chains directly into crossref_get_member for the full publisher record.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "prefix": {
+    "description": "DOI prefix in the format \"10.NNNN\" \u2014 the registrant portion of a DOI with no \"/suffix\", e.g. \"10.1038\" or \"10.1371\".",
+    "pattern": "^10\\.\\d+$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "prefix"
+  ],
+  "type": "object"
+ },
+ "name": "crossref_get_prefix",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "prefix"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: Crossref answered HTTP 429 and the limit did not clear inside the retry budget. `upstream_unavailable`: Crossref was unreachable, returned a 5xx status, or served an HTML error page instead of JSON. `malformed_response`: Crossref returned HTTP 200 with a body that is not valid JSON. `request_timeout`: Crossref did not respond within CROSSREF_TIMEOUT_MS, or answered HTTP 408/504. `prefix_not_found`: The DOI prefix is not registered with Crossref. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_unavailable",
+         "malformed_response",
+         "request_timeout",
+         "prefix_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "memberId": {
+    "description": "Numeric Crossref member ID that owns this prefix \u2014 pass to crossref_get_member for the full publisher record",
+    "type": "number"
+   },
+   "ownerName": {
+    "description": "Name of the member (publisher) that owns this prefix",
+    "type": "string"
+   },
+   "prefix": {
+    "description": "The DOI prefix that was resolved, e.g. \"10.1038\"",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Prefix Owner"
+}

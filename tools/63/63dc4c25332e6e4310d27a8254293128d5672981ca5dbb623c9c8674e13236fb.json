@@ -1,0 +1,339 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List what an ETF or mutual fund holds, parsed from the NPORT-P portfolio report it files with the SEC every quarter. The input is the fund \u2014 a ticker like VOO, a fund series ID, or the registrant trust \u2014 which is the opposite direction from the ownership tools: secedgar_get_institutional_holdings and secedgar_find_holders answer who owns a company, this answers what a fund owns. Each position carries the security name, CUSIP/ISIN/LEI where the filer reports them, share balance, market value in USD, and percent of the fund's net assets, alongside fund-level net assets and total assets. Positions are returned largest-first by percent of net assets, one page of limit rows starting at offset; the full report registers as df_<id> when a canvas is available \u2014 inspect it with secedgar_dataframe_describe, then analyze it with secedgar_dataframe_query, which is how a fund running to thousands of positions is aggregated or joined against the 13F and insider dataframes. An NPORT-P covers exactly one fund series and a registrant trust files one report per series, so a trust with several funds needs the specific fund named \u2014 pass its ticker or series_id. Reports publish roughly two months after the period they cover, so every result is dated: the holdings are the portfolio as of report_period_date, not as of today.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "fund": {
+    "description": "The fund whose portfolio you want \u2014 a fund ticker (\"VOO\", \"SCHD\"), an SEC fund series ID (\"S000002839\"), or a 10-digit CIK. A ticker names one share class of one series and routes directly; a CIK names the registrant, which files a separate report per series and needs series_id when it runs more than one fund. Fund trusts are indexed by ticker and series, not by name, so a trust name only resolves for a fund that trades under its own name (\"SPDR S&P 500 ETF Trust\") \u2014 pass the CIK otherwise.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Number of positions to return inline, largest first by percent of net assets. Default 20. A broad index fund reports thousands of positions, so the inline list is a preview \u2014 read the whole portfolio from the dataframe, or page it with offset.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Position to start the page at, 0-based, over the full ordered holdings list. Pass the returned next_offset to read the next page \u2014 the report is parsed whole and sliced, so paging is stable and gap-free.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "report_date": {
+    "description": "Target a specific reporting period by its last day (YYYY-MM-DD), e.g. \"2025-12-31\". Omit for the most recent report. Period ends follow the fund's own fiscal quarters, which are not always calendar quarters \u2014 Direxion funds report to February, May, August, and November. available_report_periods in the response lists the ones this call identified; a period missing from that list is still worth requesting directly, since a report the submissions window no longer dates is dated by reading it.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "series_id": {
+    "description": "SEC fund series identifier (\"S000002839\"), naming which fund of the registrant to report. Takes precedence over any series the fund input implies. Series IDs come back on fund results from secedgar_company_search and in the series list of a series_required error.",
+    "pattern": "^S\\d{9}$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "fund"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_get_fund_holdings",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "fund",
+     "class_ids",
+     "registrant_cik",
+     "registrant_name",
+     "filing_date",
+     "form",
+     "accession_number",
+     "total_holdings",
+     "offset",
+     "available_report_periods",
+     "holdings",
+     "as_of"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "accession_number": {
+    "description": "Accession number \u2014 pass to secedgar_get_filing for the full document.",
+    "type": "string"
+   },
+   "as_of": {
+    "description": "The portfolio date these holdings are reported as of, and the publication lag behind it.",
+    "type": "string"
+   },
+   "available_report_periods": {
+    "description": "Period end dates of this fund's reports, newest first \u2014 the horizon report_date can address, not the fund's full history. It reaches back roughly a decade of quarterly reports, and a period older than that is refused rather than served. A period inside the horizon can still be missing from the list: the dates come from the registrant's recent submissions window, which a trust filing thousands of reports a year outruns in months, and a report the window no longer reaches is dated by reading it only when report_date asks for it.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "cap": {
+    "description": "The limit cap applied.",
+    "type": "number"
+   },
+   "class_ids": {
+    "description": "SEC class IDs of the share classes covered. One report covers every class of the series, so a fund with both an ETF and an admiral-share class reports them together.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe holding every position in the report (the inline holdings[] is a preview capped at limit). Each row carries the fund keys \u2014 series_id, registrant_cik, report_period_date, accession_number \u2014 alongside the position fields, so it joins against the 13F and insider dataframes on cusip. Absent when canvas is unavailable or the report had no positions.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `fund_not_found`: The fund input resolves to neither an EDGAR company nor a known fund series. `ambiguous_fund`: The fund name matches several EDGAR companies. `series_required`: The input resolves to a registrant trust that files reports for more than one fund series. `no_filings_found`: No NPORT-P report exists for this fund, or none covers the report_date requested. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "fund_not_found",
+         "ambiguous_fund",
+         "series_required",
+         "no_filings_found",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "filing_date": {
+    "description": "Date the report was submitted to EDGAR (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "form": {
+    "description": "EDGAR form name \u2014 \"NPORT-P\", or \"NPORT-P/A\" for an amended report.",
+    "type": "string"
+   },
+   "fund": {
+    "description": "The fund input, echoed.",
+    "type": "string"
+   },
+   "holdings": {
+    "description": "One page of positions, `limit` rows starting at `offset`, largest first by percent of net assets.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One position from the fund portfolio.",
+     "properties": {
+      "asset_category": {
+       "description": "SEC asset-type code \u2014 EC equity-common, EP equity-preferred, DBT debt, RA repurchase agreement, STIV short-term investment vehicle, DE derivative. A filer that classifies a position as Other reports its own label here instead of a code (\"Right\"), because the code in that case is just \"OTHER\".",
+       "type": "string"
+      },
+      "balance": {
+       "description": "Units held, counted in whatever `units` names \u2014 shares, principal, or contracts.",
+       "type": "number"
+      },
+      "country": {
+       "description": "ISO 3166 country of investment.",
+       "type": "string"
+      },
+      "currency": {
+       "description": "ISO 4217 currency the position is denominated in.",
+       "type": "string"
+      },
+      "cusip": {
+       "description": "9-character CUSIP. Absent when the filer omits it.",
+       "type": "string"
+      },
+      "isin": {
+       "description": "ISIN. Absent when the filer reports another identifier.",
+       "type": "string"
+      },
+      "issuer_category": {
+       "description": "SEC issuer-type code \u2014 CORP corporate, MUN municipal, USGSE US government-sponsored, RF registered fund. A filer that classifies an issuer as Other reports its own label here instead of a code (\"Future\", \"Warrant\").",
+       "type": "string"
+      },
+      "lei": {
+       "description": "Legal Entity Identifier of the issuer, when reported.",
+       "type": "string"
+      },
+      "name": {
+       "description": "Issuer name as the fund reports it. A derivative position routinely reports the literal \"N/A\" here and names the instrument in title instead, so group and label positions by title when asset_category marks a derivative.",
+       "type": "string"
+      },
+      "payoff_profile": {
+       "description": "\"Long\", \"Short\", or \"N/A\" for instruments with no direction.",
+       "type": "string"
+      },
+      "percent_of_net_assets": {
+       "description": "Percent of the fund's net assets, as the filer computes it. Negative on a short position \u2014 a leveraged fund's swap or futures leg regularly reports several percent below zero \u2014 so this is not bounded at 0.",
+       "type": "number"
+      },
+      "title": {
+       "description": "The filer's own title for the security, often an abbreviated trading name.",
+       "type": "string"
+      },
+      "units": {
+       "description": "What balance counts \u2014 NS number of shares, PA principal amount, NC number of contracts, OU other.",
+       "type": "string"
+      },
+      "value_usd": {
+       "description": "Market value of the position in USD at the report date.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "is_final_filing": {
+    "description": "True when the fund reports this as its last filing on the series, which marks a liquidation or merger. Absent when the filing does not answer.",
+    "type": "boolean"
+   },
+   "net_assets_usd": {
+    "description": "Fund net assets in USD at the report date \u2014 the denominator of percent_of_net_assets.",
+    "type": "number"
+   },
+   "next_offset": {
+    "description": "Offset to pass on the next call to continue through the portfolio. Absent on the last page.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when the report carried no positions or the page fell past the end.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Position the returned page starts at, 0-based.",
+    "type": "number"
+   },
+   "publication_lag_days": {
+    "description": "Days between the portfolio date and the filing date. Absent when the report omits its period date.",
+    "type": "number"
+   },
+   "registrant_cik": {
+    "description": "CIK of the registrant trust, zero-padded to 10 digits.",
+    "type": "string"
+   },
+   "registrant_name": {
+    "description": "EDGAR-conformed name of the registrant trust.",
+    "type": "string"
+   },
+   "report_period_date": {
+    "description": "Last day of the period this portfolio is reported as of (YYYY-MM-DD). Holdings are the fund's positions on this date, not today's. Absent only when the filer omits it.",
+    "type": "string"
+   },
+   "report_period_end": {
+    "description": "Last day of the fiscal year the reporting period falls in (YYYY-MM-DD) \u2014 the fund's fiscal year end, not the portfolio date.",
+    "type": "string"
+   },
+   "series_id": {
+    "description": "SEC series ID of the fund this report covers. Absent when the registrant files as a single fund with no series structure, which is how some older exchange-traded trusts are organized.",
+    "type": "string"
+   },
+   "series_name": {
+    "description": "Fund name as the filer states it on the report. A closed-end fund organized as a single registrant names itself here with no series_id alongside; absent only when the filer leaves the field blank or writes \"N/A\".",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of positions shown inline.",
+    "type": "number"
+   },
+   "total_assets_usd": {
+    "description": "Fund total assets in USD at the report date.",
+    "type": "number"
+   },
+   "total_holdings": {
+    "description": "Positions in the report, before offset and limit \u2014 the size of the full portfolio.",
+    "type": "number"
+   },
+   "total_liabilities_usd": {
+    "description": "Fund total liabilities in USD at the report date.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the inline holdings list was capped by limit.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Fund Holdings"
+}

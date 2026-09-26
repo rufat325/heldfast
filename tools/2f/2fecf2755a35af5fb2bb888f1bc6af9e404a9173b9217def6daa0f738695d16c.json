@@ -1,0 +1,113 @@
+{
+ "annotations": {
+  "access": "free",
+  "connect_url": "https://dchub.cloud/connect?ref=mcp-tools-list&tool=register_standing_intent",
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "maturity": "unknown",
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Register Standing Intent (webhook push)"
+ },
+ "description": "Register a STANDING QUERY with webhook push \u2014 DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: \"notify my orchestrator on any new deal in Columbus\"). Requires a key. Params: kind (\"new_deal_in_market\" watches deals in the market param \u00b7 \"news_keyword\" watches news matching q \u00b7 \"permitting_change\" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint \u2014 private/internal hosts are rejected). Returns {intent_id, secret} \u2014 SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers \"notify my system whenever a new moratorium appears\", \"push me new matches instead of making me poll\", \"tell my orchestrator when a deal lands in Columbus\". Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (get_news / list_transactions) or email alerts (set_market_alert); this is machine-to-machine push.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "kind": {
+    "description": "Watch kind: \"new_deal_in_market\" | \"news_keyword\" | \"permitting_change\"",
+    "type": "string"
+   },
+   "market": {
+    "description": "For new_deal_in_market: the market/region substring to watch, e.g. columbus",
+    "type": "string"
+   },
+   "q": {
+    "description": "For news_keyword: the keyword/phrase to watch in title+summary, e.g. moratorium",
+    "type": "string"
+   },
+   "state": {
+    "description": "For permitting_change: optional US state filter, e.g. MN",
+    "type": "string"
+   },
+   "webhook_url": {
+    "description": "Your public HTTPS webhook endpoint (required)",
+    "type": "string"
+   }
+  },
+  "required": [
+   "kind",
+   "webhook_url"
+  ],
+  "type": "object"
+ },
+ "name": "register_standing_intent",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text \u2014 tool-specific data fields ride at the top level alongside these envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   }
+  },
+  "type": "object"
+ },
+ "title": "Register Standing Intent (webhook push)"
+}

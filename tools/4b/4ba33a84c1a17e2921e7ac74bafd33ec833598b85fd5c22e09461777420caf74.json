@@ -1,0 +1,181 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "List the dataframes (df_XXXXX_XXXXX) registered by the data-returning secedgar_* tools \u2014 any tool whose response carries a `dataset` handle stages its full result set here. Each entry surfaces source tool, query parameters, creation/expiry timestamps, row count, column schema, and whether the dataframe is truncated relative to the upstream source. Read the column schema here before writing SQL for secedgar_dataframe_query.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "name": {
+    "description": "Optional table name (df_XXXXX_XXXXX) to describe a single dataframe. Omit to list all dataframes.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "secedgar_dataframe_describe",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "dataframes"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "dataframes": {
+    "description": "Active dataframes for this tenant, newest first. Empty when none are registered.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Provenance and schema for one dataframe.",
+     "properties": {
+      "column_schema": {
+       "description": "Resolved column schema (all SEC dataframe columns are nullable).",
+       "items": {
+        "additionalProperties": false,
+        "description": "One column declaration in the dataframe schema.",
+        "properties": {
+         "name": {
+          "description": "Column name.",
+          "type": "string"
+         },
+         "nullable": {
+          "description": "Whether the column permits NULL.",
+          "type": "boolean"
+         },
+         "type": {
+          "description": "Canvas column type (VARCHAR, BIGINT, DOUBLE, ...).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "type",
+         "nullable"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "created_at": {
+       "description": "ISO 8601 creation timestamp.",
+       "type": "string"
+      },
+      "expires_at": {
+       "description": "ISO 8601 expiry timestamp. Sliding TTL touched on every dataframe op.",
+       "type": "string"
+      },
+      "max_rows": {
+       "description": "Materialization cap that produced `truncated`, when applicable.",
+       "type": "number"
+      },
+      "name": {
+       "description": "Canvas table name (df_XXXXX_XXXXX).",
+       "type": "string"
+      },
+      "query_params": {
+       "additionalProperties": {},
+       "description": "Input parameters the source tool was called with.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "row_count": {
+       "description": "Rows materialized in the dataframe.",
+       "type": "number"
+      },
+      "source_tool": {
+       "description": "Tool that produced this dataframe.",
+       "type": "string"
+      },
+      "truncated": {
+       "description": "True when the upstream source had more rows than were materialized.",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "name",
+      "source_tool",
+      "query_params",
+      "created_at",
+      "expires_at",
+      "row_count",
+      "truncated",
+      "column_schema"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `canvas_unavailable`: The DataCanvas service is not configured for this deployment. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "canvas_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Secedgar Dataframe Describe"
+}

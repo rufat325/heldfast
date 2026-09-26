@@ -1,0 +1,293 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List Federal Register documents currently open for public comment, sorted by closing date (soonest first) across the whole open window, filterable by document type, agency slug, and topic. \"What can I still weigh in on?\" Covers proposed rules and the final rules that take comment (direct final and interim final rules) by default; add NOTICE for the much larger set of notices with comment periods. Runs on the Federal Register's open-comment window and needs no key: each row carries its Regulations.gov docket and document IDs, comment count, and comment URL from the Federal Register document's embedded Regulations.gov info. Open one row with regulations_get_document for the full document, or pull the comments with regulations_find_comments (which, like regulations_get_docket, needs REGULATIONS_GOV_API_KEY).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "agencies": {
+    "description": "Filter to one or more agencies by Federal Register agency slug (e.g. \"environmental-protection-agency\") \u2014 lowercase kebab-case, not a name or acronym. Every row lists its agencies with their slugs; read agencies[].slug off a row here or in regulations_search_rules. One unrecognized slug fails the whole request.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "closing_before": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "ISO 8601 date (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Only documents whose comment period closes on or before this date, ISO 8601 (YYYY-MM-DD), a real calendar day. Use to find deadlines you need to act on soon."
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number, default 1. Pages run over the whole open window in closing-date order; totalPages and nextPage in the response say how far it goes.",
+    "maximum": 10000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "default": 20,
+    "description": "Documents per page (1\u2013100, default 20).",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Full-text filter across open documents. Omit to list every document currently open for comment.",
+    "type": "string"
+   },
+   "type": {
+    "description": "Document types to include: PRORULE (proposed rules), RULE (final rules that request comment, including direct final and interim final rules), NOTICE (information-collection and other notices with comment periods \u2014 a much larger set). Default, and when empty: [\"PRORULE\", \"RULE\"].",
+    "items": {
+     "enum": [
+      "PRORULE",
+      "RULE",
+      "NOTICE"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "name": "regulations_list_open_comments",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "asOf",
+     "keyed",
+     "results",
+     "totalCount",
+     "totalPages"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "asOf": {
+    "description": "The \"today\" the open window was computed from \u2014 the current date in US Eastern time (ISO 8601). A comment period stays open through 11:59 PM Eastern on its close date.",
+    "type": "string"
+   },
+   "cap": {
+    "description": "The Federal Register document limit that was reached.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `upstream_unavailable`: Federal Register returned a 5xx, timed out, or served an HTML error page. `invalid_filter`: The Federal Register rejected a filter value \u2014 most often an agency name or acronym passed where a slug belongs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "upstream_unavailable",
+         "invalid_filter"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "keyed": {
+    "description": "Whether REGULATIONS_GOV_API_KEY is set, which decides whether regulations_get_docket and regulations_find_comments can follow up on a row. Every row field is filled either way.",
+    "type": "boolean"
+   },
+   "nextPage": {
+    "description": "Page to request next \u2014 present only when documents remain past this page.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when nothing matched, when the page is past the end, or when the window was truncated.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Documents open for comment on this page, closing soonest first; documents closing the same day are ordered by document number.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One document open for comment.",
+     "properties": {
+      "agencies": {
+       "description": "Issuing agencies.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One issuing agency.",
+        "properties": {
+         "name": {
+          "description": "Agency name.",
+          "type": "string"
+         },
+         "slug": {
+          "description": "Federal Register agency slug \u2014 pass it back as the agencies filter. Null when the Federal Register lists the agency by raw name only, so it cannot be filtered on.",
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "required": [
+         "name",
+         "slug"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "commentCount": {
+       "description": "Comments Regulations.gov received on this document, as the Federal Register reports it; null when not on Regulations.gov. Can exceed the comment records regulations_find_comments lists.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "commentUrl": {
+       "description": "Regulations.gov page for submitting a comment on this document, as the Federal Register lists it; null when it lists none.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "commentsCloseOn": {
+       "description": "Last day of the comment period (ISO 8601), inclusive, in Eastern time.",
+       "type": "string"
+      },
+      "daysRemaining": {
+       "description": "Whole days from asOf to commentsCloseOn; 0 means comments close at the end of today.",
+       "type": "number"
+      },
+      "docketIds": {
+       "description": "Docket numbers as the Federal Register prints them \u2014 an agency's own number (\"REG-101355-26\"), or an ID inside a wrapper (\"Docket No. FAA-2026-8449\"). Pass one to regulations_search_rules as docket_id. Not always a Regulations.gov ID: for regulations_get_docket / regulations_find_comments use regulationsGovDocketId.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "documentNumber": {
+       "description": "Federal Register document number \u2014 chains into regulations_get_document.",
+       "type": "string"
+      },
+      "publicationDate": {
+       "description": "Publication date (ISO 8601).",
+       "type": "string"
+      },
+      "regulationsGovDocketId": {
+       "description": "Regulations.gov docket ID \u2014 chains into regulations_get_docket / regulations_find_comments(docket_id). Null when the document is not on Regulations.gov. An <AGENCY>_FRDOC_0001 docket (EPA_FRDOC_0001 holds 3,451 documents) is Regulations.gov's catch-all for Federal Register documents outside a rulemaking docket, so this document's comments come from regulationsGovDocumentId instead.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "regulationsGovDocumentId": {
+       "description": "Regulations.gov document ID \u2014 pass as document_object_id to regulations_find_comments for the comments filed on this document. Null when absent.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "title": {
+       "description": "Document title.",
+       "type": "string"
+      },
+      "type": {
+       "description": "Document type \u2014 \"Proposed Rule\", \"Rule\", or \"Notice\"; \"Unknown\" when unlisted.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "documentNumber",
+      "title",
+      "type",
+      "agencies",
+      "publicationDate",
+      "commentsCloseOn",
+      "daysRemaining",
+      "docketIds",
+      "regulationsGovDocketId",
+      "regulationsGovDocumentId",
+      "commentCount",
+      "commentUrl"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Documents returned on this page.",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Documents open for comment matching the filters \u2014 the window the pages run over.",
+    "type": "number"
+   },
+   "totalPages": {
+    "description": "Pages in the window at this per_page.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the Federal Register reported its 10,000-document maximum, so the window holds only the 10,000 most recently published matches.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "regulations_list_open_comments"
+}

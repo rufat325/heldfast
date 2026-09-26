@@ -1,0 +1,148 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "WHAT: Fetch https://www.ikeytz.com/llms.txt (short AI landmap). Same engine as get_discovery(which=llms). summary = file window. USE as the first discovery read. Full dump: get_discovery(which=llms-full). MCP catalog: get_llms_mcp_server.",
+ "inputSchema": {
+  "properties": {
+   "limit": {
+    "description": "Maximum number of lines to return after offset. Omit or null = return every remaining line in the loaded file. Clamped to 1..10000. For sitemap.txt (~9076 http-URLs, Stand 2026-09-22) omit limit to get the full list (or page with offset/limit + nextOffset). For llms-keywords.txt prefer a window; the file is huge. Meta also as trailing # MCP-META lines in summary.",
+    "maximum": 10000,
+    "minimum": 1,
+    "type": "number"
+   },
+   "offset": {
+    "default": 0,
+    "description": "0-based line index into the fetched UTF-8 file (split on \\n). 0 = first line. Omit = 0. Combined with limit = a sliding window. Use nextOffset from the previous result to page. Does not count bytes; one line can be a long URL.",
+    "minimum": 0,
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_llms_txt",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "Always the same envelope. tools/call returns content[0].text = summary (or JSON) AND structuredContent = this object. On success ok=true with summary + canonicalUrl + extra fields. On failure ok=false with error (snake_case code) and hint (recovery URL). Never writes, never submits forms, never calls /api/*. Attribution must be kept when quoting. Policy: ai-input yes with attribution; ai-train=no.",
+  "properties": {
+   "attribution": {
+    "description": "Required citation: 'Quelle: Schl\u00fcsseldienst Ludwigsburg ikeytz (ikeytz.com) \u00b7 ai-train=no \u00b7 https://www.ikeytz.com/.well-known/ai.txt'",
+    "type": "string"
+   },
+   "bytesReturned": {
+    "description": "UTF-8 byte length of the returned body window (before # MCP-META).",
+    "type": "number"
+   },
+   "canonicalUrl": {
+    "description": "Best URL to show the user: https://www.ikeytz.com\u2026 page, or tel:+49\u2026, mailto:\u2026, https://wa.me/\u2026. Prefer this over constructing URLs.",
+    "type": "string"
+   },
+   "error": {
+    "description": "Present when ok=false. Codes include: unknown_tool, unknown_place, unknown_auswahl, unknown_ratgeber, unknown_doc, unknown_discovery, faq_not_found, wissen_not_found, serp_not_found, q_required, bad_datetime, bad_when_key, plus HTTP errors from fetch.",
+    "type": "string"
+   },
+   "fetchTruncated": {
+    "description": "true if discoveryFetchMax cut the load (line-boundary safe). Large discovery files (sitemap-xml ~12MB, llms-keywords ~55MB, llms-index ~2MB) must load full so offset/limit can reach EOF.",
+    "type": "boolean"
+   },
+   "hint": {
+    "description": "Present when ok=false. Absolute URL the agent should open or pass to get_ai_page / get_discovery.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Applied line limit, or null if the caller omitted limit.",
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "locale": {
+    "description": "Locale actually used for URLs (args.locale or de).",
+    "enum": [
+     "de",
+     "en",
+     "fr",
+     "ru",
+     "fa",
+     "ar",
+     "tr"
+    ],
+    "type": "string"
+   },
+   "nextOffset": {
+    "description": "offset + returnedLines when more lines remain in the loaded file; else null. Pass as the next offset. Also in # MCP-META.",
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "offset": {
+    "description": "Applied 0-based line offset.",
+    "type": "number"
+   },
+   "ok": {
+    "description": "true = use summary, canonicalUrl, and extra keys. false = do not invent data; read error + hint and retry with valid args or open hint.",
+    "type": "boolean"
+   },
+   "path": {
+    "description": "Public path on www, e.g. /llms.txt or /.well-known/ai.txt",
+    "type": "string"
+   },
+   "related": {
+    "description": "Always includes https://www.ikeytz.com/llms.txt. Geo tools also include https://maps.ikeytz.com/llms.txt.",
+    "items": {
+     "format": "uri",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "returnedLines": {
+    "description": "How many lines are in summary/body this call (before # MCP-META).",
+    "type": "number"
+   },
+   "returnedUrls": {
+    "description": "Lines in this window that start with http(s)://",
+    "type": "number"
+   },
+   "summary": {
+    "description": "Primary text for the model. For discovery tools this is the file window (possibly thousands of characters). For list tools a compact one-liner. Quote with attribution.",
+    "type": "string"
+   },
+   "tool": {
+    "description": "Echo of the tool name that produced this object (e.g. get_service_area).",
+    "type": "string"
+   },
+   "totalBytes": {
+    "description": "Full origin file size when Content-Length is present (e.g. llms-keywords ~50MB); else character length of the downloaded body before the load cap. Also in # MCP-META.",
+    "type": "number"
+   },
+   "totalChars": {
+    "description": "Character length of the downloaded body before applying discoveryFetchMax (may equal totalBytes for ASCII).",
+    "type": "number"
+   },
+   "totalLines": {
+    "description": "Line count of the loaded file (full public/ file when available).",
+    "type": "number"
+   },
+   "totalUrls": {
+    "description": "http(s) lines in the loaded file (full count when public/ read succeeds).",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "true if load hit a byte cap OR offset+limit left more lines. Also mirrored in trailing # MCP-META lines in summary.",
+    "type": "boolean"
+   },
+   "which": {
+    "description": "Resolved discovery id after alias fold (llms, sitemap-txt, ard, ai-catalog, \u2026).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "tool",
+   "attribution"
+  ],
+  "type": "object"
+ },
+ "title": "Get Llms Txt"
+}

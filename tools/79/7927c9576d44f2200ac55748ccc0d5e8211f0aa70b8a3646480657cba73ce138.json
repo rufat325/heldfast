@@ -1,0 +1,70 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Upload files and get back the hashes that other tools reference them by \u2014 screenshots, logs, HAR files, videos. For one file pass `file_base64` with the base64-encoded bytes, or `file_path` with an absolute path, plus `filename` with its extension. For several, pass `files` \u2014 one entry per file, each with its own filename \u2014 and they go up in a single request, hashes returned in the same order. Use `file_base64` unless the server runs on the same machine as the file: a remote server, the hosted connector included, cannot see your filesystem, and `file_path` will simply not find the file. Qase accepts at most 20 files, 32 MB per file and 128 MB per request; a request over any of those is refused here before anything is sent, so split it across calls. The returned hash is what goes in the `attachments` field of qase_case_upsert, qase_result_record, qase_defect_upsert or qase_triage_defect \u2014 uploading alone attaches nothing, the hash has to be passed on. This is the only tool that sends multipart/form-data, which is why qase_api cannot send them. Upload once and reuse the hash rather than re-uploading the same evidence per case. Cost: one API call per request whatever the number of files, dominated by total size rather than round trip \u2014 well under a second for a screenshot, seconds for a video. Base64 inflates the payload by about a third.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "code": {
+    "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+    "maxLength": 10,
+    "minLength": 2,
+    "pattern": "^[A-Z0-9_]+$",
+    "type": "string"
+   },
+   "file": {
+    "description": "Deprecated: prefer file_base64 or file_path, which say which one you mean. Accepts either an absolute path to an existing file or base64 content.",
+    "type": "string"
+   },
+   "file_base64": {
+    "description": "Single-file form. File content, base64 encoded. Use this whenever the server is not on the same machine as the file \u2014 including the hosted connector, where it is the only option.",
+    "type": "string"
+   },
+   "file_path": {
+    "description": "Single-file form. Absolute path to a file on the machine running THIS server. Only usable for a local stdio server; a remote server cannot see your filesystem \u2014 send file_base64 instead.",
+    "type": "string"
+   },
+   "filename": {
+    "description": "Original filename with extension. Required for the single-file form.",
+    "type": "string"
+   },
+   "files": {
+    "description": "Several files in one request \u2014 each entry carries its own filename and either file_base64 or file_path. Qase accepts at most 20 files, 32 MB per file and 128 MB in total per request. Prefer this over one call per file: it is a single round trip and returns the hashes in the same order.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "file_base64": {
+       "description": "File content, base64 encoded. The only option on a remote server.",
+       "type": "string"
+      },
+      "file_path": {
+       "description": "Absolute path to a file on the machine running THIS server.",
+       "type": "string"
+      },
+      "filename": {
+       "description": "Original filename with extension",
+       "type": "string"
+      }
+     },
+     "required": [
+      "filename"
+     ],
+     "type": "object"
+    },
+    "maxItems": 20,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "code"
+  ],
+  "type": "object"
+ },
+ "name": "qase_attachment_upload",
+ "title": "Upload attachment"
+}

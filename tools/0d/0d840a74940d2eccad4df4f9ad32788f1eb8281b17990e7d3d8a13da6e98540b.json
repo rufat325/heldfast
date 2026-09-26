@@ -1,0 +1,378 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "YNAB: Compare Transactions"
+ },
+ "description": "Compare bank CSV transactions with YNAB transactions to find missing or mismatched entries.\n\nArgs:\n  - budget_id (string, optional): Budget UUID. Omit to use the default budget.\n  - account_id (string, required): Account UUID to compare against.\n  - csv_file_path or csv_data (string, required): Bank export file path or inline CSV text.\n  - statement_start_date (string, optional): Filter comparison window start date (YYYY-MM-DD).\n  - statement_date (string, optional): Filter comparison window end date (YYYY-MM-DD).\n\nReturns: comparison report with matched, unmatched_bank, unmatched_ynab transactions.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "account_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "amount_tolerance": {
+    "default": 0.01,
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "auto_detect_format": {
+    "default": false,
+    "type": "boolean"
+   },
+   "budget_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "csv_data": {
+    "type": "string"
+   },
+   "csv_file_path": {
+    "type": "string"
+   },
+   "csv_format": {
+    "additionalProperties": false,
+    "default": {
+     "amount_column": "Amount",
+     "date_column": "Date",
+     "date_format": "MM/DD/YYYY",
+     "delimiter": ",",
+     "description_column": "Description",
+     "has_header": true
+    },
+    "properties": {
+     "amount_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "credit_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "date_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ],
+      "default": "Date"
+     },
+     "date_format": {
+      "default": "MM/DD/YYYY",
+      "type": "string"
+     },
+     "debit_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "delimiter": {
+      "default": ",",
+      "type": "string"
+     },
+     "description_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ],
+      "default": "Description"
+     },
+     "has_header": {
+      "default": true,
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "date_tolerance_days": {
+    "default": 5,
+    "maximum": 7,
+    "minimum": 0,
+    "type": "number"
+   },
+   "debug": {
+    "default": false,
+    "type": "boolean"
+   },
+   "enable_chronology_bonus": {
+    "default": false,
+    "type": "boolean"
+   },
+   "statement_date": {
+    "type": "string"
+   },
+   "statement_start_date": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "account_id"
+  ],
+  "type": "object"
+ },
+ "name": "ynab_compare_transactions",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "matches": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "bank_amount": {
+       "pattern": "^-?\\d+\\.\\d{2}$",
+       "type": "string"
+      },
+      "bank_date": {
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "bank_description": {
+       "type": "string"
+      },
+      "match_reasons": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "match_score": {
+       "type": "number"
+      },
+      "ynab_amount": {
+       "pattern": "^-?\\d+\\.\\d{2}$",
+       "type": "string"
+      },
+      "ynab_date": {
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "ynab_payee": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "ynab_transaction": {
+       "additionalProperties": false,
+       "properties": {
+        "cleared": {
+         "type": "string"
+        },
+        "id": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "cleared"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "bank_date",
+      "bank_amount",
+      "bank_description",
+      "ynab_date",
+      "ynab_amount",
+      "ynab_payee",
+      "ynab_transaction",
+      "match_score",
+      "match_reasons"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "missing_in_bank": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "amount": {
+       "pattern": "^-?\\d+\\.\\d{2}$",
+       "type": "string"
+      },
+      "cleared": {
+       "type": "string"
+      },
+      "date": {
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "memo": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "payee_name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     "required": [
+      "id",
+      "date",
+      "amount",
+      "payee_name",
+      "cleared"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "missing_in_ynab": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "amount": {
+       "pattern": "^-?\\d+\\.\\d{2}$",
+       "type": "string"
+      },
+      "date": {
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "description": {
+       "type": "string"
+      },
+      "row_number": {
+       "type": "number"
+      },
+      "suggested_payee_id": {
+       "type": "string"
+      },
+      "suggested_payee_name": {
+       "type": "string"
+      },
+      "suggestion_reason": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "date",
+      "amount",
+      "description",
+      "row_number"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "summary": {
+    "additionalProperties": false,
+    "properties": {
+     "bank_transactions_count": {
+      "type": "number"
+     },
+     "date_range": {
+      "additionalProperties": false,
+      "properties": {
+       "end": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+        "type": "string"
+       },
+       "start": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+        "type": "string"
+       }
+      },
+      "required": [
+       "start",
+       "end"
+      ],
+      "type": "object"
+     },
+     "matches_found": {
+      "type": "number"
+     },
+     "missing_in_bank": {
+      "type": "number"
+     },
+     "missing_in_ynab": {
+      "type": "number"
+     },
+     "parameters": {
+      "additionalProperties": false,
+      "properties": {
+       "amount_tolerance": {
+        "type": "number"
+       },
+       "date_tolerance_days": {
+        "type": "number"
+       }
+      },
+      "type": "object"
+     },
+     "ynab_transactions_count": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "bank_transactions_count",
+     "ynab_transactions_count",
+     "matches_found",
+     "missing_in_ynab",
+     "missing_in_bank",
+     "date_range",
+     "parameters"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "summary",
+   "matches",
+   "missing_in_ynab",
+   "missing_in_bank"
+  ],
+  "type": "object"
+ }
+}

@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Swiss company bankruptcy publications from the SOGC/SHAB (SECO \u2014 public API, live, 24 h cache, online since 2021): every publication whose debtor is the company (natural persons never served), newest first \u2014 preliminary bankruptcy notice, bankruptcy publication and call to creditors, suspension, schedule of claims and inventory, distribution list, closing, revocation, real-estate auction, recognition of a foreign bankruptcy \u2014 with decision date, deadlines, office, canton and the official labels in DE/FR/IT/EN. `aucune_procedure: true` is a fact bounded by the online archive for a company known to Zefix; bankruptcy and liquidation flags recorded in the register itself come with get_swiss_company_events. Unknown UID = 404 (no charge). Paid via x402 ($0.02 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "id": {
+    "description": "Swiss UID (Unternehmens-Identifikationsnummer), CHE-xxx.xxx.xxx, e.g. CHE-102.732.681",
+    "pattern": "^CHE-?\\d{3}\\.?\\d{3}\\.?\\d{3}$",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id"
+  ],
+  "type": "object"
+ },
+ "name": "get_swiss_company_insolvency",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Swiss company bankruptcy publications (SOGC)"
+}

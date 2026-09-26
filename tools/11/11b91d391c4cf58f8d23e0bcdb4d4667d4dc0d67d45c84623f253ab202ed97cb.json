@@ -1,0 +1,401 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch the SSVC decision points CISA publishes per CVE as a CVE Authorized Data Publisher \u2014 Exploitation, Automatable, and Technical Impact \u2014 along with the CVSS score and CWE CISA contributes where present, and compute the BOD 26-04 remediation timeline those values imply for the asset exposure you supply. The computed timeline applies CISA's published decision table to CISA's published decision points and your stated exposure; it is not a compliance determination and it is not CISA's own due-date assignment, which is reported separately when the CVE is in KEV and can differ. Not every CVE is enriched \u2014 a miss returns found false with guidance rather than an error. Call cisa_list_reference with topic ssvc_values for the decision-point vocabulary.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "assetExposure": {
+    "default": "unknown",
+    "description": "Whether the affected asset is reachable by unauthenticated or untrusted entities over public networks. The one BOD 26-04 decision point CISA cannot publish. \"unknown\" returns both arms so the spread is visible without guessing.",
+    "enum": [
+     "publicly_exposed",
+     "not_publicly_exposed",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "cveIds": {
+    "description": "CVE identifiers to look up, up to 50 per call \u2014 lower than cisa_check_cve_status's 200-CVE cap because each CVE needs its own live enrichment lookup rather than a cached batch check.",
+    "items": {
+     "description": "One CVE identifier, e.g. CVE-2025-39964. Case and surrounding whitespace are normalized.",
+     "pattern": "^CVE-[0-9]{4}-[0-9]{4,19}$",
+     "type": "string"
+    },
+    "maxItems": 50,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "cveIds"
+  ],
+  "type": "object"
+ },
+ "name": "cisa_get_ssvc",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results",
+     "foundCount",
+     "notFoundCount",
+     "echo"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "echo": {
+    "additionalProperties": false,
+    "description": "The request as the server parsed it.",
+    "properties": {
+     "assetExposure": {
+      "description": "The asset exposure the server applied.",
+      "type": "string"
+     },
+     "requested": {
+      "description": "How many CVE IDs were requested.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "assetExposure",
+     "requested"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `enrichment_source_unavailable`: Every per-CVE fetch failed with a transport or 5xx error. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "enrichment_source_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "foundCount": {
+    "description": "How many CVEs carry published SSVC decision points.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "notFoundCount": {
+    "description": "How many CVEs do not.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "notice": {
+    "description": "Guidance when nothing was enriched, or when a decision timestamp predates KEV.",
+    "type": "string"
+   },
+   "results": {
+    "description": "One result per requested CVE, in the order supplied.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One SSVC lookup result.",
+     "properties": {
+      "assignmentAgrees": {
+       "description": "Whether CISA's assigned deadline matches the computed timeline. Present only when the CVE is in KEV and an exposure was stated. Reported, never reconciled.",
+       "type": "boolean"
+      },
+      "automatable": {
+       "description": "The SSVC Automatable value (yes or no).",
+       "type": "string"
+      },
+      "bod2604": {
+       "additionalProperties": false,
+       "description": "The BOD 26-04 timeline implied by the published decision points.",
+       "properties": {
+        "basis": {
+         "description": "The decision table the timeline was resolved against.",
+         "type": "string"
+        },
+        "caveat": {
+         "description": "What the computation is and is not. Fixed text on every result.",
+         "type": "string"
+        },
+        "timelines": {
+         "description": "One timeline per exposure arm \u2014 one when the caller stated an exposure, both when it is unknown.",
+         "items": {
+          "additionalProperties": false,
+          "description": "One computed remediation timeline.",
+          "properties": {
+           "assetExposure": {
+            "description": "The exposure arm this timeline applies to.",
+            "enum": [
+             "publicly_exposed",
+             "not_publicly_exposed"
+            ],
+            "type": "string"
+           },
+           "forensicTriageRequired": {
+            "description": "Whether a forensic triage of the asset is also required.",
+            "type": "boolean"
+           },
+           "remediationTimelineDays": {
+            "anyOf": [
+             {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ],
+            "description": "Calendar days allowed, or null for \"Fix on system upgrade\"."
+           },
+           "tableRow": {
+            "description": "BOD 26-04 Table 1 row number, 1 to 16.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+           },
+           "timelineLabel": {
+            "description": "The agency timeline in the directive's own wording.",
+            "type": "string"
+           }
+          },
+          "required": [
+           "assetExposure",
+           "tableRow",
+           "timelineLabel",
+           "remediationTimelineDays",
+           "forensicTriageRequired"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        }
+       },
+       "required": [
+        "timelines",
+        "basis",
+        "caveat"
+       ],
+       "type": "object"
+      },
+      "cveId": {
+       "description": "The CVE identifier that was looked up.",
+       "pattern": "^CVE-[0-9]{4}-[0-9]{4,19}$",
+       "type": "string"
+      },
+      "cvss": {
+       "additionalProperties": false,
+       "description": "The CVSS score CISA contributed through its ADP container, when present.",
+       "properties": {
+        "baseScore": {
+         "description": "CVSS base score, 0.0 through 10.0.",
+         "type": "number"
+        },
+        "baseSeverity": {
+         "description": "Qualitative severity band as published.",
+         "type": "string"
+        },
+        "vectorString": {
+         "description": "The full CVSS vector string.",
+         "type": "string"
+        },
+        "version": {
+         "description": "CVSS version of the contributed score.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "version",
+        "baseScore",
+        "baseSeverity",
+        "vectorString"
+       ],
+       "type": "object"
+      },
+      "cwes": {
+       "description": "CWEs CISA contributed. Empty when none were published.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One CWE from the CISA-authored container.",
+        "properties": {
+         "cweId": {
+          "description": "CWE identifier.",
+          "pattern": "^CWE-[0-9]+$",
+          "type": "string"
+         },
+         "description": {
+          "description": "CWE name as published.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "cweId",
+         "description"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "exploitation": {
+       "description": "The SSVC Exploitation value (none, poc, or active). Values outside that set are passed through verbatim.",
+       "type": "string"
+      },
+      "found": {
+       "description": "Whether CISA has published SSVC decision points for this CVE.",
+       "type": "boolean"
+      },
+      "guidance": {
+       "description": "What to do instead, present on every result where found is false.",
+       "type": "string"
+      },
+      "inKev": {
+       "description": "Whether the CVE is in this server's KEV catalog snapshot.",
+       "type": "boolean"
+      },
+      "kevAssigned": {
+       "additionalProperties": false,
+       "description": "CISA's own assignment for this CVE, reported alongside the computation.",
+       "properties": {
+        "dateAdded": {
+         "description": "Date CISA added the CVE to the KEV catalog.",
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+         "type": "string"
+        },
+        "daysFromAdd": {
+         "description": "Calendar days from dateAdded to dueDate.",
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        "directive": {
+         "anyOf": [
+          {
+           "enum": [
+            "BOD 26-04",
+            "BOD 22-01"
+           ],
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "The directive the KEV entry cites, or null when it cites neither."
+        },
+        "dueDate": {
+         "description": "Federal remediation deadline CISA assigned.",
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+         "type": "string"
+        },
+        "forensicTriage": {
+         "description": "Whether the KEV entry is in the three-day forensic-triage tier.",
+         "enum": [
+          "Yes",
+          "No"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "dateAdded",
+        "dueDate",
+        "daysFromAdd",
+        "forensicTriage",
+        "directive"
+       ],
+       "type": "object"
+      },
+      "sourceUrl": {
+       "description": "The Vulnrichment record URL this result was read from.",
+       "type": "string"
+      },
+      "ssvcRole": {
+       "description": "The SSVC role CISA recorded, e.g. CISA Coordinator.",
+       "type": "string"
+      },
+      "ssvcTimestamp": {
+       "description": "When CISA published these decision points, ISO 8601.",
+       "type": "string"
+      },
+      "ssvcVersion": {
+       "description": "SSVC schema version CISA published against.",
+       "type": "string"
+      },
+      "technicalImpact": {
+       "description": "The SSVC Technical Impact value (partial or total).",
+       "type": "string"
+      }
+     },
+     "required": [
+      "cveId",
+      "found",
+      "cwes",
+      "inKev",
+      "sourceUrl"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "cisa_get_ssvc"
+}

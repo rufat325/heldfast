@@ -1,0 +1,141 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Records a value moment (e.g. review_confidence, runtime_risk_found, workflow_clarity) after a successful validate run on any lens (architect.validate, design.validate, or spec.validate) or a doctrine session. Each event stores event_type, surface_used (mcp or the site section), perceived_value (1-5), and an optional short free-text note, brief_context (up to 500 characters). WHEN TO CALL: after architect.validate, design.validate, or spec.validate returns a clearly useful result AND the user has acknowledged the value (or you ask them \"would you rate this 1-5?\"). Each validator's response carries an explicit next_step instruction telling the agent to OFFER this call; surface that offer to the user. WHEN NOT TO CALL: silently or without the user's awareness; on every validate (only after a clear value moment); to capture intent or speculative value. If the user declines, do not retry within the same session. BEHAVIOR: write-only, single insert into ValueEvent. Auth: sign-in required, with an active Pro, Pro Plus, Teams, Enterprise, beta, or trial plan. Data at rest in the UK. Do NOT include proprietary code, prompt content, or PII in brief_context: it is stored as written, surfaces in admin AI-visibility dashboards, and may appear, pseudonymised, in our weekly lead-intelligence extract to OpenAI (US). Expect a 1-line acknowledgment in the response; the feedback is then aggregated server-side.",
+ "inputSchema": {
+  "properties": {
+   "brief_context": {
+    "anyOf": [
+     {
+      "maxLength": 500,
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "1\u20132 plain-English sentences summarising what was helpful. Example: 'Validation identified a missing approval gate before email send.' No code snippets, no proprietary content, no user PII. Max 500 chars.",
+    "title": "Brief Context"
+   },
+   "event_type": {
+    "description": "Pick the type that best matches what just happened: 'review_confidence': a validator lens (architect.validate / design.validate / spec.validate) returned aligned; 'runtime_risk_found': a validate run found violations; 'workflow_clarity': principles/examples clarified a design decision; 'agent_setup_success': user successfully wired up an agent or MCP tool; 'onboarding_helped': user understood how to start using the Blueprint; 'research_time_saved': user found relevant doctrine faster than expected; 'team_alignment': Blueprint helped align a team on agentic design; 'other': use only if none of the above fit.",
+    "enum": [
+     "workflow_clarity",
+     "runtime_risk_found",
+     "agent_setup_success",
+     "onboarding_helped",
+     "review_confidence",
+     "research_time_saved",
+     "team_alignment",
+     "other"
+    ],
+    "title": "Event Type",
+    "type": "string"
+   },
+   "perceived_value": {
+    "anyOf": [
+     {
+      "maximum": 5,
+      "minimum": 1,
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Ask the user: 'On a scale of 1\u20135, how valuable was this session?' Map their answer directly: 1=low, 5=high. Do not guess: only set this if the user gave an explicit score.",
+    "title": "Perceived Value"
+   },
+   "surface_used": {
+    "anyOf": [
+     {
+      "enum": [
+       "mcp",
+       "for-agents",
+       "integrations",
+       "principles",
+       "examples",
+       "runtime-architecture",
+       "learn",
+       "certification",
+       "coaching",
+       "other"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Where the value was experienced. Use 'mcp' when called from Claude Code, Cursor, Windsurf, or any MCP client. Use 'principles' if the user was browsing or searching principles. Use 'examples' if the user was reading implementation examples. Use 'for-agents' if the user came via the /for-agents page. Use 'learn' or 'certification' for course-related sessions.",
+    "title": "Surface Used"
+   },
+   "team_size": {
+    "anyOf": [
+     {
+      "minimum": 1,
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "If the user mentions their team size during the session, record it here. Do not ask for it explicitly: only capture if volunteered.",
+    "title": "Team Size"
+   },
+   "workflow_stage": {
+    "anyOf": [
+     {
+      "enum": [
+       "exploring",
+       "designing",
+       "implementing",
+       "reviewing",
+       "shipping"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Infer from what the user was doing: 'exploring': reading doctrine, browsing principles; 'designing': planning architecture or agent flows; 'implementing': writing or refactoring code; 'reviewing': running a validator lens on existing code, a surface, or a spec; 'shipping': preparing for production or deployment.",
+    "title": "Workflow Stage"
+   },
+   "would_recommend": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Ask the user: 'Would you recommend the Blueprint to a colleague?' Set true/false based on their answer. Only set if asked: do not assume.",
+    "title": "Would Recommend"
+   }
+  },
+  "required": [
+   "event_type"
+  ],
+  "title": "report_value_eventArguments",
+  "type": "object"
+ },
+ "name": "signals.report",
+ "outputSchema": {
+  "additionalProperties": true,
+  "title": "report_value_eventDictOutput",
+  "type": "object"
+ },
+ "title": "Report Value Event"
+}

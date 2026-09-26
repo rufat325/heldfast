@@ -1,0 +1,114 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Convert the agent's USDC to fiat in the owner's OWN bank account. Returns a checkoutUrl to forward to the human owner (valid ~2 hours) and a partnerOrderId to track \u2014 pass the owner's `email` and the server ALSO emails the checkout link to them automatically (the response echoes emailedTo). Paid endpoint ($0.01 USDC via x402) \u2014 without payment this returns the 402 challenge; use the fiatdock-mcp npm package with AGENT_PRIVATE_KEY for automatic payment. COMPLIANCE: own-account rule \u2014 the sending wallet and the receiving bank account must belong to the SAME person (the agent's owner); no third-party funds, no aggregation, no P2P transfers. 18+; served worldwide via our licensed provider across ~160 countries \u2014 EUR bank transfer in the SEPA zone (incl. Portugal), card/Apple Pay/Google Pay elsewhere \u2014 excluding US persons, sanctioned countries and the UK (NOT the UK). Crypto is volatile; not investment advice.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "callbackUrl": {
+    "description": "Optional public https URL stored for a future provider with status webhooks \u2014 the current provider sends none, so no push will arrive and no callback secret is issued. Poll get_order_status instead",
+    "type": "string"
+   },
+   "cryptoAmount": {
+    "description": "USDC amount to sell",
+    "type": "number"
+   },
+   "customerId": {
+    "description": "Stable agent/customer id",
+    "type": "string"
+   },
+   "email": {
+    "description": "Owner's account email. If provided, the checkout link is ALSO emailed to this address automatically (you still receive it in checkoutUrl); the response echoes emailedTo to confirm",
+    "type": "string"
+   },
+   "fiatCurrency": {
+    "description": "e.g. EUR, default EUR",
+    "type": "string"
+   },
+   "network": {
+    "description": "USDC network, default base",
+    "type": "string"
+   },
+   "payment": {
+    "description": "Base64 of a single x402 v2 PaymentPayload (EIP-3009 transferWithAuthorization on Base USDC). OMIT it on the first call: the 402 you get back carries `howToPay.payloadTemplate` \u2014 the exact envelope to fill in \u2014 plus the price and the EIP-712 domain. Send it on the second call to complete the purchase; it is forwarded as the PAYMENT-SIGNATURE header, never as body data. Nothing is charged for the 402 itself, and a call that fails after payment settles nothing.",
+    "type": "string"
+   },
+   "provider": {
+    "description": "Licensed fiat provider. `mtpelerin` is the only provider on this server and the default \u2014 omit this field. It settles by SEPA bank transfer across the SEPA zone (incl. Portugal); its order status is not push-updated. Any other value returns 400 (no other provider is configured on this server).",
+    "enum": [
+     "mtpelerin"
+    ],
+    "type": "string"
+   },
+   "ref": {
+    "description": "Optional referral code (1-64 chars: letters, digits, _ or -)",
+    "type": "string"
+   },
+   "walletAddress": {
+    "description": "Optional SELL source wallet (0x\u2026, EIP-55 checked) \u2014 pre-fills the widget; required with walletCode/walletHash",
+    "type": "string"
+   },
+   "walletCode": {
+    "description": "Optional Mt Pelerin address lock, part 1: 4-digit code (1000-9999). Requires walletHash + walletAddress",
+    "type": "string"
+   },
+   "walletHash": {
+    "description": "Optional Mt Pelerin address lock, part 2: base64 signature of 'MtPelerin-<code>' by the agent's OWN wallet key (never shared with us). Requires walletCode",
+    "type": "string"
+   }
+  },
+  "required": [
+   "cryptoAmount"
+  ],
+  "type": "object"
+ },
+ "name": "create_offramp_session",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "checkoutUrl": {
+    "description": "Branded checkout URL (valid ~2 hours) \u2014 forward to the human owner",
+    "type": "string"
+   },
+   "customerKey": {
+    "description": "Returned ONCE on the first session with a new customerId \u2014 store securely",
+    "type": "string"
+   },
+   "customerKeyNote": {
+    "description": "How to use customerKey",
+    "type": "string"
+   },
+   "emailedTo": {
+    "description": "Present when an `email` was supplied and email is configured: the checkout link was also emailed to this address (best-effort)",
+    "type": "string"
+   },
+   "note": {
+    "description": "Next-step instructions",
+    "type": "string"
+   },
+   "partnerOrderId": {
+    "description": "Order id \u2014 track it with get_order_status",
+    "type": "string"
+   },
+   "provider": {
+    "description": "Licensed fiat provider handling this session (e.g. mtpelerin)",
+    "type": "string"
+   }
+  },
+  "required": [
+   "partnerOrderId",
+   "checkoutUrl"
+  ],
+  "type": "object"
+ },
+ "title": "Create off-ramp session (USDC \u2192 bank)"
+}

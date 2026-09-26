@@ -1,0 +1,327 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Read the codified text at a CFR location via eCFR \u2014 current or as of a past date. Answers \"what does 40 CFR 50.1 say today?\" and \"...as of 2019-01-01?\". Three locations: title + part + section for one section; title + part alone for the whole part, with its Authority and Source notes, an index of its sections, and the names of its appendices; title + appendix for one appendix, passing the identifier exactly as regulations_browse_cfr emits it. A section can be written as people cite it \u2014 \"61\", \"\u00a7 141.61\", \"141.61(c)\", or the full cite \"40 CFR 141.61\" in part 141 all read 40 CFR 141.61 \u2014 and a part as \"Part 141\"; the response names the identifier it read. Text comes back as a window of up to 64,000 characters (max_chars raises it to 200,000) with the total length and, when text remains, the offset to resume from; whole parts run to millions of characters, so page with offset or read a single section. eCFR retains historical versions from 2017 through the title's up-to-date date; a date outside that window is rejected with the window named. Current single-section reads are served from a synced local mirror when it holds the title's latest eCFR issue; the source is reported.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "appendix": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Appendix identifier (e.g. \"Appendix A-1 to Part 50\").",
+      "type": "string"
+     }
+    ],
+    "description": "Appendix identifier, verbatim as eCFR writes it \u2014 the `appendix` field or the leading phrase of the `cfrCite` on a regulations_browse_cfr appendix node or search hit. It is free-form prose, not a letter: \"Appendix A-1 to Part 50\", \"Appendix A to Subpart C of Part 4\", \"Schedule I to Part 789\", \"Special Federal Aviation Regulation No. 88\". Pass the whole phrase; a short form such as \"A-1\" matches nothing. Cannot be combined with section."
+   },
+   "date": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "ISO 8601 date (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Point-in-time date, ISO 8601 (YYYY-MM-DD). Default current. eCFR serves 2017-01-01 through the title's up-to-date date, usually a few days behind today; a date outside that window is rejected, naming the window."
+   },
+   "max_chars": {
+    "description": "Most text characters to return in this window (1\u2013200,000, default 64,000).",
+    "maximum": 200000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "description": "Character offset into the text where the window starts (default 0). Pass bodyTextNextOffset from the previous call to read on, or a sections[].offset from a whole-part read to jump to that section.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "part": {
+    "description": "CFR part within the title (e.g. \"50\"). Parts can be alphanumeric; a leading \"Part\" or \"Pt.\" is dropped (\"Part 141\" reads part 141). Required unless appendix is given, where it is optional but recommended: an appendix identifier is unique within a part, not within a title, so without a part eCFR picks one of the matches. Obtain from regulations_browse_cfr or a Federal Register document's cfrReferences.",
+    "type": "string"
+   },
+   "section": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Section identifier (e.g. \"50.1\").",
+      "type": "string"
+     }
+    ],
+    "description": "Section within the part, normally written part.section as eCFR identifies it (\"141.61\"). Also accepted: the number alone (\"61\" in part 141), a leading \"\u00a7\" or \"Sec.\", a paragraph cite (\"141.61(c)\"), which reads the whole section, and the full cite this tool returns as cfrCite (\"40 CFR 141.61\", \"14 CFR 241 \u00a7 25\"), whose title has to match title. Identifiers eCFR writes differently are read as given \u2014 14 CFR 241 numbers its sections \"25\" and \"1-1\". Omit to fetch the entire part. Cannot be combined with appendix."
+   },
+   "title": {
+    "description": "CFR title number (1\u201350). E.g. 40 for \"Protection of Environment\".",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "title"
+  ],
+  "type": "object"
+ },
+ "name": "regulations_get_cfr_section",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "cfrCite",
+     "title",
+     "part",
+     "section",
+     "appendix",
+     "heading",
+     "hierarchyPath",
+     "date",
+     "source",
+     "bodyText",
+     "bodyTextOffset",
+     "bodyTextLength"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "appendices": {
+    "description": "Present on a whole-part fetch when the part has appendices \u2014 their identifiers and headings, without their text. A part's appendices routinely run several times the length of its sections, so they are not inlined; call this tool again with `appendix` set to one of these identifiers to read it. Absent means the part has no appendices; a single-section or appendix fetch never carries this field.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One appendix in the part, named but not inlined.",
+     "properties": {
+      "appendix": {
+       "description": "Appendix identifier, for a follow-up read.",
+       "type": "string"
+      },
+      "heading": {
+       "description": "Appendix heading.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "appendix",
+      "heading"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "appendix": {
+    "description": "Appendix identifier; null when a section or whole part was fetched.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "authority": {
+    "description": "The part's Authority \u2014 the statutes it is issued under, without the \"Authority:\" label; null when the part states none. Present only on a whole-part read. A subpart or subject group that states its own carries it on its sections[] entries; a single-section or appendix read carries no part- or subpart-level notes, so read the whole part for them.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "bodyText": {
+    "description": "One window of the location's text, starting at bodyTextOffset, XML stripped to plain text. A whole part's text is each section's heading and body in order. Paragraphs, subheadings, editorial notes, tables (one pipe-delimited line per row), figure references (\"[Figure: /graphics/\u2026]\"), a section's own statutory authority and OMB control-number note, and its trailing source citation are kept in document order; part-, subpart-, and subject-group-level Authority and Source are not (see authority, sourceNote, and sections[]). Superscripts read ^x and subscripts _x, braced where the run would otherwise be ambiguous (3 \u00d7 10^\u22128, SO_2, CO_{2}e); a footnote reference or label reads [n]; diacritics and overlines are Unicode combining marks on their base character (x\u0304, R\u0305M\u0305). The source citation is the bracketed Federal Register history a section ends in (\"[36 FR 22384, Nov. 25, 1971, as amended at 81 FR 68276, Oct. 3, 2016]\") \u2014 to reach the rulemaking that produced this text, pass one of its cites from 1994 on to regulations_search_rules as citation (\"81 FR 68276\") with the date printed beside it as citation_date (\"2016-10-03\"). Empty when the offset is at or past the end, or where the location is a placeholder carrying nothing but its heading (\"[Reserved]\").",
+    "type": "string"
+   },
+   "bodyTextLength": {
+    "description": "Characters in the location's whole text.",
+    "type": "number"
+   },
+   "bodyTextNextOffset": {
+    "description": "Offset to pass as offset to read the next window \u2014 present only when text remains past this window.",
+    "type": "number"
+   },
+   "bodyTextOffset": {
+    "description": "Character offset bodyText starts at.",
+    "type": "number"
+   },
+   "cfrCite": {
+    "description": "Assembled cite \u2014 \"40 CFR 50.1\" for a section, \"40 CFR 50\" for a part, \"Appendix A-1 to Part 50, Title 40\" for an appendix (eCFR's own form, leading with the identifier this tool takes back as `appendix`).",
+    "type": "string"
+   },
+   "date": {
+    "description": "The issue/point-in-time date the text reflects (ISO 8601).",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `not_found`: No such title/part/section/appendix at that date, under the section as given or any form it resolves to. `location_required`: Neither part nor appendix was given, so the call names no location to read. `conflicting_target`: Both section and appendix were given. They name two different locations, and picking one silently would return text the call did not ask for. `conflicting_title`: section is written as a full cite (\"21 CFR 141.61\") naming a different title than title. `date_out_of_range`: The requested date precedes eCFR historical coverage (2017-01-01) or is past the title's up-to-date date. `upstream_unavailable`: eCFR returned a 5xx, timed out, or served an HTML error page (live path). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "not_found",
+         "location_required",
+         "conflicting_target",
+         "conflicting_title",
+         "date_out_of_range",
+         "upstream_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "heading": {
+    "description": "Section, part, or appendix heading \u2014 for a whole part, the part's own (\"PART 141\u2014NATIONAL PRIMARY DRINKING WATER REGULATIONS\").",
+    "type": "string"
+   },
+   "hierarchyPath": {
+    "description": "Human-readable hierarchy path.",
+    "type": "string"
+   },
+   "notes": {
+    "description": "The part's editorial, general, and OMB control-number notes, in document order; empty when it has none. Present only on a whole-part read.",
+    "items": {
+     "description": "One note, its label dropped.",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "How a part or section written another way was resolved, and guidance when the offset is at or past the end of the text.",
+    "type": "string"
+   },
+   "part": {
+    "description": "CFR part; null only for an appendix that hangs off a chapter, subchapter, or subtitle rather than a part.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "section": {
+    "description": "Section identifier that was read \u2014 the resolved form when the input was written differently (\"141.61\" for \"\u00a7 141.61(c)\"); null when a whole part or an appendix was fetched.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "sections": {
+    "description": "Present only on a whole-part fetch \u2014 the part's sections whose text falls in this window, in order, without their text (bodyText carries it). A section that begins before the window and runs into it is included, so its offset can be below bodyTextOffset. Empty when the offset is past the end. To list every section and appendix of a part without reading its text, use regulations_browse_cfr in structure mode with title and part.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One section of the part, without its text.",
+     "properties": {
+      "authority": {
+       "description": "The Authority its subpart or subject group states for this section; absent when the part's authority applies.",
+       "type": "string"
+      },
+      "cfrCite": {
+       "description": "Assembled cite for the section.",
+       "type": "string"
+      },
+      "heading": {
+       "description": "Section heading.",
+       "type": "string"
+      },
+      "offset": {
+       "description": "Offset in the whole part's text where this section starts \u2014 pass as offset to read from it.",
+       "type": "number"
+      },
+      "section": {
+       "description": "Section identifier \u2014 pass as section to read it alone.",
+       "type": "string"
+      },
+      "sourceNote": {
+       "description": "The Source note its subpart or subject group states for this section; absent when the part's sourceNote applies.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "section",
+      "heading",
+      "cfrCite",
+      "offset"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "source": {
+    "description": "Provenance: the synced mirror, or the live eCFR API.",
+    "enum": [
+     "mirror",
+     "live"
+    ],
+    "type": "string"
+   },
+   "sourceNote": {
+    "description": "The part's Source note \u2014 the Federal Register document it was issued in, without the \"Source:\" label (\"40 FR 59570, Dec. 24, 1975, unless otherwise noted.\"), which holds for every section with no source citation of its own; null when the part states none. Not to be confused with source, which names the corpus that answered. Present only on a whole-part read; subpart and subject-group Source notes ride on sections[] entries.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "title": {
+    "description": "CFR title number.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "regulations_get_cfr_section"
+}

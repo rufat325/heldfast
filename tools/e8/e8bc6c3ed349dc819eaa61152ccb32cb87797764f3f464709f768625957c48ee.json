@@ -1,0 +1,189 @@
+{
+ "_meta": {
+  "openai/toolInvocation/invoked": "Players ready",
+  "openai/toolInvocation/invoking": "Searching players\u2026",
+  "securitySchemes": [
+   {
+    "scopes": [
+     "mcp:read"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search for player identity by name. Always returns identity fields, but ownership context varies by platform. ESPN and Yahoo return market/global ownership and can also populate league ownership fields when credentials and league context are available. Sleeper always evaluates league ownership against every current roster in the selected league, except during an active draft, when this tool returns an error instead of an answer, since draft picks aren't yet reflected on rosters; if the league, rosters, or users can't be loaded for another reason, the call still succeeds with every league_* field null plus a SLEEPER_OWNERSHIP_UNAVAILABLE warning. Sleeper adds a Sleeper-only league_team_id (the Sleeper roster id, or null); its market/global ownership stays unavailable regardless (ownership_scope=\"unavailable\", market_percent_owned=null) \u2014 league_team_id is league ownership, not market data. For a selected active league, use established session context (call get_user_session only if needed), then get_league_info, if this chat has not already loaded it for that league, so league-specific ownership and team names can be resolved. League ownership fields: league_status (\"ROSTERED\" = on a team, \"FREE_AGENT\" = unrostered in this league, null = ownership could not be resolved, for example because credentials or rosters were unavailable, the player result carried no usable id, or Sleeper rostering was ambiguous), league_team_name (fantasy team name if rostered), league_owner_name (team owner if rostered). FREE_AGENT is an ownership fact from a roster scan, not an acquisition guarantee \u2014 it says nothing about waiver state, so never turn it into pickup advice; get_free_agents is what reports players available to acquire. Trust a non-null league_status directly \u2014 null team/owner fields alongside FREE_AGENT are expected, not a signal to verify. Fall back to get_roster only when league_status itself is absent or null. Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo. Use values from get_user_session. Read-only. Current date is 2026-09-26.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "count": {
+    "description": "Maximum number of players to return (default: 10, max: 25)",
+    "type": "number"
+   },
+   "league_id": {
+    "description": "League ID (get from get_user_session)",
+    "type": "string"
+   },
+   "platform": {
+    "description": "Fantasy platform (e.g., \"espn\", \"yahoo\", \"sleeper\")",
+    "enum": [
+     "espn",
+     "yahoo",
+     "sleeper"
+    ],
+    "type": "string"
+   },
+   "position": {
+    "description": "Filter by position (e.g., \"QB\", \"RB\", \"SP\", \"C\"). Default: ALL",
+    "type": "string"
+   },
+   "query": {
+    "description": "Player name search string (minimum 2 characters)",
+    "minLength": 2,
+    "type": "string"
+   },
+   "season_year": {
+    "description": "Season start year \u2014 use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season. Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).",
+    "type": "number"
+   },
+   "sport": {
+    "description": "Sport type (e.g., \"football\", \"baseball\")",
+    "enum": [
+     "football",
+     "baseball",
+     "basketball",
+     "hockey"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "query",
+   "platform",
+   "sport",
+   "league_id",
+   "season_year"
+  ],
+  "type": "object"
+ },
+ "name": "get_players",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "data": {
+    "additionalProperties": true,
+    "description": "Platform envelope. Field availability varies by platform (ESPN, Yahoo, Sleeper); absent fields are not provided by that platform.",
+    "properties": {
+     "count": {
+      "type": "number"
+     },
+     "leagueKey": {
+      "type": "string"
+     },
+     "leagueName": {
+      "type": "string"
+     },
+     "platform": {
+      "type": "string"
+     },
+     "players": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "league_owner_name": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "league_status": {
+         "description": "ROSTERED, FREE_AGENT, or null when ownership could not be resolved, for example because credentials or rosters were unavailable, the player result carried no usable id, or Sleeper rostering was ambiguous",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "league_team_id": {
+         "description": "Sleeper only: the roster id owning the player; null when no single owner was resolved, which includes both a free agent and ownership that could not be resolved uniquely. league_status is the confirmation: FREE_AGENT means unrostered, null means unresolved",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "league_team_name": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "market_percent_owned": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "name": {
+         "type": "string"
+        },
+        "ownership_scope": {
+         "type": "string"
+        },
+        "position": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "team": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "query": {
+      "type": "string"
+     },
+     "sport": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "success": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "success",
+   "data"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "mcp:read"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "Search Players"
+}

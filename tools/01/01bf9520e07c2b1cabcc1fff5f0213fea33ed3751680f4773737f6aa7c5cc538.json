@@ -1,0 +1,334 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Freight Identifier Validator"
+ },
+ "description": "Validate and parse freight identifiers by their public check-digit algorithms: shipping container numbers (ISO 6346), air waybill (AWB) numbers (IATA modulus-7) and IMO ship identification numbers.\n\nTwo modes: pass text=<arbitrary string> to find and validate every identifier in it (e.g. a booking-email line), OR pass value=<identifier> + type=<container|awb|imo> to validate one.\n\nBehavior: deterministic check-digit arithmetic; per identifier found it reports type, the normalised form, valid (pass/fail), expected vs actual check digit, and details (container: owner prefix + equipment category; AWB: airline prefix + the operating airline resolved from the AWB-prefix dataset; IMO: the 7-digit number); text mode with no identifiers found returns an empty found[] with a note. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: found[] (each entry with its own _source naming the standard applied) and disclaimer under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: STRUCTURAL ONLY \u2014 a valid check digit means well-formed, NOT that the container, shipment or vessel exists or is active; not a registry or tracking lookup.\n\nRelated: container_lookup (container TYPE specs, not numbers), airline_lookup (the AWB-prefix dataset the airline resolution uses).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "text": {
+    "description": "Arbitrary string to scan for container / AWB / IMO identifiers (parse mode). Provide this OR value+type. Example: \"2 cntrs MSKU3068808 / TGHU7654325 on AWB 176-12345675\".",
+    "type": "string"
+   },
+   "type": {
+    "description": "Identifier type for value: container = ISO 6346, awb = IATA air waybill, imo = IMO ship number.",
+    "enum": [
+     "container",
+     "awb",
+     "imo"
+    ],
+    "type": "string"
+   },
+   "value": {
+    "description": "A single identifier to validate (typed mode). Requires type. Example: \"MSKU3068808\".",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "validate",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "disclaimer": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "found": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": true,
+           "properties": {
+            "_source": {
+             "anyOf": [
+              {
+               "additionalProperties": {},
+               "type": "object"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "check_digit": {
+             "anyOf": [
+              {
+               "additionalProperties": {},
+               "type": "object"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "details": {
+             "anyOf": [
+              {
+               "additionalProperties": {},
+               "type": "object"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "normalised": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "raw": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "type": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "valid": {
+             "type": [
+              "boolean",
+              "null"
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "note": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

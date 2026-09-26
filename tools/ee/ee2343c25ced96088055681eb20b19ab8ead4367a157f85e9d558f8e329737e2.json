@@ -1,0 +1,229 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Search recall campaigns by vehicle or campaign number. Use for specific recall lookups, recall history for a vehicle, or looking up a known campaign number.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "campaignNumber": {
+    "description": "NHTSA campaign number (e.g., \"20V682000\"). When provided, returns the campaign detail plus every vehicle it covers. Mutually exclusive with make/model/modelYear.",
+    "type": "string"
+   },
+   "dateRange": {
+    "description": "Filter recalls by received date. Applied locally since the API lacks native date filtering.",
+    "properties": {
+     "after": {
+      "description": "Only recalls received after this date (ISO 8601, e.g., \"2025-01-01\").",
+      "type": "string"
+     },
+     "before": {
+      "description": "Only recalls received before this date (ISO 8601, e.g., \"2026-01-01\").",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "make": {
+    "description": "Vehicle manufacturer. Required with model and modelYear when not using campaignNumber.",
+    "type": "string"
+   },
+   "model": {
+    "description": "Vehicle model. Required with make and modelYear.",
+    "type": "string"
+   },
+   "modelYear": {
+    "description": "Model year, a whole number. Required with make and model.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "nhtsa_search_recalls",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "recalls",
+     "totalCount",
+     "effectiveQuery"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "effectiveQuery": {
+    "description": "The search key used: campaign number, or \"make model modelYear\" for vehicle queries.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `mode_conflict`: Both campaignNumber and vehicle params were provided. `missing_required_combo`: Neither campaignNumber nor a complete vehicle triple was supplied. `campaign_not_found`: The campaignNumber did not match any NHTSA recall. `invalid_date`: A dateRange bound could not be parsed as a date. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "mode_conflict",
+         "missing_required_combo",
+         "campaign_not_found",
+         "invalid_date"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when no recalls are found \u2014 e.g. how to verify make/model/year spelling.",
+    "type": "string"
+   },
+   "recalls": {
+    "description": "Matching recall campaigns",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single recall campaign",
+     "properties": {
+      "affectedVehicles": {
+       "description": "Every distinct make/model the campaign covers (campaign queries). Equipment and tire campaigns name the part here \u2014 make is the brand, model is the part \u2014 and carry no model year.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One vehicle covered by the campaign",
+        "properties": {
+         "make": {
+          "description": "Vehicle make",
+          "type": "string"
+         },
+         "model": {
+          "description": "Vehicle model",
+          "type": "string"
+         },
+         "modelYear": {
+          "description": "Model year",
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "campaignNumber": {
+       "description": "NHTSA campaign number",
+       "type": "string"
+      },
+      "component": {
+       "description": "Affected component (vehicle-scoped queries)",
+       "type": "string"
+      },
+      "consequence": {
+       "description": "Safety consequence",
+       "type": "string"
+      },
+      "investigationId": {
+       "description": "ODI investigation that preceded this campaign, when NHTSA links one (campaign queries) \u2014 pass it as nhtsaId to nhtsa_search_investigations for the full record.",
+       "type": "string"
+      },
+      "manufacturer": {
+       "description": "Vehicle/equipment manufacturer",
+       "type": "string"
+      },
+      "overTheAirUpdate": {
+       "description": "OTA update availability when provided by NHTSA",
+       "type": "boolean"
+      },
+      "parkIt": {
+       "description": "Do-not-drive advisory when provided by NHTSA",
+       "type": "boolean"
+      },
+      "parkOutSide": {
+       "description": "Park-outside advisory when provided by NHTSA",
+       "type": "boolean"
+      },
+      "potentialUnitsAffected": {
+       "description": "Units affected (campaign queries)",
+       "type": "number"
+      },
+      "remedy": {
+       "description": "Corrective action",
+       "type": "string"
+      },
+      "reportReceivedDate": {
+       "description": "Date received by NHTSA (ISO YYYY-MM-DD)",
+       "type": "string"
+      },
+      "summary": {
+       "description": "Recall summary",
+       "type": "string"
+      }
+     },
+     "required": [
+      "campaignNumber",
+      "manufacturer",
+      "summary",
+      "consequence",
+      "remedy",
+      "reportReceivedDate"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalCount": {
+    "description": "Total recalls matching criteria",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Nhtsa Search Recalls"
+}

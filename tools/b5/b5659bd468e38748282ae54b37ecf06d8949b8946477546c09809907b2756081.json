@@ -1,0 +1,220 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "LP / MIP / QP Solver (HiGHS, Premium)"
+ },
+ "description": "[Premium] Solve a linear / mixed-integer / quadratic program with the HiGHS solver and return a provably optimal assignment. Use when your objective and constraints are linear (or quadratic) over named continuous/integer/binary variables: budget allocation, supply or capacity planning with integer counts, allocation with hard caps. Returns solver status (optimal/infeasible/unbounded), the objective value, and the solved value per variable. Use optimize_cmaes for black-box objectives and solve_schedule for task-to-slot assignment. Premium: needs an ORACLAW_API_KEY OR a per-call x402 payment (no signup).",
+ "inputSchema": {
+  "properties": {
+   "constraints": {
+    "items": {
+     "properties": {
+      "coefficients": {
+       "additionalProperties": {
+        "type": "number"
+       },
+       "type": "object"
+      },
+      "lower": {
+       "type": "number"
+      },
+      "name": {
+       "type": "string"
+      },
+      "upper": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "name",
+      "coefficients"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "direction": {
+    "enum": [
+     "maximize",
+     "minimize"
+    ],
+    "type": "string"
+   },
+   "objective": {
+    "additionalProperties": {
+     "type": "number"
+    },
+    "description": "Map of variable name \u2192 coefficient in the objective function.",
+    "type": "object"
+   },
+   "variables": {
+    "items": {
+     "properties": {
+      "lower": {
+       "description": "Lower bound (default: 0 / -inf depending on type).",
+       "type": "number"
+      },
+      "name": {
+       "type": "string"
+      },
+      "type": {
+       "description": "Default: continuous.",
+       "enum": [
+        "continuous",
+        "integer",
+        "binary"
+       ],
+       "type": "string"
+      },
+      "upper": {
+       "description": "Upper bound (default: +inf).",
+       "type": "number"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "direction",
+   "objective",
+   "variables",
+   "constraints"
+  ],
+  "type": "object"
+ },
+ "name": "solve_constraints",
+ "outputSchema": {
+  "properties": {
+   "certificate": {
+    "description": "Re-checkable result certificate: verify the answer without trusting the solver. Recompute feasibility + objective from `solution`, check `contentHash` binds them, and (for LPs) check the KKT duality evidence. Duality is LP-only (HiGHS exposes no duals for MIP).",
+    "properties": {
+     "algoVersion": {
+      "type": "string"
+     },
+     "certificateValid": {
+      "description": "True when re-checkable evidence supports `status`.",
+      "type": "boolean"
+     },
+     "contentHash": {
+      "description": "sha256 over canonical {problem, status, objective, solution}.",
+      "type": "string"
+     },
+     "duality": {
+      "description": "LP only: KKT optimality evidence from solver duals.",
+      "properties": {
+       "complementarySlackness": {
+        "type": "number"
+       },
+       "dualityGapCS": {
+        "description": "LP primal-dual gap via complementary slackness.",
+        "type": "number"
+       },
+       "note": {
+        "type": "string"
+       },
+       "stationarityResidual": {
+        "type": "number"
+       }
+      },
+      "type": "object"
+     },
+     "integrality": {
+      "description": "MIP only.",
+      "properties": {
+       "integral": {
+        "type": "boolean"
+       },
+       "maxFractionalViolation": {
+        "type": "number"
+       }
+      },
+      "type": "object"
+     },
+     "maxPrimalResidual": {
+      "description": "Worst constraint/bound violation (0 = feasible).",
+      "type": "number"
+     },
+     "notes": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "objectiveConsistent": {
+      "type": "boolean"
+     },
+     "primalFeasible": {
+      "type": "boolean"
+     },
+     "problemClass": {
+      "enum": [
+       "LP",
+       "MIP"
+      ],
+      "type": "string"
+     },
+     "recomputedObjective": {
+      "description": "c\u00b7x recomputed from `solution`.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "schema": {
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "optimal",
+       "infeasible",
+       "unbounded",
+       "unknown"
+      ],
+      "type": "string"
+     },
+     "tolerance": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "certificateValid",
+     "problemClass",
+     "status",
+     "primalFeasible",
+     "contentHash"
+    ],
+    "type": "object"
+   },
+   "objectiveValue": {
+    "description": "Objective at the optimum (when status='optimal').",
+    "type": "number"
+   },
+   "solution": {
+    "additionalProperties": {
+     "type": "number"
+    },
+    "description": "Map of variable name \u2192 solved value.",
+    "type": "object"
+   },
+   "solveTimeMs": {
+    "type": "number"
+   },
+   "status": {
+    "description": "e.g. 'optimal', 'infeasible', 'unbounded'.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "status"
+  ],
+  "type": "object"
+ }
+}

@@ -1,0 +1,190 @@
+{
+ "description": "Execute a multi-table query with proper joins and optional aggregation. Use this when you need data from 2+ tables that must be merged. Provide a JSON query plan with steps for each table, merge configuration, and optional aggregation. SUPPORTS AGGREGATION: For 'top N' queries, use the aggregation section to group, sum, sort, and limit results. IMPORTANT: Use this instead of multiple sap_read_table_data calls when you need joined data! CRITICAL - depends_on: When querying lookup/master data tables (KNA1, LFA1, MARA, etc.), ALWAYS use 'depends_on' and 'filter_field' to filter by keys from the primary table. This avoids querying the ENTIRE master data table. Example: To get customer names for sales orders, set KNA1 step with depends_on='orders', filter_field='KUNNR' \u2014 this queries only the customers in your order results. Without depends_on, KNA1 returns ALL customers (100K+) causing timeouts. NOTE: If the query returns more than 1000 rows, you will receive a 'requires_confirmation' response. You MUST ask the user if they want to see all the data. For 'last N' or 'most recent' requests, use sort_by + sort_order + limit instead of confirmed=true. Example: sort_by='WADAT_IST', sort_order='desc', limit=10 returns the 10 most recent deliveries. Fields in WHERE clauses and field lists are validated against table structure. Use sap_get_field_metadata or sap_read_table_structure first to discover correct field names.",
+ "inputSchema": {
+  "properties": {
+   "confirmed": {
+    "default": false,
+    "description": "Set to true after user confirms they want large results (>1000 rows)",
+    "type": "boolean"
+   },
+   "limit": {
+    "description": "Return only this many rows after sorting. Use with sort_by for 'last N' / 'top N' queries.",
+    "type": "integer"
+   },
+   "max_rows": {
+    "default": 10000,
+    "description": "Maximum rows in final result (minimum 1000 enforced)",
+    "type": "integer"
+   },
+   "query_plan": {
+    "description": "Query plan with steps and merge configuration",
+    "properties": {
+     "aggregation": {
+      "description": "Optional aggregation to apply after merge.",
+      "properties": {
+       "count": {
+        "default": false,
+        "description": "Add a count column",
+        "type": "boolean"
+       },
+       "group_by": {
+        "description": "Field(s) to group by"
+       },
+       "include_fields": {
+        "description": "Additional fields to include"
+       },
+       "limit": {
+        "description": "Number of rows to return",
+        "type": "integer"
+       },
+       "sign_field": {
+        "description": "Field indicating debit/credit",
+        "type": "string"
+       },
+       "sign_values": {
+        "description": "Map of sign values to multipliers",
+        "type": "object"
+       },
+       "sort_by": {
+        "description": "Field to sort by",
+        "type": "string"
+       },
+       "sort_order": {
+        "description": "Sort order",
+        "enum": [
+         "desc",
+         "asc"
+        ],
+        "type": "string"
+       },
+       "sum_fields": {
+        "description": "Field(s) to sum"
+       }
+      },
+      "type": "object"
+     },
+     "explanation": {
+      "description": "Human-readable explanation of what this query returns",
+      "type": "string"
+     },
+     "merge": {
+      "description": "How to merge the results",
+      "properties": {
+       "groups": {
+        "description": "For complex merges, define groups of tables to merge first",
+        "items": {
+         "properties": {
+          "how": {
+           "description": "Join type",
+           "type": "string"
+          },
+          "on": {
+           "description": "Field(s) to join on"
+          },
+          "result_alias": {
+           "description": "Alias for merged result",
+           "type": "string"
+          },
+          "tables": {
+           "description": "Table aliases to merge",
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "how": {
+        "description": "Join type",
+        "enum": [
+         "inner",
+         "left",
+         "right",
+         "outer"
+        ],
+        "type": "string"
+       },
+       "on": {
+        "description": "Field(s) to join on (string or array)"
+       }
+      },
+      "type": "object"
+     },
+     "steps": {
+      "description": "List of table queries to execute",
+      "items": {
+       "properties": {
+        "alias": {
+         "description": "Alias for this result set",
+         "type": "string"
+        },
+        "depends_on": {
+         "description": "Alias of parent step to filter by. REQUIRED for master data lookups (KNA1, LFA1, MARA). E.g., depends_on='orders' to filter KNA1 by customer IDs from the orders step.",
+         "type": "string"
+        },
+        "fields": {
+         "description": "Fields to select",
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "filter_field": {
+         "description": "Key field to filter on from the parent step. E.g., 'KUNNR' to filter KNA1 by customer numbers from VBAK. Can also be an array like ['KUNNR'] for multiple fields.",
+         "type": "string"
+        },
+        "max_rows": {
+         "description": "Max rows for this step (minimum 1000 enforced)",
+         "type": "integer"
+        },
+        "provides_key": {
+         "description": "Key field this step provides for downstream steps",
+         "type": "string"
+        },
+        "table": {
+         "description": "SAP table name (e.g., EKKO)",
+         "type": "string"
+        },
+        "where": {
+         "description": "WHERE clause (optional)",
+         "type": "string"
+        }
+       },
+       "required": [
+        "table",
+        "alias"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "steps"
+    ],
+    "type": "object"
+   },
+   "sort_by": {
+    "description": "Field to sort final results by (e.g., WADAT_IST, ERDAT, NETWR). Applied after merge.",
+    "type": "string"
+   },
+   "sort_order": {
+    "default": "desc",
+    "description": "Sort direction. Use 'desc' for most recent / highest first.",
+    "enum": [
+     "desc",
+     "asc"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "query_plan"
+  ],
+  "type": "object"
+ },
+ "name": "sap_multi_table_query"
+}

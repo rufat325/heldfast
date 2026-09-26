@@ -1,0 +1,51 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Croise FINESS DREES \u2194 SIRENE INSEE V3.11 et calcule un score de coh\u00e9rence (S\u00f8rensen-Dice sur bigrammes) pour chaque SIRET candidat. Utile pour confirmer/infirmer un appariement num_finess \u2194 SIRET avant prospection ou cross-check qualit\u00e9.\n\nLogique :\n1. R\u00e9cup\u00e8re FINESS (raison sociale + adresse libell\u00e9e)\n2. R\u00e9cup\u00e8re SIRET candidats via la table RPPS\n3. Pour chaque SIRET, lookup SIRENE puis calcule 3 sous-scores :\n   - `nom` : Dice sur raison sociale (FINESS vs SIRENE.uniteLegale)\n   - `adresse` : Dice sur adresse compl\u00e8te\n   - `telephone` : binaire 0/1 (toujours 0 actuellement : SIRENE n'expose pas le tel)\n4. Score global = pond\u00e9ration (nom 0.5, adresse 0.4, tel 0.1)\n5. Verdict brut : `match` (\u22650.8) / `partial` (0.5..0.8) / `mismatch` (<0.5)\n\nAlgorithme PUBLIC (S\u00f8rensen-Dice est dans la litt\u00e9rature depuis 1948). Aucune valeur ajout\u00e9e Unilabs ici \u2014 c'est une primitive ouverte. La connaissance propri\u00e9taire (mapping enseignes \u2194 SELAS) reste c\u00f4t\u00e9 Geo Intel.\n\nFormat : objet `LookupResult`. Quand `found: true`, retourne `{ num_finess, candidates, skipped }` :\n- `candidates` : tableau tri\u00e9 par `score_global` d\u00e9croissant (meilleur match en premier)\n- `skipped` : SIRET candidats qu'on n'a PAS pu r\u00e9concilier (lookup SIRENE rejected ou not_found) avec la `reason`. Permet au caller de distinguer 'aucun SIRET candidat trouv\u00e9' (`found: false` LookupResult.not_found) de 'N SIRETs candidats mais tous rejet\u00e9s par SIRENE' (`candidates: []` + `skipped: [...]`).",
+ "inputSchema": {
+  "properties": {
+   "num_finess": {
+    "description": "Num\u00e9ro FINESS exact (9 chiffres).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "num_finess"
+  ],
+  "type": "object"
+ },
+ "name": "reconcilier_finess_sirene",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

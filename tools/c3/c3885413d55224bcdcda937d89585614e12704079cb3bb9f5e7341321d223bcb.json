@@ -1,0 +1,73 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Evidence Create"
+ },
+ "description": "Registers a NEW evidence record inside an evidence group. Requires: evidence_group_create \u2192 evidenceGroupId, case_file_create \u2192 caseFileId. Generate a UUID v4 for `id`. Compute the SHA-256 hex hash of the file BEFORE calling. Normal INTERNAL flow: call evidence_create with custodyType INTERNAL and NO fileUrl; the API returns uploadFileUrl, a presigned S3 URL. You MUST PUT the exact file bytes to uploadFileUrl, then verify with evidence_get/evidence_list, and ONLY THEN call evidence_seal. Do not seal an evidence group until every INTERNAL evidence file has been uploaded. Convenience flow: if you pass `fileUrl` (public HTTPS, no redirects, under 1 GiB), this tool downloads that URL and PUTs the bytes to uploadFileUrl for you. EXTERNAL flow: use custodyType EXTERNAL only when you intentionally register hash-only evidence; still generate a fresh UUID for each evidence. If an INTERNAL evidence creation/upload failed and you want to retry as EXTERNAL, create a NEW evidence id; do not reuse an id whose outcome is unknown. WARNING: the API sometimes returns {code:'EvidenceCreateError'} even when the evidence was successfully persisted \u2014 always verify with evidence_list before retrying.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "caseFileId": {
+    "description": "UUID of the case file",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "custodyType": {
+    "default": "INTERNAL",
+    "description": "INTERNAL = GoCertius stores the file; EXTERNAL = only hash registered",
+    "enum": [
+     "INTERNAL",
+     "EXTERNAL"
+    ],
+    "type": "string"
+   },
+   "evidenceGroupId": {
+    "description": "UUID of the evidence group",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "fileName": {
+    "description": "Original file name including extension",
+    "type": "string"
+   },
+   "fileUrl": {
+    "description": "Optional public HTTPS URL to download and auto-upload to the returned uploadFileUrl (custodyType INTERNAL only). Omit this when you want the manual presigned-URL flow.",
+    "format": "uri",
+    "type": "string"
+   },
+   "hash": {
+    "description": "SHA-256 hex digest of the file content (64 hex chars)",
+    "type": "string"
+   },
+   "id": {
+    "description": "UUID v4 for the new evidence record (idempotency key)",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "title": {
+    "description": "Human-readable title for the evidence",
+    "maxLength": 128,
+    "type": "string"
+   }
+  },
+  "required": [
+   "caseFileId",
+   "evidenceGroupId",
+   "id",
+   "title",
+   "fileName",
+   "hash"
+  ],
+  "type": "object"
+ },
+ "name": "evidence_create"
+}

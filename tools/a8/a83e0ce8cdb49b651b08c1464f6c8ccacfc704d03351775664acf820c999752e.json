@@ -1,0 +1,339 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get a Bluesky user's recent feed ordered newest-first. Filter by post type: \"posts_with_replies\" (everything), \"posts_no_replies\" (excludes replies), \"posts_and_author_threads\" (posts the author started), \"posts_with_media\" (the actor's own posts with images or video \u2014 no link cards), or \"posts_with_video\" (the actor's own video posts). The first three include reposts, so items authored by other accounts appear alongside the actor's own writing \u2014 a \"repostedBy\" field marks those, and the \"author\" field always names who actually wrote the post; the two media filters return no reposts. Set include_pins to also get the post pinned to the profile, marked \"pinned\", first on the first page \u2014 in addition to \"limit\", and whether or not it matches the filter. Returns posts with full text, engagement counts, embeds, and AT-URIs for drilling into threads via bsky_get_post_thread. Because \"limit\" counts reposts too, a page from an account that reposts heavily holds far fewer of that account's own posts than the limit suggests; the enrichment fields report the split, so read \"originalPosts\" rather than the limit when you want the actor's own writing. Supports cursor pagination.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "actor": {
+    "description": "Handle (e.g. \"alice.bsky.social\") or DID of the author whose feed to fetch. A leading \"@\" and the account's bsky.app page (\"https://bsky.app/profile/alice.bsky.social\") are accepted and read as the handle or DID they carry. A bare name without a dot is not a handle \u2014 use bsky_search_actors to resolve one.",
+    "maxLength": 2048,
+    "minLength": 1,
+    "pattern": "^(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?|did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-]|@(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?|https:\\/\\/bsky\\.app\\/profile\\/(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?|did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-])\\/?(?:[?#].*)?)$",
+    "type": "string"
+   },
+   "cursor": {
+    "description": "Opaque pagination cursor from a previous response for the same actor, passed back unchanged. Omit for the first page.",
+    "maxLength": 2048,
+    "type": "string"
+   },
+   "filter": {
+    "default": "posts_no_replies",
+    "description": "Filter for post types: \"posts_no_replies\" excludes replies, \"posts_with_replies\" for everything, \"posts_and_author_threads\" for threads the author started \u2014 all three include reposts, so check \"repostedBy\" on each item. \"posts_with_media\" returns the actor's own posts with images or video, not link cards, and \"posts_with_video\" their video posts; neither includes reposts.",
+    "enum": [
+     "posts_with_replies",
+     "posts_no_replies",
+     "posts_with_media",
+     "posts_and_author_threads",
+     "posts_with_video"
+    ],
+    "type": "string"
+   },
+   "include_pins": {
+    "default": false,
+    "description": "Also return the post pinned to the actor's profile, marked \"pinned: true\", first on the first page. It arrives in addition to \"limit\", whether or not it matches \"filter\", and is not repeated on later pages. Default false.",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 25,
+    "description": "Maximum number of posts to return (1\u2013100). Default 25. A page that would pass the 48,000-byte response budget comes back with fewer posts and \"budgetCapped: true\"; its cursor continues from the first post it left out.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "actor"
+  ],
+  "type": "object"
+ },
+ "name": "bsky_get_author_feed",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "posts",
+     "totalReturned"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "budgetCapped": {
+    "description": "True when a page of the requested limit would have passed this server's 48,000-byte response budget, so Bluesky was asked again for fewer posts and that page was returned whole. The cursor comes from that same response, so paging on from it skips nothing. Independent of \"truncated\", which still means only that a cursor was returned.",
+    "type": "boolean"
+   },
+   "cap": {
+    "description": "The limit applied to this page.",
+    "type": "number"
+   },
+   "cursor": {
+    "description": "Opaque cursor for the next page. Absent on the last page.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `actor_not_found`: The actor handle or DID does not resolve to an existing account. `invalid_cursor`: Bluesky could not continue from the cursor the request carried \u2014 it answers a cursor it cannot decode with HTTP 500. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "actor_not_found",
+         "invalid_cursor"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when the result set is empty or constrained.",
+    "type": "string"
+   },
+   "originalPosts": {
+    "description": "How many items on this page the requested actor wrote, a pinned post included. Present whenever the page carries at least one repost \u2014 the number a caller asking for the actor's own writing is after, since under the filters that include reposts \"limit\" counts them too.",
+    "type": "number"
+   },
+   "posts": {
+    "description": "Feed items, newest-first \u2014 the actor's own posts and the posts they reposted. Items carrying \"repostedBy\" were written by the account named in \"author\", not by the requested actor.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single item from the author feed \u2014 the actor's own post, or a post they reposted.",
+     "properties": {
+      "author": {
+       "additionalProperties": false,
+       "description": "Author of this post.",
+       "properties": {
+        "avatar": {
+         "description": "URL of the author avatar image.",
+         "type": "string"
+        },
+        "did": {
+         "description": "Permanent DID of the author, e.g. \"did:plc:z72i7hdynmk6r22z27h6tvur\".",
+         "type": "string"
+        },
+        "displayName": {
+         "description": "Display name set by the author.",
+         "type": "string"
+        },
+        "handle": {
+         "description": "Human-readable handle of the author, e.g. \"alice.bsky.social\".",
+         "type": "string"
+        },
+        "verification": {
+         "additionalProperties": false,
+         "description": "Bluesky verification of the author \u2014 what tells a verified account from a look-alike handle. Absent when Bluesky sent none. Who issued it is on bsky_get_profile.",
+         "properties": {
+          "trustedVerifierStatus": {
+           "description": "Whether the author is itself a trusted verifier \u2014 same values as verifiedStatus.",
+           "type": "string"
+          },
+          "verifiedStatus": {
+           "description": "Whether a trusted verifier verified the author: \"valid\", \"invalid\" (verified once, no longer holds), or \"none\". Passed through as Bluesky sends it, so another value may appear.",
+           "type": "string"
+          }
+         },
+         "required": [
+          "verifiedStatus",
+          "trustedVerifierStatus"
+         ],
+         "type": "object"
+        }
+       },
+       "required": [
+        "did",
+        "handle"
+       ],
+       "type": "object"
+      },
+      "cid": {
+       "description": "Content Identifier (CID) of the post record.",
+       "type": "string"
+      },
+      "createdAt": {
+       "description": "ISO 8601 timestamp when this post was created.",
+       "type": "string"
+      },
+      "embed": {
+       "additionalProperties": {},
+       "description": "Media or link embed attached to this post. type: \"images\" | \"external\" | \"record\" | \"video\" | \"unknown\". images: array of { url, alt } \u2014 also carries app.bsky.embed.gallery embeds. external: { uri, title, description }. record: { uri, cid, text?, authorHandle?, embeds?, media?, omittedEmbeds?, recordKind? } \u2014 embeds is the quoted post's own attachments, so a quote of an image post carries those images here; media is the image/video/link attached alongside the quote by the post doing the quoting, on a recordWithMedia embed. Both are embeds of these same shapes. Bluesky fills embeds for the post being quoted and no deeper, so a quote nested inside another quote ordinarily carries none; omittedEmbeds counts any it did carry that were past the nesting this server follows, so an unattached quote and one whose attachments are missing are never the same value. Fetch the quote uri as its own post to read them. recordKind is absent for an ordinary quoted post and otherwise names what stood in for one: \"notFound\" | \"blocked\" | \"detached\" (the quote exists but cannot be read) or \"generator\" | \"list\" | \"starterPack\" | \"labeler\" | \"unknown\" (the quoted record is not a post). A \"generator\" quote is a feed: pass its uri to bsky_get_feed to read it. When recordKind is set, text and authorHandle are absent because that variant does not carry them \u2014 do not read the quote as an empty post. video: { playlist?, thumbnail?, presentation? }. unknown: { raw } \u2014 raw is the upstream $type this server has no mapping for.",
+       "properties": {},
+       "type": "object"
+      },
+      "indexedAt": {
+       "description": "ISO 8601 timestamp when this post was indexed.",
+       "type": "string"
+      },
+      "labels": {
+       "description": "Moderation labels on this post.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A moderation label applied by the AppView or a labeler service.",
+        "properties": {
+         "cts": {
+          "description": "ISO 8601 timestamp when the label was applied.",
+          "type": "string"
+         },
+         "src": {
+          "description": "DID of the labeler that applied this label. Equal to the post author DID when the account labelled its own post, and a labeler service DID otherwise.",
+          "type": "string"
+         },
+         "val": {
+          "description": "Label value (content warning or moderation tag, e.g. \"porn\", \"spam\").",
+          "type": "string"
+         }
+        },
+        "required": [
+         "val"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "likeCount": {
+       "description": "Number of likes.",
+       "type": "number"
+      },
+      "pinned": {
+       "description": "True on the post the actor pinned to their profile, returned when include_pins is set. A pin is placement, not recency \u2014 the post is often older than the items below it. Absent on every other item.",
+       "type": "boolean"
+      },
+      "quoteCount": {
+       "description": "Number of quote posts Bluesky counts \u2014 read them with bsky_get_post_quotes. An upper bound on what that returns, since the counter keeps quotes that have left the index.",
+       "type": "number"
+      },
+      "replyCount": {
+       "description": "Number of replies to this post.",
+       "type": "number"
+      },
+      "replyRootUri": {
+       "description": "AT-URI of the post this conversation started from, if this is a reply. Pass to bsky_get_post_thread to read the whole conversation rather than one branch.",
+       "type": "string"
+      },
+      "replyToUri": {
+       "description": "AT-URI of the post this is a reply to, if applicable.",
+       "type": "string"
+      },
+      "repostCount": {
+       "description": "Number of reposts.",
+       "type": "number"
+      },
+      "repostedAt": {
+       "description": "ISO 8601 timestamp of the repost. Present only on reposted items.",
+       "type": "string"
+      },
+      "repostedBy": {
+       "additionalProperties": false,
+       "description": "Present only when this item is a repost rather than the requested actor writing. The post itself \u2014 text, author, engagement counts \u2014 belongs to the author field, not to this account.",
+       "properties": {
+        "did": {
+         "description": "Permanent DID of the account that reposted.",
+         "type": "string"
+        },
+        "displayName": {
+         "description": "Display name of the account that reposted.",
+         "type": "string"
+        },
+        "handle": {
+         "description": "Handle of the account that reposted.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "did",
+        "handle"
+       ],
+       "type": "object"
+      },
+      "text": {
+       "description": "Full text content of the post.",
+       "type": "string"
+      },
+      "uri": {
+       "description": "AT-URI of the post, e.g. \"at://did:plc:xxx/app.bsky.feed.post/yyy\". Use with bsky_get_post_thread.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "uri",
+      "cid",
+      "text",
+      "author"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "reposts": {
+    "description": "How many items on this page are posts the requested actor reposted rather than wrote. Present only when there is at least one; these items carry \"repostedBy\".",
+    "type": "number"
+   },
+   "shown": {
+    "description": "Number of posts returned on this page.",
+    "type": "number"
+   },
+   "totalReturned": {
+    "description": "Number of posts in this response page.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when more posts exist beyond this page (a cursor was returned).",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Bluesky Author Feed"
+}

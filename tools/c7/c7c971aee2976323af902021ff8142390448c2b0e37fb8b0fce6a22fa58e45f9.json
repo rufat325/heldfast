@@ -1,0 +1,69 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Invoke a listed FiatDock service. PAID listings go THROUGH the gateway (POST /s/:id) so the non-custodial payment is enforced \u2014 ONE x402 payment: the full price, straight to the seller's wallet (the gateway commission is currently waived). TO BUY: call once WITHOUT `payment` to get the 402 challenge and step-by-step instructions, sign it with your own wallet, then call again with the same id/args plus `payment` set to the base64 x402 payload \u2014 the gateway settles on-chain directly to the seller and returns their response. No wallet? `npx fiatdock-mcp` with AGENT_PRIVATE_KEY signs automatically. FREE / first-party listings are forwarded to their real MCP endpoint directly (no payment). Pass the service's expected request body as `args`.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "args": {
+    "additionalProperties": {},
+    "description": "JSON payload to send to the service (e.g. an MCP JSON-RPC request body) \u2014 shape is defined by that service",
+    "type": "object"
+   },
+   "id": {
+    "description": "Listing id (svc_\u2026) to invoke, from search_services",
+    "type": "string"
+   },
+   "payment": {
+    "description": "Base64 x402 v2 PaymentPayload signed by YOUR wallet, satisfying every entry in the 402's `accepts`. Omit on the first call to receive the challenge; send it on the second call to complete the purchase. Sent to the gateway as the X-PAYMENT header \u2014 FiatDock never holds the funds.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id"
+  ],
+  "type": "object"
+ },
+ "name": "call_service",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "ok": {
+    "description": "true when the underlying service returned a 2xx",
+    "type": "boolean"
+   },
+   "result": {
+    "description": "The service's response body \u2014 parsed JSON when it returned JSON, otherwise the raw text"
+   },
+   "routedThroughGateway": {
+    "description": "true if PAID (settled via /s/:id \u2014 100% to the seller (the gateway commission is currently waived)); false if FREE/first-party direct",
+    "type": "boolean"
+   },
+   "service": {
+    "description": "Listing id that was invoked",
+    "type": "string"
+   },
+   "status": {
+    "description": "HTTP status returned by the service (or the gateway)",
+    "type": "number"
+   }
+  },
+  "required": [
+   "ok",
+   "status",
+   "service",
+   "routedThroughGateway"
+  ],
+  "type": "object"
+ },
+ "title": "Call a marketplace service"
+}

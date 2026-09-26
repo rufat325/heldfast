@@ -1,0 +1,246 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Search NHTSA defect investigations from the ODI flat file \u2014 covering Preliminary Evaluations (PE), Engineering Analyses (EA), Defect Petitions (DP), Recall Queries (RQ), Audit Queries (AQ), and additional ODI types. make, model, and component are structured filters against the investigation record's vehicle associations. All filters are ANDed. Use nhtsaId to fetch one investigation by its exact ID \u2014 including the investigationId nhtsa_search_recalls returns for a campaign. Investigations may link to a resulting recall campaign via recallCampaign.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "component": {
+    "description": "Structured filter \u2014 matches against the investigation's affected components (e.g., \"STEERING\"). ANDed with other filters.",
+    "type": "string"
+   },
+   "investigationType": {
+    "description": "Filter by ODI investigation type code (the leading letters of the NHTSA ID). Named types: \"PE\" (Preliminary Evaluation), \"EA\" (Engineering Analysis), \"DP\" (Defect Petition), \"RQ\" (Recall Query), \"AQ\" (Audit Query). Additional valid codes present in the dataset: \"SQ\", \"EQ\", \"RP\", \"ID\", \"TA\", \"C\". Pass any code exactly as it appears in the investigation ID prefix.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Max investigations to return. Defaults to 20; max 25. The cap is lower than the other paginated tools because a single investigation summary can run several thousand characters and is rendered in full.",
+    "maximum": 25,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "make": {
+    "description": "Structured filter \u2014 matches against the investigation's associated vehicle makes (e.g., \"TOYOTA\"). ANDed with other filters.",
+    "type": "string"
+   },
+   "model": {
+    "description": "Structured filter \u2014 matches against the investigation's associated vehicle models. ANDed with other filters.",
+    "type": "string"
+   },
+   "nhtsaId": {
+    "description": "Exact NHTSA investigation ID (e.g. \"EA23003\"), case-insensitive. Fetches that one record \u2014 mutually exclusive with every other filter.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Pagination offset into the matching investigations. Defaults to 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Free-text search across investigation ID, subject, and summary.",
+    "type": "string"
+   },
+   "status": {
+    "description": "Filter by status: \"O\" (Open) or \"C\" (Closed). Omit to include both.",
+    "enum": [
+     "O",
+     "C"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "nhtsa_search_investigations",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "totalCount",
+     "returned",
+     "offset",
+     "limit",
+     "investigations",
+     "effectiveQuery"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "effectiveQuery": {
+    "description": "Applied filters as a readable string, e.g. make=\"Ford\" status=\"O\".",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `mode_conflict`: nhtsaId was combined with another filter. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "mode_conflict"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "investigations": {
+    "description": "Matching investigations",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single NHTSA investigation",
+     "properties": {
+      "closeDate": {
+       "description": "Date investigation closed (YYYY-MM-DD), if closed",
+       "type": "string"
+      },
+      "components": {
+       "description": "Affected components",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "investigationType": {
+       "description": "Investigation type code",
+       "type": "string"
+      },
+      "investigationTypeName": {
+       "description": "Investigation type name",
+       "type": "string"
+      },
+      "makes": {
+       "description": "Associated vehicle makes",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "manufacturer": {
+       "description": "Manufacturer name",
+       "type": "string"
+      },
+      "models": {
+       "description": "Associated vehicle models",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "nhtsaId": {
+       "description": "NHTSA investigation ID",
+       "type": "string"
+      },
+      "openDate": {
+       "description": "Date investigation opened (YYYY-MM-DD)",
+       "type": "string"
+      },
+      "recallCampaign": {
+       "description": "Linked recall campaign number (if any) \u2014 use with nhtsa_search_recalls",
+       "type": "string"
+      },
+      "status": {
+       "description": "Status code (O=Open, C=Closed)",
+       "type": "string"
+      },
+      "statusName": {
+       "description": "Status name",
+       "type": "string"
+      },
+      "subject": {
+       "description": "Investigation subject",
+       "type": "string"
+      },
+      "summary": {
+       "description": "Investigation summary",
+       "type": "string"
+      },
+      "years": {
+       "description": "Associated model years",
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "limit": {
+    "description": "Pagination limit used for this page",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when no investigations match the filters, or when the requested page overshoots the result set.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Pagination offset used for this page",
+    "type": "number"
+   },
+   "returned": {
+    "description": "Number of investigations in this page",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Total matching investigations",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Nhtsa Search Investigations"
+}

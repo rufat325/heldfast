@@ -1,0 +1,574 @@
+{
+ "_meta": {
+  "openai/outputTemplate": "ui://adoteca/pets.html",
+  "ui": {
+   "resourceUri": "ui://adoteca/pets.html"
+  }
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Pets parecidos com UM pet espec\u00edfico, mesma esp\u00e9cie e mesma cidade \u2014 n\u00e3o \u00e9 a busca geral do cat\u00e1logo. Use quando o pet desejado j\u00e1 n\u00e3o estiver dispon\u00edvel. Pode vir vazia: use searchPets, nunca invente pets. Mostre o `adoption_url`. `total` \u00e9 o tamanho desta lista; n\u00e3o h\u00e1 p\u00e1gina 2.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "limit": {
+    "default": 6,
+    "description": "Quantos pets parecidos devolver, no m\u00e1ximo 24. Esta lista n\u00e3o tem p\u00e1ginas: n\u00e3o existe `page` aqui.",
+    "title": "Limit",
+    "type": "integer"
+   },
+   "pet_ref": {
+    "description": "C\u00f3digo curto do pet (ex.: 'ab12cd') ou o identificador da ficha.",
+    "title": "Pet Ref",
+    "type": "string"
+   }
+  },
+  "required": [
+   "pet_ref"
+  ],
+  "title": "search_similar_petsArguments",
+  "type": "object"
+ },
+ "name": "search_similar_pets",
+ "outputSchema": {
+  "$defs": {
+   "AgentNameMatch": {
+    "properties": {
+     "confidence": {
+      "description": "'high' = \u00e9 este pet: afirme direto. 'low' = N\u00c3O afirme qual \u00e9; mostre os pets da lista e pergunte qual deles.",
+      "enum": [
+       "high",
+       "low"
+      ],
+      "title": "Confidence",
+      "type": "string"
+     },
+     "query": {
+      "description": "O nome que foi buscado.",
+      "title": "Query",
+      "type": "string"
+     }
+    },
+    "required": [
+     "query",
+     "confidence"
+    ],
+    "title": "AgentNameMatch",
+    "type": "object"
+   },
+   "AgentPetSummary": {
+    "properties": {
+     "adoption_evidence": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "S\u00f3 quando status='adopted': 'announced' (a ONG anunciou) ou 'unlisted' (o post saiu do ar e a ONG confirma isso como ado\u00e7\u00e3o). null nos demais status.",
+      "title": "Adoption Evidence"
+     },
+     "adoption_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Link da ficha do pet. SEMPRE mostre este link na resposta.",
+      "title": "Adoption Url"
+     },
+     "age": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Idade leg\u00edvel, ex.: '6 meses', '2 anos'. Acima de um ano a idade \u00e9 dada em anos inteiros; abaixo, em meses.",
+      "title": "Age"
+     },
+     "age_category": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Faixa et\u00e1ria: 'filhote', 'adulto' ou 'idoso'.",
+      "title": "Age Category"
+     },
+     "breed": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Ra\u00e7a informada; a maioria \u00e9 SRD (sem ra\u00e7a definida).",
+      "title": "Breed"
+     },
+     "city": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Cidade e UF onde o pet est\u00e1, ex.: 'Campinas - SP'.",
+      "title": "City"
+     },
+     "contact_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Link para falar com a ONG sobre este pet: abre uma p\u00e1gina da Adoteca que leva ao post original no Instagram. Mostre este link ao indicar contato.",
+      "title": "Contact Url"
+     },
+     "days_without_update": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Dias desde a \u00faltima not\u00edcia nova sobre este pet (publica\u00e7\u00e3o da ONG ou sinal de ado\u00e7\u00e3o). null = desfecho confirmado ou data desconhecida. Passado um m\u00eas, diga que nada novo chegou desde ent\u00e3o e que o pet pode ou n\u00e3o continuar dispon\u00edvel; quem confirma \u00e9 quem cuida dele.",
+      "title": "Days Without Update"
+     },
+     "dewormed": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "null = a ONG n\u00e3o informou.",
+      "title": "Dewormed"
+     },
+     "distance_km": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Dist\u00e2ncia em km entre o centro da cidade do pet e o da cidade buscada (0 = a pr\u00f3pria cidade). S\u00f3 vem quando a busca usou `area` ou `widen_if_empty`.",
+      "title": "Distance Km"
+     },
+     "foster_status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "'aceita lar tempor\u00e1rio' ou 'precisa de lar tempor\u00e1rio'. Muda o que se pede \u00e0 pessoa: n\u00e3o \u00e9 ado\u00e7\u00e3o definitiva. null = n\u00e3o classificado.",
+      "title": "Foster Status"
+     },
+     "good_with_cats": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "null = a ONG n\u00e3o informou.",
+      "title": "Good With Cats"
+     },
+     "good_with_dogs": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "null = a ONG n\u00e3o informou.",
+      "title": "Good With Dogs"
+     },
+     "good_with_kids": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "null = a ONG n\u00e3o informou.",
+      "title": "Good With Kids"
+     },
+     "microchipped": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "null = a ONG n\u00e3o informou.",
+      "title": "Microchipped"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Nome do pet, quando a ONG informou.",
+      "title": "Name"
+     },
+     "neutered": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "null = a ONG n\u00e3o informou. Nunca afirme 'n\u00e3o castrado' quando for null.",
+      "title": "Neutered"
+     },
+     "photo_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Foto principal do pet.",
+      "title": "Photo Url"
+     },
+     "published_recently": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/AgentPublishedRecently"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Preenchido s\u00f3 na busca por nome: a Adoteca postou este pet nesta rede h\u00e1 pouco. Use para situar a pessoa ('o que postamos no Instagram') em vez de afirmar sem contexto."
+     },
+     "rescuer": {
+      "$ref": "#/$defs/AgentRescuer",
+      "description": "Quem cuida do pet."
+     },
+     "sex": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "'macho' ou 'f\u00eamea'.",
+      "title": "Sex"
+     },
+     "short_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "C\u00f3digo curto do pet (o mesmo de adoteca.com.br/p/{code}).",
+      "title": "Short Code"
+     },
+     "size": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Porte: 'pequeno', 'm\u00e9dio' ou 'grande'.",
+      "title": "Size"
+     },
+     "species": {
+      "description": "'cachorro' ou 'gato'.",
+      "title": "Species",
+      "type": "string"
+     },
+     "status": {
+      "description": "'available', 'adopted', 'deceased' ou 'source_gone' (post original saiu do ar: pode ter sido adotado; confirme com o protetor). Nunca ofere\u00e7a um pet que n\u00e3o esteja 'available'. 'available' s\u00f3 diz que ningu\u00e9m sinalizou mudan\u00e7a: leia `days_without_update` antes de afirmar que est\u00e1 dispon\u00edvel.",
+      "title": "Status",
+      "type": "string"
+     },
+     "vaccinated": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "null = a ONG n\u00e3o informou. Nunca afirme 'n\u00e3o vacinado' quando for null.",
+      "title": "Vaccinated"
+     }
+    },
+    "required": [
+     "short_code",
+     "name",
+     "species",
+     "sex",
+     "size",
+     "breed",
+     "age",
+     "age_category",
+     "city",
+     "status",
+     "photo_url",
+     "adoption_url",
+     "rescuer"
+    ],
+    "title": "AgentPetSummary",
+    "type": "object"
+   },
+   "AgentPublishedRecently": {
+    "properties": {
+     "platform": {
+      "description": "Rede onde a Adoteca postou este pet, ex.: 'Instagram'.",
+      "title": "Platform",
+      "type": "string"
+     },
+     "published_at": {
+      "description": "Quando a Adoteca postou.",
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "platform",
+     "published_at"
+    ],
+    "title": "AgentPublishedRecently",
+    "type": "object"
+   },
+   "AgentRescuer": {
+    "properties": {
+     "instagram_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Perfil oficial da ONG no Instagram. Para indicar contato, mostre contact_url.",
+      "title": "Instagram Url"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Nome da ONG ou protetor respons\u00e1vel pelo pet.",
+      "title": "Name"
+     }
+    },
+    "required": [
+     "name",
+     "instagram_url"
+    ],
+    "title": "AgentRescuer",
+    "type": "object"
+   },
+   "AgentSearchResponse": {
+    "properties": {
+     "name_match": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/AgentNameMatch"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "S\u00f3 quando a busca enviou `name`. Leia `confidence` antes de afirmar de qual pet a pessoa est\u00e1 falando."
+     },
+     "page": {
+      "description": "P\u00e1gina devolvida (come\u00e7a em 1).",
+      "title": "Page",
+      "type": "integer"
+     },
+     "pets": {
+      "description": "Os pets desta p\u00e1gina.",
+      "items": {
+       "$ref": "#/$defs/AgentPetSummary"
+      },
+      "title": "Pets",
+      "type": "array"
+     },
+     "searched_area": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/AgentSearchedArea"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "A \u00e1rea que a busca realmente cobriu. Se `widened` for true, os pets n\u00e3o s\u00e3o da cidade pedida: diga isso antes de list\u00e1-los."
+     },
+     "total": {
+      "description": "Total de pets que atendem aos filtros.",
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "total",
+     "page",
+     "pets"
+    ],
+    "title": "AgentSearchResponse",
+    "type": "object"
+   },
+   "AgentSearchedArea": {
+    "description": "The area the pet search actually ran \u2014 after any automatic widening.",
+    "properties": {
+     "area": {
+      "description": "\u00c1rea usada: 'city' (s\u00f3 a cidade), 'neighbors' (a cidade e as que fazem divisa com ela) ou 'radius' (tamb\u00e9m as cidades a at\u00e9 `radius_km`).",
+      "enum": [
+       "city",
+       "neighbors",
+       "radius"
+      ],
+      "title": "Area",
+      "type": "string"
+     },
+     "cities": {
+      "description": "Quantas cidades a \u00e1rea cobriu (0 = busca sem cidade).",
+      "title": "Cities",
+      "type": "integer"
+     },
+     "radius_km": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Raio em km quando `area` \u00e9 'radius'; sen\u00e3o null.",
+      "title": "Radius Km"
+     },
+     "widened": {
+      "description": "true quando a cidade n\u00e3o tinha pets e a busca foi ampliada sozinha (widen_if_empty). Diga isso \u00e0 pessoa e cite a cidade de cada pet.",
+      "title": "Widened",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "area",
+     "radius_km",
+     "widened",
+     "cities"
+    ],
+    "title": "AgentSearchedArea",
+    "type": "object"
+   },
+   "AgentToolError": {
+    "description": "The error branch of every tool's return type.\n\nErrors are DATA, never a raised exception: a raised one aborts the calling\nmodel's tool loop, while this arrives as a normal result the model can read\nand act on. It is part of the declared output schema so a client sees the\nbranch exists before it ever hits one.",
+    "properties": {
+     "error": {
+      "description": "O que impediu a consulta e o que enviar na pr\u00f3xima chamada. Leia e corrija a chamada; NUNCA responda que n\u00e3o existem pets por causa disto.",
+      "title": "Error",
+      "type": "string"
+     }
+    },
+    "required": [
+     "error"
+    ],
+    "title": "AgentToolError",
+    "type": "object"
+   }
+  },
+  "properties": {
+   "result": {
+    "anyOf": [
+     {
+      "$ref": "#/$defs/AgentSearchResponse"
+     },
+     {
+      "$ref": "#/$defs/AgentToolError"
+     }
+    ],
+    "title": "Result"
+   }
+  },
+  "required": [
+   "result"
+  ],
+  "title": "search_similar_petsOutput",
+  "type": "object"
+ },
+ "title": "Ver pets parecidos"
+}

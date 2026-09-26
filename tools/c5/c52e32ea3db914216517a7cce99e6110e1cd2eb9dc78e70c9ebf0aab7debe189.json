@@ -1,0 +1,78 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Read a video: returns its transcript and a small set of important, deduplicated keyframes rather than every frame. Output is written to destinationPath -- read the returned paths; only a short transcript comes back inline. Each item returns { status, title, duration, frameCount, framePaths, manifestPath, transcriptPath?, transcript?, videoPath?, warnings, cookies }. Pass several items in videos to batch them; results come back one per item in order, and one failing does not fail the others. A single item writes into destinationPath, several into video-1/, video-2/. Pass start and end for part of a video. For one exact frame use the same second for both with frames: \"even\", maxFrames: 1, transcript: false. For a transcript alone use frames: \"none\" -- on a captioned video that skips the download entirely and takes seconds. Check every item's status. \"rate_limited\" is temporary: wait, retry, and space out repeats for the same video. Every item reports cookies: \"none\", \"browser:<name>\", \"cookies_file\" or \"wechat_cookie\" -- what was sent, never a value. When an item fails as auth_required, auth_expired or rate_limited and its reason suggests userCookies, ASK THE USER before retrying with userCookies: true. Read warnings, and transcript.source, to tell a failed stage from a video that simply has no speech; when source is \"asr\", transcript.asrReason says whether the video had no captions (\"no_captions\") or had captions that could not be retrieved (\"captions_failed\"). Pass videoPath back in to inspect another moment without downloading again. For anything long, call this as a background task: your environment notifies you with the result when it finishes, so there is no need to poll for it. To watch progress or check it is still alive meanwhile, GET the returned statusUrl. Reach for get_status ONLY if your environment TIMED OUT the call -- the work finishes either way. Handles YouTube, TikTok, Instagram, X, Facebook, Twitch, Vimeo, Reddit, WeChat Channels, direct .mp4/.m3u8 URLs and many other sites; unsupported ones return a failure status.",
+ "execution": {
+  "taskSupport": "optional"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "destinationPath": {
+    "description": "Directory to write manifests, transcripts and frames into. Created if missing.",
+    "type": "string"
+   },
+   "userCookies": {
+    "default": false,
+    "description": "Use the user's own browser session for this call only. NEVER set it on your own: ask the user first, every time -- it reads their browser's cookies, and nothing carries over to later calls. Cookies come from their default browser (or an installed one this server can read, when the default is unsupported; cookies in the reply names it) and go only to the site being fetched. If the user needs to sign in -- no yuanbao.tencent.com session for WeChat Channels, or any other site still refusing with their cookies -- the call opens a page in that browser saying which site to sign in to and why, and waits up to 3 minutes for them before returning. Tell the user to expect that. Chrome-family browsers show a macOS Keychain prompt when read. Default false.",
+    "type": "boolean"
+   },
+   "videos": {
+    "description": "One entry per video to analyze. One item = single video, flat layout; several = video-N subdirectories.",
+    "items": {
+     "properties": {
+      "end": {
+       "description": "End second of the range. Set equal to start for a single instant (requires frames: \"even\").",
+       "type": "number"
+      },
+      "frames": {
+       "description": "\"key\" (default): the most informative frames, deduplicated. \"even\": uniform sampling across the range. \"none\": no frames (transcript only).",
+       "enum": [
+        "key",
+        "even",
+        "none"
+       ],
+       "type": "string"
+      },
+      "language": {
+       "description": "Language hint such as \"zh\", \"ja\" or \"en\". Usually inferred from the platform; supply it when the source carries no language metadata or the guess is wrong.",
+       "type": "string"
+      },
+      "maxFrames": {
+       "description": "Maximum frames to return. With frames \"even\" this sets density across the range. 0 with frames omitted means the same as frames: \"none\". Default 35.",
+       "type": "number"
+      },
+      "pathOrUrl": {
+       "description": "A video URL, or a path to a video file already on this machine. Both are accepted.",
+       "type": "string"
+      },
+      "start": {
+       "description": "Start second of the range to analyze. Provide with end; either alone is ignored. Note that if pathOrUrl is a clip previously fetched with a range, times are relative to that clip, which starts at 0.",
+       "type": "number"
+      },
+      "transcript": {
+       "default": true,
+       "description": "Produce a transcript. Set false to skip transcription entirely when you only want frames.",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "pathOrUrl"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "destinationPath",
+   "videos"
+  ],
+  "type": "object"
+ },
+ "name": "analyze_video",
+ "title": "Analyze video"
+}

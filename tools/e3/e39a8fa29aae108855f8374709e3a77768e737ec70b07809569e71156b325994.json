@@ -1,0 +1,251 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Walk the citation graph one hop from a seed work. Direction picks the edge: incoming citations (`cites`), the seed's own references (`cited_by`), or OpenAlex's algorithmically-related works (`related_to`). Note: `direction` follows OpenAlex's filter convention, which inverts the common English reading \u2014 `cites` returns works that cite the seed; `cited_by` returns works the seed cites. Results use the works schema; combine with filters/sort to narrow further.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cursor": {
+    "description": "Pagination cursor from a previous response. Pass to get the next page. Omit it on the first call \u2014 an empty string is rejected, since a supplied-but-blank cursor is a caller mistake rather than a request for the first page.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "direction": {
+    "description": "\"cites\": works that cite seed_id (incoming citations). \"cited_by\": works that seed_id cites (its reference list). \"related_to\": OpenAlex algorithmically-related works (~8-30 typical, may be empty for less-cited seeds).",
+    "enum": [
+     "cites",
+     "cited_by",
+     "related_to"
+    ],
+    "type": "string"
+   },
+   "filters": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Additional filters to narrow the graph, same syntax as openalex_search_entities. Example: publication_year=\">2020\", is_oa=\"true\". Do not include cites/cited_by/related_to, nor an alias of one such as cited_works \u2014 those keys are set by the `direction` parameter.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "per_page": {
+    "default": 25,
+    "description": "Results per page (1-100). Default 25.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "seed_id": {
+    "description": "Seed work identifier. Accepts OpenAlex ID (\"W2741809807\"), DOI (\"10.1038/nature12373\" or full URL), or PMID (\"12345678\" or \"https://pubmed.ncbi.nlm.nih.gov/12345678\"). A PMCID is recognized too, bare or as a PubMed Central URL, but OpenAlex indexes no PMCIDs, so it resolves nothing \u2014 pass the work's PMID or DOI instead. Use openalex_resolve_name first if you only have a title.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "select": {
+    "description": "OpenAlex work field names to return. Always returned: id, display_name. Defaults to the curated works select if omitted.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "sort": {
+    "description": "Sort field. Prefix with \"-\" for descending. Comma-separate for a multi-key sort, applied left to right, with the \"-\" prefix set per key (\"-publication_year,cited_by_count\" sorts by year descending, then citations ascending). Common: \"cited_by_count\", \"-publication_date\". Default is OpenAlex relevance.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "seed_id",
+   "direction"
+  ],
+  "type": "object"
+ },
+ "name": "openalex_get_citation_graph",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "meta",
+     "results",
+     "echo",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "budget": {
+    "additionalProperties": false,
+    "description": "What this call cost against the OpenAlex daily budget and what is left of it. Price a full walk before committing to it: `totalCount` \u00f7 `per_page` \u00d7 `costUsd` against `remainingUsd`. Absent when OpenAlex omitted the accounting headers.",
+    "properties": {
+     "costUsd": {
+      "description": "USD this call spent, covering both upstream requests \u2014 the seed validation lookup (unbilled) and the graph page itself.",
+      "type": "number"
+     },
+     "prepaidRemainingUsd": {
+      "description": "USD left in the prepaid balance \u2014 a separate pool OpenAlex draws on only after the daily allowance runs out, and which the daily reset does not refill. Add it to `remainingUsd` for the full spendable amount. Absent when the account holds no prepaid balance.",
+      "type": "number"
+     },
+     "remainingUsd": {
+      "description": "USD left in today's OpenAlex budget after this call.",
+      "type": "number"
+     },
+     "resetsInSeconds": {
+      "description": "Seconds until the daily budget refills (midnight UTC).",
+      "type": "number"
+     }
+    },
+    "required": [
+     "costUsd",
+     "remainingUsd",
+     "resetsInSeconds"
+    ],
+    "type": "object"
+   },
+   "echo": {
+    "description": "Compact echo of seed_id, direction, filters, sort \u2014 surfaces what was actually queried when no edges are returned.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: OpenAlex throttled the request for exceeding its per-second ceiling (HTTP 429). `upstream_budget_exhausted`: The OpenAlex daily usage budget is spent (HTTP 429). `upstream_timeout`: OpenAlex did not respond within the request deadline. `upstream_unavailable`: OpenAlex was unreachable or unusable \u2014 HTTP 503, a connection failure, or a body that was empty, HTML, or unparseable JSON. `upstream_unauthorized`: OpenAlex rejected the API key (HTTP 401). `upstream_forbidden`: OpenAlex denied access to the requested resource (HTTP 403). `comma_in_filter_value`: A filter value contains a comma, which collides with the OpenAlex filter separator. `upstream_invalid_params`: OpenAlex rejected an invalid filter or sort field name (HTTP 400). `upstream_invalid_id_value`: An entity-ID filter received a value that is not an OpenAlex ID \u2014 usually a name (HTTP 400). `upstream_sort_requires_search`: sort=-relevance_score was used but the citation-graph query has no active search (HTTP 400). `upstream_invalid_params_other`: OpenAlex rejected the request (HTTP 400) for a reason other than an invalid field name. `reserved_filter_key`: filters contains cites/cited_by/related_to, or an alias of one such as cited_works \u2014 the direction parameter reserves those keys. `entity_not_found`: OpenAlex has no work matching the seed_id. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_budget_exhausted",
+         "upstream_timeout",
+         "upstream_unavailable",
+         "upstream_unauthorized",
+         "upstream_forbidden",
+         "comma_in_filter_value",
+         "upstream_invalid_params",
+         "upstream_invalid_id_value",
+         "upstream_sort_requires_search",
+         "upstream_invalid_params_other",
+         "reserved_filter_key",
+         "entity_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "meta": {
+    "additionalProperties": false,
+    "description": "Result metadata including pagination.",
+    "properties": {
+     "count": {
+      "description": "Total edges from seed_id in this direction (across all pages).",
+      "type": "number"
+     },
+     "next_cursor": {
+      "description": "Cursor for next page. null if no more results.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "per_page": {
+      "description": "Page size OpenAlex echoed for this request \u2014 the requested per_page, not the number of records returned. A short or exhausted page carries fewer records than this.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "count",
+     "per_page",
+     "next_cursor"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when no edges are returned. A first call suggests verifying the seed_id, broadening filters, or trying a different direction; a `cursor` continuation says the walk is already past its last edge instead. Absent when results are present.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Works on the citation graph in this direction. Text values are plain text \u2014 HTML entities decoded, HTML/JATS/MathML markup removed.",
+    "items": {
+     "additionalProperties": {},
+     "description": "A single OpenAlex work record on the citation graph. Additional fields vary by `select`.",
+     "properties": {
+      "display_name": {
+       "description": "Work title. null when OpenAlex holds no title for the record (paratext works and other untitled entries) \u2014 use `id` to identify it.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "id": {
+       "description": "OpenAlex work ID.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "display_name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalCount": {
+    "description": "Total edges from seed_id in this direction across all pages.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Openalex Get Citation Graph"
+}

@@ -1,0 +1,293 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Vehicle Lookup"
+ },
+ "description": "Look up road-freight vehicle and trailer specifications \u2014 17 types: EU articulated trailers (standard/mega curtainsider, box, reefer, double-deck, flatbed, low-loader), US 53ft/48ft dry vans, rigid trucks (7.5-26 t) and vans (Luton, Transit, Sprinter). Each record carries internal dimensions, payload and gross weights, euro/UK pallet capacity, axle configuration and features.\n\nProvide slug (e.g. \"standard-curtainsider\") for one record; omit it to list all 17; category (articulated | rigid | van) and region (EU | US) filter the list.\n\nBehavior: read-only; an unknown slug errors with the valid list; per-record provenance (sources, audited_at, decision_rationale) is included. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: the vehicle record (or filtered list) under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: typical specs, provenance pending independent verification (the envelope's provenance_status says so) \u2014 real equipment varies by operator and build; legal payload is set by the vehicle's plated weights.\n\nRelated: ldm_calculator (whether a pallet load fits), pallet_fitting_calculator, consignment_calculator.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "category": {
+    "description": "Filter by vehicle category.",
+    "enum": [
+     "articulated",
+     "rigid",
+     "van"
+    ],
+    "type": "string"
+   },
+   "region": {
+    "description": "Filter by region.",
+    "enum": [
+     "EU",
+     "US"
+    ],
+    "type": "string"
+   },
+   "slug": {
+    "description": "Vehicle slug. Examples: \"standard-curtainsider\", \"mega-trailer\". Omit to list all 17.",
+    "minLength": 2,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "vehicle_lookup",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "count": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "meta": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "result": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "results": {
+        "anyOf": [
+         {
+          "items": {},
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

@@ -1,0 +1,98 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Audit a page for AI visibility"
+ },
+ "description": "Audit whether AI assistants (ChatGPT, Claude, Perplexity, Google AI Overview, Bing Copilot) can read and cite a page, and optionally ask them. On-page pass (always): the live robots.txt resolved for 24 AI crawlers per RFC 9309 with the deciding line, Content-Signal, a fetch that identifies as GPTBot to catch WAFs filtering on user-agent, noindex/nosnippet/noai/data-nosnippet, text present without JavaScript, JSON-LD types and resolvable Organization/Person entities, heading outline, question-shaped headings, answer-first paragraph, lists/tables, numeric facts and quotes, chunk-sized sections, dateModified with age, author, outbound sources. Also readability grade, paragraph length, definitional openers, named-entity density, keyword stuffing, first-hand content, images/video, paywall and retired robots tokens. Retrievability first: where Google ranks the page for its own H1 question and whether it is indexed (2 SERPs) \u2014 a page that is not retrievable is not cited whatever its on-page score. Google AI Overview and Bing Copilot report brand MENTIONS only: their no-JS SERP exposes no sources. Returns a 0-100 score per pillar (retrievability, access, readability, structure, answerability, trust, plus offsite when requested), blockers that cap the score, every check with evidence and fix, and topFixes. Citation panel (when `queries` is set): asks each engine, reports cited / mentioned / rank per (query \u00d7 engine), share of voice across all cited domains, and the domains winning the questions where the page is absent. Use this instead of seo_audit when the question is AI answers rather than Google rankings.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "brand": {
+    "description": "Brand name to look for in the answer text ('mentioned' even when not cited). Defaults to the page's og:site_name / Organization name.",
+    "maxLength": 80,
+    "type": "string"
+   },
+   "competitors": {
+    "description": "Competitor domains to flag in the share of voice, e.g. ['brightdata.com']",
+    "items": {
+     "maxLength": 253,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "context": {
+    "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\"",
+    "type": "string"
+   },
+   "country": {
+    "description": "ISO country code for the proxy exit, e.g. 'us' \u2014 also the locale of the AI Overview / Copilot SERP",
+    "maxLength": 2,
+    "minLength": 2,
+    "type": "string"
+   },
+   "engines": {
+    "description": "Engines to ask (default: all). aio = Google AI Overview read from a live SERP, copilot = Bing's generative answer, openai/anthropic = the vendors' APIs with web search (an approximation of ChatGPT/Claude search), deepseek = our own Google top-10 handed to DeepSeek to answer and cite (cheapest; measures whether a model picks your page from the same results).",
+    "items": {
+     "enum": [
+      "perplexity",
+      "openai",
+      "anthropic",
+      "aio",
+      "copilot",
+      "deepseek"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "llm_model": {
+    "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" \u2014 never guess.",
+    "type": "string"
+   },
+   "no_bot_fetch": {
+    "description": "Skip the extra request that identifies itself as GPTBot",
+    "type": "boolean"
+   },
+   "no_render": {
+    "description": "Skip the rendered pass (cheaper \u2014 the two JS-parity checks are reported as skipped)",
+    "type": "boolean"
+   },
+   "no_retrieval": {
+    "description": "Skip the retrievability probe (2 SERPs: Google rank of the page for its own H1 question, and whether it is indexed). On by default \u2014 it is the strongest single predictor of citation and a blocker when the page is not indexed.",
+    "type": "boolean"
+   },
+   "offsite": {
+    "description": "Also measure the brand OFF the page with five searches (\"brand\" site:youtube.com / reddit.com / wikipedia.org / linkedin.com / review sites) \u2014 the signals studies rank above anything on-page for whether a brand gets named. Adds an `offsite` pillar; billed as 5 SERP calls.",
+    "type": "boolean"
+   },
+   "queries": {
+    "description": "Questions to ask the AI engines (max 10). Omit for the on-page audit only \u2014 each (query \u00d7 engine) pair is a billed engine call.",
+    "items": {
+     "maxLength": 300,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 10,
+    "type": "array"
+   },
+   "url": {
+    "description": "The page URL to audit",
+    "format": "uri",
+    "type": "string"
+   }
+  },
+  "required": [
+   "url",
+   "context",
+   "llm_model"
+  ],
+  "type": "object"
+ },
+ "name": "ai_visibility"
+}

@@ -1,0 +1,140 @@
+{
+ "annotations": {
+  "access": "free",
+  "connect_url": "https://dchub.cloud/connect?ref=mcp-tools-list&tool=get_hosting_capacity",
+  "destructiveHint": false,
+  "front_door": "get_infrastructure",
+  "idempotentHint": true,
+  "limits": "utility-published feeder hosting capacity covers a named subset of utilities in the Northeast, Mid-Atlantic and Midwest \u2014 not nationwide, and absence of a feeder is not absence of capacity \u00b7 published feeder capacities are single-digit to low-tens of MW and the rows are GIS vertices \u2014 read distinct_feeders, never the row count",
+  "maturity": "partial",
+  "openWorldHint": false,
+  "problem": "substations and transmission",
+  "readOnlyHint": true,
+  "title": "Feeder Hosting Capacity"
+ },
+ "description": "Utility-PUBLISHED feeder hosting capacity \u2014 the MW a NAMED distribution feeder can actually take, straight from the utility's own hosting-capacity GIS. 278,799 published records across 18 utilities (Con Edison, National Grid NY/MA, NYSEG/RG&E, Rhode Island Energy, Orange & Rockland, Central Hudson, Eversource CT, BGE, Pepco/Delmarva/ACE, Dominion VA, Ameren Illinois, AEP Ohio & I&M, Xcel MN/CO, DTE, Avista). This is filed distribution-level truth, not a proximity proxy. Three ways to call it: lat+lon (+radius_km, default 25) for a point; utility or market for a whole published territory; NO ARGS for the coverage list of every market that has data. CRITICAL \u2014 check capacity_type before quoting any number: \"load\" = LOAD-serving headroom, what a new data-center load can actually DRAW (only Ameren Illinois, AEP Ohio & I&M and Central Hudson publish it); \"gen\" = DER/generation EXPORT capacity, what the feeder can ACCEPT from solar/storage \u2014 it is NOT available load and must never be relayed as \"you can site N MW here\"; \"bus_headroom\" = transmission bus MW. Returns, split by capacity_type: distinct feeder count, max + median MW, the top feeders with substation, voltage_kv, feeder_id, coords and publish date, plus the utilities publishing them. Honest by construction \u2014 published rows are GIS vertices, so distinct_feeders and geometry_rows_scanned are reported separately (never conflated), and a capacity-capped read is flagged sample_complete=false with the capacity_floor_mw at or above which the set IS provably complete. Coverage is 18 utilities concentrated in the Northeast, Mid-Atlantic and Midwest \u2014 NOT nationwide \u2014 and a point outside them returns an explicit not-published answer with the nearest covered markets, never a silent zero. Answers \"can this feeder actually take 20 MW\", \"where can I plug in without waiting on a substation upgrade\". Try: get_hosting_capacity utility=\"Ameren Illinois\" capacity_type=load min_mw=5. Do NOT use for transmission-substation proximity or time-to-power (use get_grid_intelligence), the ISO interconnection queue (use get_interconnection_queue / get_refined_queue), or retiring-plant headroom (use get_retirement_headroom) \u2014 this is the distribution FEEDER layer. Informational, not binding interconnection guidance; verify with the utility.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "capacity_type": {
+    "description": "Restrict to one published type: \"load\" (what a new data-center load can DRAW \u2014 the type that answers siting), \"gen\" (DER/generation EXPORT headroom \u2014 NOT available load), or \"bus_headroom\" (transmission bus MW). Omit to get all three reported separately.",
+    "type": "string"
+   },
+   "lat": {
+    "description": "Latitude of the point to search around, decimal degrees. Must be paired with lon.",
+    "type": "number"
+   },
+   "latitude": {
+    "description": "Alias for lat \u2014 either name works",
+    "type": "number"
+   },
+   "limit": {
+    "description": "Max results to return (1-500; default varies by tool)",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "lng": {
+    "description": "Alias for lon \u2014 either name works",
+    "type": "number"
+   },
+   "lon": {
+    "description": "Longitude of the point to search around, decimal degrees. Must be paired with lat.",
+    "type": "number"
+   },
+   "longitude": {
+    "description": "Alias for lon \u2014 either name works",
+    "type": "number"
+   },
+   "market": {
+    "description": "Alias for utility \u2014 either name works (e.g. \"Northern Virginia \u00b7 Richmond\", \"New York City \u00b7 Westchester\").",
+    "type": "string"
+   },
+   "min_mw": {
+    "description": "Only return feeders whose published capacity is at or above this many MW.",
+    "type": "number"
+   },
+   "radius_km": {
+    "description": "Search radius in km around lat/lon (default 25, max 150). Ignored when utility/market is passed \u2014 that mode covers the utility's entire published extent.",
+    "maximum": 150,
+    "minimum": 1,
+    "type": "number"
+   },
+   "utility": {
+    "description": "Utility or market name, case-insensitive substring \u2014 e.g. \"Ameren Illinois\", \"Con Edison\", \"Providence\". Searches that utility's whole published territory instead of a point radius. Call with NO arguments to list every covered utility.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_hosting_capacity",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text \u2014 tool-specific data fields ride at the top level alongside these envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   }
+  },
+  "type": "object"
+ },
+ "title": "Feeder Hosting Capacity"
+}

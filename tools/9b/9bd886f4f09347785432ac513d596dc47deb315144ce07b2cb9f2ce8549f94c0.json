@@ -1,0 +1,221 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search the Metropolitan Museum of Art collection by keyword and optional filters. Returns the total match count and one page of matching object IDs, which met_get_object resolves to full records. Relevance is keyword-based, not semantic; department and geographic filters narrow results more than a longer query. Paging reaches only the first 10,000 matches of any search, so narrow a larger one with filters. The medium parameter takes an object classification as the Met spells it (\"Paintings\", \"Sculpture\"), not a material like \"Oil on canvas\". hasImages also includes copyrighted works; CC0 status is per object, from the isPublicDomain and hasCC0Image fields on met_get_object. isHighlight accepts true only. isOnView restricts results to works currently on display in a Met gallery.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "dateBegin": {
+    "description": "Earliest object date (year, inclusive). Negative integers for BCE (e.g., -500 for 500 BCE). Requires dateEnd.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "dateEnd": {
+    "description": "Latest object date (year, inclusive). Negative integers for BCE. Requires dateBegin.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "departmentId": {
+    "description": "Restrict results to one curatorial department. Valid IDs come from met_list_departments \u2014 the Met exposes a sparse set (roughly 1\u201321, with gaps); an unrecognized ID is rejected with an invalid_department error rather than silently widening the search. Can be combined with other filters.",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "geoLocation": {
+    "description": "Filter by geographic origin: one country, region, or city, as a one-element array (e.g., [\"France\"]). The value is matched broadly against geography fields and artist nationality. Works best with the Egyptian Art, Greek and Roman Art, and similar departments that have well-populated geography fields.",
+    "items": {
+     "description": "A country, region, or city (e.g., \"France\", \"Egypt\", \"New York\").",
+     "type": "string"
+    },
+    "maxItems": 1,
+    "type": "array"
+   },
+   "hasImages": {
+    "description": "When true, restricts results to objects that have at least one associated image, including copyrighted works whose images cannot be reproduced; false restricts them to objects with none. For freely reusable CC0 images, confirm per object from the isPublicDomain and hasCC0Image fields on met_get_object.",
+    "type": "boolean"
+   },
+   "isHighlight": {
+    "const": true,
+    "description": "Opt-in filter, true only \u2014 omit it rather than passing false, which the search ignores. Selects objects the Met has designated as highlights \u2014 major works central to the collection.",
+    "type": "boolean"
+   },
+   "isOnView": {
+    "description": "When true, restricts results to objects currently on display in a Met gallery; false restricts them to objects not on view. The GalleryNumber field on the met_get_object record identifies the specific gallery.",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Maximum number of object IDs to return in this page. Paging reaches only the first 10,000 matches, so a page that would cross 10,000 is cut short there.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "medium": {
+    "description": "Filter by object classification, case-sensitive and spelled as the Met spells it (e.g., \"Paintings\", \"Drawings\", \"Prints\", \"Ceramics\", \"Sculpture\", \"Photographs\", \"Textiles\") \u2014 \"paintings\" or \"Painting\" matches nothing. Maps to the classification field on the object, not the materials text, so a material description like \"Oil on canvas\" matches nothing either; met_get_object returns an object\u2019s classification.",
+    "type": "string"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Zero-based index of the first match to return (default 0); pass the nextOffset from a previous response to continue paging. Only the first 10,000 matches are reachable, so an offset at or beyond 10,000, or at or beyond a nonzero total, returns an empty page rather than an error. Matches with tied relevance can change order between requests, so an ID can occasionally repeat or be skipped at a page boundary.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "q": {
+    "description": "Keyword query, matched across title, artist name, culture, medium, tags, and other text fields. Broad terms return large ID sets.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "q"
+  ],
+  "type": "object"
+ },
+ "name": "met_search_collections",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "total",
+     "objectIDs",
+     "returned",
+     "truncated",
+     "remaining",
+     "nextOffset",
+     "offset"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_results`: total is 0 \u2014 no object matches the keyword, or none of its matches survives the filters. `invalid_date_range`: dateBegin or dateEnd is provided without the other, or dateBegin > dateEnd. `invalid_filter`: q is whitespace-only, or medium or geoLocation was supplied blank \u2014 an empty array, or an entry with no non-whitespace characters. `invalid_department`: departmentId is provided but is not one of the Met department IDs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_results",
+         "invalid_date_range",
+         "invalid_filter",
+         "invalid_department"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextOffset": {
+    "anyOf": [
+     {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The offset to pass on the next call to continue paging, or null when no further page is reachable (truncated is false)."
+   },
+   "notice": {
+    "description": "Present only when total exceeds 10,000: states that only the first 10,000 matches are reachable by paging, and that filters or a more specific keyword bring the rest into reach.",
+    "type": "string"
+   },
+   "objectIDs": {
+    "description": "Object IDs for this page, up to `limit` results.",
+    "items": {
+     "description": "A Met object ID.",
+     "maximum": 9007199254740991,
+     "minimum": -9007199254740991,
+     "type": "integer"
+    },
+    "type": "array"
+   },
+   "offset": {
+    "description": "The resolved offset this page was read from \u2014 the offset input after its default of 0. When it is at or beyond the smaller of total and 10,000, the page is empty because the offset ran past what paging reaches, not because the search found nothing.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "remaining": {
+    "description": "Count of reachable matches after this page: the smaller of total and 10,000, minus (offset + returned), floored at 0. 0 means no further page exists.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "returned": {
+    "description": "Count of object IDs in this page.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "total": {
+    "description": "Total number of objects in the Met collection matching the search. Can exceed 10,000, the most that paging reaches.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "truncated": {
+    "description": "True when reachable matches remain after this page (offset + returned < the smaller of total and 10,000); false when this page is the last one paging reaches.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search Met Collection"
+}

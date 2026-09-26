@@ -1,0 +1,76 @@
+{
+ "description": "Persist ONE agent-inferred semantic annotation (a one-sentence purpose + domain tags + confidence + optional semantic role) for a single file OR single symbol in an indexing job, and advance that job's progress cursor by 1.\n\nThis is the write side of tier-2 indexing: after index_code (tier2/both) returns a batch of files with their symbol skeletons, the agent reads each file's source, decides what it does, and calls record_semantic_node per file \u2014 Tentra stores the annotation in CodeSemantic and marks the file as tier2-indexed. The job cursor auto-advances so index_code_continue eventually returns done=true. Unlike record_embedding (which stores vectors for find_similar_code), record_semantic_node stores human-readable purpose text plus domain tags and surfaces in query_symbols, explain_code_path, get_service_code_graph (include_semantics=true), and get_decisions_for.\n\nPrerequisites: Tentra API auth + an active job_id from index_code + a file_id OR symbol_id from that job's snapshot (exactly one of the two is required). Call per file/symbol, not in a single mega-batch. Response: { ok: true, semantic_id }.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "confidence": {
+    "default": 0.7,
+    "description": "How certain the agent is about the purpose/tags, 0\u20131. Default 0.7 (moderate). Use ~0.9 when the symbol is obvious (big docstring, clear name), ~0.5 when guessing.",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "domain_tags": {
+    "default": [],
+    "description": "Free-form business-domain labels (e.g. [\"payments\", \"webhooks\", \"security\"]). Used to slice the graph by domain. Defaults to []. Lowercase snake-case recommended.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "extracted_by": {
+    "description": "Identifier of the agent / model that produced this extraction, e.g. \"claude-opus-4-7\" or \"gpt-5-mini\". Required for audit trails and for re-running extraction on model upgrades.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "file_id": {
+    "description": "CodeFile ID to annotate. Provide EITHER file_id or symbol_id (exactly one \u2014 tool errors if both or neither). Use file_id for file-level purpose descriptions; use symbol_id for a specific function/class.",
+    "type": "string"
+   },
+   "is_god_node": {
+    "description": "Optional override of the auto-computed isGodNode flag on the symbol. Usually omit \u2014 Tentra derives it from fanIn/fanOut. Set true only when you have strong evidence of coupling the static analysis missed.",
+    "type": "boolean"
+   },
+   "job_id": {
+    "description": "Active indexing job_id from index_code. Required \u2014 this is what ties the annotation back to a job and advances its progress cursor.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "lens_metadata": {
+    "additionalProperties": {},
+    "description": "Arbitrary JSON payload scoped to whichever \"lens\" (security, performance, testing\u2026) the agent is extracting for. Free-form; no schema enforced.",
+    "type": "object"
+   },
+   "purpose": {
+    "description": "One-sentence human-readable purpose string. Example: \"Verifies HMAC signatures on incoming Stripe webhooks\". Shown in query_symbols results, get_service_code_graph (include_semantics=true), and explain_code_path hop annotations. Keep under ~200 chars.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "semantic_role_slug": {
+    "description": "Optional semantic role from the SemanticRole catalog (e.g. \"service\", \"repository\", \"controller\", \"handler\"). Helps query_symbols filter by architectural role.",
+    "type": "string"
+   },
+   "snapshot_id": {
+    "description": "Snapshot the file or symbol belongs to (from index_code response). Required \u2014 semantic nodes are snapshot-scoped so they can evolve over time.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "symbol_id": {
+    "description": "CodeSymbol ID to annotate. Provide EITHER file_id or symbol_id (not both). Use for fine-grained annotations on one function/class/method; prefer file_id for coarse per-file summaries.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "job_id",
+   "snapshot_id",
+   "purpose",
+   "extracted_by"
+  ],
+  "type": "object"
+ },
+ "name": "record_semantic_node"
+}

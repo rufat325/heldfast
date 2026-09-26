@@ -1,0 +1,210 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Reserve a time slot on an active configured calendar. Returns a pending_offer reservation and sends a 6-digit confirmation code to the customer's email or phone. The reservation expires in 15 minutes if not confirmed. Idempotent: re-using the same idempotency_key returns the original reservation without resending the code. At a business that takes a deposit for agent bookings, pass the offer_id from get_quote (without it the answer is quote_required); no code is sent and the result's payment block carries the amount to pay instead.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "agent_id": {
+    "description": "Optional agent identifier",
+    "type": "string"
+   },
+   "customer_contact": {
+    "anyOf": [
+     {
+      "required": [
+       "email"
+      ]
+     },
+     {
+      "required": [
+       "phone"
+      ]
+     }
+    ],
+    "description": "How to reach the customer. MUST include at least one of email or phone \u2014 the confirmation code is delivered there, and a hold nobody can confirm is unreachable from both sides. Email is used when both are present.",
+    "properties": {
+     "email": {
+      "description": "Where the 6-digit confirmation code is sent, preferred over phone",
+      "format": "email",
+      "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+      "type": "string"
+     },
+     "name": {
+      "description": "Customer's name, if known",
+      "type": "string"
+     },
+     "phone": {
+      "description": "SMS fallback for the confirmation code when no email is given. Any common way of writing a number is accepted and reformatted for you: (512) 317-1992, 512-317-1992 and 5123171992 all work, and a bare national number is read as US. Only input that cannot be read as a number at all is refused, and then only when no email was supplied, since a hold nobody can confirm is worse than a refused call.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "idempotency_key": {
+    "description": "Unique key for idempotent reservation",
+    "minLength": 1,
+    "type": "string"
+   },
+   "offer_id": {
+    "description": "Optional id of a signed get_quote offer to redeem against this reservation. Omit for a business with no exact-priced service \u2014 authentication is a capability upgrade here, never a toll.",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "slug": {
+    "description": "Business slug identifier",
+    "minLength": 1,
+    "type": "string"
+   },
+   "window_end": {
+    "description": "Slot end (Unix seconds, an absolute instant) \u2014 the matching get_availability slot's `end`; see window_start.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "window_start": {
+    "description": "Slot start (Unix seconds, an absolute instant). Take it from a get_availability slot: that response carries the business's `timezone`, so request a wide availability window there and filter the returned slots locally rather than guessing the zone.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "slug",
+   "window_start",
+   "window_end",
+   "customer_contact",
+   "idempotency_key"
+  ],
+  "type": "object"
+ },
+ "name": "reserve_slot",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "booking_details": {
+    "additionalProperties": false,
+    "description": "For configured calendars: present these fixed booking details to the customer before confirming their code. No owner approval is required.",
+    "properties": {
+     "business_name": {
+      "type": "string"
+     },
+     "calendar_name": {
+      "type": "string"
+     },
+     "end": {
+      "type": "string"
+     },
+     "reference": {
+      "type": "string"
+     },
+     "start": {
+      "type": "string"
+     },
+     "timezone": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "business_name",
+     "timezone",
+     "start",
+     "end",
+     "calendar_name",
+     "reference"
+    ],
+    "type": "object"
+   },
+   "confirmation": {
+    "additionalProperties": false,
+    "properties": {
+     "channel": {
+      "description": "Where the code went: 'email', 'sms', or 'none' if delivery was unavailable",
+      "type": "string"
+     },
+     "delivered": {
+      "description": "False means the hold exists but no code reached the customer \u2014 the booking cannot be confirmed until one does",
+      "type": "boolean"
+     },
+     "method": {
+      "description": "'otp': a 6-digit code was sent to the customer. 'payment': no code \u2014 this booking is confirmed by paying the deposit in `payment`",
+      "type": "string"
+     }
+    },
+    "required": [
+     "method",
+     "channel",
+     "delivered"
+    ],
+    "type": "object"
+   },
+   "expires_at": {
+    "description": "ISO-8601. When this hold lapses if it is not confirmed (by code, or by payment when payment.required)",
+    "type": "string"
+   },
+   "idempotent_replay": {
+    "description": "Present and true when this idempotency_key already had a reservation; no new code was sent",
+    "type": "boolean"
+   },
+   "payment": {
+    "additionalProperties": false,
+    "description": "Always present. required:false \u2014 confirm with the code (confirmation.method 'otp'). required:true \u2014 the customer pays amount_cents (currency) to confirm; balance_due_cents is paid at the visit.",
+    "properties": {
+     "amount_cents": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "balance_due_cents": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "currency": {
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "deposit",
+       "full"
+      ],
+      "type": "string"
+     },
+     "required": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "required"
+    ],
+    "type": "object"
+   },
+   "reservation_id": {
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "status": {
+    "description": "Reservation state \u2014 'pending_offer' on a fresh hold; a replay returns the existing row's state",
+    "type": "string"
+   }
+  },
+  "required": [
+   "reservation_id",
+   "status",
+   "expires_at",
+   "confirmation"
+  ],
+  "type": "object"
+ },
+ "title": "Reserve Time Slot"
+}

@@ -1,0 +1,45 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "USE WHEN an agent is deciding which Uniswap pool and fee tier to provide liquidity to for a pair Sato Route already quotes, and wants the observed readings rather than an opinion. Returns every v3 pool the weekly LP lane found across the four standard fee tiers, each with its in-range liquidity, the swaps and volume actually counted, the window that count covered, and a fee-revenue proxy.\n\nRULE ENFORCED: a route is a RECOMMENDATION. `chosen_by` names every field the pick was made on and where each was read. THE LARGEST TERM IS MISSING ON PURPOSE: impermanent loss is not modelled, not approximated and not bounded, and it appears in `chosen_by` as an explicit null rather than being quietly omitted. A fee-revenue figure here is a PROXY \u2014 the pool's published fee rate multiplied by volume we counted, in token0's own units \u2014 and is never called revenue, an APR or a yield. Readings are never scaled up from the window covered to a full week.\n\nTHE PICK: highest observed fee-revenue proxy per day per unit of in-range liquidity, among pools whose window could be read. When nothing is rankable the answer is `chosen: null` with a reason per pool, never a low-confidence pick.\n\nCOVERAGE: Uniswap v3 on Base and Ethereum, for the pairs the router quotes. Uniswap v4 rows come back `null` WITH THEIR REASON \u2014 v4 is a singleton PoolManager and publishes no per-pair pool id \u2014 and null is unknown, never zero. Every non-Uniswap venue is outside the reading entirely.\n\nNON-CUSTODIAL: this tool never signs, holds, moves or provides liquidity, and nothing it returns is advice.\n\nReturns (json): { chain, pair, week, pools: [{ venue, pool, fee_tier_ppm, fee_tier_pct, liquidity, swaps_observed, volume_token0_observed, fee_revenue_proxy, fee_revenue_proxy_per_day, proxy_per_day_per_liquidity, token0, token1, covered_days, window_days, window_complete, method, evidence_tier, caveat, as_of, unknown_reason }], chosen: { pool, venue, fee_tier_ppm, because, chosen_by } | null, unranked, as_of, checked_at, caveat, rules }. When the pair is not collected: { unavailable, supported, checked_at, caveat }.\n\nExample: { chain: \"Base\", pair: \"WETH-USDC\" }",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "chain": {
+    "description": "Chain the pool is on. Collected: Base, Ethereum. Anything else answers `unavailable` with the covered list \u2014 unknown, never an empty result presented as none.",
+    "maxLength": 40,
+    "minLength": 1,
+    "type": "string"
+   },
+   "pair": {
+    "description": "The pair, either way round: 'WETH-USDC', 'usdc/weth', 'WBTC_WETH'. Only the pairs Sato Route quotes are collected.",
+    "maxLength": 40,
+    "minLength": 3,
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: 'markdown' (default) or 'json'.",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "chain",
+   "pair"
+  ],
+  "type": "object"
+ },
+ "name": "onchain_agent_route_lp",
+ "title": "Compare the Uniswap pools for a pair, with the evidence and the gap named"
+}

@@ -1,0 +1,290 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List countries and regional aggregates with metadata: ISO codes, region, income level, lending type, capital, and coordinates. Filter by region code (e.g. EAS, SSF, NAC), income level (LIC, LMC, UMC, HIC), and lending type (IDX for IDA, IBD for IBRD, IDB for Blend); filters combine by AND. Aggregate entries are excluded by default, leaving individual countries only; set include_aggregates=true to also return region, income group, and world aggregate entities.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "include_aggregates": {
+    "default": false,
+    "description": "When true, includes regional, income-group, and world aggregate entries alongside individual countries. Default false (individual countries only). No aggregate is returned under region or lending_type, whichever code is given, so this changes nothing when either is set.",
+    "type": "boolean"
+   },
+   "income_level": {
+    "description": "Filter by income group code: LIC (Low income), LMC (Lower middle income), UMC (Upper middle income), HIC (High income).",
+    "type": "string"
+   },
+   "lending_type": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "IDX (IDA), IBD (IBRD), IDB (Blend), or LNX (Not classified).",
+      "enum": [
+       "IBD",
+       "IDB",
+       "IDX",
+       "LNX"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "Filter by World Bank lending type code: IDX (IDA), IBD (IBRD), IDB (Blend \u2014 eligible for both), or LNX (Not classified). IDX, IBD, and IDB are also the codes worldbank_get_poverty takes for its lending groups; a country's lendingType field reports the name (IDA, IBRD, Blend, Not classified)."
+   },
+   "page": {
+    "default": 1,
+    "description": "Pagination page number (1-based).",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "description": "Results per page (default: server default, max: 300). One page holds at most 150 entries, which keeps a response within about 50 KB; a larger value is reduced to that cap and echoed as appliedFilters.perPage, and totalPages is counted at the reduced size, so page + 1 continues where a page ends; notice discloses the reduction whenever the result runs past one page.",
+    "maximum": 300,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "region": {
+    "description": "Filter by World Bank region code. A country's region.id is one of EAS (East Asia & Pacific), ECS (Europe & Central Asia), LCN (Latin America & Caribbean), MEA (Middle East, North Africa, Afghanistan & Pakistan), NAC (North America), SAS (South Asia), or SSF (Sub-Saharan Africa). Any other World Bank region or grouping code also filters, by membership: AFE (Africa Eastern and Southern), AFW (Africa Western and Central), ARB (Arab World), EUU (European Union), LDC (Least developed countries), and the rest of the codes the World Bank publishes for regions.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "worldbank_list_countries",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "countries",
+     "appliedFilters",
+     "totalCount",
+     "currentPage",
+     "totalPages"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "appliedFilters": {
+    "additionalProperties": false,
+    "description": "The effective listing parameters \u2014 which filters were in force and the page size served.",
+    "properties": {
+     "includeAggregates": {
+      "description": "Whether aggregates were requested, including the default of false.",
+      "type": "boolean"
+     },
+     "incomeLevel": {
+      "description": "Income level code applied, omitted when none.",
+      "type": "string"
+     },
+     "lendingType": {
+      "description": "Lending type code applied, omitted when none.",
+      "type": "string"
+     },
+     "page": {
+      "description": "Page number requested.",
+      "type": "number"
+     },
+     "perPage": {
+      "description": "Results per page actually served \u2014 the requested size or server default, reduced to the page cap when larger. totalPages is counted at this size.",
+      "type": "number"
+     },
+     "region": {
+      "description": "Region code applied, omitted when none.",
+      "type": "string"
+     },
+     "requestedPerPage": {
+      "description": "Page size asked for, present only when it exceeded the page cap and perPage was reduced.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "includeAggregates",
+     "page",
+     "perPage"
+    ],
+    "type": "object"
+   },
+   "countries": {
+    "description": "Countries (and optionally aggregates) matching the filters.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A country or aggregate entry.",
+     "properties": {
+      "capitalCity": {
+       "description": "Capital city name (empty for aggregates).",
+       "type": "string"
+      },
+      "id": {
+       "description": "Country or aggregate ID (ISO2 or WB aggregate code).",
+       "type": "string"
+      },
+      "incomeLevel": {
+       "additionalProperties": false,
+       "description": "World Bank income classification.",
+       "properties": {
+        "id": {
+         "description": "Income level code.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Income level name.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name"
+       ],
+       "type": "object"
+      },
+      "isAggregate": {
+       "description": "True when this entry is a regional or income-group aggregate rather than an individual country.",
+       "type": "boolean"
+      },
+      "iso2": {
+       "description": "ISO2 country code.",
+       "type": "string"
+      },
+      "latitude": {
+       "description": "Capital latitude (empty for aggregates).",
+       "type": "string"
+      },
+      "lendingType": {
+       "description": "World Bank lending type name: IDA, IBRD, Blend, or Not classified (lending_type filters by the codes IDX, IBD, IDB, LNX). Aggregates report Aggregates.",
+       "type": "string"
+      },
+      "longitude": {
+       "description": "Capital longitude (empty for aggregates).",
+       "type": "string"
+      },
+      "name": {
+       "description": "Country or aggregate name.",
+       "type": "string"
+      },
+      "region": {
+       "additionalProperties": false,
+       "description": "World Bank region this country belongs to.",
+       "properties": {
+        "id": {
+         "description": "Region code.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Region name.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "id",
+      "iso2",
+      "name",
+      "region",
+      "incomeLevel",
+      "lendingType",
+      "capitalCity",
+      "longitude",
+      "latitude",
+      "isAggregate"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "currentPage": {
+    "description": "Page number requested \u2014 past totalPages when the request ran off the end.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_filter`: An invalid region or income_level code was provided. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_filter"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Context for an empty page \u2014 which filters matched nothing, or the page range that exists when the requested page is past the end \u2014 or for a page size reduced to the page cap.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Total matching entries before pagination (includes aggregates if include_aggregates=true).",
+    "type": "number"
+   },
+   "totalPages": {
+    "description": "Total number of pages.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "List World Bank Countries"
+}

@@ -1,0 +1,178 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Recherche d'\u00e9tablissements de sant\u00e9 FINESS dans un rayon g\u00e9ographique (PostGIS ST_DWithin). Filtrable par familles. 24 valeurs disponibles : mco, ssr, sld, had, psychiatrie, dialyse, ambulatoire, labo, imagerie, pharmacie, msp_cpts, ehpad, residence_autonomie, senior_accompagnement, ssiad, aide_domicile, handicap_enfants, handicap_adultes, addictologie, enfance_protection, pmi, hebergement_social, prevention_sante, groupement. Source : FINESS / ANS (flux quotidien, ing\u00e9r\u00e9 le 1\u1d49\u02b3 et le 15 ; \u00e9tablissements EN SERVICE uniquement). Chaque r\u00e9sultat porte `geo_precision: \"adresse\"` d\u00e8s que `coords` est pr\u00e9sent (point WGS84 ANS ou point BAN de l'adresse, jamais un centro\u00efde ; un \u00e9tablissement sans `coords` n'a pas de point connu et est invisible des recherches par rayon) et `siret_ans` (SIRET d\u00e9clar\u00e9 par l'ANS, fait brut non v\u00e9rifi\u00e9 SIRENE \u2014 pour le verdict : reconcilier_finess_sirene / verifier_site_actif). Note : champ `email` toujours `null` (non expos\u00e9 par FINESS public). Lentille : un filtre `familles` compte les \u00e9tablissements par leur cat\u00e9gorie FINESS *principale*. Les activit\u00e9s h\u00e9berg\u00e9es dans un site d'une autre cat\u00e9gorie (ex. plateau de biologie d'un h\u00f4pital sous `famille=labo`) ne sont pas compt\u00e9es \u2014 voir le champ `perimetre` de la r\u00e9ponse. La famille `imagerie` renvoie le plus souvent 0 r\u00e9sultat (FINESS ne r\u00e9pertorie pas les cabinets d'imagerie).",
+ "inputSchema": {
+  "properties": {
+   "familles": {
+    "description": "Familles FINESS \u00e0 inclure (24 valeurs disponibles, voir enum). Si omis, toutes cat\u00e9gories.",
+    "items": {
+     "enum": [
+      "mco",
+      "ssr",
+      "sld",
+      "had",
+      "psychiatrie",
+      "dialyse",
+      "ambulatoire",
+      "labo",
+      "imagerie",
+      "pharmacie",
+      "msp_cpts",
+      "ehpad",
+      "residence_autonomie",
+      "senior_accompagnement",
+      "ssiad",
+      "aide_domicile",
+      "handicap_enfants",
+      "handicap_adultes",
+      "addictologie",
+      "enfance_protection",
+      "pmi",
+      "hebergement_social",
+      "prevention_sante",
+      "groupement"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "include_freshness": {
+    "default": false,
+    "description": "Si true, ajoute un champ `data_freshness` au payload (dans `query_metadata` si pr\u00e9sent, sinon \u00e0 la racine) listant, par source (FINESS, Ameli, RPPS, CDS, IRIS), la derni\u00e8re ingestion r\u00e9ussie (`last_success_at`, `staleness_days`) ET la derni\u00e8re fois que la donn\u00e9e a r\u00e9ellement chang\u00e9 (`last_data_change_at`, `data_age_days` \u2014 un run court-circuit\u00e9 \u00ab fichier amont identique \u00bb compte comme succ\u00e8s mais ne rajeunit pas la donn\u00e9e ; c'est `data_age_days` qui dit l'\u00e2ge r\u00e9el de ce qui est servi). Opt-in pour ne pas alourdir les payloads par d\u00e9faut. Cache 5min c\u00f4t\u00e9 serveur \u2014 co\u00fbt n\u00e9gligeable.",
+    "type": "boolean"
+   },
+   "lat": {
+    "description": "Latitude du centre (WGS84).",
+    "type": "number"
+   },
+   "limit": {
+    "default": 100,
+    "description": "Nombre max de r\u00e9sultats (1-500, d\u00e9faut 100).",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "number"
+   },
+   "lon": {
+    "description": "Longitude du centre (WGS84).",
+    "type": "number"
+   },
+   "radius_km": {
+    "default": 5,
+    "description": "Rayon en km (0.1-50, d\u00e9faut 5).",
+    "maximum": 50,
+    "minimum": 0.1,
+    "type": "number"
+   }
+  },
+  "required": [
+   "lon",
+   "lat"
+  ],
+  "type": "object"
+ },
+ "name": "etablissements_finess_in_radius",
+ "outputSchema": {
+  "description": "R\u00e9sultat de query avec metadata. `results` est tronqu\u00e9 \u00e0 `limit` c\u00f4t\u00e9 serveur (cf. `truncated` quand applicable).",
+  "properties": {
+   "activite_hebergee": {
+    "description": "Compte juxtapos\u00e9 des sites h\u00e9bergeant l'activit\u00e9 correspondant \u00e0 la famille filtr\u00e9e, sous une autre cat\u00e9gorie FINESS. Distinct du `count` principal \u2014 lire `note` pour comprendre la s\u00e9mantique et ne JAMAIS additionner les deux comptes sans pr\u00e9ciser leur nature.",
+    "properties": {
+     "activite": {
+      "type": "string"
+     },
+     "count": {
+      "type": "integer"
+     },
+     "densite_pour_100k_hab": {
+      "type": "number"
+     },
+     "note": {
+      "type": "string"
+     },
+     "sites_apercu": {
+      "items": {
+       "properties": {
+        "categorie_code": {
+         "type": "string"
+        },
+        "categorie_libelle": {
+         "type": "string"
+        },
+        "num_finess": {
+         "type": "string"
+        },
+        "raison_sociale": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "truncated": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "count": {
+    "description": "Nombre d'entr\u00e9es retourn\u00e9es dans `results` (post-troncature).",
+    "type": "number"
+   },
+   "freshness": {
+    "description": "Fra\u00eecheur des sources (pr\u00e9sent si `include_freshness: true`).",
+    "type": "object"
+   },
+   "perimetre": {
+    "description": "Lentille de la source : ce que le comptage inclut/exclut. Lire `completeness_note` et la restituer au lecteur final.",
+    "properties": {
+     "completeness_note": {
+      "type": "string"
+     },
+     "compte": {
+      "type": "string"
+     },
+     "exclut": {
+      "type": "string"
+     },
+     "lens": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "query_metadata": {
+    "description": "Metadata de la query (radius_km, departement, filtres appliqu\u00e9s, \u2026).",
+    "type": "object"
+   },
+   "results": {
+    "description": "Entr\u00e9es m\u00e9tier (shape sp\u00e9cifique au tool, cf. description du tool).",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "total": {
+    "description": "Effectif r\u00e9el avant troncature. Pr\u00e9sent sur les tools de nomenclature pagin\u00e9s (lister_*) : `count` = \u00e9chantillon, `total` = total r\u00e9el, re-appeler avec un `limit` sup\u00e9rieur si `truncated`.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "true si le total r\u00e9el d\u00e9passe `limit` (re-paginer via `offset` si support\u00e9, ou augmenter `limit` sur les lister_*). Optional sur les tools de listing exhaustif (lister_*).",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "count",
+   "results"
+  ],
+  "type": "object"
+ }
+}

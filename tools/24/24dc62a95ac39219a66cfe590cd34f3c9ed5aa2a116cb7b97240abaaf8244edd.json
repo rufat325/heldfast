@@ -1,0 +1,238 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": false,
+  "title": "Create a task"
+ },
+ "description": "Step 2 of the Tango working agreement: turn any client ask into a task before you start work. `client` is REQUIRED (except on subtasks, which inherit it from their parent): if the human has not said which client this is for, ask them \u2014 never guess. Call `list_client_team` first to see which humans and agents work on that client, then set `assignee` to yourself (`@<your-handle>`) or the best-suited teammate \u2014 do not leave tasks unassigned. Always set `goal` and `definition_of_done`. Task tenant is derived from the client (client is authoritative). Cross-agency assignments require `allow_cross_agency: true` and are audit-logged.\n\nONE TASK PER DELIVERABLE. A task is one deliverable, one worker, one verifiable outcome. If the ask contains more than one deliverable, it is more than one task \u2014 pass them together in `subtasks` so the parent and its children are created in one call. Tango runs a scope check on every creation: if the result comes back with `needs_decomposition: true`, you MUST create the child tasks (or call request_decomposition) BEFORE starting work. Do not begin work on a task flagged for decomposition. Do not split below the point where one worker can finish and one reviewer can check; smaller is not better, and every extra task costs a claim, a handoff and a receipt.",
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "acting_worker_id": {
+    "description": "Optional. The worker raising this task, recorded as the creator so whoever picks it up knows who to go back to for clarity. Defaults to the worker bound to this connection. Verified against caller ownership.",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "allow_cross_agency": {
+    "description": "Explicit opt-in to assign across agencies. Audited.",
+    "type": "boolean"
+   },
+   "approver_id": {
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "assignee": {
+    "description": "Name, @handle, or email of the assignee. Fuzzy-resolved.",
+    "type": "string"
+   },
+   "assignee_id": {
+    "description": "Human user id to assign to.",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "assignee_worker_id": {
+    "description": "Worker id to assign to.",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "authority": {
+    "description": "What the worker may do unattended. Everything is off unless granted; anything not granted must be escalated to the approver. Omit to inherit the organization's default for this role.",
+    "properties": {
+     "contact_client": {
+      "description": "May contact the client directly.",
+      "type": "boolean"
+     },
+     "deploy": {
+      "description": "May deploy to production.",
+      "type": "boolean"
+     },
+     "merge": {
+      "description": "May merge code to a protected branch.",
+      "type": "boolean"
+     },
+     "note": {
+      "description": "A boundary in plain words.",
+      "maxLength": 500,
+      "type": "string"
+     },
+     "publish": {
+      "description": "May publish externally without asking.",
+      "type": "boolean"
+     },
+     "send": {
+      "description": "May send to a recipient outside the organization.",
+      "type": "boolean"
+     },
+     "spend": {
+      "description": "May spend money.",
+      "type": "boolean"
+     },
+     "spend_cap_usd": {
+      "description": "Ceiling on spend, in USD.",
+      "exclusiveMinimum": 0,
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "client": {
+    "description": "REQUIRED unless parent_id is set. Name or @handle of the client/workspace. Fuzzy-resolved.",
+    "type": "string"
+   },
+   "client_id": {
+    "description": "Scope the task to a Tango client (shared workspace).",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "constraints": {
+    "description": "Limits: budget, style, do-not-touch, deadlines context.",
+    "type": "string"
+   },
+   "deadline": {
+    "description": "ISO 8601 deadline.",
+    "format": "date-time",
+    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+    "type": "string"
+   },
+   "definition_of_done": {
+    "description": "Concrete acceptance criteria.",
+    "type": "string"
+   },
+   "depends_on": {
+    "description": "Ids of tasks that must reach done or approved before this one is workable. Must be in the same organization; cycles are rejected.",
+    "items": {
+     "format": "uuid",
+     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "description": {
+    "type": "string"
+   },
+   "estimate_minutes": {
+    "description": "Rough effort in minutes. Anything over 240 is treated as more than one task.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "goal": {
+    "description": "What outcome are we after?",
+    "type": "string"
+   },
+   "inputs": {
+    "description": "The governed inputs this work starts from. Each artifact input is pinned to its current content fingerprint, so the task records exactly which version was handed over and flags it later if the source moves on.",
+    "items": {
+     "properties": {
+      "artifact_id": {
+       "description": "An existing Tango artifact this work starts from.",
+       "format": "uuid",
+       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+       "type": "string"
+      },
+      "external_url": {
+       "description": "A link, when the input lives outside Tango.",
+       "format": "uri",
+       "type": "string"
+      },
+      "label": {
+       "description": "What this input is, e.g. 'Approved brief' or 'Brand guidelines'.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "note": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "label"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "parent_id": {
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "project": {
+    "description": "REQUIRED unless parent_id is set. Name or @handle of the project this task belongs to (e.g. \"Website\", \"Google Ads\"). Call list_projects first and ask the human \u2014 never invent a project.",
+    "type": "string"
+   },
+   "project_id": {
+    "description": "Project id, if already known.",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "role": {
+    "description": "Role tag, e.g. 'coder', 'reviewer'.",
+    "type": "string"
+   },
+   "sources": {
+    "description": "URLs or references the assignee should read first.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "subtasks": {
+    "description": "Break the ask down in one call: the parent plus its children, each created with a parent link, inheriting client, project and organization. Use this whenever the ask has more than one deliverable.",
+    "items": {
+     "properties": {
+      "assignee": {
+       "description": "Name, @handle, or email. Fuzzy-resolved.",
+       "type": "string"
+      },
+      "deadline": {
+       "format": "date-time",
+       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+       "type": "string"
+      },
+      "definition_of_done": {
+       "type": "string"
+      },
+      "goal": {
+       "type": "string"
+      },
+      "title": {
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "title"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "title": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "type": {
+    "description": "Default 'task'.",
+    "enum": [
+     "epic",
+     "feature",
+     "task",
+     "subtask"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "title"
+  ],
+  "type": "object"
+ },
+ "name": "create_task",
+ "title": "Create a task"
+}

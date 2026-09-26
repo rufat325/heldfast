@@ -1,0 +1,128 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Cross-tabulate a table: one row per distinct value of `rows`, one column per distinct value of `columns`, each cell aggregating `measure`.\n\nThe result is an ordinary block, so every cell is addressable: `BLOCKREF(\"<name>\", \"<a rows value>\", \"<a columns value>\")`. That is what lets you put one number from it in a sentence or feed it to another calculation.\n\nYou declare the recipe; the engine generates every cell from it. Do not write formulas, and do not write into the block \u2014 renaming a field of the source rebuilds the pivot rather than breaking it, which is only true because nothing is hand-written.\n\n`rows` and `columns` must be fields whose values REPEAT (a region, a quarter, a status). Pointing either at an id gives one row per record, which is the source table again, not a pivot.\n\nIMPORTANT: a pivot's numbers are live but its SHAPE is not. When new values appear in the source, its rows and columns fall behind while every number in it stays correct \u2014 call build__refresh_pivot. describe_block reports when that has happened.",
+ "inputSchema": {
+  "properties": {
+   "columns": {
+    "description": "Field whose distinct values become the COLUMNS. Omit for a simple group-by with one value column.",
+    "type": "string"
+   },
+   "extra_measures": {
+    "description": "Extra columns with their own function and measure, for showing more than one number per group.",
+    "items": {
+     "properties": {
+      "column": {
+       "description": "Restrict it to one value of `columns`. Omit to span every value.",
+       "type": "string"
+      },
+      "func": {
+       "enum": [
+        "SUM",
+        "COUNT",
+        "COUNTA",
+        "AVERAGE",
+        "MIN",
+        "MAX"
+       ],
+       "type": "string"
+      },
+      "measure": {
+       "description": "Field of the SOURCE block.",
+       "type": "string"
+      },
+      "name": {
+       "description": "Column name in the pivot.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "func",
+      "measure"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "filters": {
+    "description": "Which source records count at all. Omit to count every one. Applied to the rows AND the numbers, so a group left with no records gets no row rather than a row reading 0.",
+    "items": {
+     "properties": {
+      "criteria": {
+       "description": "Spreadsheet condition syntax: `>100`, `East`, `<>closed`.",
+       "type": "string"
+      },
+      "field": {
+       "description": "Field of the SOURCE block.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "field",
+      "criteria"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "func": {
+    "description": "How to aggregate. Defaults to SUM. COUNT counts matching RECORDS and ignores `measure`; COUNTA counts the records whose `measure` is filled in, which is how you ask how complete a column is.",
+    "enum": [
+     "SUM",
+     "COUNT",
+     "COUNTA",
+     "AVERAGE",
+     "MIN",
+     "MAX"
+    ],
+    "type": "string"
+   },
+   "measure": {
+    "description": "Field being aggregated. Normally a number field.",
+    "type": "string"
+   },
+   "name": {
+    "description": "Ref name for the new block. Defaults to \"<source>_pivot\".",
+    "type": "string"
+   },
+   "order": {
+    "description": "Order of the rows. `ascending` (default) sorts; `firstSeen` keeps the source's own sequence; `custom` uses `order_values`.",
+    "enum": [
+     "ascending",
+     "firstSeen",
+     "custom"
+    ],
+    "type": "string"
+   },
+   "order_values": {
+    "description": "The row sequence for `order: custom`. A value you omit is placed after the listed ones, never hidden.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "row_total": {
+    "description": "Name for a column totalling each row across EVERY value of `columns` \u2014 e.g. \"Total\". Omit for no total column.",
+    "type": "string"
+   },
+   "rows": {
+    "description": "Field of the source whose distinct values become the ROWS. Its values must repeat.",
+    "type": "string"
+   },
+   "source": {
+    "description": "Ref name of the table to pivot.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "source",
+   "rows",
+   "measure"
+  ],
+  "type": "object"
+ },
+ "name": "create_pivot"
+}

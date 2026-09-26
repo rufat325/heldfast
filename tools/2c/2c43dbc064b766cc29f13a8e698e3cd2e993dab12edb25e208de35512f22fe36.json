@@ -1,0 +1,88 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Aggregates risk across multiple open positions in one call: total notional, total P&L, total margin in use, margin usage as a % of account balance (if given), and which single position sits closest to liquidation. Each position is computed through the same canonical PnL/liquidation math as the single-position tools, then rolled up. Linear (USDT-margined) positions sum into one USD total; inverse (coin-margined) positions are grouped by settlement coin instead, since a BTC-margined P&L cannot be summed with an ETH-margined one without a live conversion rate. Returns a verdict: healthy / watch / reduce / critical, driven by the closest liquidation distance and margin usage. Use when user asks \"how exposed am I across all my positions?\" or \"which of my positions is closest to liquidation?\". Position size follows the product-wide convention: base-asset quantity for linear, USD notional (contracts) for inverse.",
+ "inputSchema": {
+  "properties": {
+   "account_balance": {
+    "description": "Optional account balance in USD, used to compute margin_usage_pct: linear margin plus every inverse position's own margin marked to market at its mark_price, all as one USD total",
+    "type": "number"
+   },
+   "positions": {
+    "items": {
+     "properties": {
+      "coin": {
+       "description": "Settlement coin, required when contractType is inverse (e.g. \"BTC\", \"ETH\")",
+       "type": "string"
+      },
+      "contractType": {
+       "description": "linear = USDT-margined (default), inverse = coin-margined (e.g. Bybit BTCUSD)",
+       "enum": [
+        "linear",
+        "inverse"
+       ],
+       "type": "string"
+      },
+      "entry_price": {
+       "description": "Entry price",
+       "type": "number"
+      },
+      "fee_close_pct": {
+       "description": "Close fee rate (default 0.0005)",
+       "type": "number"
+      },
+      "fee_open_pct": {
+       "description": "Open fee rate (default 0.0002)",
+       "type": "number"
+      },
+      "label": {
+       "description": "Optional label to identify this position in the response (defaults to \"Position N\")",
+       "type": "string"
+      },
+      "leverage": {
+       "description": "Leverage multiplier",
+       "type": "number"
+      },
+      "mark_price": {
+       "description": "Current mark/last price",
+       "type": "number"
+      },
+      "mmr": {
+       "description": "Maintenance margin rate (default 0.005)",
+       "type": "number"
+      },
+      "side": {
+       "enum": [
+        "long",
+        "short"
+       ],
+       "type": "string"
+      },
+      "size": {
+       "description": "Position size: base-asset quantity for linear, USD notional (contracts) for inverse",
+       "type": "number"
+      }
+     },
+     "required": [
+      "side",
+      "entry_price",
+      "mark_price",
+      "size",
+      "leverage"
+     ],
+     "type": "object"
+    },
+    "maxItems": 50,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "positions"
+  ],
+  "type": "object"
+ },
+ "name": "workflow.run_portfolio_risk"
+}

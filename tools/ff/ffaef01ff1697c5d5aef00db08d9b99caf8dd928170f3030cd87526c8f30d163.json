@@ -1,0 +1,222 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Notification Send With Attachments"
+ },
+ "description": "Sends a certified notification WITH one or more attached documents to one or more recipients, in a single call. Use notification_send instead when there are no attachments. This tool exists separately because attachments impose an ordering rule the API enforces and does not forgive: documents must be registered and fully uploaded BEFORE any recipient is added, and every document must reach READY_TO_SEND before the notification is sent \u2014 otherwise the send fails with 409/404 NOTIFICATION_NOT_FOUND. The tool performs that whole sequence for you: create \u2192 register and upload each document \u2192 wait for READY_TO_SEND \u2192 add recipients \u2192 send. Each attachment takes a local file path, base64 content, an HTTPS URL, or an n8n binary reference; the hash and the upload are handled internally. Generates every UUID itself \u2014 do not pass any id. Requires case_file_create \u2192 caseFileId. `content` MUST be HTML: plain text is accepted by the API and reports SENT but does not render on the recipient's landing page. Supported tags only: <p>, <strong>, <em>, <ul><li>, <ol><li>. Keep `subject` to plain ASCII, 100 characters maximum. Delivery is always by email; per recipient you can additionally set sendWaUrl (WhatsApp), sendSmsUrl (RCS or SMS depending on the handset) and otpRequired (one-time code), each of which needs phonePrefix with the + and phoneNumber. The maximum number of attachments and of recipients are per-subscription settings, not fixed limits, so neither is enforced here. IF AN ATTACHMENT FAILS THE RUN STOPS BEFORE RECIPIENTS ARE ADDED, on purpose: once recipients exist the API will not accept further documents, so continuing would produce a notification that can never carry the missing file. The result reports the draft's notificationRequestId so you can retry or delete it. An INVALID recipient blocks the send, so the tool checks for one before sending and reports invalidRecipients instead of attempting a doomed send. If the initial create fails the tool raises an error instead: common causes are a caseFileId that does not exist, a subject over 100 characters, and an exhausted contracted notification plan, which no retry will fix. If that error is a timeout rather than a rejection, check notification_request_list before retrying \u2014 the request may have been created anyway. Certificates can bundle the attachments \u2014 see notification_certificate_package_url.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "attachments": {
+    "description": "One or more documents to attach. Each takes a local path, base64 content, an HTTPS URL or an n8n binary reference. The maximum is a per-subscription setting that varies by tenant and platform, so no limit is enforced here. With no attachments, use notification_send instead.",
+    "items": {
+     "properties": {
+      "file": {
+       "description": "File to ingest. One of: local path | base64 | https URL | n8n binary item.",
+       "oneOf": [
+        {
+         "properties": {
+          "path": {
+           "description": "Absolute local path to the file (stdio/local mode only).",
+           "type": "string"
+          },
+          "source": {
+           "const": "path",
+           "type": "string"
+          }
+         },
+         "required": [
+          "source",
+          "path"
+         ],
+         "type": "object"
+        },
+        {
+         "properties": {
+          "contentBase64": {
+           "description": "Base64-encoded file content.",
+           "type": "string"
+          },
+          "filename": {
+           "description": "File name including extension.",
+           "type": "string"
+          },
+          "source": {
+           "const": "base64",
+           "type": "string"
+          }
+         },
+         "required": [
+          "source",
+          "filename",
+          "contentBase64"
+         ],
+         "type": "object"
+        },
+        {
+         "properties": {
+          "source": {
+           "const": "url",
+           "type": "string"
+          },
+          "url": {
+           "description": "HTTPS URL to fetch the file from (SSRF-guarded).",
+           "format": "uri",
+           "type": "string"
+          }
+         },
+         "required": [
+          "source",
+          "url"
+         ],
+         "type": "object"
+        },
+        {
+         "properties": {
+          "binaryRef": {
+           "description": "Reference to an n8n binary item from a prior node.",
+           "type": "string"
+          },
+          "source": {
+           "const": "n8n-binary",
+           "type": "string"
+          }
+         },
+         "required": [
+          "source",
+          "binaryRef"
+         ],
+         "type": "object"
+        }
+       ]
+      },
+      "fileName": {
+       "description": "Name to register the document under. Defaults to the resolved file's own name.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "file"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "caseFileId": {
+    "description": "UUID of the case file the notification belongs to",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "content": {
+    "description": "Body of the notification as HTML. Supported tags only: <p>, <strong>, <em>, <ul><li>, <ol><li>. No other tags and no CSS. Plain text is accepted by the API but does NOT render for the recipient.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "language": {
+    "description": "Language of the notification and its landing page",
+    "enum": [
+     "en_GB",
+     "es_ES"
+    ],
+    "type": "string"
+   },
+   "otpByDefault": {
+    "description": "Require a one-time code for every recipient that does not state its own otpRequired",
+    "type": "boolean"
+   },
+   "recipients": {
+    "description": "One or more recipients. The maximum is a per-subscription setting that varies by tenant and platform, so no limit is enforced here \u2014 if the tenant's cap is exceeded the API says so.",
+    "items": {
+     "properties": {
+      "email": {
+       "description": "Recipient's email address \u2014 delivery always goes by email",
+       "format": "email",
+       "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+       "type": "string"
+      },
+      "firstName": {
+       "description": "Recipient's first name",
+       "minLength": 1,
+       "type": "string"
+      },
+      "lastName": {
+       "description": "Recipient's last name or names",
+       "minLength": 1,
+       "type": "string"
+      },
+      "otpRequired": {
+       "description": "Challenge this recipient with a one-time code before they can read the notification",
+       "type": "boolean"
+      },
+      "phoneNumber": {
+       "description": "Phone number without the prefix. Required with any of sendWaUrl, sendSmsUrl or otpRequired.",
+       "type": "string"
+      },
+      "phonePrefix": {
+       "description": "International dialling prefix INCLUDING the + (e.g. '+34'). Required with any of sendWaUrl, sendSmsUrl or otpRequired.",
+       "type": "string"
+      },
+      "sendSmsUrl": {
+       "description": "Also send this recipient the link over RCS or SMS, whichever their handset supports",
+       "type": "boolean"
+      },
+      "sendWaUrl": {
+       "description": "Also send this recipient the link over WhatsApp",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "firstName",
+      "lastName",
+      "email"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "sendSmsUrlByDefault": {
+    "description": "Send the RCS/SMS link to every recipient that does not state its own sendSmsUrl",
+    "type": "boolean"
+   },
+   "sendWaUrlByDefault": {
+    "description": "Send the WhatsApp link to every recipient that does not state its own sendWaUrl",
+    "type": "boolean"
+   },
+   "subject": {
+    "description": "Subject line, 100 characters maximum. Use plain ASCII \u2014 avoid em dashes and smart quotes.",
+    "maxLength": 100,
+    "minLength": 1,
+    "type": "string"
+   },
+   "type": {
+    "default": "NO_RESPONSE",
+    "description": "What the recipient can do: NO_RESPONSE = read only; ACCEPTED_OR_NOT = accept or reject; RECEIVED_AGREE = acknowledge receipt and agree or disagree",
+    "enum": [
+     "NO_RESPONSE",
+     "ACCEPTED_OR_NOT",
+     "RECEIVED_AGREE"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "caseFileId",
+   "subject",
+   "content",
+   "language",
+   "attachments",
+   "recipients"
+  ],
+  "type": "object"
+ },
+ "name": "notification_send_with_attachments"
+}

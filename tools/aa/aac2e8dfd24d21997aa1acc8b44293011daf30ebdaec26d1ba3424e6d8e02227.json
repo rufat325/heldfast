@@ -1,0 +1,140 @@
+{
+ "annotations": {
+  "access": "paid",
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "maturity": "mature",
+  "openWorldHint": false,
+  "pricing_url": "https://dchub.cloud/pricing/upgrade?tool=rank_markets&ref=mcp-tools-list",
+  "problem": "colocation and wholesale data-center markets",
+  "readOnlyHint": true,
+  "title": "Rank Markets",
+  "upgrade_relay": "Call the tool first: a gated result carries a session-bound checkout link (dchub.cloud/go/c/<token>) and a human relay (dchub.cloud/upgrade/h/<token>) minted for THIS session \u2014 relay those verbatim. This URL is only the fallback for a client that renders annotations before any call."
+ },
+ "description": "FRONT DOOR CHECK \u2014 if the question is \"WHERE SHOULD I PUT <N> MW\" (a siting decision), call `execute_plan(intent=\"<the user's question, unchanged>\")` instead: ONE call runs the market ranking AND the per-finalist BUILD/CAUTION/AVOID verdict AND the grid reality-check, and returns a `replay` naming the markets it rejected and why. If the question is \"RANK MARKETS BY <metric>\" \u2014 you want the ranked list itself and nothing attached \u2014 rank_markets IS the right call: stay here. The trade is real and runs the other way: execute_plan spent ~3 steps and roughly 4x this tool's latency on a measured market-ranking intent, so a single-capability ask should NOT be routed through the planner. Use when a user wants \"the top N markets for X\" \u2014 one ranked list across the 300+ market set rather than N separate get_market_intel calls. Example: \"What are the 10 fastest-growing US markets with at least 100MW of existing capacity?\" \u2014 rank_markets criteria=fastest_growing region=us limit=10 min_capacity_mw=100. Params: criteria one of \"cheapest_power\" | \"most_capacity\" | \"most_operators\" | \"fastest_growing\" | \"best_overall\" (default best_overall) | \"ai_ready\"; region one of \"global\" | \"us\" | \"canada\" | \"eu\" | \"apac\" | \"americas\" (default us); limit 1-50 (default 10); min_capacity_mw filter floor (e.g. 100). \u2605 criteria=\"ai_ready\" ranks by DCPI BUILDABILITY (excess-power + time-to-power + BUILD/CAUTION/AVOID verdict) \u2014 where NEW AI-campus load can actually LAND \u2014 NOT by installed build-out (the other five criteria). Use ai_ready for AI/GPU/hyperscale campus siting: the most-built-out markets are frequently AVOID for new load, so a build-out ranking mis-answers \"where do I put a 200MW AI campus\". Returns: {criteria, region, result_count, results:[{rank, metro_slug, market, city, state, country, score, value, total_mw, facility_count, operator_count, url}], data_source, methodology, score_basis}. `score` is the value the list is sorted by (`score_basis` states this in words; ai_ready omits it and explains its composite in `methodology`): best_overall = 0.4\u00d7total_mw + 50\u00d7operator_count + 20\u00d7facility_count; most_capacity and cheapest_power = total_mw; most_operators = operator_count; fastest_growing = facility_count; ai_ready = the DCPI composite. It is NOT a 0-100 scale and does not change with `limit`, so compare scores only within one criteria; `rank` is the position. To drill into a ranked market, feed results[].metro_slug into get_market_dcpi_rank. Do NOT use for a deep read on ONE market (use get_market_intel), for scoring a specific lat/lon (use analyze_site), or for a siting question that also needs the verdict and grid check attached (use execute_plan).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "criteria": {
+    "description": "Ranking criterion: \"cheapest_power\", \"most_capacity\", \"most_operators\", \"fastest_growing\", \"best_overall\" (default), or \"ai_ready\" (DCPI buildability \u2014 where new AI load can land, for AI-campus siting; region us/global)",
+    "type": "string"
+   },
+   "fields": {
+    "anyOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Return ONLY these row fields (array or comma string) \u2014 a token diet. The response envelope (citation, provenance, as_of, coverage, request_interpretation, the human relay line) is NEVER projected away; a projection narrows ROWS only."
+   },
+   "limit": {
+    "description": "Number of markets to return, 1-50 (default 10)",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "min_capacity_mw": {
+    "description": "Minimum existing capacity filter in megawatts (MW), e.g. 100",
+    "type": "number"
+   },
+   "mpp_credential": {
+    "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result \u2014 no API key, no subscription, no human. One payment covers one call.",
+    "type": "string"
+   },
+   "mpp_pay": {
+    "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves \u2014 a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+    "type": "boolean"
+   },
+   "projection": {
+    "description": "Named field preset, cheaper to send than a field list: market_summary (ranking rows), siting_summary (site/point rows), identity_only (ids + names).",
+    "enum": [
+     "siting_summary",
+     "market_summary",
+     "identity_only"
+    ],
+    "type": "string"
+   },
+   "region": {
+    "description": "Region scope: \"global\", \"us\" (default), \"canada\", \"eu\", \"apac\", or \"americas\"",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "rank_markets",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text \u2014 tool-specific data fields ride at the top level alongside these envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   }
+  },
+  "type": "object"
+ },
+ "title": "Rank Markets"
+}

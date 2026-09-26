@@ -1,0 +1,291 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Fetch the full record for one sanctions designation by source list + entry ID or the list's published reference number \u2014 the drill-in after sanctions_screen_name or sanctions_screen_identifier surfaces a candidate, or the lookup for a reference a notice cites (UN QDe.004, EU EU.27.28, UK OFSI Group ID). Returns all published aliases, identifiers (passport, national ID, tax and registration numbers, SWIFT/BIC codes, digital-currency addresses, vessel call signs, aircraft tail and serial numbers, phone numbers, email addresses, websites), addresses, dates and places of birth at the precision the source published, nationalities, sanctioning program, legal basis, and designation date. The record reflects exactly what the source published; missing fields mean the source omitted them. This is a screening aid \u2014 the designation record supports a compliance review, it is not itself a determination.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "entryId": {
+    "description": "The source list's own entry ID (the sourceEntryId from sanctions_screen_name), or the reference number the list publishes for the entry (UN QDe.004, EU EU.27.28, UK OFSI Group ID 14196). Matched trimmed and case-insensitive, entry ID first.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "source": {
+    "description": "Which source list the entry belongs to.",
+    "enum": [
+     "ofac_sdn",
+     "ofac_consolidated",
+     "eu",
+     "uk",
+     "un"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "source",
+   "entryId"
+  ],
+  "type": "object"
+ },
+ "name": "sanctions_get_designation",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "source",
+     "sourceLabel",
+     "sourceEntryId",
+     "entityType",
+     "primaryName",
+     "aliases",
+     "identifiers",
+     "addresses",
+     "datesOfBirth",
+     "nationalities",
+     "caveat"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "addresses": {
+    "description": "Published addresses.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One published address.",
+     "properties": {
+      "country": {
+       "description": "Country, when published.",
+       "type": "string"
+      },
+      "full": {
+       "description": "Single-line rendering of the address.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "full"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "aliases": {
+    "description": "All published aliases / name variants.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One published alias.",
+     "properties": {
+      "name": {
+       "description": "Alias as published.",
+       "type": "string"
+      },
+      "nameType": {
+       "description": "Alias provenance: a.k.a., f.k.a., or a low-quality a.k.a.",
+       "enum": [
+        "primary",
+        "aka",
+        "fka",
+        "low-quality-aka"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "nameType"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "caveat": {
+    "description": "Decision-support caveat \u2014 this is a screening aid, not a compliance determination.",
+    "type": "string"
+   },
+   "datesOfBirth": {
+    "description": "Published dates and places of birth (persons).",
+    "items": {
+     "additionalProperties": false,
+     "description": "One date/place of birth.",
+     "properties": {
+      "circa": {
+       "const": true,
+       "description": "Present when the source flags the date as approximate; never without date.",
+       "type": "boolean"
+      },
+      "date": {
+       "description": "Date of birth in ISO 8601 at the precision the source published: YYYY-MM-DD, YYYY-MM, or YYYY. A range is an interval whose ends keep their own precision (1955/1957); an open end is .. (../1980). A value with no ISO form is kept as published.",
+       "type": "string"
+      },
+      "place": {
+       "description": "Place of birth, when published.",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "designationDate": {
+    "description": "The source's own designation date as YYYY-MM-DD; absent when unpublished.",
+    "type": "string"
+   },
+   "entityType": {
+    "description": "Entity classification as published.",
+    "enum": [
+     "person",
+     "organization",
+     "vessel",
+     "aircraft",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `designation_not_found`: No designation in the given source has that entry ID or reference number in the mirror. `reference_ambiguous`: The entry ID is a reference number more than one designation in the source publishes. `mirror_not_ready`: The sanctions mirror has never completed an initial sync. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "designation_not_found",
+         "reference_ambiguous",
+         "mirror_not_ready"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "identifiers": {
+    "description": "Published identifiers: identity documents (passport, national ID, tax, registration) and, where the source publishes them, SWIFT/BIC codes, digital-currency addresses, vessel call signs, aircraft tail and serial numbers, phone numbers, email addresses, and websites.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One structured identifier.",
+     "properties": {
+      "country": {
+       "description": "Issuing country/authority, when published.",
+       "type": "string"
+      },
+      "type": {
+       "description": "Identifier category as the source labels it (e.g. Passport, National ID, SWIFT/BIC, Digital Currency Address - XBT, Phone Number, Website).",
+       "type": "string"
+      },
+      "value": {
+       "description": "Identifier value exactly as published, letter case included.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "value"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "legalBasis": {
+    "description": "Statutory / regulatory basis, when published.",
+    "type": "string"
+   },
+   "nationalities": {
+    "description": "Published nationalities / citizenships.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "primaryName": {
+    "description": "Primary published name.",
+    "type": "string"
+   },
+   "program": {
+    "description": "Sanctioning program / regime, when published.",
+    "type": "string"
+   },
+   "referenceNumber": {
+    "description": "The list's published reference number (UN, EU, UK OFSI Group ID); absent when the list publishes none for the entry. OFAC publishes none \u2014 its entry ID is its published number.",
+    "type": "string"
+   },
+   "remarks": {
+    "description": "Free-form remarks published by the source, when present.",
+    "type": "string"
+   },
+   "source": {
+    "description": "Source list the entry belongs to.",
+    "enum": [
+     "ofac_sdn",
+     "ofac_consolidated",
+     "eu",
+     "uk",
+     "un"
+    ],
+    "type": "string"
+   },
+   "sourceEntryId": {
+    "description": "The source list's own entry ID.",
+    "type": "string"
+   },
+   "sourceLabel": {
+    "description": "Human-readable name of the source list.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "sanctions-screening-mcp-server: get designation"
+}

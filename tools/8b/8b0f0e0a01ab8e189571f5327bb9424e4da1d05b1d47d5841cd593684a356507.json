@@ -1,0 +1,491 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Shipment Summary"
+ },
+ "description": "Composite shipment analysis in one call: volume (CBM), gross and chargeable weight, road LDM with pallet spaces and a vehicle suggestion (road mode), volumetric weight (air), revenue tonnes with a container suggestion (sea), dangerous-goods presence for items carrying un_number, and UK duty estimates for items carrying hs_code + customs_value.\n\nProvide mode (road | air | sea | multimodal) and items[] (dims in cm, weight in kg, quantity; optional stackable, pallet_type, hs_code, un_number, customs_value); origin/destination and incoterm refine the duty leg.\n\nBehavior: calls the ldm_calculator, adr_lookup and uk_duty_calculator engines directly; CBM, volumetric weight and revenue tonnes are the same arithmetic inline rather than a call out. Road LDM uses the 2.40 m loading-metre convention divisor and, like ldm_calculator, treats an item with no stackable flag as NOT stacked. modeSpecific.palletSpaces is pallet FLOOR POSITIONS (the figure ldm_calculator reports); palletRows is the separate row count. Sections that cannot run (e.g. duty without a customs value) surface in warnings instead of failing the whole call. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: mode, itemCount, totals {pieces, grossWeight, volumeCBM, chargeableWeight, billingBasis}, modeSpecific (LDM / pallet floor positions / pallet rows / suggested vehicle, or revenue tonnes / container), warnings and dataVersion (road mode attributes the vehicle dataset and the LDM divisor) under result \u2014 note this composite's result uses camelCase field names (legacy shape); plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: a planning summary, not a quotation or compliance determination.\n\nRelated: consignment_calculator (canonical snake_case lines[] shape with advisory flags), cbm_calculator, chargeable_weight_calculator, ldm_calculator, adr_lookup, uk_duty_calculator. ldm_calculator, adr_lookup and uk_duty_calculator are the engines this actually calls; the rest are the single-purpose equivalents of arithmetic it does inline.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "destination": {
+    "additionalProperties": false,
+    "description": "Destination \u2014 ISO country code and optional UN/LOCODE.",
+    "properties": {
+     "country": {
+      "type": "string"
+     },
+     "locode": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "country"
+    ],
+    "type": "object"
+   },
+   "freight_cost": {
+    "description": "Freight cost in GBP for the duty calculation.",
+    "type": "number"
+   },
+   "incoterm": {
+    "description": "Incoterms 2020 three-letter code. Examples: \"DAP\", \"EXW\", \"FOB\".",
+    "type": "string"
+   },
+   "insurance_cost": {
+    "description": "Insurance cost in GBP for the duty calculation.",
+    "type": "number"
+   },
+   "items": {
+    "description": "Shipment items with dimensions, weight and optional HS/UN codes.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "adr_quantity": {
+       "description": "OPTIONAL ADR 1.1.3.6.3 quantity for this dangerous-goods line, in adr_quantity_unit. SEPARATE from weight, which is gross package mass \u2014 1.1.3.6.3 counts none of its four categories that way. Supply both on EVERY dangerous-goods line and adrFlags.totalPoints is calculated; omit either and it stays null.",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      },
+      "adr_quantity_unit": {
+       "description": "Dimension of adr_quantity. CHECKED against the dimension 1.1.3.6.3 counts for the row \u2014 a litres entry given kilograms still withholds the total.",
+       "enum": [
+        "L",
+        "kg"
+       ],
+       "type": "string"
+      },
+      "customs_value": {
+       "description": "Customs value per item in GBP \u2014 enables the duty section.",
+       "type": "number"
+      },
+      "description": {
+       "description": "Optional item label.",
+       "type": "string"
+      },
+      "height": {
+       "description": "Height in cm.",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      },
+      "hs_code": {
+       "description": "HS code \u2014 enables the duty section together with customs_value.",
+       "type": "string"
+      },
+      "length": {
+       "description": "Length in cm.",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      },
+      "pallet_type": {
+       "description": "Pallet standard the item sits on, if any.",
+       "enum": [
+        "euro",
+        "uk",
+        "us",
+        "custom",
+        "none"
+       ],
+       "type": "string"
+      },
+      "quantity": {
+       "description": "Number of items.",
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "stackable": {
+       "description": "Whether this item can be stacked (affects pallet fitting).",
+       "type": "boolean"
+      },
+      "un_number": {
+       "description": "UN number \u2014 enables the dangerous-goods section.",
+       "type": "string"
+      },
+      "weight": {
+       "description": "Gross weight per item in kg.",
+       "type": "number"
+      },
+      "width": {
+       "description": "Width in cm.",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "length",
+      "width",
+      "height",
+      "weight",
+      "quantity"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "mode": {
+    "description": "Transport mode \u2014 selects the mode-specific section of the result.",
+    "enum": [
+     "road",
+     "air",
+     "sea",
+     "multimodal"
+    ],
+    "type": "string"
+   },
+   "origin": {
+    "additionalProperties": false,
+    "description": "Origin \u2014 ISO country code and optional UN/LOCODE.",
+    "properties": {
+     "country": {
+      "type": "string"
+     },
+     "locode": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "country"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "items"
+  ],
+  "type": "object"
+ },
+ "name": "shipment_summary",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "adr": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "dataVersion": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "disclaimer": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "duty": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "itemCount": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "mode": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "modeSpecific": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "totals": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "properties": {
+           "billingBasis": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "chargeableWeight": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "grossWeight": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "pieces": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "volumeCBM": {
+            "type": [
+             "number",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "warnings": {
+        "anyOf": [
+         {
+          "items": {},
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

@@ -1,0 +1,163 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Resolve a company name or partial ticker to Finnhub stock symbols. The entry point for every other tool \u2014 users say \"Microsoft\", the rest of the surface needs \"MSFT\". Returns matched symbols with display symbol, description, and security type, best likely-US match first. Each result carries isLikelyUS, a symbol-format heuristic for likely free-tier availability; quote and profile responses remain authoritative.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "limit": {
+    "default": 10,
+    "description": "Max symbols to return (Finnhub often returns 10\u201350 matches for a common word). Default 10. Likely-US Common Stock matches are surfaced first.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Company name (e.g., \"Apple\"), partial name (\"micro\"), or ticker fragment, up to 20 characters. Finnhub full-text matches across symbols and descriptions. Use this first when you have a company name, not a ticker \u2014 the rest of the tools need a symbol.",
+    "maxLength": 20,
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "finnhub_search_symbols",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit that was applied.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode.",
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when nothing matched the query.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Matched symbols, likely-US Common Stock first, then by Finnhub order.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single matched symbol.",
+     "properties": {
+      "description": {
+       "description": "Company / security name.",
+       "type": "string"
+      },
+      "displaySymbol": {
+       "description": "Human-facing ticker as shown on its exchange (e.g., \"AAPL\", \"603020.SS\").",
+       "type": "string"
+      },
+      "isLikelyUS": {
+       "description": "Symbol-format heuristic for likely US free-tier availability. Plain tickers and `.A`/`.B` class-share symbols are likely US; recognized exchange suffixes such as `.SS`, `.T`, and `.L` are not. Quote and profile responses remain authoritative.",
+       "type": "boolean"
+      },
+      "symbol": {
+       "description": "Finnhub symbol \u2014 pass this to finnhub_get_quote / _company / _earnings / _news / _recommendations.",
+       "type": "string"
+      },
+      "type": {
+       "description": "Security type (e.g., \"Common Stock\", \"ETP\", \"ETF\"). Empty string when Finnhub omits it.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "symbol",
+      "displaySymbol",
+      "description",
+      "type",
+      "isLikelyUS"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Number of symbols returned.",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Total matches Finnhub reported (its `count`), before the limit.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when more matches existed than the limit returned.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Finnhub Search Symbols"
+}

@@ -1,0 +1,126 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Report a whole CI run in one call: creates the run, records every result, and completes it. This is the tool for a pipeline that has just finished \u2014 it replaces qase_run_upsert, then qase_result_record, then qase_run_complete, and leaves no half-open run behind if the agent stops early. Each result needs a numeric `case_id` plus a status, and may carry duration, comment, stacktrace and attachment hashes. Use qase_result_record instead when the run already exists and results arrive in stages; use qase_run_upsert when you need the run left open. A batch larger than 200 is split across requests for you, up to 2000 results in one report. Cost: one tool call covering three API operations, plus one extra request per 200 results. A run with two results measured about 0.7s, against roughly 1.5s for the same work as three separate calls, and it grows with the number of results rather than with the number of round trips.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "code": {
+    "description": "Project code (2-10 uppercase letters, numbers, or underscores)",
+    "maxLength": 10,
+    "minLength": 2,
+    "pattern": "^[A-Z0-9_]+$",
+    "type": "string"
+   },
+   "complete": {
+    "default": true,
+    "description": "Complete the run after recording results (default: true)",
+    "type": "boolean"
+   },
+   "environment_id": {
+    "description": "ID of the environment the build ran against",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "is_autotest": {
+    "default": true,
+    "description": "Mark as automated run (default: true)",
+    "type": "boolean"
+   },
+   "results": {
+    "description": "Test results to record, 1 to 2000 per call",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "attachments": {
+       "description": "Attachment hashes from qase_attachment_upload",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "case_id": {
+       "exclusiveMinimum": 0,
+       "type": "integer"
+      },
+      "comment": {
+       "type": "string"
+      },
+      "defect": {
+       "type": "boolean"
+      },
+      "stacktrace": {
+       "type": "string"
+      },
+      "status": {
+       "enum": [
+        "passed",
+        "failed",
+        "blocked",
+        "skipped",
+        "invalid"
+       ],
+       "type": "string"
+      },
+      "time_ms": {
+       "minimum": 0,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "case_id",
+      "status"
+     ],
+     "type": "object"
+    },
+    "maxItems": 2000,
+    "minItems": 1,
+    "type": "array"
+   },
+   "title": {
+    "description": "Run title (e.g., \"CI Build #1234\")",
+    "maxLength": 255,
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "code",
+   "title",
+   "results"
+  ],
+  "type": "object"
+ },
+ "name": "qase_ci_report",
+ "outputSchema": {
+  "properties": {
+   "results_recorded": {
+    "description": "Number of results recorded",
+    "type": "integer"
+   },
+   "run_id": {
+    "description": "Created run ID",
+    "type": "integer"
+   },
+   "run_status": {
+    "enum": [
+     "active",
+     "complete",
+     "complete_failed"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "run_id",
+   "run_status",
+   "results_recorded"
+  ],
+  "type": "object"
+ },
+ "title": "Report CI results"
+}

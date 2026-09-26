@@ -1,0 +1,136 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Check whether a residential construction project in King/Pierce/Snohomish counties requires a permit. Each result carries `verdict` \u2014 required / exempt / depends / unknown \u2014 computed from the jurisdiction's own thresholds, the parcel's overlays (when `address` is given) and the `facts` you pass; when it is `depends`, `verdict.questions` names the facts to ask the homeowner and pass back. `requiresPermit` is the rule's default posture, not the answer. Also returns timeline, fee notes, inspection sequence, required submittals, and official source URL \u2014 preferring jurisdiction-verified rules. Use for \"Do I need a permit to build a deck in Seattle?\" or \"What permits are required for a kitchen remodel in Bellevue?\". Pass `address` to also receive the structured per-item SubmittalSet (`submittals_v2`) from the unified permit engine \u2014 Seattle is full SDCI fidelity, other 9 verified cities are wa-baseline-stub.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "address": {
+    "description": "Full street address \u2014 when provided, the response includes `submittals_v2` from the unified resolver (per-item triggers, source citations, filler actor). Overrides `location` for jurisdiction routing.",
+    "type": "string"
+   },
+   "deckHeightAboveGradeIn": {
+    "description": "Deck walking surface above grade, inches \u2014 measured to the grade below at any point within 36 in of the outer edge.",
+    "type": "number"
+   },
+   "deckOnAccessibleRoute": {
+    "description": "True if the deck is part of an accessible route to a building entrance \u2014 an independent permit trigger, separate from height.",
+    "type": "boolean"
+   },
+   "deckOverStoryBelow": {
+    "description": "True if any part of the deck is over a basement or a story below. A deck under 30 in is still NOT exempt in Kirkland if it sits over a story.",
+    "type": "boolean"
+   },
+   "facts": {
+    "additionalProperties": {
+     "type": [
+      "number",
+      "boolean"
+     ]
+    },
+    "description": "What the homeowner has said about the scope, keyed by fact. Each result carries `verdict.questions` naming the facts still open; pass them back here. Keys: deckHeightAboveGradeIn, deckAreaSqft, deckAttached, deckOverStoryBelow, deckOnAccessibleRoute, deckServesRequiredExit, roofDeck, deckCovered, deckingBoardsOnly, fenceHeightFt, masonryWallHeightFt, fenceInFrontYard, cosmeticOnly, plumbingMovedOrAdded, newCircuits, gasOrMechanicalWork, structuralOrWallChange, tubOrShowerReplaced, surfacesOpened, windowNewOrEnlargedOpening, windowStructuralChange, windowEgressAffected, windowEnergyDowngrade, sidingStructuralChange, sidingInsulationOrWrbChange, sidingStuccoOrVeneer, roofSheathingReplaced, roofMaterialTypeChange, roofLayersAfter, roofUnitWeightPsf, roofMaterialWeightIncreasePsf, roofFramingChange, roofSkylightsOrMechanical, buildingUnreinforcedMasonry, subfloorOrJoistChange, radiantHeat, plumbingLeakRepairOnly, plumbingLikeForLikeSameLocation, plumbingFixtureInstalledOrReplaced, plumbingFixtureAddedOrMoved, waterHeaterReplaced, plumbingNewOrRelocatedPiping, plumbingConcealedPipeReplaced, electricalLikeInKindMinor, newCircuitsOrPanel, hardwiredFixtureOrAppliance, portableAppliance, hvacMinorPartReplacement, treeDbhIn, treeAlderOrCottonwood, treesRemovedThisYear. Parcel facts (inCriticalArea, inFloodZone, inShoreline, historicOrLandmark) are read from the parcel when `address` is given; pass them only without an address.",
+    "type": "object"
+   },
+   "guardRunLengthFt": {
+    "description": "Total guard/railing run in the scope of work, feet. A guard is separately permittable from the surface it stands on; a deck exemption does not carry it.",
+    "type": "number"
+   },
+   "limit": {
+    "description": "Max matching rules to return (default 25). Narrow with projectType/location before raising it.",
+    "maximum": 200,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "location": {
+    "description": "City or jurisdiction slug, e.g. \"Seattle\", \"Bellevue\", \"Tacoma\", \"king-county-unincorporated\"",
+    "type": "string"
+   },
+   "projectType": {
+    "description": "Project type \u2014 canonical: kitchen, bathroom, basement, deck, fence, siding, windows, flooring, adu, roofing, hvac, electrical, plumbing, addition",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "check_permit_requirements",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "description": "Either a rule set, or a documented coverage gap carrying `important` + `next`. A gap is never evidence that no permit is required.",
+  "properties": {
+   "attribution": {
+    "additionalProperties": true,
+    "properties": {
+     "citeAs": {
+      "description": "Ready-made citation line. Use verbatim.",
+      "type": "string"
+     },
+     "primarySource": {
+      "description": "Present when Kolmo verified but does not author the fact \u2014 cite both.",
+      "type": "string"
+     },
+     "sourceUrl": {
+      "description": "The specific page these facts render on. Link this, not the site root.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "sourceUrl",
+     "citeAs"
+    ],
+    "type": "object"
+   },
+   "authoritativeRulesCount": {
+    "type": "number"
+   },
+   "coverage": {
+    "description": "Present on an unfiltered call: the jurisdictions and project types the catalog covers."
+   },
+   "disclaimer": {
+    "type": "string"
+   },
+   "important": {
+    "type": "string"
+   },
+   "message": {
+    "type": "string"
+   },
+   "next": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "overlayDisclaimer": {
+    "type": "string"
+   },
+   "overlays": {},
+   "parcel": {},
+   "recommendation": {
+    "type": "string"
+   },
+   "results": {},
+   "returned": {
+    "type": "number"
+   },
+   "routing": {},
+   "total": {
+    "type": "number"
+   },
+   "trustLevel": {
+    "description": "\"authoritative\" or a LEGACY_LLM_SEED warning. Relay the warning if present.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Permit requirements lookup"
+}

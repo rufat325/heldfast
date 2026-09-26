@@ -1,0 +1,60 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Profil d\u00e9mographique au grain QUARTIER (IRIS) \u2014 la \u00ab demande \u00bb d'un territoire (\u00e2ge, CSP, familles, revenu), \u00e0 croiser avec l'offre de soins pour l'aide \u00e0 l'implantation. Source : INSEE RP 2022 + FILOSOFI 2021 (tables ing\u00e9r\u00e9es, g\u00e9o 01/01/2024). Retourne un `LookupResult` discrimin\u00e9 par `found`.\n\nEntr\u00e9e : EXACTEMENT un de `point` (`lat`+`lon`) OU `code_iris` (9 car.). `rayon_km` optionnel (0 < r \u2264 10) \u2192 DEUX modes :\n- SANS `rayon_km` \u2192 profil de l'\u00ceLOT seul (~2000 hab) sous le point / du code. `mode: \"ilot\"`, `revenu_median` = m\u00e9diane r\u00e9elle de l'\u00eelot.\n- AVEC `rayon_km` \u2192 AGR\u00c9GAT du BASSIN = \u00eelots dont le CENTRO\u00cfDE est dans le disque (chaque \u00eelot compt\u00e9 1 fois). `mode: \"bassin\"`, `population_bassin`, `nb_iris_agreges`, et `revenu_median_pondere` = PROXY (moyenne pond\u00e9r\u00e9e population des m\u00e9dianes des \u00eelots couverts \u2014 PAS une vraie m\u00e9diane de bassin) + `couverture` {`revenu_pct_population`, `iris_revenu_manquants`} car FILOSOFI ne couvre que les communes \u22655000 hab.\n\nLes parts `age` (part_65_plus/75_plus) et `csp` (cadres, prof_interm, employ\u00e9s, ouvriers, agriculteurs, artisans_comm, retrait\u00e9s, autres) sont des ratios sur comptes bruts (\u03a3/\u03a3). Pour une simple population de commune/dept, utiliser `population`. `not_found` motiv\u00e9 si code absent ou point hors m\u00e9tropole / en mer.",
+ "inputSchema": {
+  "properties": {
+   "code_iris": {
+    "description": "Code IRIS 9 caract\u00e8res (ex `751103701`) \u2014 alternatif au point.",
+    "type": "string"
+   },
+   "lat": {
+    "description": "Latitude du point (mode point).",
+    "type": "number"
+   },
+   "lon": {
+    "description": "Longitude du point (mode point).",
+    "type": "number"
+   },
+   "rayon_km": {
+    "description": "Rayon du bassin en km (0 < r \u2264 10). Absent = profil de l'\u00eelot seul.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "name": "profil_iris",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

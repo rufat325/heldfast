@@ -1,0 +1,146 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "List known Socrata-powered government open-data portals with their domain, organization name, and approximate dataset count. The catalog is a curated list of 39 well-known portals; dataset counts are fetched from the Discovery API and cached for ~24 hours. Filtering is client-side substring match on the query parameter. Use this first when you do not know which portal to target, then pass the domain to socrata_find_datasets.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "limit": {
+    "default": 50,
+    "description": "Max portals to return (1\u2013200). Default 50.",
+    "maximum": 200,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Pagination offset. Default 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Keyword to filter portal names or organization names (case-insensitive substring match). Omit to list all portals.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "socrata_list_portals",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "portals",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode.",
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Recovery hint when no portals matched the filter. Absent on non-empty pages.",
+    "type": "string"
+   },
+   "portals": {
+    "description": "Matching portals. Empty when no results.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single Socrata portal.",
+     "properties": {
+      "dataset_count": {
+       "description": "Approximate count of dataset-type assets on this portal from the Discovery API catalog (point-in-time, refreshed ~daily). 0 means the portal exposes no dataset assets to the catalog; null means the live count is temporarily unavailable.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "domain": {
+       "description": "Portal domain (e.g. data.seattle.gov). Pass to socrata_find_datasets.",
+       "type": "string"
+      },
+      "organization": {
+       "description": "Organization name when available (e.g. City of Seattle).",
+       "type": "string"
+      }
+     },
+     "required": [
+      "domain",
+      "dataset_count"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalCount": {
+    "description": "Total portals before pagination. 0 when empty.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "List Socrata Portals"
+}

@@ -1,0 +1,135 @@
+{
+ "annotations": {
+  "idempotentHint": false
+ },
+ "description": "Manage Digital Product Passports \u2014 create, read, and run lifecycle actions.\n\nIMPORTANT: `create` consumes a DPP slot on the account's plan and IS BILLABLE. Creating a passport beyond the included quota incurs a per-passport overage charge; if over quota the tool returns a 402-style message \u2014 only re-run with args.confirmOverage=true after the user explicitly agrees to the charge. `archive` is IRREVERSIBLE (the public QR permanently 404s); prefer `suspend` when a change might be undone.\n\nActions (pass via `action`, with `args`):\n- list \u2014 args: { page?, limit? (\u2264100), productId?, status?, search? }. status \u2208 draft|in_review|approved|published|suspended|expired|archived. Read-only.\n- get \u2014 args: { id, format? (summary|full), lang? }. Read-only.\n- get_by_serial \u2014 args: { serial, format?, lang?, gtin? }. Read-only. Addresses the passport by your own serial. A serial is unique only WITHIN a GTIN \u2014 if the same serial exists under two GTINs in your account the call returns 409 ambiguous_serial; pass `gtin` (or use the by-id action) to resolve exactly.\n- compliance \u2014 args: { id }. Read-only. Returns a three-tier compliance verdict (compliant | compliant_with_warnings | incomplete) with regulation-cited findings \u2014 use to gap-check a passport against the rules for its category, fix the cited fields/parties, then re-check. Also returns byRegulation[]: the same findings grouped per regulation, worst first, so you can tell WHICH regime is failing instead of reading one `incomplete` as everything being wrong. A regulation absent from that array raised no finding \u2014 that is not the same as it having passed.\n- registry_readiness \u2014 args: { id }. Read-only. Returns { ready, findings[] } \u2014 whether the passport would pass the EU DPP Registry's FORMAL submission gate (mandatory fields present, correct formatting, a resolvable public link, item-level granularity via a serial number, and a well-formed commodity code where the category carries one). This is the registry's mechanical pre-submission check, NOT the substantive compliance verdict; a passport can be registry-ready yet not substantively compliant. Battery passports only.\n- create \u2014 args: { productId, gtin, serialNumber, confirmOverage? }. BILLABLE.\n- suspend \u2014 args: { id }. Reversible \u2014 public QR shows 'suspended'.\n- suspend_by_serial \u2014 args: { serial, gtin? }. Same as suspend, addressed by your serial. 409 ambiguous_serial if the serial isn't unique in your account \u2014 pass `gtin`.\n- archive \u2014 args: { id }. IRREVERSIBLE \u2014 confirm with the user first.\n- archive_by_serial \u2014 args: { serial, gtin? }. IRREVERSIBLE, addressed by your serial \u2014 confirm first. 409 ambiguous_serial if the serial isn't unique \u2014 pass `gtin`.\n- get_qr \u2014 args: { id, format? (svg|png) }. Read-only.\n- get_qr_by_serial \u2014 args: { serial, format? (svg|png), gtin? }. Read-only. Same as get_qr, addressed by your own serial. A serial is unique only WITHIN a GTIN \u2014 if the same serial exists under two GTINs in your account the call returns 409 ambiguous_serial; pass `gtin` (or use get_qr by id) to resolve exactly.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "action": {
+    "description": "Which passport operation to run. Reads: list | get | get_by_serial | compliance | registry_readiness | get_qr | get_qr_by_serial. Lifecycle: create (BILLABLE) | suspend (reversible) | archive (IRREVERSIBLE), each with a _by_serial variant.",
+    "enum": [
+     "list",
+     "get",
+     "get_by_serial",
+     "compliance",
+     "registry_readiness",
+     "create",
+     "suspend",
+     "suspend_by_serial",
+     "archive",
+     "archive_by_serial",
+     "get_qr",
+     "get_qr_by_serial"
+    ],
+    "type": "string"
+   },
+   "args": {
+    "description": "Arguments for the chosen action; required fields depend on `action` (see each action above).",
+    "properties": {
+     "confirmOverage": {
+      "description": "Set true to accept a per-passport overage charge when create is over the plan quota (402).",
+      "type": "boolean"
+     },
+     "format": {
+      "description": "get/get_by_serial: summary|full. get_qr/get_qr_by_serial: svg|png.",
+      "type": "string"
+     },
+     "gtin": {
+      "description": "GTIN disambiguator for *_by_serial actions when a serial isn't unique across GTINs (else 409 ambiguous_serial).",
+      "type": "string"
+     },
+     "id": {
+      "description": "Passport id. Required for get/compliance/create-result/suspend/archive/get_qr (the by-id actions).",
+      "type": "string"
+     },
+     "lang": {
+      "description": "Resolve field values to one of the 24 EU locales server-side (get/get_by_serial).",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Page size for list, max 100.",
+      "type": "number"
+     },
+     "page": {
+      "description": "Page number for list (1-based).",
+      "type": "number"
+     },
+     "productId": {
+      "description": "Parent product id. Required for create.",
+      "type": "string"
+     },
+     "search": {
+      "description": "Filter list by a search term.",
+      "type": "string"
+     },
+     "serial": {
+      "description": "Your own serial number. Required for the *_by_serial actions.",
+      "type": "string"
+     },
+     "serialNumber": {
+      "description": "Serial for the new passport. Required for create.",
+      "type": "string"
+     },
+     "status": {
+      "description": "Filter list by status: draft|in_review|approved|published|suspended|expired|archived.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "action"
+  ],
+  "type": "object"
+ },
+ "name": "tracepass_passports",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "error": {
+    "description": "Machine-readable error code, when the API rejected the request.",
+    "type": "string"
+   },
+   "id": {
+    "description": "The resource's TracePass id, when the response is a single entity.",
+    "type": "string"
+   },
+   "items": {
+    "description": "The page of results, when the action is a list.",
+    "items": {},
+    "type": "array"
+   },
+   "limit": {
+    "description": "Page size (list actions).",
+    "type": "number"
+   },
+   "message": {
+    "description": "Human-readable error or status detail, when present.",
+    "type": "string"
+   },
+   "page": {
+    "description": "Current page number (list actions).",
+    "type": "number"
+   },
+   "result": {
+    "description": "Wraps a non-object response body (e.g. a QR code string)."
+   },
+   "total": {
+    "description": "Total matching records across all pages (list actions).",
+    "type": "number"
+   },
+   "totalPages": {
+    "description": "Total number of pages (list actions).",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "TracePass passports"
+}

@@ -1,0 +1,276 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Finds Crossref journal records by ISSN or title query. Provide issn for an exact single-journal lookup, or query for title-based search returning up to rows results. Title-query results page with offset \u2014 the nextOffset enrichment carries the value for the following page, up to offset + rows = 100000. Set include_works to true to also return a page of the matched journal's most recent works; that list pages two ways, in two orders. works_offset is the simple one: newest published first, capped ten times lower at works_offset + rows = 10000. works_cursor has no ceiling and reaches the whole works list, newest registered first \u2014 ordered by the date each DOI was registered with Crossref, since Crossref does not walk a publication-date sort by cursor: pass works_cursor=\"*\" on the first call, then chain the nextWorksCursor token from each response. The two cannot be combined, and a cursor walk always starts at the most recently registered work \u2014 it cannot resume from an offset. Returns journal metadata: title, publisher, ISSN-L, subject areas, and total DOI count.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "include_works": {
+    "default": false,
+    "description": "When true, also return a page of the journal's most recent works \u2014 newest published first on an offset page, newest registered first on a works_cursor walk. Requires an unambiguous journal \u2014 pass issn when a title query matches more than one. A journal with no ISSN registered has no addressable works list; the works lookup is then skipped and the notice enrichment says so.",
+    "type": "boolean"
+   },
+   "issn": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "ISSN, e.g. \"1234-5678\"",
+      "pattern": "^\\d{4}-?\\d{3}[\\dX]$",
+      "type": "string"
+     }
+    ],
+    "description": "ISSN for exact single-journal lookup (print or electronic, with or without hyphen). Example: \"1234-5678\"."
+   },
+   "offset": {
+    "default": 0,
+    "description": "Zero-based offset into the title-query journal list. Pass the nextOffset value from the previous response to continue. Ignored when issn is set, which resolves exactly one record.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Journal title search query, e.g. \"Nature\" or \"Journal of Machine Learning Research\"",
+    "type": "string"
+   },
+   "rows": {
+    "default": 10,
+    "description": "Maximum number of journals to return for title queries, or works when include_works is true (1\u2013100, default 10)",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "works_cursor": {
+    "description": "Cursor token for deep paging of the journal works list when include_works is true. Pass \"*\" to start the walk at the most recently registered work, then pass the nextWorksCursor value from each response. A walk runs by the date each DOI was registered with Crossref, newest first, not by publication date \u2014 Crossref does not walk a publication-date sort by cursor. Has no offset ceiling and cannot be combined with works_offset.",
+    "type": "string"
+   },
+   "works_offset": {
+    "default": 0,
+    "description": "Zero-based offset into the journal works list when include_works is true. Pass the nextWorksOffset value from the previous response to continue. Capped at works_offset + rows = 10000; use works_cursor to read the whole list. Cannot be combined with works_cursor.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "crossref_search_journals",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "journals",
+     "journalCount",
+     "journalsTotal"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: Crossref answered HTTP 429 and the limit did not clear inside the retry budget. `upstream_unavailable`: Crossref was unreachable, returned a 5xx status, or served an HTML error page instead of JSON. `malformed_response`: Crossref returned HTTP 200 with a body that is not valid JSON. `request_timeout`: Crossref did not respond within CROSSREF_TIMEOUT_MS, or answered HTTP 408/504. `invalid_cursor`: Crossref did not recognize the cursor token (HTTP 404 cursor-invalid). `invalid_parameter`: Crossref rejected a parameter value (a filter value of the wrong type or form), or answered HTTP 400 with a body that did not parse. `issn_not_found`: ISSN lookup returned 404 \u2014 ISSN is not registered in Crossref. `ambiguous_journal`: include_works is true but the title query matched more than one journal, making the target ambiguous. `offset_too_large`: offset + rows exceeds the 100000-record ceiling Crossref allows on journal title search. `works_offset_too_large`: works_offset + rows exceeds the 10000-record ceiling Crossref allows on a journal works list. `works_cursor_offset_conflict`: include_works is true and works_cursor was supplied alongside a works_offset above zero. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_unavailable",
+         "malformed_response",
+         "request_timeout",
+         "invalid_cursor",
+         "invalid_parameter",
+         "issn_not_found",
+         "ambiguous_journal",
+         "offset_too_large",
+         "works_offset_too_large",
+         "works_cursor_offset_conflict"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "journalCount": {
+    "description": "Number of journal records returned in this page",
+    "type": "number"
+   },
+   "journals": {
+    "description": "Matching journal records",
+    "items": {
+     "additionalProperties": false,
+     "description": "Journal record",
+     "properties": {
+      "issn": {
+       "description": "All ISSN variants for this journal",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "issnL": {
+       "description": "Linking ISSN (ISSN-L). Absent when the journal has no linking ISSN registered \u2014 Crossref reports that as an explicit null rather than an omitted key.",
+       "type": "string"
+      },
+      "publisher": {
+       "description": "Publisher name",
+       "type": "string"
+      },
+      "subjects": {
+       "description": "Subject classifications",
+       "items": {
+        "additionalProperties": false,
+        "description": "Subject",
+        "properties": {
+         "name": {
+          "description": "Subject area name",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "title": {
+       "description": "Journal title",
+       "type": "string"
+      },
+      "totalDois": {
+       "description": "Total registered DOIs in this journal",
+       "type": "number"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "journalsTotal": {
+    "description": "Total journal records matching the query in Crossref",
+    "type": "number"
+   },
+   "nextOffset": {
+    "description": "Value to pass as offset on the next call for the following page of journals. Absent when this page ends the matches or the next page would breach the 100000-record offset ceiling.",
+    "type": "number"
+   },
+   "nextWorksCursor": {
+    "description": "Value to pass as works_cursor on the next call for the following page of works. Present only on a page requested with works_cursor, and absent once the walk reaches the end of the works list.",
+    "type": "string"
+   },
+   "nextWorksOffset": {
+    "description": "Value to pass as works_offset on the next call for the following page of works. Absent when this page ends the works list, the next page would breach the 10000-record offset ceiling, or the page was requested with works_cursor.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance on a page that needs a caveat: a query nothing matched, an offset or works_offset past the end of a list that did match, a page that stops at one of the route offset ceilings with records still unretrieved, an include_works request that was skipped because the matched journal has no registered ISSN to address its works list by, or a query or issn supplied blank with nothing else to search by, so the page lists every journal unfiltered. Absent otherwise. A page needing more than one caveat carries them all in this one string.",
+    "type": "string"
+   },
+   "recentWorks": {
+    "description": "Page of works from the matched journal, newest first \u2014 by publication date on an offset page, by Crossref registration date on a works_cursor page. Requires include_works, and absent even then when the matched journal has no registered ISSN \u2014 the works list is addressable by ISSN alone, and the notice enrichment says so.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Work summary",
+     "properties": {
+      "doi": {
+       "description": "Work DOI",
+       "type": "string"
+      },
+      "isReferencedByCount": {
+       "description": "Incoming citation count",
+       "type": "number"
+      },
+      "published": {
+       "additionalProperties": false,
+       "description": "Publication date \u2014 the first of published, published-print, and published-online that names one. A component Crossref records as unknown is omitted, and so is every component below it.",
+       "properties": {
+        "month": {
+         "description": "Month",
+         "type": "number"
+        },
+        "year": {
+         "description": "Year",
+         "type": "number"
+        }
+       },
+       "type": "object"
+      },
+      "title": {
+       "description": "Work title",
+       "type": "string"
+      },
+      "type": {
+       "description": "Work type",
+       "type": "string"
+      }
+     },
+     "required": [
+      "doi"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "worksTotal": {
+    "description": "Total works count for the journal, when include_works is true",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search Journals"
+}

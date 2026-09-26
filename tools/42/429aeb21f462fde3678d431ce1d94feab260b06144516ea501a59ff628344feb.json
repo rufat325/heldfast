@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Members and shareholders of an Estonian company from the official e-Business Register share register (RIK, CC BY 4.0), refreshed daily from the national photo: holding percentage, nominal value and currency as published (EEK before 2011, never converted), ownership type (sole, joint, undivided), verification source and registration date; AS shareholders and founders recorded beside the card under the same rule; share pledges and conditional transfers; capital from the general data when fresh; detenu_par_personnes_physiques_pct. Corporate holders are named with their registrikood or foreign code and country; natural persons are COUNTED with their holding and never named (GDPR, no chain to natural persons). Legal persons only: sole proprietorships are refused (404, payment cancelled). aucun_associe_inscrit: true is a register fact for a known legal person (its meaning depends on the legal form: dematerialised AS shares are held by the central depository). Paid via x402 ($0.02 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "registrikood": {
+    "description": "8-digit Estonian registry code (registrikood, e-Business Register), e.g. 10003666",
+    "pattern": "^\\d{8}$",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "registrikood"
+  ],
+  "type": "object"
+ },
+ "name": "get_estonian_company_shareholders",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Estonian company members and shareholders"
+}

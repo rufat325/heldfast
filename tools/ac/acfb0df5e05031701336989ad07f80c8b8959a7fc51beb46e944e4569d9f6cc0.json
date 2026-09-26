@@ -1,0 +1,761 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Read post performance"
+ },
+ "description": "How published posts are performing, one row per destination: views, likes, comments, shares and saves, each with how far it has moved over the period. Best first, so the default answers \"what did well\" in one call rather than by listing everything. Sort by change instead to find what is moving now. Numbers are as of the last sweep, and every row carries the time it was measured \u2014 a delivery nobody has measured yet has no metrics at all rather than zeroes, and sorts last.\n\n`trial` names an Instagram trial reel's graduation strategy, and is null for anything that is not one. A trial is shown to non-followers first, so its numbers come from a colder audience than an ordinary post's: compare trials with trials.\n\nEach row also carries `insights`: what the platform's own analytics said on that delivery, never summed across deliveries. reach (distinct accounts), totalWatchMs and avgWatchMs, replays, follows (gained from the post), completionRate and skipRate as fractions 0..1, `retention` \u2014 the full audience-retention curve as Facebook sends it, `points[i]` being the share still watching at i twentieths of the video and `bucketMs` one twentieth in milliseconds \u2014 and `breakdowns` such as clicks by type. retentionAt3s and retentionAtHalf are read off that curve, interpolated between buckets, so hooks can be ranked by how many viewers they held; null without a curve or a known video length. Null means the platform does not report it; a name listed in `unavailable` means it would have and refused this time. Compare watch time across platforms as totalWatchMs / views: Facebook averages per play and Instagram per viewer, so avgWatchMs is not comparable between them.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "by": {
+    "description": "Rank by the running total, or by how much it moved over the period. Defaults to the total. A post with no observation in the window has no change and sorts last either way.",
+    "enum": [
+     "value",
+     "change"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "description": "How many to return. Defaults to 10. Ask for more only when you need them \u2014 every row carries its post and account.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "period": {
+    "description": "The window a change is measured over. Defaults to 24h.",
+    "enum": [
+     "24h",
+     "7d"
+    ],
+    "type": "string"
+   },
+   "sort_by": {
+    "description": "Which counter or insight to rank by. Defaults to views. Insights rank by value only; deliveries without one sort last.",
+    "enum": [
+     "views",
+     "likes",
+     "comments",
+     "shares",
+     "saves",
+     "reach",
+     "totalWatchMs",
+     "avgWatchMs",
+     "replays",
+     "follows",
+     "completionRate",
+     "retentionAt3s",
+     "retentionAtHalf"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "posts_performance",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "posts": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "account": {
+       "additionalProperties": false,
+       "properties": {
+        "avatarUrl": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "displayName": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "handle": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "id": {
+         "type": "string"
+        },
+        "organizationId": {
+         "type": "string"
+        },
+        "platform": {
+         "type": "string"
+        },
+        "profileUrl": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "refreshTokenExpiresAt": {
+         "anyOf": [
+          {
+           "format": "date-time",
+           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "scopeCoverage": {
+         "anyOf": [
+          {
+           "additionalProperties": false,
+           "properties": {
+            "expected": {
+             "exclusiveMinimum": 0,
+             "maximum": 9007199254740991,
+             "type": "integer"
+            },
+            "granted": {
+             "maximum": 9007199254740991,
+             "minimum": 0,
+             "type": "integer"
+            },
+            "held": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "missing": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "required": [
+            "granted",
+            "expected",
+            "held",
+            "missing"
+           ],
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "status": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "platform",
+        "handle",
+        "displayName",
+        "status",
+        "refreshTokenExpiresAt",
+        "organizationId",
+        "avatarUrl",
+        "profileUrl",
+        "scopeCoverage"
+       ],
+       "type": "object"
+      },
+      "externalUrl": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "finalizedAt": {
+       "anyOf": [
+        {
+         "format": "date-time",
+         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "id": {
+       "type": "string"
+      },
+      "insights": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "avgWatchMs": {
+           "anyOf": [
+            {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "breakdowns": {
+           "anyOf": [
+            {
+             "additionalProperties": {
+              "additionalProperties": {
+               "type": "number"
+              },
+              "propertyNames": {
+               "type": "string"
+              },
+              "type": "object"
+             },
+             "propertyNames": {
+              "type": "string"
+             },
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "completionRate": {
+           "anyOf": [
+            {
+             "maximum": 9007199254740991,
+             "minimum": -9007199254740991,
+             "type": "number"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "follows": {
+           "anyOf": [
+            {
+             "maximum": 9007199254740991,
+             "minimum": -9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "reach": {
+           "anyOf": [
+            {
+             "maximum": 9007199254740991,
+             "minimum": -9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "replays": {
+           "anyOf": [
+            {
+             "maximum": 9007199254740991,
+             "minimum": -9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "retention": {
+           "anyOf": [
+            {
+             "additionalProperties": false,
+             "properties": {
+              "bucketMs": {
+               "anyOf": [
+                {
+                 "type": "number"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "points": {
+               "items": {
+                "type": "number"
+               },
+               "type": "array"
+              }
+             },
+             "required": [
+              "points",
+              "bucketMs"
+             ],
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "retentionAt3s": {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "retentionAtHalf": {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "skipRate": {
+           "anyOf": [
+            {
+             "maximum": 9007199254740991,
+             "minimum": -9007199254740991,
+             "type": "number"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "totalWatchMs": {
+           "anyOf": [
+            {
+             "maximum": 9007199254740991,
+             "minimum": -9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "unavailable": {
+           "anyOf": [
+            {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          }
+         },
+         "required": [
+          "reach",
+          "totalWatchMs",
+          "avgWatchMs",
+          "replays",
+          "follows",
+          "completionRate",
+          "skipRate",
+          "retention",
+          "breakdowns",
+          "unavailable",
+          "retentionAt3s",
+          "retentionAtHalf"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "lastError": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "metrics": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "capturedAt": {
+           "format": "date-time",
+           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+           "type": "string"
+          },
+          "comments": {
+           "additionalProperties": false,
+           "properties": {
+            "change": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "value": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            }
+           },
+           "required": [
+            "value",
+            "change"
+           ],
+           "type": "object"
+          },
+          "comparedTo": {
+           "anyOf": [
+            {
+             "format": "date-time",
+             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "likes": {
+           "additionalProperties": false,
+           "properties": {
+            "change": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "value": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            }
+           },
+           "required": [
+            "value",
+            "change"
+           ],
+           "type": "object"
+          },
+          "saves": {
+           "additionalProperties": false,
+           "properties": {
+            "change": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "value": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            }
+           },
+           "required": [
+            "value",
+            "change"
+           ],
+           "type": "object"
+          },
+          "shares": {
+           "additionalProperties": false,
+           "properties": {
+            "change": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "value": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            }
+           },
+           "required": [
+            "value",
+            "change"
+           ],
+           "type": "object"
+          },
+          "views": {
+           "additionalProperties": false,
+           "properties": {
+            "change": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "value": {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            }
+           },
+           "required": [
+            "value",
+            "change"
+           ],
+           "type": "object"
+          }
+         },
+         "required": [
+          "capturedAt",
+          "comparedTo",
+          "views",
+          "likes",
+          "comments",
+          "shares",
+          "saves"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "post": {
+       "additionalProperties": false,
+       "properties": {
+        "content": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "createdAt": {
+         "format": "date-time",
+         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+         "type": "string"
+        },
+        "id": {
+         "type": "string"
+        },
+        "organizationId": {
+         "type": "string"
+        },
+        "scheduledAt": {
+         "anyOf": [
+          {
+           "format": "date-time",
+           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "source": {
+         "type": "string"
+        },
+        "status": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "status",
+        "content",
+        "scheduledAt",
+        "source",
+        "organizationId",
+        "createdAt"
+       ],
+       "type": "object"
+      },
+      "postedAt": {
+       "anyOf": [
+        {
+         "format": "date-time",
+         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "publishedAt": {
+       "anyOf": [
+        {
+         "format": "date-time",
+         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "socialAccountId": {
+       "type": "string"
+      },
+      "status": {
+       "type": "string"
+      },
+      "thumbnail": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "id": {
+           "type": "string"
+          },
+          "kind": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "id",
+          "kind"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "trial": {
+       "anyOf": [
+        {
+         "enum": [
+          "SS_PERFORMANCE",
+          "MANUAL"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     "required": [
+      "id",
+      "socialAccountId",
+      "status",
+      "externalUrl",
+      "publishedAt",
+      "lastError",
+      "post",
+      "account",
+      "trial",
+      "metrics",
+      "insights",
+      "thumbnail",
+      "finalizedAt",
+      "postedAt"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "posts"
+  ],
+  "type": "object"
+ },
+ "title": "Read post performance"
+}

@@ -1,0 +1,285 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Pull a rulemaking docket from Regulations.gov by docket ID (e.g. \"EPA-HQ-OAR-2025-0194\") \u2014 the docket's metadata (title, agency, RIN, abstract) and the documents filed in it (NPRM, final rule, supporting materials). The docket is the folder holding a rule's whole paper trail; each returned document's objectId feeds regulations_find_comments. A docket often contains hundreds of supporting materials \u2014 filter document_types to \"Proposed Rule\"/\"Rule\" to find the rule documents themselves. Requires REGULATIONS_GOV_API_KEY (free at https://api.data.gov/signup/); the Federal Register and eCFR tools work without it.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "docket_id": {
+    "description": "Regulations.gov docket ID (e.g. \"EPA-HQ-OAR-2025-0194\"). Obtain from regulationsGovDocketId on a regulations_search_rules or regulations_list_open_comments row, or docketId from regulations_get_document. The printed docketIds on those tools are not always Regulations.gov IDs (\"REG-101355-26\" is the IRS's own number for docket IRS-2026-0925).",
+    "pattern": "^[A-Za-z0-9_-]+$",
+    "type": "string"
+   },
+   "document_types": {
+    "description": "Filter the docket's documents to these types. Omit for all. A docket often contains hundreds of \"Supporting & Related Material\" items \u2014 filter to \"Proposed Rule\"/\"Rule\" to find the rule documents.",
+    "items": {
+     "enum": [
+      "Proposed Rule",
+      "Rule",
+      "Notice",
+      "Supporting & Related Material",
+      "Other"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number (1\u201340, default 1). Regulations.gov serves 40 pages, so a docket listing reaches 40 \u00d7 per_page documents (10,000 at per_page 250); totalPages and nextPage in the response say how far this one goes. Beyond that, narrow with document_types.",
+    "maximum": 40,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "default": 25,
+    "description": "Documents per page (5\u2013250, default 25). Regulations.gov requires a minimum page size of 5.",
+    "maximum": 250,
+    "minimum": 5,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "docket_id"
+  ],
+  "type": "object"
+ },
+ "name": "regulations_get_docket",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "docketId",
+     "title",
+     "docketType",
+     "agencyId",
+     "rin",
+     "abstract",
+     "modifyDate",
+     "objectId",
+     "documentCount",
+     "documents",
+     "totalPages"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "abstract": {
+    "description": "Docket abstract, or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "agencyId": {
+    "description": "Agency ID (e.g. \"EPA\"), or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "cap": {
+    "description": "The most documents 40 pages reach at this per_page (40 \u00d7 per_page); set with truncated.",
+    "type": "number"
+   },
+   "docketId": {
+    "description": "Regulations.gov docket ID.",
+    "type": "string"
+   },
+   "docketType": {
+    "description": "Docket type (e.g. \"Rulemaking\"), or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "documentCount": {
+    "description": "Total documents in the docket (before pagination).",
+    "type": "number"
+   },
+   "documents": {
+    "description": "Documents filed in the docket (this page).",
+    "items": {
+     "additionalProperties": false,
+     "description": "One document filed in the docket.",
+     "properties": {
+      "commentEndDate": {
+       "description": "The UTC instant the comment period ends, or null. Periods end at 11:59 PM Eastern, so \"2023-05-31T03:59:59Z\" is the close date 2023-05-30 the Federal Register prints.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "commentPeriodOpen": {
+       "description": "Whether the document is open for comment now, as Regulations.gov reports it (its openForComment); null when Regulations.gov doesn't say.",
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "documentId": {
+       "description": "Regulations.gov document ID.",
+       "type": "string"
+      },
+      "documentType": {
+       "description": "Document type.",
+       "type": "string"
+      },
+      "frDocNum": {
+       "description": "Federal Register document number \u2014 chains back into regulations_get_document. Null when absent.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "objectId": {
+       "description": "Document object ID \u2014 chains into regulations_find_comments(document_object_id).",
+       "type": "string"
+      },
+      "postedDate": {
+       "description": "Posted date.",
+       "type": "string"
+      },
+      "title": {
+       "description": "Document title.",
+       "type": "string"
+      },
+      "withdrawn": {
+       "description": "True when the document was withdrawn.",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "documentId",
+      "objectId",
+      "title",
+      "documentType",
+      "postedDate",
+      "frDocNum",
+      "commentEndDate",
+      "commentPeriodOpen",
+      "withdrawn"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `auth_required`: REGULATIONS_GOV_API_KEY is not configured, or Regulations.gov rejected the key that is. `not_found`: No docket exists with that ID. `rate_limited`: Regulations.gov returned 429 (1,000 requests/hour per key). `upstream_unavailable`: Regulations.gov returned a 5xx, timed out, or could not be reached at all. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "auth_required",
+         "not_found",
+         "rate_limited",
+         "upstream_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "modifyDate": {
+    "description": "Last-modified date, or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "nextPage": {
+    "description": "Page to request next \u2014 present only when a later page holds documents.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when the docket has no documents, when the page is past the end, or when documents lie beyond the last page.",
+    "type": "string"
+   },
+   "objectId": {
+    "description": "Docket object ID, or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "rin": {
+    "description": "Regulation Identifier Number (\"Not Assigned\" when none), or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "shown": {
+    "description": "Documents returned on this page.",
+    "type": "number"
+   },
+   "title": {
+    "description": "Docket title.",
+    "type": "string"
+   },
+   "totalPages": {
+    "description": "Pages of documents at this per_page, at most the 40 Regulations.gov serves; 0 when there are none.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the docket holds more documents than 40 pages reach at this per_page, so some are on no page \u2014 set on every page of such a docket.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "regulations_get_docket"
+}

@@ -1,0 +1,45 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Pro/Teams. BLOCK until the session owner posts the next `steer` event to a Governed Session from AIDB Studio, then return it. DELIVERY GUARANTEE: the durable cursor read against the session log is authoritative (at-least-once: a lost response is safely re-issuable with the same cursor, and timed_out is only returned after a final confirming read). The in-between wake-up is a best-effort in-process push: usually sub-second, but a steer is never lost if a wake-up is missed; the confirming read catches it. See the after_event_id and timeout_s parameter descriptions for the semantics. THE LOOP: finish a task -> post me.session_event handoff -> call me.await_steer -> on a steer, FIRST post me.session_event event_type=ack ('Started: <steer gist>'), then execute, then handoff, then call me.await_steer again; on `timed_out`, call again with the returned after_event_id. REQUIRES team mode on the session (toggled by the owner in the web app); owner-scoped, so foreign session ids read as not found. Read-only: this tool never writes events. REJECTION CODES (invalid_request): 'Session not found.' (not yours, or no such id); 'Team mode is off for this session.' (owner enables it on the session page). Auth: sign-in required, with an active Pro, Pro Plus, Teams, Enterprise, beta, or trial plan.",
+ "inputSchema": {
+  "properties": {
+   "after_event_id": {
+    "default": 0,
+    "description": "Cursor: highest session-event id you have already seen (0 = deliver any existing steer). Pass the value from your previous await_steer result or me.sessions read. Non-destructive at-least-once delivery: re-calling with the same cursor returns the same steers again, so a lost response never loses a steer.",
+    "minimum": 0,
+    "title": "After Event Id",
+    "type": "integer"
+   },
+   "session_id": {
+    "description": "The Governed Session to watch. Must be YOURS and have team_agents enabled; list sessions via me.sessions.",
+    "title": "Session Id",
+    "type": "integer"
+   },
+   "timeout_s": {
+    "default": 45,
+    "description": "Seconds to wait before returning timed_out. Clamped to 5-240, DEFAULT 45: safe under Claude Code's 60-second first-response-byte timer for HTTP servers. Longer waits require the per-server timeout raised in the MCP client config (e.g. \"timeout\": 300000 in .mcp.json).",
+    "maximum": 240,
+    "minimum": 5,
+    "title": "Timeout S",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "session_id"
+  ],
+  "title": "await_steerArguments",
+  "type": "object"
+ },
+ "name": "me.await_steer",
+ "outputSchema": {
+  "additionalProperties": true,
+  "title": "await_steerDictOutput",
+  "type": "object"
+ },
+ "title": "Wait for the Next AIDB Studio Steer (long-poll)"
+}

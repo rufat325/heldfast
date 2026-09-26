@@ -1,0 +1,473 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Team details combining metadata, venue, active roster, the last 5 results, and the next 3 upcoming fixtures.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "league": {
+    "description": "League identifier. Supported: nfl, nba, mlb, nhl, epl, mls, laliga, bundesliga, seriea, ligue1, ucl, ncaaf, ncaab.",
+    "enum": [
+     "nfl",
+     "nba",
+     "mlb",
+     "nhl",
+     "epl",
+     "mls",
+     "laliga",
+     "bundesliga",
+     "seriea",
+     "ligue1",
+     "ucl",
+     "ncaaf",
+     "ncaab"
+    ],
+    "type": "string"
+   },
+   "team_name": {
+    "description": "Team name, abbreviation, or city. Fuzzy matched against ESPN/MLB team list.",
+    "maxLength": 200,
+    "pattern": "\\S",
+    "type": "string"
+   }
+  },
+  "required": [
+   "league",
+   "team_name"
+  ],
+  "type": "object"
+ },
+ "name": "sports_get_team",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "team",
+     "roster",
+     "recentResults",
+     "upcomingFixtures"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `team_not_found`: No team matched the provided team_name in the specified league. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "team_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "recentResults": {
+    "description": "Last up to 5 completed games for this team.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A recent completed game result.",
+     "properties": {
+      "awayTeam": {
+       "additionalProperties": false,
+       "description": "Away team and score.",
+       "properties": {
+        "abbreviation": {
+         "description": "Team abbreviation, e.g. \"DAL\".",
+         "type": "string"
+        },
+        "id": {
+         "description": "Source-prefixed team ID.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Full team name.",
+         "type": "string"
+        },
+        "score": {
+         "description": "Final score, null if not played yet.",
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "abbreviation",
+        "score"
+       ],
+       "type": "object"
+      },
+      "homeTeam": {
+       "additionalProperties": false,
+       "description": "Home team and score.",
+       "properties": {
+        "abbreviation": {
+         "description": "Team abbreviation, e.g. \"SEA\".",
+         "type": "string"
+        },
+        "id": {
+         "description": "Source-prefixed team ID.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Full team name.",
+         "type": "string"
+        },
+        "score": {
+         "description": "Final score, null if not played yet.",
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "abbreviation",
+        "score"
+       ],
+       "type": "object"
+      },
+      "id": {
+       "description": "Source-prefixed game ID, e.g. espn:401872656.",
+       "type": "string"
+      },
+      "shortName": {
+       "description": "Short matchup string, e.g. \"SEA @ DAL\".",
+       "type": "string"
+      },
+      "source": {
+       "description": "Data source that provided this game record.",
+       "enum": [
+        "espn",
+        "mlbstats"
+       ],
+       "type": "string"
+      },
+      "startTimeUtc": {
+       "description": "Game start time in UTC ISO 8601.",
+       "type": "string"
+      },
+      "status": {
+       "description": "Game status.",
+       "enum": [
+        "scheduled",
+        "in-progress",
+        "final",
+        "postponed",
+        "cancelled"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "shortName",
+      "status",
+      "homeTeam",
+      "awayTeam",
+      "startTimeUtc",
+      "source"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "roster": {
+    "description": "Active roster.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A roster player entry.",
+     "properties": {
+      "jersey": {
+       "description": "Jersey number, or null if unavailable.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "name": {
+       "description": "Player full name.",
+       "type": "string"
+      },
+      "position": {
+       "description": "Player position.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "position",
+      "jersey"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "team": {
+    "additionalProperties": false,
+    "description": "Team metadata.",
+    "properties": {
+     "abbreviation": {
+      "description": "Team abbreviation, e.g. \"SEA\".",
+      "type": "string"
+     },
+     "displayName": {
+      "description": "Full display name, e.g. \"Seattle Seahawks\".",
+      "type": "string"
+     },
+     "espnId": {
+      "description": "ESPN numeric team ID, or null if not in ESPN.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "id": {
+      "description": "Primary source-prefixed team ID, e.g. espn:26 or mlb:136.",
+      "type": "string"
+     },
+     "league": {
+      "description": "League this team plays in, e.g. \"nfl\".",
+      "type": "string"
+     },
+     "location": {
+      "description": "Team city or region, e.g. \"Seattle\".",
+      "type": "string"
+     },
+     "logoUrl": {
+      "description": "Team logo or badge URL, or null if unavailable.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "mlbId": {
+      "description": "MLB StatsAPI team ID, or null if not an MLB team.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "name": {
+      "description": "Team short name, e.g. \"Seahawks\".",
+      "type": "string"
+     },
+     "source": {
+      "description": "Data source that provided this team record.",
+      "enum": [
+       "espn",
+       "mlbstats",
+       "thesportsdb"
+      ],
+      "type": "string"
+     },
+     "tsdbId": {
+      "description": "TheSportsDB team ID, or null if not found.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "venueName": {
+      "description": "Home venue or stadium name, or null if unavailable.",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "espnId",
+     "mlbId",
+     "tsdbId",
+     "name",
+     "abbreviation",
+     "location",
+     "displayName",
+     "league",
+     "logoUrl",
+     "venueName",
+     "source"
+    ],
+    "type": "object"
+   },
+   "upcomingFixtures": {
+    "description": "Next up to 3 upcoming scheduled games for this team.",
+    "items": {
+     "additionalProperties": false,
+     "description": "An upcoming scheduled game.",
+     "properties": {
+      "awayTeam": {
+       "additionalProperties": false,
+       "description": "Away team.",
+       "properties": {
+        "abbreviation": {
+         "description": "Team abbreviation, e.g. \"DAL\".",
+         "type": "string"
+        },
+        "id": {
+         "description": "Source-prefixed team ID.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Full team name.",
+         "type": "string"
+        },
+        "score": {
+         "description": "Score if the game is in progress, otherwise null.",
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "abbreviation",
+        "score"
+       ],
+       "type": "object"
+      },
+      "homeTeam": {
+       "additionalProperties": false,
+       "description": "Home team.",
+       "properties": {
+        "abbreviation": {
+         "description": "Team abbreviation, e.g. \"SEA\".",
+         "type": "string"
+        },
+        "id": {
+         "description": "Source-prefixed team ID.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Full team name.",
+         "type": "string"
+        },
+        "score": {
+         "description": "Score if the game is in progress, otherwise null.",
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "abbreviation",
+        "score"
+       ],
+       "type": "object"
+      },
+      "id": {
+       "description": "Source-prefixed game ID, e.g. espn:401872656.",
+       "type": "string"
+      },
+      "shortName": {
+       "description": "Short matchup string, e.g. \"SEA @ DAL\".",
+       "type": "string"
+      },
+      "source": {
+       "description": "Data source that provided this game record.",
+       "enum": [
+        "espn",
+        "mlbstats"
+       ],
+       "type": "string"
+      },
+      "startTimeUtc": {
+       "description": "Game start time in UTC ISO 8601.",
+       "type": "string"
+      },
+      "status": {
+       "description": "Game status.",
+       "enum": [
+        "scheduled",
+        "in-progress",
+        "final",
+        "postponed",
+        "cancelled"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "shortName",
+      "status",
+      "homeTeam",
+      "awayTeam",
+      "startTimeUtc",
+      "source"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Sports Get Team"
+}

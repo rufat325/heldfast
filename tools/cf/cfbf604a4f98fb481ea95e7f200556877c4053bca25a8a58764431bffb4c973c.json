@@ -1,0 +1,336 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search EDGAR filings since 1993. Full-text search covers 2001-present (the EFTS index floor); pre-2001 date ranges (to 1993) are served from the archives by form and entity/date. Pre-2001 free text needs entity scope (ticker:/cik:) \u2014 with it, the tool reads the entity's matching filings and matches the terms locally, which costs a few seconds (SEC's request rate caps the scan at roughly 5s for the 50-document maximum). A range crossing 2001-01-01 is split at the boundary and the two eras merged, each row tagged with its source. Supports exact phrases, boolean operators, wildcards, and entity targeting (ticker:AAPL or cik:320193 in query). When the match set outruns the inline list it is also staged as df_<id> \u2014 inspect it with secedgar_dataframe_describe, then analyze it with secedgar_dataframe_query.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "filed_after": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Only include filings filed on or after this date (YYYY-MM-DD). This tool filters by date only with both bounds \u2014 pair it with filed_before."
+   },
+   "filed_before": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Only include filings filed on or before this date (YYYY-MM-DD). This tool filters by date only with both bounds \u2014 pair it with filed_after."
+   },
+   "forms": {
+    "description": "Filter to specific form types (e.g., [\"10-K\", \"10-Q\", \"8-K\"]). Without this, searches all form types. Note: \"10-K\" also matches amendments filed as 10-K/A. SEC renamed the blockholder schedules on 2024-12-18 \u2014 filings before that date are \"SC 13D\"/\"SC 13G\", filings after are \"SCHEDULE 13D\"/\"SCHEDULE 13G\" \u2014 so a filter spanning that boundary must list both spellings. Ownership forms (3, 4, 5) are indexed by the reporting person (e.g., \"LEVINSON ARTHUR D\"), not the issuer \u2014 rows carry no transaction code, share count, or price. Use secedgar_get_insider_transactions to retrieve parsed ownership XML with person, relationship, transaction code, shares, and price.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Results per page. Max 100.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Pagination offset. For sort=relevance on a 2001-onward search, EDGAR pages server-side up to its 10,000-result cap. Everywhere else the offset indexes the rows this call assembled and sorted: a single 100-row window for date sorts and entity targeting, the full matched set on a pre-2001 archive path, or both together on a range that crosses 2001-01-01. Offsets at or past those rows return nothing even when total is larger \u2014 switch to sort=relevance for deep pagination on a 2001-onward search, narrow the search (forms, dates, entity targeting), or query the dataframe. On a crossing range the two sides are assembled unevenly \u2014 the archive side contributes every row it matched, the full-text side one window of its total \u2014 so once the window runs out the rows jump to the pre-2001 era with the remaining full-text matches absent from the middle; search the 2001-onward era on its own to page through those.",
+    "maximum": 9999,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "query": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Full-text search query. Supports: exact phrases (\"material weakness\"), boolean operators (revenue OR income), exclusion (-preliminary), wildcard suffix (account*), entity targeting (ticker:AAPL or cik:320193 in the query). Terms are AND'd by default.",
+      "minLength": 1,
+      "type": "string"
+     }
+    ],
+    "description": "Full-text search query. Optional \u2014 omit (or pass \"\") to browse by form type and/or entity instead, e.g. every S-1 in a date window, or a company's filings via ticker:/cik:. A date range alone is not a valid search; pair it with forms or entity targeting. The EFTS index that serves free text starts at 2001-01-01; a date range reaching earlier needs ticker:/cik: entity scope, which lets the tool read that entity's filings and match the terms locally (bounded to 50 documents, a few seconds at SEC's request rate), or drop the text terms to browse by form and date. When present, supports exact phrases (\"material weakness\"), boolean operators (revenue OR income), exclusion (-preliminary), wildcard suffix (account*), and entity targeting (ticker:AAPL or cik:320193 in the query); terms are AND'd by default. A multi-class share ticker resolves in either form \u2014 ticker:BRK-B and ticker:BRK.B scope to the same issuer. The pre-2001 local scan honors the same phrase / OR / exclusion / wildcard syntax."
+   },
+   "sort": {
+    "default": "filing_date_desc",
+    "description": "Result ordering. \"filing_date_desc\" (default) returns most recent first. \"filing_date_asc\" returns oldest first. \"relevance\" returns SEC's native search-score order, which weights term match strength over recency. Date sorts re-order the top 100 hits returned by the search index \u2014 for broad queries with more than 100 matches and no entity targeting, date-newest filings may sit outside that window. Entity targeting (ticker:/cik:) or a narrower query keeps matches inside the window when absolute recency matters. On the no-query browse path (forms/entity only), EFTS has no relevance signal \u2014 every hit scores null \u2014 and returns filings in natural date-descending order, so all sort modes effectively yield newest-first. Pre-2001 archive results carry no relevance score either, so relevance collapses to date-descending there.",
+    "enum": [
+     "filing_date_desc",
+     "filing_date_asc",
+     "relevance"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "secedgar_search_filings",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "total",
+     "total_is_exact",
+     "results",
+     "effectiveQuery"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit cap applied.",
+    "type": "number"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe holding the fetched hits (full-text window, or the full pre-2001 archive match set), each tagged with its `source`. Absent when total \u2264 inline limit, canvas is unavailable, or materialization failed. Query with secedgar_dataframe_query SQL.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     },
+     "truncated": {
+      "description": "True when more matches exist beyond the materialized set \u2014 the full-text window was exceeded, or a pre-2001 archive scan hit its cap. Each row carries a `source` column so provenance survives into secedgar_dataframe_query.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at",
+     "truncated"
+    ],
+    "type": "object"
+   },
+   "effectiveQuery": {
+    "description": "The query as executed against EDGAR (ticker/cik: tokens resolved to entity names).",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_date_range`: Only one of filed_after or filed_before was provided. `unresolved_ticker`: A ticker: targeting token in the query does not resolve to a known company. `invalid_cik`: A cik: targeting token in the query is not a 1-10 digit number. `entity_not_found`: A cik: targeting token on a pre-2001 date range names a CIK with no EDGAR submissions history. `missing_criteria`: Neither a full-text query nor a forms filter was provided (a date range cannot stand alone). `pre2001_full_text_unscoped`: A date range reaching before 2001-01-01 carries free-text terms with no entity scope \u2014 no pre-2001 full-text index exists, and nothing bounds a local scan. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_date_range",
+         "unresolved_ticker",
+         "invalid_cik",
+         "entity_not_found",
+         "missing_criteria",
+         "pre2001_full_text_unscoped",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "form_distribution": {
+    "additionalProperties": {
+     "type": "number"
+    },
+    "description": "Count of results by form type. Helps narrow follow-up searches.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when no results were returned \u2014 echoes the query and suggests how to broaden.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Matching filings.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One matching filing hit.",
+     "properties": {
+      "accession_number": {
+       "description": "Filing accession number. Pass to secedgar_get_filing to retrieve the document text.",
+       "type": "string"
+      },
+      "cik": {
+       "description": "Filing entity CIK, zero-padded to 10 digits.",
+       "type": "string"
+      },
+      "company_name": {
+       "description": "Filing entity, with ticker/CIK parentheticals stripped.",
+       "type": "string"
+      },
+      "file_description": {
+       "description": "SEC-provided description of the matching document (e.g., \"EX-99.1\"). Absent when SEC published none, and for pre-2001 archive-sourced rows. A range crossing 2001-01-01 returns both kinds of row together, so this field is populated on source=efts rows only.",
+       "type": "string"
+      },
+      "filing_date": {
+       "description": "Date the filing was submitted (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "form": {
+       "description": "Form type (e.g. \"10-K\"). Absent for hits where the index lacks a form tag.",
+       "type": "string"
+      },
+      "location": {
+       "description": "Business location (state or country code). Absent when SEC has no location for this filer, and for pre-2001 archive-sourced rows. A range crossing 2001-01-01 returns both kinds of row together, so this field is populated on source=efts rows only.",
+       "type": "string"
+      },
+      "period_ending": {
+       "description": "Period the filing reports on (YYYY-MM-DD). Absent for filings without a reporting period (e.g., proxy statements, ownership reports) and for all pre-2001 archive-sourced rows (source submissions/full-index), which carry no period field. A range crossing 2001-01-01 returns both kinds of row together, so this field is populated on source=efts rows only.",
+       "type": "string"
+      },
+      "sic": {
+       "description": "SIC industry code for the filer. Absent for filers without a classification, and for pre-2001 archive-sourced rows. A range crossing 2001-01-01 returns both kinds of row together, so this field is populated on source=efts rows only.",
+       "type": "string"
+      },
+      "source": {
+       "description": "Which EDGAR backend served this row: \"efts\" (2001+ full-text index), \"submissions\" (a pre-2001 entity-scoped filing history), or \"full-index\" (a pre-2001 unscoped quarterly index browse). A date range crossing 2001-01-01 is split at the boundary and returns rows of two sources in one result set, so read this per row rather than per result. Provenance is carried into the canvas dataframe as a `source` column.",
+       "enum": [
+        "efts",
+        "submissions",
+        "full-index"
+       ],
+       "type": "string"
+      },
+      "ticker": {
+       "description": "Primary ticker symbol parsed from the EFTS display name. Absent for private filers, foreign filers without a US listing, filings whose display name omits the ticker parenthetical, and all pre-2001 archive-sourced rows. A range crossing 2001-01-01 returns both kinds of row together, so this field is populated on source=efts rows only. For multi-class issuers (e.g., BRK-A / BRK-B), this is the first class listed.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "accession_number",
+      "filing_date",
+      "company_name",
+      "cik"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "scan": {
+    "additionalProperties": false,
+    "description": "Present only on the pre-2001 entity-scoped free-text path, where no full-text index exists and terms are matched by reading documents. Reports the scan's shape so a partial read is never presented as a complete one. Each document read is the whole accession .txt \u2014 SEC's original flat-submission format concatenates every exhibit into one file, and pre-1997 filings expose no per-document URL at all \u2014 so a match may sit in an attached exhibit rather than the body of the requested form. Absent on every other path.",
+    "properties": {
+     "candidates": {
+      "description": "Filings the form + date pre-filter selected before any document was read.",
+      "type": "number"
+     },
+     "capped": {
+      "description": "True when candidates exceeded the document cap, so the unscanned remainder may hold further matches \u2014 narrow the form or date filter to bring them into range.",
+      "type": "boolean"
+     },
+     "matched": {
+      "description": "Scanned filings whose text satisfied the query terms.",
+      "type": "number"
+     },
+     "scanned": {
+      "description": "Candidate documents actually fetched and matched against. Capped at 50 per call.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "candidates",
+     "scanned",
+     "matched",
+     "capped"
+    ],
+    "type": "object"
+   },
+   "shown": {
+    "description": "Number of results shown inline.",
+    "type": "number"
+   },
+   "total": {
+    "description": "Total matching filings, which can exceed the rows returned inline or materialized. On the full-text (2001+) path this is capped at 10,000; entity targeting (ticker:/cik:) scopes server-side via the EFTS ciks param, so it is the entity's exact match count up to the cap. On a pre-2001 archive path it is the exact count within the scanned window (see total_is_exact). On a range crossing 2001-01-01 it is the sum of both eras' counts.",
+    "type": "number"
+   },
+   "total_is_exact": {
+    "description": "False when total is a lower bound \u2014 the full-text path hit its 10,000 cap, a pre-2001 archive scan hit its page/quarter cap before exhausting the range, or a pre-2001 local text scan hit its document cap (scan.capped).",
+    "type": "boolean"
+   },
+   "truncated": {
+    "description": "True when results were capped by limit.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Secedgar Search Filings"
+}

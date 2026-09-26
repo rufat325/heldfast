@@ -1,0 +1,76 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Analyze audio"
+ },
+ "description": "Analyze an audio file. Modes:\n- transcript: Speech-to-text with word-level timestamps \u2014 returns `{language, full_text, words}` where each word is `{word, start_ms, end_ms, punctuated_word}`. \u26a0 MILLISECONDS here; get_clip's `voiceover_words` gives the same words in SECONDS as `{word, start, end}`. Use for caption timing, script editing, or word-level visual sync. Works on narration and on sung lyrics: the provider is picked from the content, and if it returns nothing the other one is tried automatically. So an empty `words` means the audio genuinely has no intelligible speech, not that the wrong engine ran.\n- silences: returns `{silences, total_silence_ms}`, each span `{start_ms, end_ms, peak_db}`. Use for auto-trim, smart-split, or pause-aware editing.\n- beats: returns `{tempo_bpm, beats_ms}` \u2014 beats_ms is an array of MILLISECOND positions. Empty for non-music. Use to align animations/zooms to a beat.\n- features: returns `{duration_ms, peak_db, rms_db, lufs, has_music, has_speech}` \u2014 loudness plus two INDEPENDENT hints \u2014 `has_music` (beats hold a steady period) and `has_speech` (there is audible content above a loudness floor; it is not a speech detector). Both can be true at once, e.g. narration over a music bed. Cheap dispatcher \u2014 call once to pick a mode, or for duration_ms to pass as add_audio's source_duration. When the words matter, trust transcript rather than these flags.\n\nSource: provide exactly one of mcp_upload_id (from upload tool) or file_url (already-public URL, e.g. a find(type='music') result or Clueso CDN file).\nOptional time range: range_start_ms / range_end_ms crops the analysis window.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "file_url": {
+    "description": "Public http(s) URL to the audio. Use when the file is already accessible (e.g. find(type='music') result, Clueso CDN). Validated against private/loopback ranges.",
+    "type": "string"
+   },
+   "mcp_upload_id": {
+    "description": "MCP upload ID from the upload_file tool. Use this OR file_url, not both.",
+    "type": "string"
+   },
+   "mode": {
+    "description": "Which analysis to run.",
+    "enum": [
+     "transcript",
+     "silences",
+     "beats",
+     "features"
+    ],
+    "type": "string"
+   },
+   "range_end_ms": {
+    "description": "End of analysis window in milliseconds. Default: whole file.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "range_start_ms": {
+    "description": "Start of analysis window in milliseconds. Default 0 (beginning).",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "silences_options": {
+    "description": "Options for mode='silences'.",
+    "properties": {
+     "min_pause_ms": {
+      "description": "Minimum pause length to report. Default 250ms.",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     },
+     "threshold_db": {
+      "description": "Silence threshold in dBFS. Default -40.",
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "transcript_options": {
+    "description": "Options for mode='transcript'.",
+    "properties": {
+     "language": {
+      "description": "Language code hint (e.g. 'en', 'es'). Auto-detected if omitted.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode"
+  ],
+  "type": "object"
+ },
+ "name": "analyze_audio",
+ "title": "Analyze audio"
+}

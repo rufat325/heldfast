@@ -1,0 +1,293 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Find fossil collections (localities) by area and geologic time \u2014 \"what has been dug up here, and from what rock.\" Each locality returns its location, age (named interval and Ma), formation and strata, lithology, depositional environment, and the count of co-occurring fossils. Filter by a clade-inclusive base_name (or base_id, the same clade by resolved taxon id), a named interval or max_ma/min_ma range, a lng/lat bounding box, a formation or lithology name, and/or an environment. Results page inline via limit/offset (the response discloses when more remain). Take a collection_no from a row and pass it \u2014 or the same bbox+interval \u2014 to paleobiology_search_occurrences to see the actual fauna found together.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "base_id": {
+    "description": "Clade-inclusive taxon filter by PBDB taxon id \u2014 the taxon_no from paleobiology_get_taxon, or accepted_no on an occurrence row. Same semantics as base_name, but unambiguous where a name is not (homonyms, synonyms, unresolved spellings). Supply this or base_name, never both.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "base_name": {
+    "description": "Clade-inclusive taxon filter \u2014 localities yielding this taxon or its descendants, e.g. \"Dinosauria\". Supply this or base_id, never both.",
+    "type": "string"
+   },
+   "environment": {
+    "description": "Depositional environment: \"marine\", \"terrestrial\", or \"freshwater\" (lacustrine + fluvial). Omit for all.",
+    "enum": [
+     "marine",
+     "terrestrial",
+     "freshwater"
+    ],
+    "type": "string"
+   },
+   "formation": {
+    "description": "Geologic formation name to filter by, e.g. \"Hell Creek\".",
+    "type": "string"
+   },
+   "interval": {
+    "description": "Named geologic interval bounding the age, e.g. \"Maastrichtian\". Alternative to max_ma/min_ma.",
+    "type": "string"
+   },
+   "latmax": {
+    "description": "Northern edge of the bounding box, decimal degrees (\u221290\u202690). Valid on its own \u2014 a lone latitude edge filters as a half-plane.",
+    "maximum": 90,
+    "minimum": -90,
+    "type": "number"
+   },
+   "latmin": {
+    "description": "Southern edge of the bounding box, decimal degrees (\u221290\u202690). Valid on its own \u2014 a lone latitude edge filters as a half-plane.",
+    "maximum": 90,
+    "minimum": -90,
+    "type": "number"
+   },
+   "limit": {
+    "default": 100,
+    "description": "Maximum localities to return per page (1\u2013500).",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "lithology": {
+    "description": "Lithology (rock type) to filter by, e.g. \"sandstone\".",
+    "type": "string"
+   },
+   "lngmax": {
+    "description": "Eastern edge of the bounding box, decimal degrees (\u2212180\u2026180). Longitude is a closed pair \u2014 supply lngmin with it or neither.",
+    "maximum": 180,
+    "minimum": -180,
+    "type": "number"
+   },
+   "lngmin": {
+    "description": "Western edge of the bounding box, decimal degrees (\u2212180\u2026180). Longitude is a closed pair \u2014 supply lngmax with it or neither.",
+    "maximum": 180,
+    "minimum": -180,
+    "type": "number"
+   },
+   "max_ma": {
+    "description": "Older age bound in millions of years ago. When paired with min_ma it must be strictly greater \u2014 max_ma is the deeper-time end of the window.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "min_ma": {
+    "description": "Younger age bound in millions of years ago. When paired with max_ma it must be strictly smaller \u2014 min_ma is the nearer-to-present end of the window.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Number of localities to skip \u2014 page with limit by advancing offset.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "paleobiology_search_collections",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "collections",
+     "attribution"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "attribution": {
+    "description": "CC-BY data attribution for the Paleobiology Database.",
+    "type": "string"
+   },
+   "cap": {
+    "description": "The per-page limit that was applied (set when truncated).",
+    "type": "number"
+   },
+   "collections": {
+    "description": "Matching localities for this page.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A fossil collection (locality) with its age, strata, lithology, and environment.",
+     "properties": {
+      "cc": {
+       "description": "ISO 3166-1 alpha-2 country code, when known.",
+       "type": "string"
+      },
+      "collection_name": {
+       "description": "Locality name, when recorded.",
+       "type": "string"
+      },
+      "collection_no": {
+       "description": "PBDB collection (locality) id \u2014 scope paleobiology_search_occurrences to it for the fauna found here.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "county": {
+       "description": "County, when known.",
+       "type": "string"
+      },
+      "early_interval": {
+       "description": "Named interval of the older age bound, e.g. \"Late Maastrichtian\".",
+       "type": "string"
+      },
+      "environment": {
+       "description": "Depositional environment as PBDB recorded it (finer than the filter enum), when known.",
+       "type": "string"
+      },
+      "formation": {
+       "description": "Geologic formation, when recorded.",
+       "type": "string"
+      },
+      "geological_group": {
+       "description": "Geologic group, when recorded.",
+       "type": "string"
+      },
+      "lat": {
+       "description": "MODERN latitude of the locality (where the rock is today).",
+       "type": "number"
+      },
+      "late_interval": {
+       "description": "Named interval of the younger bound \u2014 present when the age spans two intervals.",
+       "type": "string"
+      },
+      "lithology": {
+       "description": "Primary lithology (rock type), when recorded.",
+       "type": "string"
+      },
+      "lithology_description": {
+       "description": "Free-text lithology description, when recorded.",
+       "type": "string"
+      },
+      "lng": {
+       "description": "MODERN longitude of the locality (where the rock is today).",
+       "type": "number"
+      },
+      "max_ma": {
+       "description": "Older age bound in millions of years ago.",
+       "type": "number"
+      },
+      "member": {
+       "description": "Geologic member, when recorded.",
+       "type": "string"
+      },
+      "min_ma": {
+       "description": "Younger age bound in millions of years ago.",
+       "type": "number"
+      },
+      "n_occs": {
+       "description": "Number of fossil occurrences (co-occurring taxa) recorded at this locality.",
+       "type": "number"
+      },
+      "reference_no": {
+       "description": "PBDB bibliographic reference id for provenance.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "state": {
+       "description": "State/province, when known.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "collection_no"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `missing_filter`: The call carried only pagination fields \u2014 no taxon, time, place, formation, lithology, or environment filter. `conflicting_taxon_filter`: Both base_name and base_id were supplied \u2014 PBDB accepts only one clade selector. `incomplete_bbox`: Exactly one of lngmin/lngmax was supplied \u2014 a longitude box needs both edges. `inverted_ma_range`: min_ma was greater than or equal to max_ma \u2014 the age window is inverted or empty. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "missing_filter",
+         "conflicting_taxon_filter",
+         "incomplete_bbox",
+         "inverted_ma_range"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when no locality matched, when localities remain past this page, or when a filter value was not recognized and ignored.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of localities returned in this page (set when truncated).",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Total localities matching the filters upstream, across all pages.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when localities remain past this page \u2014 advance offset for more.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "paleobiology-mcp-server: search fossil collections"
+}

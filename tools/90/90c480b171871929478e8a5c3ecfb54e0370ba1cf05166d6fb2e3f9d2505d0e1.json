@@ -1,0 +1,313 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List preprints posted or revised within a date interval, optionally scoped to one server or a subject category. Returns 30 preprints per page (fixed by the API); pass `cursor` as an integer offset (0, 30, 60, \u2026) to step through additional pages. Abstracts are omitted by default to keep the page small \u2014 pass include_abstract: true for the whole page, or call biorxiv_get_preprint (up to 10 DOIs per call) for a few. When server=\"both\" (default), per-server pagination state is returned separately \u2014 use each server's `cursor` field for independent advancement. One server failing under server=\"both\" does not abort the call: the other server's page is still returned and the failed one is named in `failed[]`, marking the result set as partial rather than complete. Every attempted server failing is a different case and does abort the call, with a retryable upstream_unavailable (or rate_limited) error \u2014 an empty page would otherwise be indistinguishable from an interval that genuinely holds nothing. Call biorxiv_list_categories for valid category strings; a server that answers a category filter with its unfiltered listing is left out with a notice, and invalid_category is raised when no server applied it. `funder` limits the listing to bioRxiv preprints funded by that organization, given its ROR ID; an ID api.biorxiv.org has no funder record for raises invalid_funder rather than returning an empty page.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "category": {
+    "description": "Subject category filter, matched case-insensitively with \"_\" and \"-\" read as a space \u2014 \"Cell Biology\", \"cell biology\", \"cell_biology\", and \"cell-biology\" are the same filter. Use biorxiv_list_categories for valid values.",
+    "type": "string"
+   },
+   "cursor": {
+    "default": 0,
+    "description": "Integer page offset (0, 30, 60, \u2026). Defaults to 0 (first page).",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "end_date": {
+    "description": "End of the date interval (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "funder": {
+    "description": "Funder filter: the funder's ROR ID, bare (\"021nxhr62\" for the US National Science Foundation) or as a URL (\"https://ror.org/021nxhr62\"). bioRxiv only \u2014 medRxiv records carry no funder data, so server=\"both\" queries bioRxiv alone and server=\"medrxiv\" is rejected. Combines with category. Look the ID up by name at ror.org.",
+    "type": "string"
+   },
+   "include_abstract": {
+    "default": false,
+    "description": "Include each preprint's abstract. Defaults to false: abstracts make up about three quarters of a page, and every other field is returned either way.",
+    "type": "boolean"
+   },
+   "server": {
+    "default": "both",
+    "description": "Server to query. \"both\" fans out to bioRxiv and medRxiv in parallel.",
+    "enum": [
+     "biorxiv",
+     "medrxiv",
+     "both"
+    ],
+    "type": "string"
+   },
+   "start_date": {
+    "description": "Start of the date interval (YYYY-MM-DD).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "start_date",
+   "end_date"
+  ],
+  "type": "object"
+ },
+ "name": "biorxiv_list_recent",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "preprints",
+     "pagination",
+     "failed"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "categoryNote": {
+    "description": "Present when server=\"both\" and the category exists in only one server's taxonomy. Explains which server was queried and why the other was excluded.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_date_range`: end_date is before start_date, or either date is malformed. `invalid_category`: The category is not in the requested server's taxonomy, or api.biorxiv.org ignored it and returned the unfiltered listing on every server that answered. `invalid_funder`: funder is not a well-formed ROR ID (pattern or checksum), is combined with server=\"medrxiv\", or is a ROR ID api.biorxiv.org has no funder record for. `upstream_unavailable`: Every attempted server failed against api.biorxiv.org, so no page was retrieved and an empty interval could not be established. `rate_limited`: Every attempted server failed and at least one was rejected with HTTP 429 by api.biorxiv.org. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_date_range",
+         "invalid_category",
+         "invalid_funder",
+         "upstream_unavailable",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "failed": {
+    "description": "Servers that did not answer, so their records are missing from \"preprints\" and they have no \"pagination\" entry. Non-empty means this result set is partial \u2014 retry to include them. Only populated when server=\"both\", and never holding every attempted server: when none answered, the call fails with upstream_unavailable or rate_limited instead of returning a page. A single-server failure likewise surfaces as a tool error. Distinct from an exhausted pagination entry, where the server answered.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A server that did not answer.",
+     "properties": {
+      "error": {
+       "description": "What went wrong on that server.",
+       "type": "string"
+      },
+      "server": {
+       "description": "Server whose listing request failed.",
+       "enum": [
+        "biorxiv",
+        "medrxiv"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "server",
+      "error"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance on how to read this result set: which servers did not answer, which ignored the category filter (their unfiltered records are left out), that a funder filter limited server=\"both\" to bioRxiv, which cursors are past the end, and \u2014 when nothing came back \u2014 the applied filters and how to broaden them. All applicable qualifications are composed into one string.",
+    "type": "string"
+   },
+   "pagination": {
+    "additionalProperties": false,
+    "description": "Per-server pagination state. Advance each server independently.",
+    "properties": {
+     "biorxiv": {
+      "additionalProperties": false,
+      "description": "bioRxiv pagination state. Present when server is \"biorxiv\" or \"both\".",
+      "properties": {
+       "cursor": {
+        "description": "Current cursor (offset used for this page).",
+        "type": "number"
+       },
+       "exhausted": {
+        "description": "True when this cursor is past bioRxiv's last page: no records came back at a non-zero cursor. The API reports total 0 for an out-of-range cursor, so \"total\" is not the interval total here \u2014 step back to a lower cursor to read it.",
+        "type": "boolean"
+       },
+       "nextCursor": {
+        "description": "Cursor value for the next page, if any.",
+        "type": "number"
+       },
+       "total": {
+        "description": "Total preprints available on bioRxiv for these filters.",
+        "type": "number"
+       }
+      },
+      "required": [
+       "cursor",
+       "total"
+      ],
+      "type": "object"
+     },
+     "medrxiv": {
+      "additionalProperties": false,
+      "description": "medRxiv pagination state. Present when server is \"medrxiv\" or \"both\", except under a funder filter, which queries bioRxiv only.",
+      "properties": {
+       "cursor": {
+        "description": "Current cursor (offset used for this page).",
+        "type": "number"
+       },
+       "exhausted": {
+        "description": "True when this cursor is past medRxiv's last page: no records came back at a non-zero cursor. The API reports total 0 for an out-of-range cursor, so \"total\" is not the interval total here \u2014 step back to a lower cursor to read it.",
+        "type": "boolean"
+       },
+       "nextCursor": {
+        "description": "Cursor value for the next page, if any.",
+        "type": "number"
+       },
+       "total": {
+        "description": "Total preprints available on medRxiv for these filters.",
+        "type": "number"
+       }
+      },
+      "required": [
+       "cursor",
+       "total"
+      ],
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "preprints": {
+    "description": "Preprints in the requested date interval.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single preprint entry.",
+     "properties": {
+      "abstract": {
+       "description": "Abstract text. Present only when include_abstract is true.",
+       "type": "string"
+      },
+      "authorCorresponding": {
+       "description": "Corresponding author name.",
+       "type": "string"
+      },
+      "authorCorrespondingInstitution": {
+       "description": "Corresponding author institution.",
+       "type": "string"
+      },
+      "authors": {
+       "description": "Author list.",
+       "type": "string"
+      },
+      "awards": {
+       "description": "Grant award numbers from the funding statement, verbatim and deduplicated \u2014 one value can hold several grants run together without a separator. Absent when none. Funder names are not included: api.biorxiv.org attributes them to unrelated organizations.",
+       "items": {
+        "description": "One award value as upstream records it.",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "category": {
+       "description": "Subject category.",
+       "type": "string"
+      },
+      "date": {
+       "description": "Posting or revision date (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "doi": {
+       "description": "Preprint DOI.",
+       "type": "string"
+      },
+      "jatsxmlUrl": {
+       "description": "URL to the JATS XML full-text.",
+       "type": "string"
+      },
+      "license": {
+       "description": "License identifier.",
+       "type": "string"
+      },
+      "publishedJournalDoi": {
+       "description": "Published journal DOI when this preprint has been accepted.",
+       "type": "string"
+      },
+      "server": {
+       "description": "Source server (biorxiv or medrxiv).",
+       "type": "string"
+      },
+      "title": {
+       "description": "Title of the preprint.",
+       "type": "string"
+      },
+      "type": {
+       "description": "Preprint type.",
+       "type": "string"
+      },
+      "version": {
+       "description": "Revision version number.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "doi"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "List Recent Preprints"
+}

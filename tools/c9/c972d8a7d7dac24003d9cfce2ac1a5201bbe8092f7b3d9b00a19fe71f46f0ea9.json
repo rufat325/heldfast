@@ -1,0 +1,228 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search for datasets across all Socrata-powered government open-data portals, or scope to one portal with the domain parameter. Returns dataset IDs, names, domains, update timestamps, and column_names \u2014 the API field names SoQL takes, not display labels. Use socrata_get_dataset to fetch the typed column schema before writing queries \u2014 column_names carry no type information.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "categories": {
+    "description": "Filter by domain categories (e.g. [\"Public Safety\", \"Transportation\"]).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "domain": {
+    "description": "Scope search to a single portal by bare hostname (e.g. data.seattle.gov, data.cityofnewyork.us); URL forms like https://data.seattle.gov/ are accepted and reduced to the host. Omit to search all portals.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Number of results to return (1\u2013100). Default 10.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Pagination offset. Default 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "only": {
+    "description": "Filter by asset type. Omit to include all types. Usually \"datasets\" is what you want.",
+    "enum": [
+     "datasets",
+     "maps",
+     "files",
+     "calendars",
+     "stories"
+    ],
+    "type": "string"
+   },
+   "order": {
+    "description": "Sort order. Defaults to relevance. Use updated_at to surface recently-refreshed datasets.",
+    "enum": [
+     "relevance",
+     "page_views_total",
+     "created_at",
+     "updated_at"
+    ],
+    "type": "string"
+   },
+   "query": {
+    "description": "Full-text search across dataset names and descriptions. Omit to browse without filtering.",
+    "type": "string"
+   },
+   "tags": {
+    "description": "Filter by tags (e.g. [\"covid19\", \"permits\"]).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "name": "socrata_find_datasets",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "effectiveQuery": {
+    "description": "Search query applied, for reference.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: Discovery API returned 429. `unknown_domain`: The Discovery catalog does not index the domain (\"Domain not found\"). `invalid_domain`: The domain is not a hostname, even after dropping a URL scheme, path, or query. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "unknown_domain",
+         "invalid_domain"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Recovery hint when results are empty \u2014 echoes filters and suggests how to broaden. Absent on non-empty result pages.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Matching datasets. Empty when no results.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single matching dataset.",
+     "properties": {
+      "category": {
+       "description": "Domain category when available.",
+       "type": "string"
+      },
+      "column_names": {
+       "description": "API field names \u2014 the identifiers SoQL takes in select/where/group/order (e.g. cuisine_description), not display labels. Computed-region system columns are dropped; empty when the catalog lists no field names. No type info \u2014 call socrata_get_dataset for the typed schema.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "data_updated_at": {
+       "description": "ISO 8601 timestamp of last data update when available.",
+       "type": "string"
+      },
+      "dataset_id": {
+       "description": "Four-by-four dataset ID (e.g. kzjm-xkqj). Pass to socrata_get_dataset or socrata_query_dataset.",
+       "type": "string"
+      },
+      "description": {
+       "description": "Dataset description when available.",
+       "type": "string"
+      },
+      "domain": {
+       "description": "Portal domain hosting this dataset (e.g. data.seattle.gov).",
+       "type": "string"
+      },
+      "license": {
+       "description": "Dataset license when available.",
+       "type": "string"
+      },
+      "name": {
+       "description": "Dataset display name.",
+       "type": "string"
+      },
+      "tags": {
+       "description": "Associated tags.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "view_count": {
+       "description": "Total page views when available.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "dataset_id",
+      "domain",
+      "name",
+      "tags",
+      "column_names"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalCount": {
+    "description": "Total matches before pagination. 0 when empty.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Find Socrata Datasets"
+}

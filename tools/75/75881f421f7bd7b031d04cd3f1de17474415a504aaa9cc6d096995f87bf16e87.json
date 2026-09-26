@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Estonian company annual accounts \u2014 annual-report key figures from the official e-Business Register open data (RIK, CC BY 4.0, refreshed MONTHLY): EVERY published financial year since 2019 in one call \u2014 balance sheet (assets, equity, current/non-current liabilities, cash), revenue, employee expense, depreciation, operating profit, profit before tax, net profit and average FTE headcount, in EUR as published (null = not published, never zero). Statutory and consolidated figures kept apart. Filings submitted as PDF only carry no structured figures and are not served. No default-risk score is computed for this country yet: the response carries score_defaillance (statut non_evaluable, closed-list reasons \u2014 GET /v1/lecture explains them); never read it as a low score. Paid via x402 ($0.02 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "registrikood": {
+    "description": "8-digit Estonian registry code (registrikood, e-Business Register), e.g. 10003666",
+    "pattern": "^\\d{8}$",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "registrikood"
+  ],
+  "type": "object"
+ },
+ "name": "get_estonian_company_accounts",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Estonian annual accounts"
+}

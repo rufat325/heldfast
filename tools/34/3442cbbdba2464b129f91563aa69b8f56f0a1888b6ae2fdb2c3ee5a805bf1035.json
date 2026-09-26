@@ -1,0 +1,369 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Mesure si un texte est de la M\u00caME MAIN que trois textes de r\u00e9f\u00e9rence coll\u00e9s dans l\u2019appel. Aucun compte, aucun cr\u00e9dit, rien de conserv\u00e9 : ni les textes, ni leur empreinte, ni une ligne de journal. Il faut exactement 3 r\u00e9f\u00e9rences de 100 mots minimum chacune, dans des registres DIFF\u00c9RENTS (trois fois le m\u00eame contexte mesure le contexte, pas l\u2019auteur), et un texte \u00e0 juger d\u2019au moins 50 mots (150 pour sortir de la confiance basse). Rend une PROBABILIT\u00c9 calibr\u00e9e, son libell\u00e9, et les quatre dimensions stylom\u00e9triques (rythme, lexique, structure, signature) \u2014 qui ne sont PAS la d\u00e9composition de la probabilit\u00e9. `probability: null` avec un `unavailable` est une abstention MESUR\u00c9E, pas une panne : seul `embedding_layer` est un incident de notre c\u00f4t\u00e9. \u26a0\ufe0f CE N\u2019EST PAS verify_authorship. Ici la r\u00e9f\u00e9rence est un presse-papiers qu\u2019il faut recoller \u00e0 chaque appel ; l\u00e0-bas c\u2019est la voix GARD\u00c9E du compte \u2014 construite, versionn\u00e9e, capable de certifier, et mesurable sur un texte sans jamais reposter le corpus. Quand l\u2019essai a convaincu, la suite est un compte Kaneme sur https://kaneme.com et la connexion MCP authentifi\u00e9e, qui ouvre les 40 autres outils.",
+ "inputSchema": {
+  "additionalProperties": {},
+  "properties": {
+   "question": {
+    "description": "human = cette personne contre une IA (d\u00e9faut) ; author = cette personne contre un autre humain.",
+    "enum": [
+     "human",
+     "author"
+    ],
+    "type": "string"
+   },
+   "samples": {
+    "description": "Exactement 3 textes de la personne, 100 mots minimum chacun, dans des registres diff\u00e9rents.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "text": {
+    "description": "Le texte \u00e0 attribuer (50 mots minimum). Ne le prends PAS dans les r\u00e9f\u00e9rences : la mesure s\u2019abstiendrait (self_overlap).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "samples",
+   "text"
+  ],
+  "type": "object"
+ },
+ "name": "measure_authorship",
+ "outputSchema": {
+  "additionalProperties": {},
+  "properties": {
+   "confidence": {
+    "enum": [
+     "none",
+     "low",
+     "medium",
+     "high"
+    ],
+    "type": "string"
+   },
+   "dimensions": {
+    "description": "Sur quoi le texte s\u2019\u00e9carte des r\u00e9f\u00e9rences : rythme, lexique, structure, signature. Ce n\u2019est PAS la d\u00e9composition de `probability` \u2014 ces quatre-l\u00e0 lisent la couche stylom\u00e9trique, qui p\u00e8se 20 % du score fusionn\u00e9. Servies m\u00eame en abstention : ce sont des faits mesur\u00e9s, pas un verdict.",
+    "items": {
+     "additionalProperties": {},
+     "properties": {
+      "detail": {
+       "type": "string"
+      },
+      "id": {
+       "enum": [
+        "rythme",
+        "lexique",
+        "structure",
+        "signature"
+       ],
+       "type": "string"
+      },
+      "label": {
+       "type": "string"
+      },
+      "measured": {
+       "type": "boolean"
+      },
+      "passages": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "basis": {
+          "enum": [
+           "reference",
+           "preference",
+           "observation"
+          ],
+          "type": "string"
+         },
+         "end": {
+          "type": "number"
+         },
+         "observation": {
+          "type": "string"
+         },
+         "quote": {
+          "type": "string"
+         },
+         "start": {
+          "type": "number"
+         }
+        },
+        "required": [
+         "start",
+         "end",
+         "quote",
+         "observation",
+         "basis"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "score": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     "required": [
+      "id",
+      "label",
+      "measured",
+      "score",
+      "detail"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "dimensionsVersion": {
+    "type": "string"
+   },
+   "explanation": {
+    "additionalProperties": {},
+    "properties": {
+     "caveat": {
+      "type": "string"
+     },
+     "factors": {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "detail": {
+         "type": "string"
+        },
+        "gap": {
+         "anyOf": [
+          {
+           "maximum": 1,
+           "minimum": 0,
+           "type": "number"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "id": {
+         "enum": [
+          "cadence",
+          "registre",
+          "structure",
+          "lexique"
+         ],
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        },
+        "status": {
+         "enum": [
+          "aligned",
+          "mixed",
+          "different",
+          "unmeasured"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "label",
+        "status",
+        "gap",
+        "detail"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "summary": {
+      "type": "string"
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "version",
+     "summary",
+     "caveat",
+     "factors"
+    ],
+    "type": "object"
+   },
+   "label": {
+    "description": "Attribution en clair, d\u00e9riv\u00e9e de `probability`. Absent quand `unavailable` est pr\u00e9sent.",
+    "type": "string"
+   },
+   "language": {
+    "type": "string"
+   },
+   "measurement": {
+    "additionalProperties": false,
+    "properties": {
+     "axis": {
+      "enum": [
+       "q1",
+       "q2"
+      ],
+      "type": "string"
+     },
+     "calibrationLanguage": {
+      "enum": [
+       "fr",
+       "en"
+      ],
+      "type": "string"
+     },
+     "calibrationSource": {
+      "type": "string"
+     },
+     "calibrationVersion": {
+      "type": "string"
+     },
+     "candidateLanguage": {
+      "type": "string"
+     },
+     "contrast": {
+      "type": "string"
+     },
+     "display": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "limitation": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "scoreVersion": {
+      "type": "string"
+     },
+     "version": {
+      "const": "kaneme.measurement.v1",
+      "type": "string"
+     }
+    },
+    "required": [
+     "version",
+     "axis",
+     "contrast",
+     "display",
+     "calibrationLanguage",
+     "candidateLanguage",
+     "model",
+     "scoreVersion",
+     "calibrationVersion",
+     "calibrationSource",
+     "limitation"
+    ],
+    "type": "object"
+   },
+   "passages": {
+    "description": "Pr\u00e9sent uniquement avec `unavailable: \"mixed_language\"` : les phrases \u00e9crites dans l\u2019autre langue, avec leurs positions (`start`, `end`) dans le texte jug\u00e9. Les corriger ou les retirer, puis relancer.",
+    "items": {
+     "additionalProperties": {},
+     "properties": {
+      "end": {
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "language": {
+       "enum": [
+        "fr",
+        "en"
+       ],
+       "type": "string"
+      },
+      "start": {
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "text": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "text",
+      "start",
+      "end",
+      "language"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "probability": {
+    "anyOf": [
+     {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "question": {
+    "enum": [
+     "author",
+     "human"
+    ],
+    "type": "string"
+   },
+   "referenceLimited": {
+    "type": "boolean"
+   },
+   "unavailable": {
+    "description": "self_overlap \u2014 Le texte \u00e0 juger est d\u00e9j\u00e0, pour l\u2019essentiel, dans la r\u00e9f\u00e9rence qui le juge : la mesure porterait sur elle-m\u00eame. Juge un texte que la r\u00e9f\u00e9rence ne contient pas \u2014 ou retire-le du corpus de cette voix. \u00b7 unsupported_language \u2014 Le texte ne se lit ni en fran\u00e7ais ni en anglais, m\u00eame en d\u00e9partageant ces deux seules langues : le verdict n\u2019est calibr\u00e9 que sur elles, chacune avec son propre moteur. Lis le champ `language` de la r\u00e9ponse avant d\u2019appeler : hors du fran\u00e7ais et de l\u2019anglais, ne demande pas de verdict. \u00b7 voice_language_mismatch \u2014 Le texte et la voix de r\u00e9f\u00e9rence ne sont pas \u00e9crits dans la m\u00eame langue : chaque moteur ne compare un texte qu\u2019\u00e0 une voix de sa langue. Juge ce texte avec une voix \u00e9crite dans sa langue \u2014 cr\u00e9e-la si elle n\u2019existe pas. Ne le traduis pas pour contourner ce refus. \u00b7 mixed_language \u2014 Le texte est dans la langue de la voix, mais au moins une phrase enti\u00e8re est dans l\u2019autre langue servie : la mesure m\u00ealerait deux moteurs. Corrige ou retire les passages renvoy\u00e9s dans `passages` (positions dans le texte), puis relance. Les mots isol\u00e9s \u2014 anglicismes, marques \u2014 et les citations entre guillemets ne d\u00e9clenchent pas ce refus. \u00b7 embedding_layer \u2014 La couche de mesure profonde n\u2019a pas r\u00e9pondu ; sans elle, aucune probabilit\u00e9 n\u2019est calibr\u00e9e. R\u00e9essaie dans un instant si la couche de mesure redevient disponible. \u00b7 out_of_distribution \u2014 Le panel de contraste ne couvre pas le registre de cette voix : la marge existerait, elle ne voudrait rien dire. Verse dans la voix des textes de r\u00e9f\u00e9rence plus proches du registre mesur\u00e9. \u00b7 calibration_mismatch \u2014 La version du moteur ne correspond pas \u00e0 une calibration valid\u00e9e. Attends la correction de la configuration du moteur. Ne modifie ni ne traduis le texte pour contourner ce refus.",
+    "enum": [
+     "self_overlap",
+     "unsupported_language",
+     "voice_language_mismatch",
+     "mixed_language",
+     "embedding_layer",
+     "out_of_distribution",
+     "calibration_mismatch"
+    ],
+    "type": "string"
+   },
+   "version": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "question",
+   "probability",
+   "referenceLimited",
+   "version",
+   "dimensions",
+   "dimensionsVersion"
+  ],
+  "type": "object"
+ },
+ "title": "Mesure d\u2019essai, sans compte"
+}

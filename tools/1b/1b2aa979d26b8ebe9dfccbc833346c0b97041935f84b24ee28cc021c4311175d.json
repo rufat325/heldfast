@@ -1,0 +1,242 @@
+{
+ "_meta": {
+  "apiVersion": "1.0.0",
+  "examples": [
+   {
+    "input": {
+     "verbosity": "summary",
+     "zipBase64": "<zip-base64>"
+    },
+    "title": "Is this archive intact?"
+   },
+   {
+    "input": {
+     "entries": "failed",
+     "zipBase64": "<zip-base64>"
+    },
+    "title": "Which entries failed?"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Deep verification in one call \u2014 zipnative's verifyZip report verbatim: eager structural validation, then every entry's CRC-32 / size / local-header agreement. `ok` is true when the structure is valid AND every verifiable entry passed. This tool NEVER fails for a problem with the archive: a structural refusal lands in `error` {code: ZIP_*, message}; an unverifiable entry is `skipped` ('encrypted' | 'stream-only-codec') and does not fail the archive, while an entry whose method has no codec here (anything but 0 store / 8 deflate) is reported FAILED, not skipped \u2014 the engine's verdict verbatim. Only caller mistakes (bad limits, bad input) are isError. `entries:'failed'` keeps the rows you act on; `verbosity:'summary'` keeps the verdict + counts. Verify before you trust: run it on any archive from an untrusted source before extract_zip.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "entries": {
+    "default": "all",
+    "description": "Which per-entry rows to return: 'all' (default), only 'failed' (ok:false, not skipped), only 'skipped', or 'none' (verdict + counts only).",
+    "enum": [
+     "all",
+     "failed",
+     "skipped",
+     "none"
+    ],
+    "type": "string"
+   },
+   "fields": {
+    "description": "Dot-path projection applied after verbosity (e.g. ['entryCount', 'entries.name']); array segments map over elements; unmatched paths are reported in _meta.unmatchedFields.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "limits": {
+    "additionalProperties": false,
+    "description": "Override zipnative's named security bounds for this call (CWE-400 / CWE-409 guards). Every key is optional; absent keys keep the engine defaults (maxEntries 100000, maxEntryUncompressedSize 1 GiB, maxTotalUncompressedSize 8 GiB, maxCompressionRatio 1024, maxNameBytes 4096, maxExtraFieldBytes 65535, maxCommentBytes 65535, maxCentralDirectoryBytes 256 MiB). Values above the operator ceilings (ZIPNATIVE_MCP_MAX_UNCOMPRESSED_BYTES, ZIPNATIVE_MCP_MAX_ENTRIES) are refused with LIMIT_CEILING_EXCEEDED. Raise a bound for trusted input only.",
+    "properties": {
+     "maxCentralDirectoryBytes": {
+      "description": "Maximum central-directory size in bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCommentBytes": {
+      "description": "Maximum comment length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCompressionRatio": {
+      "description": "Maximum declared uncompressed/compressed ratio for entries >= 1 KiB compressed (zip-bomb guard).",
+      "minimum": 1,
+      "type": "number"
+     },
+     "maxEntries": {
+      "description": "Maximum central-directory entry count.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxEntryUncompressedSize": {
+      "description": "Maximum decompressed size of one entry, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxExtraFieldBytes": {
+      "description": "Maximum extra-field block length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxNameBytes": {
+      "description": "Maximum entry-name length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxTotalUncompressedSize": {
+      "description": "Maximum total decompressed size across an extraction, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "maxEntries": {
+    "default": 1000,
+    "description": "Cap on returned rows (the counts always cover every entry); `entriesTruncated` flags a cut.",
+    "maximum": 100000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "verbosity": {
+    "default": "full",
+    "description": "'summary' returns only the scalar verdict fields (drops arrays and payloads) \u2014 the token-frugal form.",
+    "enum": [
+     "full",
+     "summary"
+    ],
+    "type": "string"
+   },
+   "zipBase64": {
+    "description": "The archive bytes as base64 (exactly once; a data: URI prefix is tolerated). Exclusive with zipPath. Decoded size \u2264 128 MiB.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "zipPath": {
+    "description": "Relative path of an archive inside the ZIPNATIVE_MCP_OUTPUT_DIR sandbox (no absolute paths, no '..'; container extensions only: .zip .jar .docx .epub \u2026). Exclusive with zipBase64. Lets a create/modify \u2192 verify/extract chain avoid re-sending the bytes.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "verify_zip",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Deep verification report. Every property is optional because the result can be projected: verbosity:'summary' returns only the scalar summary fields, fields:[...] keeps a dot-path subset. Defaults return the full shape.",
+  "properties": {
+   "diagnosticCount": {
+    "description": "summary only: number of diagnostics.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "diagnostics": {
+    "description": "Non-fatal conformance concerns the engine raised while parsing or writing (de-duplicated by code + entry, at most 200). Empty for a clean archive. Codes: ZIP_PREPENDED_DATA, ZIP_MULTIPLE_EOCD, ZIP_NAME_MISMATCH, ZIP_UNICODE_PATH_CONFLICT, ZIP_INVALID_UTF8_NAME, ZIP_DUPLICATE_NAME, ZIP_EXTRA_FIELD_MALFORMED, ZIP_ZIP64_EXTRA_IGNORED, ZIP_TIMESTAMP_NOT_PINNED, ZIP_NONDETERMINISTIC_CODEC, ZIP_DEAD_BYTES_RATIO.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "entryName": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning",
+        "info"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "entries": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "crcMatch": {
+       "type": "boolean"
+      },
+      "localHeaderMatch": {
+       "type": "boolean"
+      },
+      "name": {
+       "type": "string"
+      },
+      "ok": {
+       "type": "boolean"
+      },
+      "sizeMatch": {
+       "type": "boolean"
+      },
+      "skipped": {
+       "enum": [
+        "encrypted",
+        "stream-only-codec"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "entriesTruncated": {
+    "type": "boolean"
+   },
+   "entryCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "error": {
+    "additionalProperties": false,
+    "description": "The structural refusal when the archive could not even be opened (frozen ZIP_* code + engine message), else null.",
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     }
+    },
+    "type": [
+     "object",
+     "null"
+    ]
+   },
+   "failedCount": {
+    "description": "Entries with a CRC / size / local-header mismatch.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "skippedCount": {
+    "description": "Entries that could not be verified (encrypted, stream-only codec).",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "verifiedCount": {
+    "description": "Entries that passed every check.",
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Verify archive integrity (one call, never throws for archive problems)"
+}

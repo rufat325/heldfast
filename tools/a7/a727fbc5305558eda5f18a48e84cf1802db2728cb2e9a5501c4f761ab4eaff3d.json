@@ -1,0 +1,252 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get historical daily stock prices (OHLC). Returns a summary by default; set series=true to get the full daily price series (for backtesting / charting).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "limit": {
+    "default": 500,
+    "description": "Max rows of the daily series to return when series=true.",
+    "maximum": 3000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "period": {
+    "default": "1y",
+    "description": "Look-back window",
+    "enum": [
+     "1y",
+     "3y",
+     "5y",
+     "10y"
+    ],
+    "type": "string"
+   },
+   "series": {
+    "default": false,
+    "description": "If true, return the full daily OHLC series (up to `limit` rows) instead of just a summary.",
+    "type": "boolean"
+   },
+   "ticker": {
+    "description": "Stock ticker symbol",
+    "maxLength": 200,
+    "type": "string"
+   }
+  },
+  "required": [
+   "ticker"
+  ],
+  "type": "object"
+ },
+ "name": "get_stock_price",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "days_requested": {
+    "type": "integer"
+   },
+   "latest": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "close": {
+        "anyOf": [
+         {
+          "pattern": "^-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+       },
+       "date": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "date",
+       "close"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "period": {
+    "type": "string"
+   },
+   "period_high_close": {
+    "$ref": "#/properties/latest/anyOf/0/properties/close"
+   },
+   "period_low_close": {
+    "$ref": "#/properties/latest/anyOf/0/properties/close"
+   },
+   "period_start": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "close": {
+        "$ref": "#/properties/latest/anyOf/0/properties/close"
+       },
+       "date": {
+        "$ref": "#/properties/latest/anyOf/0/properties/date"
+       }
+      },
+      "required": [
+       "date",
+       "close"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "plan_limit": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "continuation": {
+        "$ref": "#/properties/latest/anyOf/0/properties/date"
+       },
+       "date_basis": {
+        "$ref": "#/properties/latest/anyOf/0/properties/date"
+       },
+       "effective_period": {
+        "$ref": "#/properties/latest/anyOf/0/properties/date"
+       },
+       "policy_version": {
+        "$ref": "#/properties/latest/anyOf/0/properties/date"
+       },
+       "row_cap": {
+        "anyOf": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "truncated": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "window_end": {
+        "$ref": "#/properties/latest/anyOf/0/properties/date"
+       },
+       "window_start": {
+        "$ref": "#/properties/latest/anyOf/0/properties/date"
+       }
+      },
+      "required": [
+       "policy_version",
+       "window_start",
+       "window_end",
+       "effective_period",
+       "date_basis",
+       "row_cap",
+       "truncated",
+       "continuation"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The Free/keyless plan limits ko.io applied to this answer (null for paid callers)"
+   },
+   "rows": {
+    "description": "The rows rendered: the full series (series=true, up to limit) or the latest 10",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "close": {
+       "$ref": "#/properties/latest/anyOf/0/properties/close"
+      },
+      "date": {
+       "$ref": "#/properties/latest/anyOf/0/properties/date"
+      },
+      "high": {
+       "$ref": "#/properties/latest/anyOf/0/properties/close"
+      },
+      "low": {
+       "$ref": "#/properties/latest/anyOf/0/properties/close"
+      },
+      "open": {
+       "$ref": "#/properties/latest/anyOf/0/properties/close"
+      },
+      "volume": {
+       "$ref": "#/properties/latest/anyOf/0/properties/close"
+      }
+     },
+     "required": [
+      "date",
+      "open",
+      "high",
+      "low",
+      "close",
+      "volume"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "rows_returned": {
+    "type": "integer"
+   },
+   "ticker": {
+    "type": "string"
+   },
+   "total_return_pct": {
+    "anyOf": [
+     {
+      "$ref": "#/properties/latest/anyOf/0/properties/close/anyOf/0"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "(latest close - period-start close) / period-start close x 100, from the returned rows"
+   }
+  },
+  "required": [
+   "ticker",
+   "period",
+   "days_requested",
+   "rows_returned",
+   "latest",
+   "period_start",
+   "total_return_pct",
+   "period_high_close",
+   "period_low_close",
+   "rows",
+   "plan_limit"
+  ],
+  "type": "object"
+ }
+}

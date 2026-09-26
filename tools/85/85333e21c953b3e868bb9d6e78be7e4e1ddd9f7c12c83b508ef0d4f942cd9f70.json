@@ -1,0 +1,525 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Whole-portfolio risk and diversification analysis for 2 to 30 US stocks or ETFs: which positions are redundant, where the risk concentrates (Euler risk contributions), what actually diversifies, portfolio volatility, beta and market R2, diversification ratio, effective number of independent bets, correlation blocks that move together, max drawdown of the mix vs SPY, and issuer-sourced holdings-overlap warnings between the ETFs held. Use compare_pair for just two assets. Covers ~4,700 US-listed stocks and ETFs only (no crypto, no foreign listings, no inverse/leveraged short funds, no intraday data); figures use weekly closes and refresh once per trading day. Unknown tickers return an error: resolve them with resolve_symbol first.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "detail": {
+    "description": "auto (default) includes the correlation matrix up to 12 positions; compact never includes it",
+    "enum": [
+     "auto",
+     "compact"
+    ],
+    "type": "string"
+   },
+   "positions": {
+    "description": "The holdings. Example: [{symbol:'AAPL',weight:40},{symbol:'MSFT',weight:30},{symbol:'SCHD',weight:30}]",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "symbol": {
+       "description": "Ticker, e.g. AAPL or SCHD",
+       "type": "string"
+      },
+      "weight": {
+       "description": "Optional weight, any scale (0.4, 40 or a dollar amount); normalized to sum to 1. Give weights for all positions or for none (equal-weight).",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "symbol"
+     ],
+     "type": "object"
+    },
+    "maxItems": 30,
+    "minItems": 2,
+    "type": "array"
+   }
+  },
+  "required": [
+   "positions"
+  ],
+  "type": "object"
+ },
+ "name": "analyze_portfolio",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "clusters": {
+    "additionalProperties": true,
+    "properties": {
+     "blocks": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "avg_intra_rho": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "members": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "risk_contribution_pct": {
+         "type": "number"
+        },
+        "summary": {
+         "type": "string"
+        },
+        "weight_pct": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "members",
+        "avg_intra_rho",
+        "weight_pct",
+        "risk_contribution_pct",
+        "summary"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "merges": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "join": {
+         "items": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "type": "array"
+        },
+        "rho_equiv": {
+         "type": [
+          "number",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "join",
+        "rho_equiv"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "singletons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "blocks",
+     "singletons"
+    ],
+    "type": "object"
+   },
+   "correlation_matrix": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "lower_triangle": {
+        "items": {
+         "items": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "type": "array"
+        },
+        "type": "array"
+       },
+       "order": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "order",
+       "lower_triangle"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "drawdown": {
+    "additionalProperties": true,
+    "properties": {
+     "current_dd_pct": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "mdd_pct": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "peak_date": {
+      "type": "string"
+     },
+     "recovered": {
+      "type": "boolean"
+     },
+     "spy_mdd_pct": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "trough_date": {
+      "type": "string"
+     },
+     "worst_weeks": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "date": {
+         "type": "string"
+        },
+        "ret_pct": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "date",
+        "ret_pct"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "mdd_pct",
+     "worst_weeks"
+    ],
+    "type": "object"
+   },
+   "etf_overlap_warnings": {
+    "items": {
+     "additionalProperties": true,
+     "properties": {
+      "a": {
+       "type": "string"
+      },
+      "b": {
+       "type": "string"
+      },
+      "common_holdings": {
+       "type": "number"
+      },
+      "note": {
+       "type": "string"
+      },
+      "overlap_pct": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "a",
+      "b",
+      "overlap_pct",
+      "note"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "flags": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "meta": {
+    "additionalProperties": true,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "assumption": {
+      "type": "string"
+     },
+     "precision_note": {
+      "type": "string"
+     },
+     "weights_normalized": {
+      "type": "boolean"
+     },
+     "window_limited_by": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "window_weeks": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "as_of",
+     "window_weeks"
+    ],
+    "type": "object"
+   },
+   "notes": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "portfolio": {
+    "additionalProperties": true,
+    "properties": {
+     "avg_correlation": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "beta_vs_spy": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "diversification_ratio": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "dr_squared": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "effective_positions": {
+      "additionalProperties": true,
+      "properties": {
+       "by_risk": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "by_weight": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "by_weight",
+       "by_risk"
+      ],
+      "type": "object"
+     },
+     "headline": {
+      "type": "string"
+     },
+     "r2_market": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "risk_reduction_pct": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "vol_ann_pct": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "weighted_avg_vol_pct": {
+      "type": [
+       "number",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "vol_ann_pct",
+     "weighted_avg_vol_pct",
+     "beta_vs_spy",
+     "r2_market",
+     "avg_correlation",
+     "diversification_ratio",
+     "risk_reduction_pct",
+     "effective_positions",
+     "headline"
+    ],
+    "type": "object"
+   },
+   "positions": {
+    "items": {
+     "additionalProperties": true,
+     "properties": {
+      "avg_corr_with_rest": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "beta": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "flag": {
+       "type": "string"
+      },
+      "kind": {
+       "type": "string"
+      },
+      "most_correlated_with": {
+       "anyOf": [
+        {
+         "additionalProperties": true,
+         "properties": {
+          "rho": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "symbol": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "symbol",
+          "rho"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "name": {
+       "type": "string"
+      },
+      "risk_contribution_pct": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "role": {
+       "type": "string"
+      },
+      "symbol": {
+       "type": "string"
+      },
+      "vol_ann_pct": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "weight_pct": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "symbol",
+      "weight_pct",
+      "vol_ann_pct",
+      "beta",
+      "risk_contribution_pct",
+      "avg_corr_with_rest",
+      "most_correlated_with",
+      "role"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "redundant_pairs": {
+    "items": {
+     "additionalProperties": true,
+     "properties": {
+      "a": {
+       "type": "string"
+      },
+      "b": {
+       "type": "string"
+      },
+      "note": {
+       "type": "string"
+      },
+      "rho": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "a",
+      "b",
+      "rho"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "terms": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "meta",
+   "portfolio",
+   "positions",
+   "redundant_pairs",
+   "clusters",
+   "etf_overlap_warnings",
+   "drawdown",
+   "flags",
+   "notes"
+  ],
+  "type": "object"
+ },
+ "title": "Analyze a portfolio"
+}

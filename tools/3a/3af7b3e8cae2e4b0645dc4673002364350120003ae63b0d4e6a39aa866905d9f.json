@@ -1,0 +1,173 @@
+{
+ "annotations": {
+  "title": "Render Timeline Video"
+ },
+ "description": "Render a page's animation timelines to an MP4 video. The page's scripts must expose `window.__timelines` \u2014 objects with `duration()` and `pause(t)` (a paused gsap.timeline registered there works as-is). Each frame seeks every timeline to t=i/fps and paints the viewport, so the output is deterministic \u2014 no wall clock in the pixel values. Audio: `narration[]` places TTS/voice clips at start times (mixed into one AAC track), `audio` adds looped background music, and `subtitles_srt` muxes an SRT as a soft mov_text track and (by default, `burn_subtitles: false` to opt out) burns the same cues into the frame pixels \u2014 QuickTime, WeChat and most social embeds ignore the soft track. Requires ffmpeg on the server. Returns base64 MP4 (H.264, yuv420p) plus frame count and durations.",
+ "inputSchema": {
+  "$defs": {
+   "RenderNarrationClip": {
+    "description": "render_video `narration[]`: one voiceover clip placed at a start time \u2014\ngenerate with any TTS, hand us the URL; all clips mix into one AAC track.",
+    "properties": {
+     "start_secs": {
+      "default": 0.0,
+      "description": "Seconds from video t=0 where this line starts. Default 0.",
+      "format": "double",
+      "type": "number"
+     },
+     "url": {
+      "description": "URL of the voice clip (any TTS output; mp3/wav/ogg/m4a).",
+      "type": "string"
+     },
+     "volume": {
+      "default": 1.0,
+      "description": "Linear multiplier 0..=2. Default 1.",
+      "format": "float",
+      "type": "number"
+     }
+    },
+    "required": [
+     "url"
+    ],
+    "type": "object"
+   },
+   "RenderVideoAudio": {
+    "description": "render_video `audio`: background music track \u2014 fetched, looped to cover\nthe video, volume-scaled, optionally faded out at the end.",
+    "properties": {
+     "fade_out_secs": {
+      "default": 0.0,
+      "description": "Fade out over the final N seconds. Default 0 (none).",
+      "format": "float",
+      "type": "number"
+     },
+     "loop_audio": {
+      "default": true,
+      "description": "Loop to cover the whole video. Default true.",
+      "type": "boolean"
+     },
+     "url": {
+      "description": "URL of the music file. mp3/wav/ogg/m4a \u2014 probed by content.",
+      "type": "string"
+     },
+     "volume": {
+      "default": 1.0,
+      "description": "Linear multiplier 0..=2; 1 = as authored. Default 1.",
+      "format": "float",
+      "type": "number"
+     }
+    },
+    "required": [
+     "url"
+    ],
+    "type": "object"
+   }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "audio": {
+    "anyOf": [
+     {
+      "$ref": "#/$defs/RenderVideoAudio"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Background music: looped to cover the video, volume-scaled, faded\nout at the tail."
+   },
+   "burn_subtitles": {
+    "default": null,
+    "description": "Burn the cues into the frame pixels too (hardsub) \u2014 on by default\nwhen `subtitles_srt` is present; QuickTime, WeChat and most social\nembeds ignore the soft mov_text track. `false` keeps the soft track\nonly.",
+    "type": [
+     "boolean",
+     "null"
+    ]
+   },
+   "fps": {
+    "default": 24.0,
+    "description": "Frames per second. Default 24.",
+    "format": "double",
+    "type": "number"
+   },
+   "height": {
+    "default": 720,
+    "description": "Viewport height in CSS pixels. Default 720.",
+    "format": "uint32",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "hold_tail_secs": {
+    "default": 0.5,
+    "description": "Freeze the final timeline state for this many extra seconds. Default 0.5.",
+    "format": "double",
+    "type": "number"
+   },
+   "max_duration_secs": {
+    "default": 120.0,
+    "description": "Safety cap on timeline + hold tail, seconds. Default 120.",
+    "format": "double",
+    "type": "number"
+   },
+   "narration": {
+    "default": [],
+    "description": "Voiceover clips, each starting at its own time (any TTS output;\nmixed into one AAC track).",
+    "items": {
+     "$ref": "#/$defs/RenderNarrationClip"
+    },
+    "type": "array"
+   },
+   "subtitles_language": {
+    "default": null,
+    "description": "ISO language tag for the subtitle track, e.g. \"eng\" / \"zh\".",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "subtitles_srt": {
+    "default": null,
+    "description": "Inline SRT subtitles muxed as a soft (toggleable) mov_text track.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "tls_fingerprint": {
+    "default": null,
+    "description": "TLS fingerprint override (stealth mode only)",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "url": {
+    "description": "Page URL whose scripts register timelines in `window.__timelines`\n(GSAP-style objects with `duration()` + `pause(t)`).",
+    "type": "string"
+   },
+   "use_proxy": {
+    "default": false,
+    "description": "Route through proxy (for blocked foreign sites)",
+    "type": "boolean"
+   },
+   "wait_timelines_ms": {
+    "default": 10000,
+    "description": "How long to wait for `window.__timelines` to appear, ms. Default 10000.",
+    "format": "uint64",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "width": {
+    "default": 1280,
+    "description": "Viewport width in CSS pixels (floored to even \u2014 yuv420p). Default 1280.",
+    "format": "uint32",
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "url"
+  ],
+  "type": "object"
+ },
+ "name": "render_video"
+}

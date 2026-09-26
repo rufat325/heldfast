@@ -1,0 +1,157 @@
+{
+ "description": "Create or update gossipcat team. Default mode is \"merge\" \u2014 adds/updates specified agents while keeping existing ones. Use \"replace\" to overwrite entire config. Detects host environment (unknown) and supports both native Claude Code subagents (.claude/agents/*.md) and custom provider agents (Anthropic, OpenAI, Google Gemini).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "agents": {
+    "description": "Array of agents to create",
+    "items": {
+     "properties": {
+      "base_url": {
+       "description": "Custom base URL for OpenAI-compatible gateways. For openai: defaults to https://api.openai.com/v1. For openclaw: defaults to http://127.0.0.1:18789/v1.",
+       "type": "string"
+      },
+      "custom_model": {
+       "description": "For custom agents: model ID (e.g. gemini-2.5-pro, gpt-4o, claude-sonnet-4-6)",
+       "type": "string"
+      },
+      "description": {
+       "description": "For native agents: one-line description for the .claude/agents/*.md frontmatter",
+       "type": "string"
+      },
+      "id": {
+       "description": "Agent ID (lowercase, hyphens). e.g. \"claude-reviewer\", \"gemini-impl\"",
+       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$",
+       "type": "string"
+      },
+      "instructions": {
+       "description": "For native agents: full instructions (markdown body of .claude/agents/*.md)",
+       "type": "string"
+      },
+      "maxToolTurns": {
+       "description": "Per-agent tool-turn budget override (integer in [1, 100]). Defaults to 15 when omitted. Useful for slow-reasoning agents (e.g. deepseek-reasoner) that need more turns per cross-review. NOTE: re-declaring an existing agent replaces its whole config entry (even in merge mode) \u2014 omitting this field on a re-declare resets the agent to the default.",
+       "maximum": 100,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "model": {
+       "description": "For native agents: Claude model tier",
+       "enum": [
+        "opus",
+        "sonnet",
+        "haiku",
+        "fable"
+       ],
+       "type": "string"
+      },
+      "provider": {
+       "description": "For custom agents: LLM provider",
+       "enum": [
+        "anthropic",
+        "openai",
+        "deepseek",
+        "grok",
+        "openclaw",
+        "google",
+        "local"
+       ],
+       "type": "string"
+      },
+      "role": {
+       "description": "Agent role \u2014 freeform, e.g. \"ui-architect\", \"security-auditor\", \"reviewer\"",
+       "type": "string"
+      },
+      "skills": {
+       "description": "Skill tags (e.g. [\"typescript\", \"code_review\"])",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "type": {
+       "description": "\"native\" = Claude Code subagent (.claude/agents/*.md), uses Anthropic API on the relay. \"custom\" = any provider (anthropic/openai/google/local)",
+       "enum": [
+        "native",
+        "custom"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "instruction_agent_ids": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    ],
+    "description": "Agent IDs for instruction update"
+   },
+   "instruction_mode": {
+    "description": "How to apply instruction update",
+    "enum": [
+     "append",
+     "replace"
+    ],
+    "type": "string"
+   },
+   "instruction_update": {
+    "description": "Instruction text to append/replace",
+    "type": "string"
+   },
+   "main_model": {
+    "description": "OPTIONAL model ID for the orchestrator (e.g. gemini-2.5-pro, claude-sonnet-4-6, gpt-4o). Only honored alongside an explicit main_provider \u2014 main_model on its own is ignored and the preserved/default main_agent is kept. Omit it when omitting main_provider.",
+    "type": "string"
+   },
+   "main_provider": {
+    "description": "OPTIONAL provider for the orchestrator LLM. Omit to keep the current orchestrator: the existing .gossip/config.json main_agent is preserved in BOTH merge and replace modes (replace replaces the team, not the orchestrator choice); on a fresh setup with nothing to preserve it resolves to \"none\" \u2014 the zero-config native-host orchestration state, not Google. Pass it explicitly (together with main_model) to change the orchestrator. Use \"none\" when no API key is available \u2014 features degrade gracefully to profile-based. Note: \"native\" is not valid here (use it only for utility_model or per-agent overrides).",
+    "enum": [
+     "anthropic",
+     "openai",
+     "deepseek",
+     "grok",
+     "openclaw",
+     "google",
+     "local",
+     "none"
+    ],
+    "type": "string"
+   },
+   "mirror_hooks": {
+    "default": false,
+    "description": "Opt-in (default false): install the activity-mirror hooks (UserPromptSubmit/Stop/PostToolUse) into .claude/settings.local.json so the live CC session is mirrored into the dashboard. OFF by default because these hooks mirror tool I/O externally \u2014 only enable after verifying the relay + dashboard render are ready.",
+    "type": "boolean"
+   },
+   "mode": {
+    "default": "merge",
+    "description": "\"merge\" (default) keeps existing agents and adds/updates the ones specified. \"replace\" overwrites entire config. \"update_instructions\" updates agent instructions without touching the config.",
+    "enum": [
+     "merge",
+     "replace",
+     "update_instructions"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "agents"
+  ],
+  "type": "object"
+ },
+ "name": "gossip_setup"
+}

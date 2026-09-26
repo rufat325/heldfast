@@ -1,0 +1,51 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "R\u00e9cup\u00e8re le d\u00e9tail d'un \u00e9tablissement par son SIRET (14 chiffres) via l'API SIRENE INSEE V3.11 : raison sociale de l'unit\u00e9 l\u00e9gale, enseigne commerciale, NAF de l'\u00e9tablissement, dates de cr\u00e9ation/fermeture, statut administratif actif/ferm\u00e9, adresse compl\u00e8te, tranche d'effectif. Source : SIRENE INSEE V3.11 (api.insee.fr).\n\n**Format de retour** : objet `LookupResult` discrimin\u00e9 par `found`.\n- `found: true` \u2192 \u00e9tablissement \u00e0 plat (`siret`, `siren`, `actif`, `dateFermeture`, `enseigne`, `adresse`, \u2026)\n- `found: false` \u2192 `{ found: false, key, lookupStatus: 'not_found', message }`. Cas typiques : cl\u00e9 `INSEE_SIRENE_API_KEY` non configur\u00e9e c\u00f4t\u00e9 serveur (message explicite), SIRET inexistant SIRENE, diffusion partielle INSEE.\n\n\u26a0\ufe0f Diff\u00e9rence avec `entreprise_by_siren` : ce tool renvoie UN \u00e9tablissement pr\u00e9cis (un site), alors que `entreprise_by_siren` renvoie l'unit\u00e9 l\u00e9gale + sa liste d'\u00e9tablissements. Pour d\u00e9tecter un SIRET ferm\u00e9 encore list\u00e9 actif c\u00f4t\u00e9 FINESS, lire `actif: false` + `dateFermeture`.\n\n**Pas de coords** : l'endpoint INSEE `/siret/<siret>` ne renvoie pas les coordonn\u00e9es GPS. Pour g\u00e9olocaliser, croiser avec `geocode_adresse` c\u00f4t\u00e9 caller ou utiliser `entreprises_in_radius`.\n\nRate limit INSEE : 30 req/min (retry-after g\u00e9r\u00e9 c\u00f4t\u00e9 serveur).",
+ "inputSchema": {
+  "properties": {
+   "siret": {
+    "description": "SIRET exact, 14 chiffres.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "siret"
+  ],
+  "type": "object"
+ },
+ "name": "etablissement_by_siret",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

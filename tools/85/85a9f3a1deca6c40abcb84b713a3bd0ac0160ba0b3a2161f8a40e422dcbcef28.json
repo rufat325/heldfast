@@ -1,0 +1,188 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "pages": [
+      0,
+      2,
+      4
+     ],
+     "pdfBase64": "<base64>"
+    },
+    "title": "Keep pages 0, 2 and 4"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Keep an arbitrary `pages[]` subset (0-based, in the given order) in ONE fresh PDF. Same page-tree caveats as merge_pdfs (signatures/AcroForm/XMP dropped; boxes kept; URI links unless dropAnnotations). Encrypted sources: `password`; output unencrypted unless `encrypt`. Need several documents? Use split_pdf.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "dropAnnotations": {
+    "default": false,
+    "description": "When true, drop ALL annotations. Default keeps self-contained URI link annotations.",
+    "type": "boolean"
+   },
+   "encrypt": {
+    "additionalProperties": false,
+    "description": "Re-encrypt the output (Standard Security Handler; AES-128 default or AES-256; RC4 never emitted).",
+    "properties": {
+     "algorithm": {
+      "default": "aes128",
+      "description": "aes128 (V4/R4, widest compatibility) or aes256 (V5/R6).",
+      "enum": [
+       "aes128",
+       "aes256"
+      ],
+      "type": "string"
+     },
+     "ownerPassword": {
+      "description": "Owner password (full access).",
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+     },
+     "permissions": {
+      "additionalProperties": false,
+      "description": "Permission flags; each defaults to allowed.",
+      "properties": {
+       "copy": {
+        "type": "boolean"
+       },
+       "extractText": {
+        "type": "boolean"
+       },
+       "modify": {
+        "type": "boolean"
+       },
+       "print": {
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "userPassword": {
+      "description": "Open password; omitted/empty = opens without a prompt.",
+      "maxLength": 4096,
+      "type": "string"
+     }
+    },
+    "required": [
+     "ownerPassword"
+    ],
+    "type": "object"
+   },
+   "maxOutputSizeBytes": {
+    "description": "Maximum size, in bytes, of the produced PDF. Defaults to 268435456 (256 MiB).",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default) returns the PDF inline; 'file' writes it inside the PDFNATIVE_MCP_OUTPUT_DIR sandbox (SECURITY_VIOLATION when the sandbox is not configured).",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Required when outputMode='file'. Relative path inside the sandbox; must end with .pdf (no absolute paths, no '..').",
+    "type": "string"
+   },
+   "pages": {
+    "description": "0-based page indices to keep, in output order. Duplicates and out-of-range indices are rejected.",
+    "items": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "maxItems": 5000,
+    "minItems": 1,
+    "type": "array"
+   },
+   "password": {
+    "description": "Password (user or owner) of an encrypted source. Never logged or echoed.",
+    "maxLength": 4096,
+    "minLength": 1,
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded source PDF. Pass `password` for an encrypted source.",
+    "minLength": 4,
+    "type": "string"
+   }
+  },
+  "required": [
+   "pdfBase64",
+   "pages"
+  ],
+  "type": "object"
+ },
+ "name": "extract_pages",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Result of a PDF-producing tool. base64 mode: the PDF arrives as an embedded `resource` content block (not duplicated here); file mode: `filePath`.",
+  "properties": {
+   "diagnostics": {
+    "description": "Engine diagnostics (when includeDiagnostics=true).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "severity"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "filePath": {
+    "description": "Sandboxed absolute path (file mode).",
+    "type": "string"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "sizeBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "summary": {
+    "additionalProperties": true,
+    "description": "Tool-specific summary, when produced.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "sizeBytes"
+  ],
+  "type": "object"
+ },
+ "title": "Extract pages into one PDF"
+}

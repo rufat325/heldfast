@@ -1,0 +1,69 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "USE WHEN you are about to install a package, clone a repo, connect to an MCP endpoint, pay an agent, or trade a token, and you want to know what is on record about it FIRST \u2014 every evidence line, with the field it was read from and its date. Stack picks and deploy specs already carry a records-only `preflight_summary`; call this for the full evidence, for any target that is not a pick (a repo, package, token, skill or ERC-8004 agent you were handed), or for a live handshake with an unlisted MCP endpoint. Pass exactly one of repo, package, endpoint, agent, token, skill or x402.\n\nReturns a verdict \u2014 go | caution | no | unknown \u2014 with one evidence line per check, each naming the field it was read from and when that field was written. The rules are written down in lib/preflight.ts and cited by id in `rule`.\n\nRULE ENFORCED: a verdict names WHAT WAS CHECKED AND WHEN. It is never a security review, a quality judgment or a statement about returns, and `unknown` means Sato Hub holds no record \u2014 not that something is wrong. An unlisted endpoint gets ONE live handshake (initialize + tools/list, 8 s cap) and can never come back `go`: a handshake is not a record. For agent=<chain>:<id> we confirm the ERC-8004 registration exists, fetch its registration file, and report the services it DECLARES; only a declared MCP service is probed.\n\nTOKEN LANE (token + chain, EVM only): keyless chain reads \u2014 bytecode presence and size, the ERC-20 views, the Clanker v4 factory's OWN deployment record (`tokenDeploymentInfo`, not a bytecode heuristic), and the Uniswap v3 factory across the four standard fee tiers against wrapped native. Every field is nullable and a null carries the reason it is null. PERMANENTLY NULL, and said so in the evidence: holder concentration (no keyless public source \u2014 explorers are not scraped) and Uniswap v4 / non-Uniswap liquidity (a v4 poolId cannot be reconstructed without the PoolKey). The deployer address needs an optional explorer key. A pool existing is not depth; a locker holds a position on the terms its own code enforces. Nothing in this lane says safe, audited, rug or scam \u2014 those are not readings.\n\nSKILL LANE (skill): a skill is a DOCUMENT an agent follows, which is exactly why it is worth checking first \u2014 the ClawSwarm skills needed no malware, only text telling the agent to generate a wallet and post the private key. Evidence is the static disclosure the weekly sweep already produced: hosts the text names, whether it generates or handles keys, whether it asks for a credential, whether it pipes a remote script into a shell, what tools it grants itself \u2014 each finding WITH the lines that produced it \u2014 plus installs, when it was last seen in its registry, and whether a host it names belongs to a listed project. Nothing is fetched from a registry and no skill is executed. A DISCLOSURE DESCRIBES: it never says safe, it never says malicious, an empty flag list is \"nothing matched\" rather than a pass, and the registry's own scan result is attributed to that registry by name.\n\nReturns (json): { verdict, rule, target: { kind, value, slug, name, sato_url, verify_url }, evidence: [{ check, result, source_field, checked_at }], checked_at, caveat, rules, token?, skill? }. `token` and `skill` are the raw reports for those lanes. Read-only.\n\nX402 LANE (x402): one unpaid request to the resource URL; reports whether it answered 402 and the payment terms it states (network, asset, amount, payTo), against its catalogue entry and our daily record when we hold one. It describes the payee \u2014 it is never a reputation score. CUSTODY: repo, package, endpoint and skill results carry `custody` (Sato Check: does it take your key, does the key leave, can it move funds, what changed) when a profile is on record; custody can only lower a verdict, never raise it.\n\nExample: { repo: \"coinbase/agentkit\" } \u00b7 { endpoint: \"https://mcp.example.com/v1\" } \u00b7 { x402: \"https://api.example.com/paid\" } \u00b7 { agent: \"base:42\" } \u00b7 { token: \"0x1bc0c42215582d5A085795f4baDbaC3ff36d1Bcb\", chain: \"Base\" } \u00b7 { skill: \"clawhub/solana-wallet\" }",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "agent": {
+    "description": "An ERC-8004 agent reference, <chain>:<id>, e.g. 'base:42'. Chains: Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche, Gnosis, Robinhood Chain.",
+    "maxLength": 120,
+    "type": "string"
+   },
+   "chain": {
+    "description": "Chain for `token`: Base, Ethereum, Arbitrum, Robinhood Chain. Anything else (Solana included) answers 'unknown' with the reason, never a guess.",
+    "maxLength": 40,
+    "type": "string"
+   },
+   "endpoint": {
+    "description": "An https MCP endpoint URL. If it is not in the directory it gets a live initialize + tools/list handshake, capped at 8 seconds.",
+    "maxLength": 300,
+    "type": "string"
+   },
+   "package": {
+    "description": "An npm or PyPI package name, e.g. 'solana-agent-kit'. A trailing @version is ignored.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "repo": {
+    "description": "A GitHub repository: a URL or bare owner/name, e.g. 'coinbase/agentkit'.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: 'markdown' (default) or 'json'.",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "skill": {
+    "description": "An agent skill: '<registry>/<id>' (registries: clawhub, skillssh, skills.sh, skills-sh, github), or the skill id alone when it is unique. Reads the static disclosure already on record \u2014 nothing is fetched from a registry and no skill is ever executed.",
+    "maxLength": 300,
+    "type": "string"
+   },
+   "token": {
+    "description": "An ERC-20 token contract address, e.g. '0x1bc0c42215582d5A085795f4baDbaC3ff36d1Bcb'. Needs `chain`. EVM only in v1.",
+    "maxLength": 120,
+    "type": "string"
+   },
+   "x402": {
+    "description": "An https x402 resource URL. ONE unpaid request reads its 402 payment terms (v1 body or v2 PAYMENT-REQUIRED header); no payment is ever sent or signed.",
+    "maxLength": 300,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "onchain_agent_preflight",
+ "title": "Check a target before you install, connect, pay or trade"
+}

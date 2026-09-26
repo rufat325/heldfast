@@ -1,0 +1,218 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Return an incident-response playbook tailored to a vendor degradation, with pre-filled follow-up tool calls. Synthesizes category-specific guidance (cloud, CDN, dev-platform, auth, etc.) from built-in incident knowledge and the provided context. Use after devops_status_check or devops_get_incidents surfaces a problem to determine what to investigate next.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "affected_components": {
+    "description": "Component names affected (from devops_status_check degraded_components or devops_get_incidents affected_components). Used to tailor suggestions to the impacted subsystem.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "incident_summary": {
+    "description": "Latest incident description or update body from devops_get_incidents. Paste the most recent update to get more targeted advice.",
+    "type": "string"
+   },
+   "vendor": {
+    "description": "Vendor slug or display name (e.g., \"cloudflare\", \"github\"). Used to tailor category-specific guidance (CDN outage vs. CI/CD outage vs. auth provider outage).",
+    "minLength": 1,
+    "type": "string"
+   },
+   "vendor_indicator": {
+    "description": "Overall vendor status indicator from a prior devops_status_check call (its indicator field). When provided, the playbook leads with severity-tailored urgency guidance. Omit if status has not been checked yet.",
+    "enum": [
+     "none",
+     "minor",
+     "major",
+     "critical",
+     "maintenance"
+    ],
+    "type": "string"
+   },
+   "your_domain": {
+    "description": "Your own domain or service URL. When provided, nextToolSuggestions will be pre-filled with your domain for cert and DNS checks.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "vendor"
+  ],
+  "type": "object"
+ },
+ "name": "devops_suggest_action",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "vendor",
+     "vendor_category",
+     "guidance",
+     "diagnostics_summary",
+     "nextToolSuggestions"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "diagnostics_summary": {
+    "additionalProperties": false,
+    "description": "Summary of input context used to generate the playbook.",
+    "properties": {
+     "affected_components": {
+      "description": "Affected component names echoed from the affected_components input.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "incident_snippet": {
+      "description": "The incident_summary input echoed in full for context, or null when not provided.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "vendor_indicator": {
+      "anyOf": [
+       {
+        "enum": [
+         "none",
+         "minor",
+         "major",
+         "critical",
+         "maintenance"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Vendor status indicator echoed from the vendor_indicator input, or null when not provided."
+     }
+    },
+    "required": [
+     "vendor_indicator",
+     "affected_components",
+     "incident_snippet"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode.",
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "guidance": {
+    "description": "Markdown playbook \u2014 immediate steps, diagnostic checks, mitigation options, and what to monitor for resolution. Tailored to the vendor category, reported severity, and affected components.",
+    "type": "string"
+   },
+   "nextToolSuggestions": {
+    "description": "Recommended follow-up calls with arguments already populated. Execute these in sequence to gather diagnostic data.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A recommended follow-up tool call with pre-filled arguments.",
+     "properties": {
+      "args": {
+       "additionalProperties": {},
+       "description": "Ready-to-use arguments for the suggested tool call.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "reason": {
+       "description": "Why this step is recommended given the incident context.",
+       "type": "string"
+      },
+      "toolName": {
+       "description": "Tool to call next (e.g., \"devops_check_dns\", \"devops_check_certs\").",
+       "type": "string"
+      }
+     },
+     "required": [
+      "toolName",
+      "reason",
+      "args"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "vendor": {
+    "description": "Vendor as provided.",
+    "type": "string"
+   },
+   "vendor_category": {
+    "description": "Detected category from registry (e.g., \"cdn-edge\", \"auth\"). Null for unrecognized vendors.",
+    "type": [
+     "string",
+     "null"
+    ]
+   }
+  },
+  "type": "object"
+ },
+ "title": "Devops Suggest Action"
+}

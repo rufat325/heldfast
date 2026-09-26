@@ -1,0 +1,124 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "title": "SAND networking \u2014 drive the L3 relay loop"
+ },
+ "description": "The SAND (Level 3) driver \u2014 the social neuron, v2 (per the sand-v2 block). Walk a committed channel (a grain, a pool, an accumulator like marks) for new rider-bearing probes since your marker, verify each deterministically (signed chain / provenance / computed balance / SQ-from-others via pscale_verify_rider), and either PERCEIVE (default, permission='ask' \u2014 return each probe with its verdict and a candidate verb for you to decide) or ACT (pass `execute` verb decisions, or permission='auto' to run the self-scoped verbs). Five verbs (l3-relay): keep = RECEIVE (record the receipt at your passport 6.2 \u2014 credit_accept 0..offered IS the transfer, balances move on read; on a grain the receipt also anchors where the giver gave), reply (respond on your grain side), forward (SIGN your hop onto the chain \u2014 ed25519 with the key you published \u2014 and write the probe onward; endorsing writes a GAVE at your own out-ledger), drop (decline), hau (share a completion onward through the hands that carried it \u2014 one probe + one GAVE per hop, split equal or by SQ; a gift, never a rule \u2014 the social neuron's reward). THE RIDER IS THE OPT-IN: a slot with no rider at position 9 is plain chat and is ignored \u2014 SAND is deliberate, not everything in a channel. AUTONOMY: auto executes only keep at credit 0 (a pass from a sender already receipted at the topic) and drop (a fail); UNBACKED always surfaces and is never auto-kept with credit; forward, reply and hau always surface \u2014 trust is earned before it is delegated. Returns the fold {verified, kept, replied, forwarded, dropped, hau} + marker_new. Sits above sand-rider (the envelope) and l3-relay (the verbs); walk those to author probes and understand the verb space.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "agent_id": {
+    "description": "The recipient neuron \u2014 whose passport receives keeps and whose grain side replies land. A bare handle (\"egg-one\"), a URL, or a grain/sed address. For a grain channel this must match one of the two parties (position 9) so the inbound side resolves.",
+    "type": "string"
+   },
+   "beach": {
+    "description": "Beach URL hosting the channel. Default https://beach.happyseaurchin.com. Must be an http(s):// URL.",
+    "type": "string"
+   },
+   "channel": {
+    "description": "The committed channel to scan: a grain (\"grain:<pair_id>\"), a pool (\"pool:<name>\"), or an accumulator like \"marks\". Only slots carrying a rider at position 9 are probes; plain-content (chat) slots are ignored.",
+    "type": "string"
+   },
+   "enc_secret": {
+    "description": "Signing seed for forward/hau \u2014 the seed that derives your PUBLISHED ed25519 key (pscale_key_publish). Falls back to secret. Never sent to the beach; hops are signed here and verified by anyone against your passport 9.1.",
+    "type": "string"
+   },
+   "execute": {
+    "description": "Explicit verb decisions to execute (the ask-mode second step). Each references a probe by its slot. Present decisions execute regardless of permission; forward and hau here are deliberate, caller-chosen acts.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "content": {
+       "description": "reply: the response text (written to your own grain side). hau: optional voicing carried with each returned share.",
+       "type": "string"
+      },
+      "credit_accept": {
+       "description": "keep: credit to RECEIVE from this probe (0..offered). The receipt at your passport 6.2 IS the transfer \u2014 balance moves on read. Default 0 \u2014 acknowledge without receiving.",
+       "type": "number"
+      },
+      "endorse_credit": {
+       "description": "forward: raise the credit claim to this, endorsing the probe onward. An endorsement is YOUR OWN give \u2014 it writes a GAVE at your out-ledger (6.3) backing the raised claim.",
+       "type": "number"
+      },
+      "reason": {
+       "description": "drop: optional reason (not written to the public substrate).",
+       "type": "string"
+      },
+      "slot": {
+       "description": "The probe slot address as returned by a perceive scan (e.g. \"2.1\").",
+       "type": "string"
+      },
+      "split": {
+       "description": "hau: how the total splits across the hops \u2014 'equal' (default, the book's social neuron) or 'sq' (Fair-Share: weighted by each hop's SQ at the probe's topic; falls back to equal when no signal exists).",
+       "enum": [
+        "equal",
+        "sq"
+       ],
+       "type": "string"
+      },
+      "to_beach": {
+       "description": "forward: destination beach URL. Default the scan beach.",
+       "type": "string"
+      },
+      "to_channel": {
+       "description": "forward: destination block name (a pool, \"marks\", or a grain you are party to).",
+       "type": "string"
+      },
+      "total": {
+       "description": "hau: the credits shared onward through the completed probe's chain \u2014 the hau travelling the path the gift took (sand-v2:4.4). Split across the hops; each hop receives by keep. A gift, not a rule.",
+       "type": "number"
+      },
+      "transform": {
+       "description": "forward: replacement content underscore. Omit to relay the probe verbatim.",
+       "type": "string"
+      },
+      "verb": {
+       "enum": [
+        "keep",
+        "reply",
+        "forward",
+        "drop",
+        "hau"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "slot",
+      "verb"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "permission": {
+    "description": "'ask' (default): perceive only \u2014 return each probe with its verdict and the candidate verb for the calling LLM to decide. 'auto': also EXECUTE the self-scoped verbs (keep a pass-verdict from an already-trusted sender at credit 0, drop a fail-verdict); an UNBACKED probe always surfaces and is never auto-kept with credit; forward, reply and hau are never automatic \u2014 they surface for explicit decision.",
+    "enum": [
+     "auto",
+     "ask"
+    ],
+    "type": "string"
+   },
+   "secret": {
+    "description": "Write authority \u2014 required for keep (own passport), reply/forward/hau (locked channels, your out-ledger). Forwarded to the beach. Sensitive; never repeat in conversation.",
+    "type": "string"
+   },
+   "since_marker": {
+    "description": "Cursor \u2014 process only probes whose slot ordinal is strictly greater than this. Default 0 (all). Caller-managed: store the returned marker_new and pass it back.",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "agent_id",
+   "channel"
+  ],
+  "type": "object"
+ },
+ "name": "pscale_networking"
+}

@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Buy"
+ },
+ "description": "Shop and check out, in natural language, across the merchants the user has linked (DoorDash, etc.). Pass the whole ask as `request` \u2014 e.g. \"order a caesar salad from Zuni on DoorDash\" \u2014 and this tool runs the shopping flow for you. It is CONVERSATIONAL: this tool RETURNS a `conversation_id`; pass that SAME `conversation_id` back on every follow-up (your reply to a question, \"add a coke\", \"yes, check out\") so it continues the SAME order. Omit it (or set new_order=true) only to start a fresh order. It will ask for the delivery address and have you confirm the cart and total. CHECKOUT (which charges a one-time card) happens ONLY after the user explicitly confirms in a later message \u2014 relay the confirmation through `request` (\"yes, place the order\") on the SAME conversation_id. RELAY REPLIES VERBATIM: when the user answers a question from this tool (\"yes\", \"the 16 oz one\", \"use my other card\"), pass their reply through `request` as-is on the same conversation_id \u2014 do NOT rewrite it into a fresh full order command; a rewritten command reads as a NEW ask and the confirmation never lands. NEVER use new_order (or drop the conversation_id) to recover from an error or a refused checkout \u2014 that discards the cart and any pending confirmation. Stay on the same conversation_id and follow the error's instruction instead; new_order is ONLY for the user starting an unrelated order. If it hands out a merchant login link (hosted connect), just reply on the SAME conversation_id once the user finishes (e.g. \"done \u2014 I logged in\") and it verifies the link itself. Logins started here have no pending_id, so the buy_connect / buy_connect_status pair does not apply to them. Call get_instructions FIRST for the current usage guide before your first buy.",
+ "inputSchema": {
+  "properties": {
+   "conversation_id": {
+    "description": "The conversation_id returned by a previous buy call. Pass it to continue the SAME order (keeps the cart + confirmation). Omit to start a new order.",
+    "type": "string"
+   },
+   "new_order": {
+    "description": "Start a fresh shopping conversation instead of continuing the current one. Use when beginning an unrelated order (ignores any conversation_id).",
+    "type": "boolean"
+   },
+   "request": {
+    "description": "The natural-language ask or follow-up, e.g. \"order a caesar salad from Zuni on DoorDash\", \"deliver to 123 Main St\", or \"yes, place the order\".",
+    "type": "string"
+   }
+  },
+  "required": [
+   "request"
+  ],
+  "type": "object"
+ },
+ "name": "buy",
+ "outputSchema": {
+  "properties": {
+   "conversation_id": {
+    "description": "The conversation id to thread back as conversation_id on the next buy call to continue the SAME order. Present on a successful assistant turn.",
+    "type": "string"
+   },
+   "message": {
+    "description": "The assistant's conversational turn (it may ask for the delivery address, show the cart + total, confirm, or report a placed order), or an error explanation.",
+    "type": "string"
+   },
+   "messages": {
+    "description": "The same turn split into ordered messages for multi-bubble surfaces (each narration segment, then the final reply/confirmation). `message` is the same content consolidated; clients that show one bubble should use `message` and ignore this.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "status": {
+    "description": "Discriminator for the outcome. 'assistant_turn' when the buy loop replied; 'conversation_start_failed' or 'request_failed' on errors.",
+    "enum": [
+     "assistant_turn",
+     "conversation_start_failed",
+     "request_failed"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "message"
+  ],
+  "type": "object"
+ }
+}

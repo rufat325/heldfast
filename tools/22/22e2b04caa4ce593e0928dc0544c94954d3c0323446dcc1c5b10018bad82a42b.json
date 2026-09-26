@@ -1,0 +1,1209 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Add elements to clips"
+ },
+ "description": "Add many elements across one or more clips in a single tool call. Replaces the per-element tool \u2014 always batch.\n\nSEND LESS. Most batches repeat themselves \u2014 the same clip_index, element_type, font_setting, alignment or gradientSetting on every item. Hoist those into `defaults` and send them once; each item then carries only what differs, and overrides any key it sets (type_data merges one level). On a 20-30 element batch this typically cuts the call by a quarter to a half. `returning` shapes the response the way `select` shapes a get_clip read.\n\n  defaults: { clip_index: 2, element_type: 'text', type_data: { font_setting: { font: 'Inter', weight: '600' }, alignment: 'center' } }\n  elements: [ { name: 'headline', x: 960, y: 400, type_data: { text: 'Hello', fontSize: 120 } }, ... ]\n\nUse after calling get_element_schema to confirm the type_data shape per element_type. Items within one call are applied in order; returns one result entry per input item so partial success is fine.\n\nReuse instead of rebuilding: an item may pass `component_id` INSTEAD of element_type/type_data to insert a saved component from this workspace exactly as stored \u2014 no generation, instant \u2014 returning every new element_id plus its parameter_schema; set its content afterwards with update_elements(type_data.parameter_values). Find them with find(type='element_components'). Use `base_component_id` (with element_type='animation' and a prompt) only when you want a NEW variant rather than that component.\n\nZ-order: list position IS z-index \u2014 later renders on top \u2014 and a new element goes on top by default. Pass `insert_at: 'back'` to put it behind what's already there, or `insert_at: {before: id}` / `{after: id}` to land next to a specific element \u2014 that also puts the new element in THAT node's group, which is the only way to place inside one. `reorder_elements` rewrites the whole order in one call, grouped clips included.\n\n`group` + `insert_at: {before|after}` together: what the reference is relative to decides what gets positioned. Point at a node INSIDE the group and the ELEMENT takes that slot among its new siblings. Point at one OUTSIDE it and the GROUP takes that slot, with the element inside \u2014 which is how you put a backdrop pattern of N elements at a chosen depth as one hideable unit: hoist both into `defaults` and the first item seats the group, the rest just join it. The one refusal left is naming a reference outside a group that already exists somewhere else, since moving an established group is not what adding one element to it should do; seat the group where you want it in the call that CREATES it, because there is no reposition afterwards. `front`/`back` with a `group` follow the same principle: they address the GROUP only while the element is alone in it \u2014 the call that creates it \u2014 and once the group has other members they address the ELEMENT within the group's interior, so they will not move an established group either.\n\nGrouping: pass `group: \"<name>\"` to keep a unit together (a card and its label, a stat and its caption) so the user can move or hide it as one thing. Items in one call sharing a name land in the same group, and a later call with that name adds to it. Grouping never changes coordinates. It does affect z-order: a group's members render contiguously at the group's slot, and a NEW group takes the slot of its first member, so grouping already-adjacent elements keeps their z-position while grouping scattered ones pulls them together at the lowest member's slot.\n\nConcurrency: within ONE call every element lands in a single save. Across calls the conflict domain is the CLIP's element list, not the individual element, so you can fan this tool out across parallel subagents targeting DIFFERENT clips. Two concurrent add_elements calls on the SAME clip are NOT safe: every add claims that clip's element list, so the later call is REJECTED ('changed since this edit was based on') and nothing it sent is written \u2014 batch all of a clip's elements into ONE call instead. A rejection is not last-write-wins: re-read and re-apply. Do NOT run it concurrently with a whole-clip or whole-project mutation on the same guide (update_clips on that clip, add_clips/remove_clip/split_clip/duplicate_clip, add_audio, update_project) \u2014 those rewrite a larger scope and would clobber the element.\n\nElement-type quirks (handled per-item):\n  \u2022 zoom      \u2192 x/y/width/height are ignored; use centerX/centerY in type_data\n  \u2022 image     \u2192 provide x/y/width/height (the clip is located by clip_index; the clip_id input is accepted but unused)\n  \u2022 animation \u2192 x/y/width/height default to the full canvas if omitted (the clip is located by clip_index)\nFor everything else, x/y/width/height are required.\n\nAnimation: pass a top-level `keyframes` array (sibling of x/y/type_data, NOT inside type_data) \u2014 entries are { timestamp, positionX?, positionY?, width?, height?, interpolation? } in canvas pixels. positionX/Y use the SAME alignment-aware origin as the element's x/y. Text caveat: width/height are not keyframable on text \u2014 animate its size with fontSize (letterSpacing/lineHeight/padding* are also keyframable).\n\nPosition origin: for TEXT `y` is the vertical CENTRE when centre-aligned and the TOP otherwise; every other type uses the top; `x` is the left edge, except TEXT where alignment picks it: left\u2192left, center\u2192centre, right\u2192right.\n\nTo centre a label in a row, pill, chip, card or beside an icon: pass the container's centre line as y with y_anchor:'center'. The server centres the measured text in it, so it is one number and it holds for wrapped text. Add type_data.fit{max_height} whenever the text could wrap, so the box stays inside the space you gave it. y_anchor is a directive for computing the stored y, not a property that sticks \u2014 repeat it on any later call that moves the same label.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "defaults": {
+    "additionalProperties": false,
+    "description": "Values shared by every item, sent once rather than repeated. Items win per key; type_data merges one level. E.g. defaults:{clip_index:1, element_type:'text', type_data:{font_setting:{font:'Inter',weight:'600'}, alignment:'center'}} then items carry only what differs.",
+    "properties": {
+     "clip_id": {
+      "type": "string"
+     },
+     "clip_index": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "element_type": {
+      "enum": [
+       "text",
+       "callout",
+       "rectangle",
+       "arrow",
+       "blur",
+       "spotlight",
+       "zoom",
+       "image",
+       "video",
+       "animation"
+      ],
+      "type": "string"
+     },
+     "end_time": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "group": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "height": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "insert_at": {
+      "enum": [
+       "front",
+       "back"
+      ],
+      "type": "string"
+     },
+     "keyframes": {
+      "anyOf": [
+       {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "backgroundBlur": {
+           "description": "Backdrop blur behind the element",
+           "type": "number"
+          },
+          "bezier": {
+           "description": "Cubic-bezier [x1,y1,x2,y2]; used when interpolation is 'custom'.",
+           "items": {
+            "type": "number"
+           },
+           "maxItems": 4,
+           "minItems": 4,
+           "type": "array"
+          },
+          "bezier_overrides": {
+           "additionalProperties": {
+            "items": {
+             "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array"
+           },
+           "description": "Per-property cubic-bezier override, e.g. {\"opacity\":[.4,0,.6,1]}, when two `custom`-eased properties in this entry need DIFFERENT curves. Keys must be properties present in this entry.",
+           "propertyNames": {
+            "enum": [
+             "positionX",
+             "positionY",
+             "width",
+             "height",
+             "rotation",
+             "scaleX",
+             "scaleY",
+             "rotateX",
+             "rotateY",
+             "cropX",
+             "cropY",
+             "cropWidth",
+             "cropHeight",
+             "opacity",
+             "blur",
+             "backgroundBlur",
+             "strokeWidth",
+             "strokeDash",
+             "strokeGap",
+             "strokeTrimStart",
+             "strokeTrimEnd",
+             "strokeTrimOffset",
+             "textStrokeWidth",
+             "textStrokeDash",
+             "textStrokeGap",
+             "imageBorderWidth",
+             "shadowOffsetX",
+             "shadowOffsetY",
+             "shadowBlur",
+             "shadowSpread",
+             "borderRadiusTopLeft",
+             "borderRadiusTopRight",
+             "borderRadiusBottomRight",
+             "borderRadiusBottomLeft",
+             "imageCornerRadiusTopLeft",
+             "imageCornerRadiusTopRight",
+             "imageCornerRadiusBottomRight",
+             "imageCornerRadiusBottomLeft",
+             "videoCornerRadiusTopLeft",
+             "videoCornerRadiusTopRight",
+             "videoCornerRadiusBottomRight",
+             "videoCornerRadiusBottomLeft",
+             "fontSize",
+             "lineHeight",
+             "letterSpacing",
+             "paddingTop",
+             "paddingRight",
+             "paddingBottom",
+             "paddingLeft",
+             "textBgRadiusTopLeft",
+             "textBgRadiusTopRight",
+             "textBgRadiusBottomRight",
+             "textBgRadiusBottomLeft",
+             "fillColor",
+             "strokeColor",
+             "textStrokeColor",
+             "imageBorderColor",
+             "textColor",
+             "textBackgroundColor",
+             "shadowColor"
+            ],
+            "type": "string"
+           },
+           "type": "object"
+          },
+          "blur": {
+           "description": "Layer blur",
+           "type": "number"
+          },
+          "borderRadiusBottomLeft": {
+           "description": "borderRadiusBottomLeft in canvas pixels",
+           "type": "number"
+          },
+          "borderRadiusBottomRight": {
+           "description": "borderRadiusBottomRight in canvas pixels",
+           "type": "number"
+          },
+          "borderRadiusTopLeft": {
+           "description": "borderRadiusTopLeft in canvas pixels",
+           "type": "number"
+          },
+          "borderRadiusTopRight": {
+           "description": "borderRadiusTopRight in canvas pixels",
+           "type": "number"
+          },
+          "cropHeight": {
+           "description": "cropHeight (native unit)",
+           "type": "number"
+          },
+          "cropWidth": {
+           "description": "cropWidth (native unit)",
+           "type": "number"
+          },
+          "cropX": {
+           "description": "cropX (native unit)",
+           "type": "number"
+          },
+          "cropY": {
+           "description": "cropY (native unit)",
+           "type": "number"
+          },
+          "fillColor": {
+           "description": "fillColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+           "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+           "type": "string"
+          },
+          "fontSize": {
+           "description": "Font size in CANVAS PIXELS (same unit as the top-level fontSize \u2014 NOT a fraction).",
+           "type": "number"
+          },
+          "height": {
+           "description": "Height in canvas pixels (0 allowed)",
+           "minimum": 0,
+           "type": "number"
+          },
+          "imageBorderColor": {
+           "description": "imageBorderColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+           "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+           "type": "string"
+          },
+          "imageBorderWidth": {
+           "description": "imageBorderWidth in canvas pixels",
+           "type": "number"
+          },
+          "imageCornerRadiusBottomLeft": {
+           "description": "imageCornerRadiusBottomLeft in canvas pixels",
+           "type": "number"
+          },
+          "imageCornerRadiusBottomRight": {
+           "description": "imageCornerRadiusBottomRight in canvas pixels",
+           "type": "number"
+          },
+          "imageCornerRadiusTopLeft": {
+           "description": "imageCornerRadiusTopLeft in canvas pixels",
+           "type": "number"
+          },
+          "imageCornerRadiusTopRight": {
+           "description": "imageCornerRadiusTopRight in canvas pixels",
+           "type": "number"
+          },
+          "interpolation": {
+           "description": "Easing for THIS entry, applied to every property in it (default easeInOut). NOT `easing`.",
+           "enum": [
+            "linear",
+            "easeInOut",
+            "easeIn",
+            "easeOut",
+            "sigmoid",
+            "smootherstep",
+            "smoothstep",
+            "hold",
+            "easeInBack",
+            "easeOutBack",
+            "easeInOutBack",
+            "custom"
+           ],
+           "type": "string"
+          },
+          "interpolation_overrides": {
+           "additionalProperties": {
+            "enum": [
+             "linear",
+             "easeInOut",
+             "easeIn",
+             "easeOut",
+             "sigmoid",
+             "smootherstep",
+             "smoothstep",
+             "hold",
+             "easeInBack",
+             "easeOutBack",
+             "easeInOutBack",
+             "custom"
+            ],
+            "type": "string"
+           },
+           "description": "Per-property easing override, e.g. {\"opacity\":\"linear\"} while the rest use `interpolation`. Keys must be keyframable properties present in this entry.",
+           "propertyNames": {
+            "enum": [
+             "positionX",
+             "positionY",
+             "width",
+             "height",
+             "rotation",
+             "scaleX",
+             "scaleY",
+             "rotateX",
+             "rotateY",
+             "cropX",
+             "cropY",
+             "cropWidth",
+             "cropHeight",
+             "opacity",
+             "blur",
+             "backgroundBlur",
+             "strokeWidth",
+             "strokeDash",
+             "strokeGap",
+             "strokeTrimStart",
+             "strokeTrimEnd",
+             "strokeTrimOffset",
+             "textStrokeWidth",
+             "textStrokeDash",
+             "textStrokeGap",
+             "imageBorderWidth",
+             "shadowOffsetX",
+             "shadowOffsetY",
+             "shadowBlur",
+             "shadowSpread",
+             "borderRadiusTopLeft",
+             "borderRadiusTopRight",
+             "borderRadiusBottomRight",
+             "borderRadiusBottomLeft",
+             "imageCornerRadiusTopLeft",
+             "imageCornerRadiusTopRight",
+             "imageCornerRadiusBottomRight",
+             "imageCornerRadiusBottomLeft",
+             "videoCornerRadiusTopLeft",
+             "videoCornerRadiusTopRight",
+             "videoCornerRadiusBottomRight",
+             "videoCornerRadiusBottomLeft",
+             "fontSize",
+             "lineHeight",
+             "letterSpacing",
+             "paddingTop",
+             "paddingRight",
+             "paddingBottom",
+             "paddingLeft",
+             "textBgRadiusTopLeft",
+             "textBgRadiusTopRight",
+             "textBgRadiusBottomRight",
+             "textBgRadiusBottomLeft",
+             "fillColor",
+             "strokeColor",
+             "textStrokeColor",
+             "imageBorderColor",
+             "textColor",
+             "textBackgroundColor",
+             "shadowColor"
+            ],
+            "type": "string"
+           },
+           "type": "object"
+          },
+          "letterSpacing": {
+           "description": "Letter spacing in canvas pixels.",
+           "type": "number"
+          },
+          "lineHeight": {
+           "description": "lineHeight (native unit)",
+           "type": "number"
+          },
+          "opacity": {
+           "description": "Opacity 0-100",
+           "maximum": 100,
+           "minimum": 0,
+           "type": "number"
+          },
+          "paddingBottom": {
+           "description": "paddingBottom in canvas pixels",
+           "type": "number"
+          },
+          "paddingLeft": {
+           "description": "paddingLeft in canvas pixels",
+           "type": "number"
+          },
+          "paddingRight": {
+           "description": "paddingRight in canvas pixels",
+           "type": "number"
+          },
+          "paddingTop": {
+           "description": "paddingTop in canvas pixels",
+           "type": "number"
+          },
+          "positionX": {
+           "description": "X position in canvas pixels (NOT `x`). Same origin as the element's top-level x: `x` is the left edge, except TEXT where alignment picks it: left\u2192left, center\u2192centre, right\u2192right.",
+           "type": "number"
+          },
+          "positionY": {
+           "description": "Y position in canvas pixels (NOT `y`). Same origin as the element's top-level y: for TEXT `y` is the vertical CENTRE when centre-aligned and the TOP otherwise; every other type uses the top. y_anchor applies to the element's own y, NOT to keyframe values, so read the element back and key off its stored y.",
+           "type": "number"
+          },
+          "rotateX": {
+           "description": "rotateX (native unit)",
+           "type": "number"
+          },
+          "rotateY": {
+           "description": "rotateY (native unit)",
+           "type": "number"
+          },
+          "rotation": {
+           "description": "Rotation in degrees",
+           "type": "number"
+          },
+          "scaleX": {
+           "description": "Horizontal scale multiplier (1 = 100%)",
+           "type": "number"
+          },
+          "scaleY": {
+           "description": "Vertical scale multiplier (1 = 100%)",
+           "type": "number"
+          },
+          "shadowBlur": {
+           "description": "shadowBlur in canvas pixels",
+           "type": "number"
+          },
+          "shadowColor": {
+           "description": "shadowColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+           "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+           "type": "string"
+          },
+          "shadowOffsetX": {
+           "description": "shadowOffsetX in canvas pixels",
+           "type": "number"
+          },
+          "shadowOffsetY": {
+           "description": "shadowOffsetY in canvas pixels",
+           "type": "number"
+          },
+          "shadowSpread": {
+           "description": "shadowSpread in canvas pixels",
+           "type": "number"
+          },
+          "strokeColor": {
+           "description": "strokeColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+           "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+           "type": "string"
+          },
+          "strokeDash": {
+           "description": "strokeDash in canvas pixels",
+           "type": "number"
+          },
+          "strokeGap": {
+           "description": "strokeGap in canvas pixels",
+           "type": "number"
+          },
+          "strokeTrimEnd": {
+           "description": "strokeTrimEnd (native unit)",
+           "type": "number"
+          },
+          "strokeTrimOffset": {
+           "description": "strokeTrimOffset (native unit)",
+           "type": "number"
+          },
+          "strokeTrimStart": {
+           "description": "strokeTrimStart (native unit)",
+           "type": "number"
+          },
+          "strokeWidth": {
+           "description": "strokeWidth in canvas pixels",
+           "type": "number"
+          },
+          "textBackgroundColor": {
+           "description": "textBackgroundColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+           "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+           "type": "string"
+          },
+          "textBgRadiusBottomLeft": {
+           "description": "textBgRadiusBottomLeft in canvas pixels",
+           "type": "number"
+          },
+          "textBgRadiusBottomRight": {
+           "description": "textBgRadiusBottomRight in canvas pixels",
+           "type": "number"
+          },
+          "textBgRadiusTopLeft": {
+           "description": "textBgRadiusTopLeft in canvas pixels",
+           "type": "number"
+          },
+          "textBgRadiusTopRight": {
+           "description": "textBgRadiusTopRight in canvas pixels",
+           "type": "number"
+          },
+          "textColor": {
+           "description": "textColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+           "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+           "type": "string"
+          },
+          "textStrokeColor": {
+           "description": "textStrokeColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+           "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+           "type": "string"
+          },
+          "textStrokeDash": {
+           "description": "textStrokeDash in canvas pixels",
+           "type": "number"
+          },
+          "textStrokeGap": {
+           "description": "textStrokeGap in canvas pixels",
+           "type": "number"
+          },
+          "textStrokeWidth": {
+           "description": "textStrokeWidth in canvas pixels",
+           "type": "number"
+          },
+          "timestamp": {
+           "description": "Clip-relative time in seconds",
+           "minimum": 0,
+           "type": "number"
+          },
+          "videoCornerRadiusBottomLeft": {
+           "description": "videoCornerRadiusBottomLeft in canvas pixels",
+           "type": "number"
+          },
+          "videoCornerRadiusBottomRight": {
+           "description": "videoCornerRadiusBottomRight in canvas pixels",
+           "type": "number"
+          },
+          "videoCornerRadiusTopLeft": {
+           "description": "videoCornerRadiusTopLeft in canvas pixels",
+           "type": "number"
+          },
+          "videoCornerRadiusTopRight": {
+           "description": "videoCornerRadiusTopRight in canvas pixels",
+           "type": "number"
+          },
+          "width": {
+           "description": "Width in canvas pixels (0 allowed \u2014 e.g. a bar that draws in from 0)",
+           "minimum": 0,
+           "type": "number"
+          }
+         },
+         "required": [
+          "timestamp"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "rotation": {
+      "type": "number"
+     },
+     "start_time": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "type_data": {
+      "additionalProperties": {},
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "width": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "x": {
+      "type": "number"
+     },
+     "y": {
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "elements": {
+    "description": "Elements to add \u2014 at least one entry.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "clip_id": {
+       "description": "Clip ID \u2014 accepted but unused; the clip is located by clip_index for all element types.",
+       "type": "string"
+      },
+      "clip_index": {
+       "description": "Zero-based clip index. Required unless hoisted into `defaults`.",
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "component_id": {
+       "description": "Insert a SAVED COMPONENT exactly as stored \u2014 no AI generation, no restyling. This is how you reuse a component from your workspace verbatim (find one with find(type='element_components')). Components are workspace-scoped \u2014 there is no community library for them. A component is a fragment of a clip \u2014 one or more elements, possibly grouped \u2014 so this inserts ALL of them and returns every new element_id plus the animation's parameter_schema. Customise afterwards with update_elements(type_data.parameter_values). Mutually exclusive with element_type/type_data. To instead GENERATE a new animation using a component as a style reference, use element_type='animation' with type_data.base_component_id.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "element_type": {
+       "description": "One of: text, callout, rectangle, arrow, blur, spotlight, zoom, image, video, animation. Omit when using component_id.",
+       "enum": [
+        "text",
+        "callout",
+        "rectangle",
+        "arrow",
+        "blur",
+        "spotlight",
+        "zoom",
+        "image",
+        "video",
+        "animation"
+       ],
+       "type": "string"
+      },
+      "end_time": {
+       "description": "Disappear at (seconds)",
+       "minimum": 0,
+       "type": "number"
+      },
+      "group": {
+       "description": "Put this element in a named group. The name is the handle: items in ONE call sharing the same name land in the SAME group, and a later call with that name adds to it. Use it to keep a unit together (a card and its label, a stat and its caption) so the user can move or hide it as one thing. Grouping never moves anything \u2014 coordinates stay absolute. Animations and AI-generated images are created in the background and cannot be grouped as they are added; add them first, then set `group` via update_elements.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "height": {
+       "description": "Height, pixels (0 allowed). For text the box's height always follows the measured text, so this reads as the space you are giving it: the text is centred in that space and layout.fits_height says whether it fit. Use type_data.fit to shrink the font into it.",
+       "minimum": 0,
+       "type": "number"
+      },
+      "insert_at": {
+       "anyOf": [
+        {
+         "enum": [
+          "front",
+          "back"
+         ],
+         "type": "string"
+        },
+        {
+         "additionalProperties": false,
+         "properties": {
+          "before": {
+           "minLength": 1,
+           "type": "string"
+          }
+         },
+         "required": [
+          "before"
+         ],
+         "type": "object"
+        },
+        {
+         "additionalProperties": false,
+         "properties": {
+          "after": {
+           "minLength": 1,
+           "type": "string"
+          }
+         },
+         "required": [
+          "after"
+         ],
+         "type": "object"
+        }
+       ],
+       "description": "Where the element lands in z-order, so you don't need a follow-up reorder_elements. `front` (default) puts it on top of what's already on the clip; `back` puts it behind everything \u2014 what a backdrop panel or a wash needs. `{before: element_id}` / `{after: element_id}` place it next to a specific element or group and put it in THAT node's group, which is the only way to position inside a group. Passing `group` as well changes what `front`/`back` address \u2014 see the Z-order notes in this tool's description. Placement is relative to the clip AS IT STANDS when the item is applied, so several `back` items in one call end up in REVERSE input order: send one backdrop per call, or list them back-to-front."
+      },
+      "keyframes": {
+       "anyOf": [
+        {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "backgroundBlur": {
+            "description": "Backdrop blur behind the element",
+            "type": "number"
+           },
+           "bezier": {
+            "description": "Cubic-bezier [x1,y1,x2,y2]; used when interpolation is 'custom'.",
+            "items": {
+             "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array"
+           },
+           "bezier_overrides": {
+            "additionalProperties": {
+             "items": {
+              "type": "number"
+             },
+             "maxItems": 4,
+             "minItems": 4,
+             "type": "array"
+            },
+            "description": "Per-property cubic-bezier override, e.g. {\"opacity\":[.4,0,.6,1]}, when two `custom`-eased properties in this entry need DIFFERENT curves. Keys must be properties present in this entry.",
+            "propertyNames": {
+             "enum": [
+              "positionX",
+              "positionY",
+              "width",
+              "height",
+              "rotation",
+              "scaleX",
+              "scaleY",
+              "rotateX",
+              "rotateY",
+              "cropX",
+              "cropY",
+              "cropWidth",
+              "cropHeight",
+              "opacity",
+              "blur",
+              "backgroundBlur",
+              "strokeWidth",
+              "strokeDash",
+              "strokeGap",
+              "strokeTrimStart",
+              "strokeTrimEnd",
+              "strokeTrimOffset",
+              "textStrokeWidth",
+              "textStrokeDash",
+              "textStrokeGap",
+              "imageBorderWidth",
+              "shadowOffsetX",
+              "shadowOffsetY",
+              "shadowBlur",
+              "shadowSpread",
+              "borderRadiusTopLeft",
+              "borderRadiusTopRight",
+              "borderRadiusBottomRight",
+              "borderRadiusBottomLeft",
+              "imageCornerRadiusTopLeft",
+              "imageCornerRadiusTopRight",
+              "imageCornerRadiusBottomRight",
+              "imageCornerRadiusBottomLeft",
+              "videoCornerRadiusTopLeft",
+              "videoCornerRadiusTopRight",
+              "videoCornerRadiusBottomRight",
+              "videoCornerRadiusBottomLeft",
+              "fontSize",
+              "lineHeight",
+              "letterSpacing",
+              "paddingTop",
+              "paddingRight",
+              "paddingBottom",
+              "paddingLeft",
+              "textBgRadiusTopLeft",
+              "textBgRadiusTopRight",
+              "textBgRadiusBottomRight",
+              "textBgRadiusBottomLeft",
+              "fillColor",
+              "strokeColor",
+              "textStrokeColor",
+              "imageBorderColor",
+              "textColor",
+              "textBackgroundColor",
+              "shadowColor"
+             ],
+             "type": "string"
+            },
+            "type": "object"
+           },
+           "blur": {
+            "description": "Layer blur",
+            "type": "number"
+           },
+           "borderRadiusBottomLeft": {
+            "description": "borderRadiusBottomLeft in canvas pixels",
+            "type": "number"
+           },
+           "borderRadiusBottomRight": {
+            "description": "borderRadiusBottomRight in canvas pixels",
+            "type": "number"
+           },
+           "borderRadiusTopLeft": {
+            "description": "borderRadiusTopLeft in canvas pixels",
+            "type": "number"
+           },
+           "borderRadiusTopRight": {
+            "description": "borderRadiusTopRight in canvas pixels",
+            "type": "number"
+           },
+           "cropHeight": {
+            "description": "cropHeight (native unit)",
+            "type": "number"
+           },
+           "cropWidth": {
+            "description": "cropWidth (native unit)",
+            "type": "number"
+           },
+           "cropX": {
+            "description": "cropX (native unit)",
+            "type": "number"
+           },
+           "cropY": {
+            "description": "cropY (native unit)",
+            "type": "number"
+           },
+           "fillColor": {
+            "description": "fillColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+            "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+            "type": "string"
+           },
+           "fontSize": {
+            "description": "Font size in CANVAS PIXELS (same unit as the top-level fontSize \u2014 NOT a fraction).",
+            "type": "number"
+           },
+           "height": {
+            "description": "Height in canvas pixels (0 allowed)",
+            "minimum": 0,
+            "type": "number"
+           },
+           "imageBorderColor": {
+            "description": "imageBorderColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+            "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+            "type": "string"
+           },
+           "imageBorderWidth": {
+            "description": "imageBorderWidth in canvas pixels",
+            "type": "number"
+           },
+           "imageCornerRadiusBottomLeft": {
+            "description": "imageCornerRadiusBottomLeft in canvas pixels",
+            "type": "number"
+           },
+           "imageCornerRadiusBottomRight": {
+            "description": "imageCornerRadiusBottomRight in canvas pixels",
+            "type": "number"
+           },
+           "imageCornerRadiusTopLeft": {
+            "description": "imageCornerRadiusTopLeft in canvas pixels",
+            "type": "number"
+           },
+           "imageCornerRadiusTopRight": {
+            "description": "imageCornerRadiusTopRight in canvas pixels",
+            "type": "number"
+           },
+           "interpolation": {
+            "description": "Easing for THIS entry, applied to every property in it (default easeInOut). NOT `easing`.",
+            "enum": [
+             "linear",
+             "easeInOut",
+             "easeIn",
+             "easeOut",
+             "sigmoid",
+             "smootherstep",
+             "smoothstep",
+             "hold",
+             "easeInBack",
+             "easeOutBack",
+             "easeInOutBack",
+             "custom"
+            ],
+            "type": "string"
+           },
+           "interpolation_overrides": {
+            "additionalProperties": {
+             "enum": [
+              "linear",
+              "easeInOut",
+              "easeIn",
+              "easeOut",
+              "sigmoid",
+              "smootherstep",
+              "smoothstep",
+              "hold",
+              "easeInBack",
+              "easeOutBack",
+              "easeInOutBack",
+              "custom"
+             ],
+             "type": "string"
+            },
+            "description": "Per-property easing override, e.g. {\"opacity\":\"linear\"} while the rest use `interpolation`. Keys must be keyframable properties present in this entry.",
+            "propertyNames": {
+             "enum": [
+              "positionX",
+              "positionY",
+              "width",
+              "height",
+              "rotation",
+              "scaleX",
+              "scaleY",
+              "rotateX",
+              "rotateY",
+              "cropX",
+              "cropY",
+              "cropWidth",
+              "cropHeight",
+              "opacity",
+              "blur",
+              "backgroundBlur",
+              "strokeWidth",
+              "strokeDash",
+              "strokeGap",
+              "strokeTrimStart",
+              "strokeTrimEnd",
+              "strokeTrimOffset",
+              "textStrokeWidth",
+              "textStrokeDash",
+              "textStrokeGap",
+              "imageBorderWidth",
+              "shadowOffsetX",
+              "shadowOffsetY",
+              "shadowBlur",
+              "shadowSpread",
+              "borderRadiusTopLeft",
+              "borderRadiusTopRight",
+              "borderRadiusBottomRight",
+              "borderRadiusBottomLeft",
+              "imageCornerRadiusTopLeft",
+              "imageCornerRadiusTopRight",
+              "imageCornerRadiusBottomRight",
+              "imageCornerRadiusBottomLeft",
+              "videoCornerRadiusTopLeft",
+              "videoCornerRadiusTopRight",
+              "videoCornerRadiusBottomRight",
+              "videoCornerRadiusBottomLeft",
+              "fontSize",
+              "lineHeight",
+              "letterSpacing",
+              "paddingTop",
+              "paddingRight",
+              "paddingBottom",
+              "paddingLeft",
+              "textBgRadiusTopLeft",
+              "textBgRadiusTopRight",
+              "textBgRadiusBottomRight",
+              "textBgRadiusBottomLeft",
+              "fillColor",
+              "strokeColor",
+              "textStrokeColor",
+              "imageBorderColor",
+              "textColor",
+              "textBackgroundColor",
+              "shadowColor"
+             ],
+             "type": "string"
+            },
+            "type": "object"
+           },
+           "letterSpacing": {
+            "description": "Letter spacing in canvas pixels.",
+            "type": "number"
+           },
+           "lineHeight": {
+            "description": "lineHeight (native unit)",
+            "type": "number"
+           },
+           "opacity": {
+            "description": "Opacity 0-100",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+           },
+           "paddingBottom": {
+            "description": "paddingBottom in canvas pixels",
+            "type": "number"
+           },
+           "paddingLeft": {
+            "description": "paddingLeft in canvas pixels",
+            "type": "number"
+           },
+           "paddingRight": {
+            "description": "paddingRight in canvas pixels",
+            "type": "number"
+           },
+           "paddingTop": {
+            "description": "paddingTop in canvas pixels",
+            "type": "number"
+           },
+           "positionX": {
+            "description": "X position in canvas pixels (NOT `x`). Same origin as the element's top-level x: `x` is the left edge, except TEXT where alignment picks it: left\u2192left, center\u2192centre, right\u2192right.",
+            "type": "number"
+           },
+           "positionY": {
+            "description": "Y position in canvas pixels (NOT `y`). Same origin as the element's top-level y: for TEXT `y` is the vertical CENTRE when centre-aligned and the TOP otherwise; every other type uses the top. y_anchor applies to the element's own y, NOT to keyframe values, so read the element back and key off its stored y.",
+            "type": "number"
+           },
+           "rotateX": {
+            "description": "rotateX (native unit)",
+            "type": "number"
+           },
+           "rotateY": {
+            "description": "rotateY (native unit)",
+            "type": "number"
+           },
+           "rotation": {
+            "description": "Rotation in degrees",
+            "type": "number"
+           },
+           "scaleX": {
+            "description": "Horizontal scale multiplier (1 = 100%)",
+            "type": "number"
+           },
+           "scaleY": {
+            "description": "Vertical scale multiplier (1 = 100%)",
+            "type": "number"
+           },
+           "shadowBlur": {
+            "description": "shadowBlur in canvas pixels",
+            "type": "number"
+           },
+           "shadowColor": {
+            "description": "shadowColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+            "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+            "type": "string"
+           },
+           "shadowOffsetX": {
+            "description": "shadowOffsetX in canvas pixels",
+            "type": "number"
+           },
+           "shadowOffsetY": {
+            "description": "shadowOffsetY in canvas pixels",
+            "type": "number"
+           },
+           "shadowSpread": {
+            "description": "shadowSpread in canvas pixels",
+            "type": "number"
+           },
+           "strokeColor": {
+            "description": "strokeColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+            "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+            "type": "string"
+           },
+           "strokeDash": {
+            "description": "strokeDash in canvas pixels",
+            "type": "number"
+           },
+           "strokeGap": {
+            "description": "strokeGap in canvas pixels",
+            "type": "number"
+           },
+           "strokeTrimEnd": {
+            "description": "strokeTrimEnd (native unit)",
+            "type": "number"
+           },
+           "strokeTrimOffset": {
+            "description": "strokeTrimOffset (native unit)",
+            "type": "number"
+           },
+           "strokeTrimStart": {
+            "description": "strokeTrimStart (native unit)",
+            "type": "number"
+           },
+           "strokeWidth": {
+            "description": "strokeWidth in canvas pixels",
+            "type": "number"
+           },
+           "textBackgroundColor": {
+            "description": "textBackgroundColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+            "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+            "type": "string"
+           },
+           "textBgRadiusBottomLeft": {
+            "description": "textBgRadiusBottomLeft in canvas pixels",
+            "type": "number"
+           },
+           "textBgRadiusBottomRight": {
+            "description": "textBgRadiusBottomRight in canvas pixels",
+            "type": "number"
+           },
+           "textBgRadiusTopLeft": {
+            "description": "textBgRadiusTopLeft in canvas pixels",
+            "type": "number"
+           },
+           "textBgRadiusTopRight": {
+            "description": "textBgRadiusTopRight in canvas pixels",
+            "type": "number"
+           },
+           "textColor": {
+            "description": "textColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+            "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+            "type": "string"
+           },
+           "textStrokeColor": {
+            "description": "textStrokeColor as #rrggbb or #rrggbbaa (alpha = opacity)",
+            "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+            "type": "string"
+           },
+           "textStrokeDash": {
+            "description": "textStrokeDash in canvas pixels",
+            "type": "number"
+           },
+           "textStrokeGap": {
+            "description": "textStrokeGap in canvas pixels",
+            "type": "number"
+           },
+           "textStrokeWidth": {
+            "description": "textStrokeWidth in canvas pixels",
+            "type": "number"
+           },
+           "timestamp": {
+            "description": "Clip-relative time in seconds",
+            "minimum": 0,
+            "type": "number"
+           },
+           "videoCornerRadiusBottomLeft": {
+            "description": "videoCornerRadiusBottomLeft in canvas pixels",
+            "type": "number"
+           },
+           "videoCornerRadiusBottomRight": {
+            "description": "videoCornerRadiusBottomRight in canvas pixels",
+            "type": "number"
+           },
+           "videoCornerRadiusTopLeft": {
+            "description": "videoCornerRadiusTopLeft in canvas pixels",
+            "type": "number"
+           },
+           "videoCornerRadiusTopRight": {
+            "description": "videoCornerRadiusTopRight in canvas pixels",
+            "type": "number"
+           },
+           "width": {
+            "description": "Width in canvas pixels (0 allowed \u2014 e.g. a bar that draws in from 0)",
+            "minimum": 0,
+            "type": "number"
+           }
+          },
+          "required": [
+           "timestamp"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Animation keyframes (\u22652 entries). Each entry has a timestamp plus one or more keyframable properties (position/size in canvas pixels; rotation\u00b0, opacity 0-100, scale, colors as #rrggbb[aa], etc. in native units). Easing: per-entry `interpolation` + optional per-property `interpolation_overrides`. Call get_element_schema to see which properties this element_type can keyframe. null is accepted and means none."
+      },
+      "keyframes_repeat": {
+       "additionalProperties": false,
+       "description": "Repeat `keyframes` as a cycle \u2014 { count, mode?, every? }. Requires `keyframes` in the same call.",
+       "properties": {
+        "count": {
+         "description": "TOTAL number of cycles, INCLUDING the one you wrote. 1 is a no-op. Expansion stops at the clip end rather than piling the overflow onto the last frame, and the generated total is capped at 600 keyframes (it errors rather than silently truncating).",
+         "maximum": 9007199254740991,
+         "minimum": 1,
+         "type": "integer"
+        },
+        "every": {
+         "description": "Seconds between cycle STARTS. Defaults to the cycle's own span (back-to-back). A LARGER value holds the last value in the gap \u2014 that is how you get a pulse every 2s instead of a constant wobble. Shorter than the cycle is rejected, because the cycles would overlap and collide on the same frames.",
+         "exclusiveMinimum": 0,
+         "type": "number"
+        },
+        "mode": {
+         "description": "'loop' (default) replays the cycle forwards every time \u2014 seamless only if your first and last values match. 'pingpong' alternates forwards/backwards, so the value always returns to where it started without a jump; use it for a breathe/pulse written as a one-way ramp.",
+         "enum": [
+          "loop",
+          "pingpong"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "count"
+       ],
+       "type": "object"
+      },
+      "name": {
+       "description": "Label",
+       "type": "string"
+      },
+      "rotation": {
+       "description": "Rotation in degrees",
+       "type": "number"
+      },
+      "start_time": {
+       "description": "Appear at (seconds)",
+       "minimum": 0,
+       "type": "number"
+      },
+      "type_data": {
+       "additionalProperties": {},
+       "description": "Type-specific fields. Use the get_element_schema tool first to discover the shape for a given element_type. Omit when using component_id.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "width": {
+       "description": "Width, pixels (0 allowed \u2014 e.g. a bar that draws in from 0). For text this is the WRAP width and it is kept as sent: the text wraps to it and the box stays this wide. (Height differs \u2014 the box's height follows the measured text.)",
+       "minimum": 0,
+       "type": "number"
+      },
+      "x": {
+       "description": "X position in canvas pixels. `x` is the left edge, except TEXT where alignment picks it: left\u2192left, center\u2192centre, right\u2192right (callout, rectangle, arrow, blur, spotlight, image and animation all use the left edge). For zoom, use type_data.centerX instead.",
+       "type": "number"
+      },
+      "y": {
+       "description": "Y position in canvas pixels \u2014 for TEXT `y` is the vertical CENTRE when centre-aligned and the TOP otherwise; every other type uses the top. Pair it with y_anchor (below), always.",
+       "type": "number"
+      },
+      "y_anchor": {
+       "description": "TEXT only. ALWAYS send `y_anchor` ('top'|'center'|'bottom') when you set `y` on text, so the position states what you meant instead of inheriting the alignment origin. To centre in a row, pill, chip, card or button: pass the container's centre line as `y` with y_anchor:'center'. The server centres the MEASURED box \u2014 you cannot compute that height, since wrapping and `fit` change it. A write-time DIRECTIVE: never stored, never returned by a read, so send it on every call whose `y` means the same thing. (Also accepted inside type_data \u2014 older spelling; this one wins.)",
+       "enum": [
+        "top",
+        "center",
+        "bottom"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "project_id": {
+    "description": "Project ID",
+    "type": "string"
+   },
+   "returning": {
+    "description": "Declare what comes back, the way get_clip's `select` shapes a read. Omit it and you get ids, the measured layout, and the clip audit in compact form \u2014 which names every problem but drops the explanatory prose. Values: 'ids' (element_id per result), 'layout' (the measured text fit \u2014 font_size_px, text_width_px, natural_width_px, line_count, fits_width/fits_height/fits \u2014 `fits` is the WIDTH check (the widest rendered line inside the box), `fits_height` is the separate height one \u2014 plus an `adjusted` entry whenever the measured line box replaced the height you sent; widen a box to natural_width_px, NOT text_width_px, which is the widest RENDERED line and so a lower bound on text that is already wrapping; plus `placement` {y_anchor, top, center, bottom} \u2014 where the box landed and what your `y` meant, emitted only when the origin was implicit or resolves to 'center'. Compare placement.center with a container's centre line to verify centring: a mis-anchored label is the one layout error nothing else reports), 'qa.codes' (audit counts and summary plus severity/code/element_ids per finding), 'qa' (the same audit with the full message and suggested fix on every finding \u2014 ask for this when a code alone isn't enough to act on). A text element measured on a fallback face is listed in top-level `font_warnings` whichever you choose. ERROR-severity findings always come back with their full message whichever you choose \u2014 including `returning:[]` and `['ids']`, which suppress WARNINGS only. A failed item always returns complete. Pass [] for just {total, succeeded, failed} plus any errors, the leanest write.",
+    "items": {
+     "enum": [
+      "ids",
+      "layout",
+      "qa",
+      "qa.codes"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "project_id",
+   "elements"
+  ],
+  "type": "object"
+ },
+ "name": "add_elements",
+ "title": "Add elements to clips"
+}

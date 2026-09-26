@@ -1,0 +1,201 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Return every CC0 (open-access) image for a Smithsonian object at multiple resolutions. The tool never returns an empty list \u2014 it names the reason instead: an object with nothing digitized, an object whose media is entirely non-image (scanned books, 3D models, sound recordings), and an object whose images are entirely non-CC0 each fail with their own reason. Each image entry includes thumbnail (~120px), screen-size (~800px), and high-resolution JPEG/TIFF URLs with pixel dimensions. The cc0_only filter on smithsonian_search_objects surfaces objects that have downloadable CC0 images.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "id": {
+    "description": "record_id of the object (e.g. \"nasm_A19670093000\") from smithsonian_search_objects or smithsonian_get_object.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id"
+  ],
+  "type": "object"
+ },
+ "name": "smithsonian_get_media",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "record_id",
+     "title",
+     "is_cc0",
+     "images"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `not_found`: No object with the given ID exists in the Smithsonian catalog. `no_media`: The object exists but has no digitized online media. `no_images`: The object has digitized media, but none of it is an image \u2014 the media is entirely non-image types such as scanned books, 3D models, or sound recordings. `not_cc0`: The object has media but none of its images are CC0 open access. `invalid_id`: The ID is empty or contains only whitespace. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "not_found",
+         "no_media",
+         "no_images",
+         "not_cc0",
+         "invalid_id"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "images": {
+    "description": "CC0-licensed images for this object.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single CC0 image item with resolution variants.",
+     "properties": {
+      "alt_text": {
+       "description": "Accessibility alt text for the image.",
+       "type": "string"
+      },
+      "description": {
+       "description": "Extended accessibility description.",
+       "type": "string"
+      },
+      "high_res_jpeg": {
+       "additionalProperties": false,
+       "description": "Full-resolution JPEG download when available.",
+       "properties": {
+        "height": {
+         "description": "Image height in pixels.",
+         "type": "number"
+        },
+        "url": {
+         "description": "Direct download URL for the image.",
+         "type": "string"
+        },
+        "width": {
+         "description": "Image width in pixels.",
+         "type": "number"
+        }
+       },
+       "required": [
+        "url"
+       ],
+       "type": "object"
+      },
+      "high_res_tiff": {
+       "additionalProperties": false,
+       "description": "Archival TIFF download when available.",
+       "properties": {
+        "height": {
+         "description": "Image height in pixels.",
+         "type": "number"
+        },
+        "url": {
+         "description": "Direct download URL for the image.",
+         "type": "string"
+        },
+        "width": {
+         "description": "Image width in pixels.",
+         "type": "number"
+        }
+       },
+       "required": [
+        "url"
+       ],
+       "type": "object"
+      },
+      "is_cc0": {
+       "description": "True when this specific image is CC0 (may differ from the object-level flag). Always true on returned images \u2014 non-CC0 images are filtered out before the response.",
+       "type": "boolean"
+      },
+      "media_id": {
+       "description": "IDS media identifier.",
+       "type": "string"
+      },
+      "screen_url": {
+       "description": "Screen-size URL (~800px).",
+       "type": "string"
+      },
+      "thumbnail_url": {
+       "description": "Thumbnail URL (~120px).",
+       "type": "string"
+      }
+     },
+     "required": [
+      "media_id",
+      "is_cc0"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "is_cc0": {
+    "description": "True when the object-level metadata is CC0. The Open Access corpus is CC0 throughout, so this rarely varies; the per-image is_cc0 flag is what gates delivery.",
+    "type": "boolean"
+   },
+   "record_id": {
+    "description": "Smithsonian catalog record ID for the object.",
+    "type": "string"
+   },
+   "title": {
+    "description": "Object title from the catalog record.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Smithsonian Object Media"
+}

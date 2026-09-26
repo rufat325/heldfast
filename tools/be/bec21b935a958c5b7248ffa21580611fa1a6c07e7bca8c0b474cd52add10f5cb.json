@@ -1,0 +1,122 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Query stored traces with filters, pagination and sorting; optionally with the dashboard summary.\n\nWhat it does. Read-only, local. Exact-match agent_name and framework, inclusive since and until, and min_score and max_score on each trace's latest evaluation. limit is 1..1000 (default 50), newest first by default. A crossed range is refused, never returned as an empty page. Full detail: iris://capabilities.\n\nWhen not to use it. To score a trace (evaluate_output) or create one (log_trace). As a live stream: poll with backoff.\n\nReturns. JSON: traces, total, limit, offset, summary.\n\nErrors. IRIS_STORAGE_ERROR. Out-of-range bounds are refused, naming the values; no match is total 0, not an error. Failures return {\"error\":{code,message,recovery}} with isError; follow recovery.\n\nSiblings. log_trace \u2014 record an execution; evaluate_output \u2014 score one output; delete_trace \u2014 remove one trace.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "agent_name": {
+    "description": "Filter by agent name \u2014 exact match (no wildcards)",
+    "type": "string"
+   },
+   "framework": {
+    "description": "Filter by agent framework \u2014 exact match (e.g., langchain, autogen)",
+    "type": "string"
+   },
+   "include_summary": {
+    "default": false,
+    "description": "Include dashboard summary stats in same response \u2014 saves a round-trip when ingesting for dashboards",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 50,
+    "description": "Results per page (default 50, max 1000 \u2014 values above are rejected)",
+    "maximum": 1000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "max_score": {
+    "description": "Maximum eval score filter (0..1; values outside are rejected) \u2014 applied to LATEST eval per trace",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "min_score": {
+    "description": "Minimum score (0..1) of each trace's latest evaluation; at most max_score",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Zero-based pagination offset \u2014 skip first N results (non-negative integer)",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "session": {
+    "description": "Filter by session id \u2014 the turns of one conversation, as logged with session_id",
+    "type": "string"
+   },
+   "since": {
+    "description": "Inclusive lower bound, an ISO 8601 timestamp or date; anything else is rejected",
+    "type": "string"
+   },
+   "sort_by": {
+    "default": "timestamp",
+    "description": "Sort by timestamp | latency_ms | cost_usd (default timestamp)",
+    "enum": [
+     "timestamp",
+     "latency_ms",
+     "cost_usd"
+    ],
+    "type": "string"
+   },
+   "sort_order": {
+    "default": "desc",
+    "description": "Sort order: asc | desc (default desc \u2014 most recent / highest first)",
+    "enum": [
+     "asc",
+     "desc"
+    ],
+    "type": "string"
+   },
+   "until": {
+    "description": "ISO 8601 timestamp (or date) upper bound \u2014 return traces with timestamp <= this; must not be earlier than `since`",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_traces",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {},
+  "properties": {
+   "limit": {
+    "type": "number"
+   },
+   "offset": {
+    "type": "number"
+   },
+   "summary": {
+    "additionalProperties": {},
+    "properties": {},
+    "type": "object"
+   },
+   "total": {
+    "type": "number"
+   },
+   "traces": {
+    "items": {},
+    "type": "array"
+   }
+  },
+  "required": [
+   "traces",
+   "total",
+   "limit",
+   "offset"
+  ],
+  "type": "object"
+ },
+ "title": "Get Traces"
+}

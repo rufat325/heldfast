@@ -1,0 +1,73 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Request a g\u00e5rdssalg booking"
+ },
+ "description": "Submit a booking REQUEST for a Norwegian g\u00e5rdssalg (farm-sale) producer discovered via discover_gardssalg. Send inn en reservasjonsforesp\u00f8rsel for et g\u00e5rdssalg-bes\u00f8k. IMPORTANT: this NEVER creates a confirmed booking \u2014 it creates a PENDING request, exactly like the producer's own website form. The PRODUCER reviews the request and responds (confirms, proposes another time, or declines); guest_email only receives a read-only status link, never anything that can finalize the booking. No payment is involved (pickup/visit, pay on arrival, as today). Only producers with an active booking status (see discover_gardssalg's booking.live field) can be booked \u2014 a paused/not-yet-onboarded producer is rejected with a clear message, never a silent failure. VIKTIG: oppretter ALDRI en bekreftet booking \u2014 kun en avventende foresp\u00f8rsel; produsenten mottar foresp\u00f8rselen og svarer (bekrefter, foresl\u00e5r nytt tidspunkt eller avsl\u00e5r). ONE-SENTENCE FLOW (\u00abbook et m\u00f8te hos X fredag 20. oktober kl. 10 for 4 personer\u00bb): call this ONCE with provider_query='X' (the producer's name \u2014 no discover_gardssalg round-trip needed), slot_at, party_size, guest_name, guest_email and requested_weekday='fredag'. The tool resolves X to exactly one producer (or returns candidates / not-found with NO booking created), checks that the date really is a Friday (or returns weekday_mismatch:true with the nearest Fridays, NO booking created), then submits the request and notifies the producer by email. guest_name and guest_email are the HUMAN guest's own \u2014 ask the guest for them if you do not have them; never invent or reuse someone else's. Required: provider_id OR provider_query, slot_at (requested date/time, 'YYYY-MM-DDTHH:MM' Europe/Oslo), party_size, guest_name, guest_email. Optional: requested_weekday, experience_id, guest_phone, notes, confirm_outside_hours. The requested slot_at is ALWAYS hard-rejected if it's in the past or too far ahead. If the producer has stated opening hours and slot_at falls outside them, this returns outside_hours:true (not an error) instead of creating the booking \u2014 retry once with confirm_outside_hours:true if the exact requested time should be kept anyway. On success the response carries the resolved producer (provider.navn) and slot_at_local (e.g. 'fredag 23. oktober 2026 kl. 10:00') \u2014 read both back to the guest. Example: provider_query 'Fjordgard Bryggeri', slot_at '2026-10-23T10:00', requested_weekday 'fredag', party_size 4, guest_name 'Kari Nordmann', guest_email 'kari@example.no'.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "confirm_outside_hours": {
+    "description": "Set to true only when RETRYING after a previous call to this tool returned outside_hours:true and the requested time should be kept anyway, despite falling outside the producer's stated opening hours. Omit on a first attempt.",
+    "type": "boolean"
+   },
+   "experience_id": {
+    "description": "Optional experience UUID if this booking is for a specific listed experience rather than a general g\u00e5rdssalg visit.",
+    "type": "string"
+   },
+   "guest_email": {
+    "description": "Guest's email address \u2014 REQUIRED. Receives a confirmation-of-request email plus a read-only status link; the booking stays pending until the PRODUCER responds (confirms, proposes another time, or declines) \u2014 the guest's link cannot finalize anything. Example: 'kari@example.no'",
+    "type": "string"
+   },
+   "guest_name": {
+    "description": "Full name of the person the reservation is for. Example: 'Kari Nordmann'",
+    "type": "string"
+   },
+   "guest_phone": {
+    "description": "Optional guest phone number.",
+    "type": "string"
+   },
+   "notes": {
+    "description": "Optional free-text note to the producer (e.g. dietary needs, arrival details).",
+    "type": "string"
+   },
+   "party_size": {
+    "description": "Number of people in the group (1-50). Example: 4",
+    "type": "number"
+   },
+   "provider_id": {
+    "description": "The g\u00e5rdssalg producer's id \u2014 the `id` field of a discover_gardssalg result (NOT the profile slug). Example: '3f1b2c4d-...'. Either provider_id or provider_query is required; provider_id wins when both are given.",
+    "type": "string"
+   },
+   "provider_query": {
+    "description": "Alternative to provider_id: the producer's name as the guest said it, optionally with a place, e.g. 'Fjordgard Bryggeri' or 'Egge g\u00e5rd Steinkjer'. Resolved to exactly ONE producer; if several match, the tool returns the candidates (no booking created) so you can ask the guest which one; if none match, it says so.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "requested_weekday": {
+    "description": "Safety check \u2014 the weekday the guest actually said, e.g. 'fredag' or 'Friday'. If slot_at does not fall on that weekday (Europe/Oslo) the tool returns weekday_mismatch:true with the nearest dates that do, instead of booking the wrong day. Always pass it when the guest named a weekday.",
+    "maxLength": 20,
+    "type": "string"
+   },
+   "slot_at": {
+    "description": "Requested visit date/time, local (Europe/Oslo), format 'YYYY-MM-DDTHH:MM'. Example: '2026-08-15T13:00'. This is a REQUEST \u2014 the producer may confirm, suggest another time, or decline.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "slot_at",
+   "party_size",
+   "guest_name",
+   "guest_email"
+  ],
+  "type": "object"
+ },
+ "name": "book_gardssalg",
+ "title": "Request a g\u00e5rdssalg booking (pending \u2014 email confirmation required)"
+}

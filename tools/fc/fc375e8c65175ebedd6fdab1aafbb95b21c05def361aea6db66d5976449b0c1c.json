@@ -1,0 +1,87 @@
+{
+ "annotations": {
+  "cost": {
+   "all": 5
+  },
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Find FDA-approved drugs by brand name, active ingredient, or application number. To find generic versions of a drug, search by active ingredient using products.active_ingredients.name (NOT openfda.generic_name \u2014 that field only works in the label endpoint). IMPORTANT: drug names in the FDA database are stored in UPPERCASE \u2014 always pass ingredient and brand names in uppercase (e.g. \"APIXABAN\" not \"apixaban\") or you will get 0 results. Returns approval status, sponsor, application number (ANDA = generic, NDA = brand), and application details. There is NO queryable \"application_type\" field \u2014 never add application_type:\"ANDA\" (it returns 0 results). To limit to generics, search by active ingredient and read the ANDA/NDA prefix on application_number in the results. This endpoint has NO indication/disease field \u2014 for \"drugs approved to treat <condition>\" use fda_drug_labels (which searches indications_and_usage); an indication phrase passed here is silently ignored and matches by drug name only. The response `total` can exceed the 100-row cap on a single page \u2014 use `skip` to page past it, and `sort` to get genuinely-newest-first ordering (\"most recently approved\" is not the default order).",
+ "inputSchema": {
+  "examples": [
+   {
+    "query": "openfda.brand_name:\"KEYTRUDA\""
+   },
+   {
+    "limit": 10,
+    "query": "products.active_ingredients.name:\"SEMAGLUTIDE\"",
+    "sort": "approval_date_desc"
+   },
+   {
+    "limit": 20,
+    "query": "products.active_ingredients.name:\"pembrolizumab\""
+   },
+   {
+    "limit": 5,
+    "query": "products.active_ingredients.name:\"AMOXICILLIN\"",
+    "skip": 100
+   },
+   {
+    "limit": 10,
+    "query": "products.active_ingredients.name:\"AMOXICILLIN\"",
+    "sort": "approval_date_desc"
+   }
+  ],
+  "properties": {
+   "limit": {
+    "description": "Number of results (1-100, default 10)",
+    "type": "number"
+   },
+   "query": {
+    "description": "OpenFDA drugsfda search query. Drug names MUST be UPPERCASE in quotes. To find all generics for a drug: 'products.active_ingredients.name:\"APIXABAN\"' (returns all ANDA + NDA approvals). By brand: 'openfda.brand_name:\"KEYTRUDA\"'. By original submission: 'submissions.submission_type:\"ORIG\"'. Do NOT use application_type (no such field \u2014 returns 0); ANDA vs NDA is read from the application_number prefix in the results, not filtered in the query. NOTE: use products.active_ingredients.name (not openfda.generic_name which is a label-API field and returns 0 here).",
+    "type": "string"
+   },
+   "skip": {
+    "description": "Offset for pagination (default 0). The reported `total` is often larger than one page \u2014 pass skip=100 to reach the 101st+ result of a large query instead of assuming the first page is everything.",
+    "type": "number"
+   },
+   "sort": {
+    "description": "Order results by each drug's original FDA approval date instead of openFDA's default (unordered/relevance) order. approval_date_desc puts the genuinely most-recently-approved drug first \u2014 needed for \"most recent approval\" questions, which are wrong without it. Computed client-side from each record's own ORIG+approved submission (openFDA's native sort on this field is unreliable \u2014 it reads any submission in a drug's history, so an old drug with a recent label supplement can outrank a real new approval). Sorting is exact over up to 1000 matching records per call; a `sort_note` in the response says if the query matched more than that.",
+    "enum": [
+     "approval_date_asc",
+     "approval_date_desc"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "fda_drug_approvals",
+ "outputSchema": {
+  "properties": {
+   "results": {
+    "description": "Array of drug approval objects",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "total": {
+    "description": "Total count of matching FDA-approved drugs",
+    "type": "number"
+   }
+  },
+  "required": [
+   "total",
+   "results"
+  ],
+  "type": "object"
+ },
+ "title": "Fda Drug Approvals",
+ "version": "v1.0c38f0aa"
+}

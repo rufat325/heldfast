@@ -1,0 +1,120 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search Sentry events and replays. Use for event counts/statistics.\n\n`query` is natural language or Sentry search syntax; a configured agent fixes dataset, query, fields, and sort.\n\nSupports THREE query types:\n1. AGGREGATIONS (counts, sums, averages): 'how many errors', 'total tokens'\n2. Individual events with timestamps: 'error logs from last hour'\n3. TIME SERIES (metric over time): 'errors per hour', 'error trend over time'\n\nDatasets:\n- errors: Exception/crash events with stack traces, usually grouped into issues\n- logs: Application log entries, including error-severity log messages\n- spans: Raw trace/span events for performance, AI/LLM calls, requests, and operations\n- metrics: Metric rows and aggregates: counters, gauges, distributions, values\n- profiles: Transaction/continuous profile results, profile IDs, profiled transactions\n- replays: Session replay results: rage clicks, dead clicks, visited pages, replay users\nIf the user says logs, log messages, error logs, or warning logs, choose logs instead of errors.\n\nReplay searches return replay lists only; replay count()/avg()/sum() are not supported.\n\nNOT for grouped issue lists (use search_issues) or app screenshots/images (use get_latest_base_snapshot).\n\n<examples>\nsearch_events(organizationSlug='my-org', query='how many errors today')\nsearch_events(organizationSlug='my-org', dataset='errors', fields=['issue', 'count()'], sort='-count()')\nsearch_events(organizationSlug='my-org', query='errors per hour last 24h')\nsearch_events(organizationSlug='my-org', dataset='spans', query='span.op:db', sort='-span.duration')\nsearch_events(organizationSlug='my-org', dataset='replays', query='count_errors:>0', sort='-count_errors')\n</examples>\n\n<hints>\n- name/otherName notation means <organizationSlug>/<projectSlug>; parse it directly, don't call find_organizations/find_projects.\n- Use fields with aggregate functions like count(), avg(), sum() for statistics\n- Sort by -count() for most common, -timestamp for newest\n</hints>",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "dataset": {
+    "description": "Initial dataset hint: errors, logs, spans, metrics, profiles, or replays. The agent may correct this when configured.",
+    "enum": [
+     "spans",
+     "errors",
+     "logs",
+     "metrics",
+     "profiles",
+     "replays"
+    ],
+    "type": "string"
+   },
+   "environment": {
+    "anyOf": [
+     {
+      "minLength": 1,
+      "type": "string"
+     },
+     {
+      "items": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+     }
+    ],
+    "description": "Optional environment filter for dataset='replays'. Use a string for one environment or an array for multiple. Omit when unused. For other datasets, filter environment in the query string instead."
+   },
+   "fields": {
+    "anyOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Fields to return for event datasets. If not specified, uses sensible defaults. Include aggregate functions like count(), avg() for statistics. Leave null for dataset='replays'."
+   },
+   "includeExplanation": {
+    "default": false,
+    "description": "Include explanation of how the query was translated or repaired",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Maximum number of results to return (1-100)",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "number"
+   },
+   "organizationSlug": {
+    "description": "The organization's slug. You can find a existing list of organizations you have access to using the `find_organizations()` tool.",
+    "type": "string"
+   },
+   "period": {
+    "description": "Relative time window, such as `24h`, `7d`, `14d`, `30d`, or `90d`. Controls which records fall within the search window.",
+    "pattern": "^\\d+[hdw]$",
+    "type": "string"
+   },
+   "projectSlug": {
+    "anyOf": [
+     {
+      "description": "The project's slug. You can find a list of existing projects in an organization using the `find_projects()` tool.",
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null
+   },
+   "query": {
+    "description": "Natural language or Sentry event search query syntax.",
+    "type": "string"
+   },
+   "regionUrl": {
+    "anyOf": [
+     {
+      "description": "The region URL for the organization you're querying, if known. For Sentry's Cloud Service (sentry.io), this is typically the region-specific URL like 'https://us.sentry.io'. For self-hosted Sentry installations, this parameter is usually not needed and should be omitted. You can find the correct regionUrl from the organization details using the `find_organizations()` tool.",
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null
+   },
+   "sort": {
+    "description": "Sort field (prefix with - for descending). If omitted, event datasets default to -timestamp and replays default to -started_at. Use -count() for event aggregations. For dataset='replays', use replay sorts like -started_at or -count_errors.",
+    "type": [
+     "string",
+     "null"
+    ]
+   }
+  },
+  "required": [
+   "organizationSlug"
+  ],
+  "type": "object"
+ },
+ "name": "search_events"
+}

@@ -1,0 +1,156 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Submit a callback request on behalf of a user. Advocate attempts a notification through the business's configured lead routing channel (SMS/email); provider acceptance is not proof the business read it. A failed or pending result can require direct follow-up or a retry. Idempotent: re-using the same idempotency_key returns the original request.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "agent_id": {
+    "description": "Optional agent identifier",
+    "type": "string"
+   },
+   "contact_email": {
+    "description": "End-user's email",
+    "format": "email",
+    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+    "type": "string"
+   },
+   "contact_name": {
+    "description": "End-user's name",
+    "maxLength": 120,
+    "type": "string"
+   },
+   "contact_phone": {
+    "description": "End-user's phone",
+    "maxLength": 40,
+    "type": "string"
+   },
+   "idempotency_key": {
+    "description": "Idempotency key",
+    "minLength": 1,
+    "type": "string"
+   },
+   "preferred_channel": {
+    "description": "Channel the user prefers (default: any)",
+    "enum": [
+     "phone",
+     "email",
+     "sms",
+     "any"
+    ],
+    "type": "string"
+   },
+   "reason": {
+    "description": "Why the user wants the callback",
+    "maxLength": 800,
+    "type": "string"
+   },
+   "slug": {
+    "description": "Business slug identifier",
+    "minLength": 1,
+    "type": "string"
+   },
+   "urgency": {
+    "description": "How time-sensitive (default: normal)",
+    "enum": [
+     "low",
+     "normal",
+     "high",
+     "emergency"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "slug",
+   "idempotency_key"
+  ],
+  "type": "object"
+ },
+ "name": "request_callback",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "acknowledgment": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Customer-facing sentence to relay; null only on a replay caught while the original send is still in flight"
+   },
+   "callback_id": {
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "delivered_via": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "'sms' or 'email' when notified; null otherwise"
+   },
+   "form_url": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Present with reason 'form_routing_configured': the business's own contact form for the user to complete, or null where the business chose form routing without supplying one"
+   },
+   "idempotent_replay": {
+    "description": "Present and true when this idempotency_key already had a request; nothing was re-sent",
+    "type": "boolean"
+   },
+   "reason": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Present for a known routing or provider outcome: 'form_routing_configured', 'no_recipient_configured', 'sms_consent_missing', a shape-mismatch skip, a spend-cap denial, or a provider failure code"
+   },
+   "status": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "'notified': the configured notification provider accepted the request; this does not prove the business read it. 'failed': routing was not available or the provider reported a failure \u2014 see reason. 'pending': a web-form business (see form_url), or a replay while the original send is still in flight."
+   }
+  },
+  "required": [
+   "callback_id",
+   "status",
+   "delivered_via",
+   "acknowledgment"
+  ],
+  "type": "object"
+ },
+ "title": "Request Callback"
+}

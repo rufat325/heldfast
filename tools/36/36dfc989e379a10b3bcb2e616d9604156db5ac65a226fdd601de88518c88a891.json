@@ -1,0 +1,122 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Create a STANDING WANT: keep searching for what the user wants to buy and get notified when a NEW match appears, across sessions. Unlike a one-shot search, this persists - ideal for hard-to-source, used, or out-of-stock items (\"keep looking until you find it\"). Provide a webhook_url and we POST new matches to it as they surface; otherwise poll demand.list_watches. Same query shape and enforced constraints as demand.search. WITHOUT AN API KEY this works too, under limits: no webhooks, three standing wants at a time, a six-hour minimum re-check, and a seven-day life. Any limit applied to your request comes back in `notes`.",
+ "inputSchema": {
+  "properties": {
+   "category": {
+    "description": "Broad kind of thing. Defaults to goods; use services for labour.",
+    "enum": [
+     "goods",
+     "services",
+     "other"
+    ],
+    "type": "string"
+   },
+   "check_interval_minutes": {
+    "description": "How often to re-check, in minutes (>=5 with a key, >=360 without, default 60). A request below the floor is raised and the change reported in `notes`.",
+    "type": "integer"
+   },
+   "client_token": {
+    "description": "Optional idempotency key (<=128 chars). Retrying with the same token returns the original watch instead of creating a duplicate. (v1.1 \u00a7E)",
+    "type": "string"
+   },
+   "constraints": {
+    "description": "Machine-evaluable constraints (rules.condition_min, rules.specs). Enforced like demand.search.",
+    "type": "object"
+   },
+   "description": {
+    "description": "Further detail that did not belong in the title: intended use, acceptable substitutes, what is already ruled out.",
+    "type": "string"
+   },
+   "min_score": {
+    "description": "Only notify on matches at/above this relevance (0..1, default 0.5)",
+    "type": "number"
+   },
+   "price_cents": {
+    "description": "Budget ceiling in cents. $1,200 is 120000. Enforced as a maximum for the life of the watch, so a wrong ceiling means it can never match.",
+    "type": "integer"
+   },
+   "title": {
+    "description": "What to keep watching for (3-200 chars)",
+    "type": "string"
+   },
+   "webhook_url": {
+    "description": "https URL we POST new matches to (type: want.matches). Requires an API key - a keyless request naming one is refused rather than silently ignored.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "title"
+  ],
+  "type": "object"
+ },
+ "name": "demand.create_watch",
+ "outputSchema": {
+  "additionalProperties": true,
+  "properties": {
+   "message": {
+    "description": "Human-readable summary.",
+    "type": "string"
+   },
+   "notes": {
+    "description": "Any limit applied to your request, stated plainly rather than applied silently.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "watch": {
+    "description": "The standing want as stored.",
+    "properties": {
+     "active": {
+      "description": "False once cancelled or expired.",
+      "type": "boolean"
+     },
+     "check_interval_minutes": {
+      "description": "How often it actually re-runs, after any clamp.",
+      "type": "integer"
+     },
+     "expires_at": {
+      "description": "When it stops on its own. Keyless watches live 7 days.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "id": {
+      "description": "Handle for demand.list_watches and demand.cancel_watch.",
+      "type": "string"
+     },
+     "title": {
+      "description": "What it watches for.",
+      "type": "string"
+     },
+     "webhook_url": {
+      "description": "Null for keyless callers, who poll instead.",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "type": "object"
+   },
+   "webhook_secret": {
+    "description": "Shown once, on first creation only. Signs every delivery.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "watch"
+  ],
+  "type": "object"
+ },
+ "title": "Create a standing want (watch)"
+}

@@ -1,0 +1,156 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Runs a test definition through on-demand execution, which executes it and discards it \u2014 nothing in the account is created or changed. Use it to check that a selector chain still resolves before editing a test, and to check a definition you are authoring before saving it.\n\n\ud83d\udd34 It drives a real browser against a real URL, so it is an action with real-world effects even though nothing is saved. Modules are inlined first, because a test whose steps are just `execute` calls hides its submit inside a module. Then three guard layers apply, and none can be turned off or extended past its cut:\n(A) Static: the run is truncated at the first click on a submit-shaped target, Enter keypress, or eval/assertEval/extractEval script or step condition that could submit or send data (.submit(, requestSubmit(, .click(, dispatchEvent(, fetch(, XMLHttpRequest, sendBeacon(, $.ajax, $.post, axios). That step becomes an assertElementVisible on its target, so the chain is verified, including that the control is reachable. `stopBefore` can move this cut earlier, never later.\n(B) In the browser: before every remaining click, a wait on its target and a probe. The probe stops the run if the element is a form's submit button or input, a control inside a form that is not a field, or cannot be resolved from the top document; every step is gated on that stop. Accepted false positive: a type=submit \"Continue\" inside a form stops the run.\n(C) Tripwire: armed before every step on every page, click or not, it blocks submit events, form.submit(), non-GET fetch and XHR, and sendBeacon, and `guard.blockedRequests` lists them. It does not stop the run. Residual gaps: a script that saved window.fetch or form.submit before the page's first step ran, a WebSocket, anything inside a child frame, and data sent by a GET (a pixel or a navigation).\nStep numbers in `plan`, `steps` and `guard` count plan steps; the injected ones never shift them. There is no way to make this tool submit; that stays a deliberate curl.\n\nFor an existing test the suite's configuration is replicated in the request body \u2014 viewport, browser, user agent, region, language, delays, failOnJavaScriptError, disableVisuals, disallowInsecureCertificates \u2014 with a non-null value on the test winning over the suite's, and a caller override winning over both. Tests inherit these, and a selector can resolve on desktop and fail on mobile. `ranAs.settings` shows each value and its source; after the run `settingsCheck` lists any the result reports differently. HTTP basic auth is never sent. An ad-hoc definition gets the same treatment from `suiteId`.\n\n\ud83d\udd34 {{variables}} are substituted here, because on-demand execution ignores custom variables and silently runs an unknown {{name}} as an empty string \u2014 a startUrl of https://{{sub}}.example.com/ would run as https://.example.com/ and could still pass. Values come from `variables` (yours), then the suite, then the organization. A name an earlier step sets at run time (variableName), a built-in ({{timestamp}}, {{alphanumeric}}) or a dotted name is left for the browser. Anything else without a value refuses the run before anything is sent, and `variables.unresolved` says where.\n\nA browser run takes 20-100 seconds; the tool polls until it finishes. `passing: null` in the raw API means not finished, never failed.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "browser": {
+    "description": "Override, e.g. \"chrome\". Omit to replicate the suite's.",
+    "type": "string"
+   },
+   "definition": {
+    "description": "Ad-hoc definition to validate instead of an existing test.",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "startUrl": {
+      "description": "Where the run begins.",
+      "type": "string"
+     },
+     "steps": {
+      "description": "Steps in execution order.",
+      "items": {
+       "properties": {
+        "command": {
+         "description": "One of: assertElementNotPresent, assertElementNotVisible, assertElementPresent, assertElementVisible, assertEval, assertNotText, assertText, assertTextNotPresent, assertTextPresent, assign, click, dragAndDrop, eval, execute, exit, extract, extractEval, keypress, mouseOver, open, pause, refresh, screenshot, store.",
+         "type": "string"
+        },
+        "condition": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "properties": {
+              "statement": {
+               "type": "string"
+              }
+             },
+             "required": [
+              "statement"
+             ],
+             "type": "object"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "JavaScript deciding whether the step runs, with an explicit return. Stored as {statement}, which gi_get_test returns; a bare string is written in that shape. AND-ed with conditions inherited from enclosing imports."
+        },
+        "optional": {
+         "description": "Continue when this step fails.",
+         "type": "boolean"
+        },
+        "private": {
+         "description": "Hide the step's value in results, for secrets. Kept on every write; omitting it clears it.",
+         "type": "boolean"
+        },
+        "target": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "items": {
+            "additionalProperties": {},
+            "properties": {
+             "selector": {
+              "type": "string"
+             }
+            },
+            "required": [
+             "selector"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          }
+         ],
+         "description": "CSS selector, or an array of fallback selectors ({selector}) tried in order, as gi_get_test returns them. \ud83d\udd34 REQUIRED by the text assertions: assertTextPresent with no target fails with \"Text not contained\" even when the text is plainly on the page, which reads as a product bug rather than a malformed step \u2014 scope it to body at minimum. Anchor to stable semantic attributes (data-*, name, id) and scope to a container id. Never :nth-of-type, never XPath matching visible copy, never long chains of presentational classes. A selector matching more than one element is a latent failure. Attribute selectors need brackets: [data-x=\"y\"], not data-x=\"y\", which is not valid CSS and never matched anything."
+        },
+        "value": {
+         "description": "For assign, the value to type \u2014 send it unformatted and assert the formatted result, so the test exercises the input mask instead of bypassing it. For eval and assertEval, JavaScript that MUST contain an explicit return; without one it evaluates to undefined and the assertion always fails, which looks like a product bug. For execute, the module's test id.",
+         "type": "string"
+        },
+        "variableName": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "command"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "startUrl",
+     "steps"
+    ],
+    "type": "object"
+   },
+   "dryRun": {
+    "description": "Deprecated: use gi_plan_test, which does exactly this and is read-only. Reports what would run and sends nothing.",
+    "type": "boolean"
+   },
+   "stopBefore": {
+    "description": "Stop before this plan step (as numbered by gi_plan_test). Can only cut earlier than the guard's own cut; a later value is ignored.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "suiteId": {
+    "description": "With `definition`: the suite whose configuration and variables it runs with.",
+    "type": "string"
+   },
+   "testId": {
+    "description": "Existing test to validate. Its suite's configuration and variables are replicated.",
+    "type": "string"
+   },
+   "variables": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Variable values, e.g. {\"subdomain\": \"www\"}. Win over the suite's and the organization's.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "verbose": {
+    "description": "Keep `plan` after a run and return every console entry. Off by default to keep the response small.",
+    "type": "boolean"
+   },
+   "viewport": {
+    "description": "Override, e.g. \"1280x800\". Omit to use the test's, then the suite's.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "gi_validate_test",
+ "title": "Ghost Inspector: validate a definition without saving or submitting"
+}

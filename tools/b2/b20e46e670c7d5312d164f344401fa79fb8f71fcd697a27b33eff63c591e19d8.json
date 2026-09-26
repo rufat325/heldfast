@@ -1,0 +1,300 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Update groups"
+ },
+ "description": "Transform, keyframe, rename, nest or lock GROUPS. A group moves, scales, rotates and fades as ONE unit, without touching any child's stored position \u2014 which is how you get a camera push instead of building the target layout twice and crossfading it.\n\nAddress by `group_id`, never by name. Ids come from get_clip, or from the `group_id` that add_elements/update_elements hands back when you pass `group`. An unknown id is an error, never a silent create.\n\nThere is no add_groups: a group is CREATED by putting elements in one \u2014 `add_elements(group: \"hero-card\")` \u2014 which also returns its id. That is not a shortcut; a group's pivot comes from its children's bounding box, so an empty group has no geometry to transform.\n\nThe shortest path, in one script:\n\n  const clip = get_clip({ project_id, clip_index: 2, select: [\"groups\"] });\n  const byName = new Map(clip.groups.map(g => [g.name, g.id]));\n  update_groups({ project_id, items: [{\n    clip_index: 2, group_id: byName.get(\"hero-card\"),\n    anchor_px: [960, 540],\n    keyframes: [\n      { timestamp: 0,   scaleX: 1,   scaleY: 1 },\n      { timestamp: 1.2, scaleX: 2.4, scaleY: 2.4, offsetX: -400, offsetY: -120,\n        interpolation: \"easeOut\" },\n    ],\n  }]});\n\nUnits are canvas pixels, as everywhere else: `offset_px`, `blur_px` and `anchor_px` are pixels; `scale` is a multiplier; `rotation`/`rotate` are degrees; `opacity` is 0-100.\n\n`anchor_px` is the pivot everything rotates and scales about. Give it as a point on the canvas \u2014 the server converts it to a fraction of the group's child bounding box and reports back both that fraction and the box, so you can check it. Default is the box's centre. Set it when you want a push that favours one corner.\n\nOnly fields you pass are changed. `keyframes: []` CLEARS every track; omitting `keyframes` leaves them alone; a non-empty list replaces only the properties it names. `parent_group_id: \"\"` moves a group to the clip root; omitting it leaves the parent alone.\n\nKeyframable: offsetX, offsetY, scaleX, scaleY, rotation, rotateX, rotateY, opacity, blur. Position, size and colour belong to elements, not groups.\n\nConcurrency: clip-scoped (a group edit can add or re-parent nodes in its clip). Serialize against other mutations on the SAME clip; different clips and different projects run in parallel freely.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "items": {
+    "description": "One entry per group to update",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "anchor_px": {
+       "description": "The pivot, as a canvas-pixel point. Defaults to the centre of the group's child bounding box.",
+       "items": false,
+       "maxItems": 2,
+       "minItems": 2,
+       "prefixItems": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        }
+       ],
+       "type": "array"
+      },
+      "blur_px": {
+       "description": "Blur in pixels, applied over every child",
+       "minimum": 0,
+       "type": "number"
+      },
+      "clip_index": {
+       "description": "Zero-based clip index",
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "collapsed": {
+       "description": "Collapse the group in the editor's layer tree",
+       "type": "boolean"
+      },
+      "group_id": {
+       "description": "The group's id (from get_clip, or returned by add_elements when you pass `group`)",
+       "minLength": 1,
+       "type": "string"
+      },
+      "keyframes": {
+       "description": "Animate the group over time. [] clears every track; omit to leave tracks alone.",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "bezier": {
+          "description": "Cubic-bezier [x1,y1,x2,y2]; used when interpolation is 'custom'.",
+          "items": {
+           "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+         },
+         "bezier_overrides": {
+          "additionalProperties": {
+           "items": {
+            "type": "number"
+           },
+           "maxItems": 4,
+           "minItems": 4,
+           "type": "array"
+          },
+          "description": "Per-property cubic-bezier override.",
+          "propertyNames": {
+           "enum": [
+            "offsetX",
+            "offsetY",
+            "scaleX",
+            "scaleY",
+            "rotation",
+            "rotateX",
+            "rotateY",
+            "opacity",
+            "blur"
+           ],
+           "type": "string"
+          },
+          "type": "object"
+         },
+         "blur": {
+          "description": "blur in pixels, applied over every child",
+          "type": "number"
+         },
+         "interpolation": {
+          "description": "Easing for THIS entry, applied to every property in it (default easeInOut).",
+          "enum": [
+           "linear",
+           "easeInOut",
+           "easeIn",
+           "easeOut",
+           "sigmoid",
+           "smootherstep",
+           "smoothstep",
+           "hold",
+           "easeInBack",
+           "easeOutBack",
+           "easeInOutBack",
+           "custom"
+          ],
+          "type": "string"
+         },
+         "interpolation_overrides": {
+          "additionalProperties": {
+           "enum": [
+            "linear",
+            "easeInOut",
+            "easeIn",
+            "easeOut",
+            "sigmoid",
+            "smootherstep",
+            "smoothstep",
+            "hold",
+            "easeInBack",
+            "easeOutBack",
+            "easeInOutBack",
+            "custom"
+           ],
+           "type": "string"
+          },
+          "description": "Per-property easing override, e.g. {\"opacity\":\"linear\"}.",
+          "propertyNames": {
+           "enum": [
+            "offsetX",
+            "offsetY",
+            "scaleX",
+            "scaleY",
+            "rotation",
+            "rotateX",
+            "rotateY",
+            "opacity",
+            "blur"
+           ],
+           "type": "string"
+          },
+          "type": "object"
+         },
+         "offsetX": {
+          "description": "offsetX in canvas pixels \u2014 how far to move the whole group",
+          "type": "number"
+         },
+         "offsetY": {
+          "description": "offsetY in canvas pixels \u2014 how far to move the whole group",
+          "type": "number"
+         },
+         "opacity": {
+          "description": "0-100, multiplied over each child's own opacity",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+         },
+         "rotateX": {
+          "description": "rotateX in degrees",
+          "type": "number"
+         },
+         "rotateY": {
+          "description": "rotateY in degrees",
+          "type": "number"
+         },
+         "rotation": {
+          "description": "rotation in degrees",
+          "type": "number"
+         },
+         "scaleX": {
+          "description": "scaleX multiplier (1 = unscaled), about the group's anchor",
+          "type": "number"
+         },
+         "scaleY": {
+          "description": "scaleY multiplier (1 = unscaled), about the group's anchor",
+          "type": "number"
+         },
+         "timestamp": {
+          "description": "Clip-relative time in seconds",
+          "minimum": 0,
+          "type": "number"
+         }
+        },
+        "required": [
+         "timestamp"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "locked": {
+       "description": "Lock the group in the editor",
+       "type": "boolean"
+      },
+      "name": {
+       "description": "Rename the group. Names stay unique per clip, so a collision is rejected.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "offset_px": {
+       "description": "Move the whole group by [dx, dy] canvas pixels. Children's stored positions are untouched.",
+       "items": false,
+       "maxItems": 2,
+       "minItems": 2,
+       "prefixItems": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        }
+       ],
+       "type": "array"
+      },
+      "opacity": {
+       "description": "0-100, multiplied over each child's own opacity",
+       "maximum": 100,
+       "minimum": 0,
+       "type": "number"
+      },
+      "parent_group_id": {
+       "description": "Nest this group under another by id. \"\" moves it to the clip root. Omit to leave the parent alone.",
+       "type": "string"
+      },
+      "rotate": {
+       "description": "3D tilt [x, y] in degrees",
+       "items": false,
+       "maxItems": 2,
+       "minItems": 2,
+       "prefixItems": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        }
+       ],
+       "type": "array"
+      },
+      "rotation": {
+       "description": "Rotation in degrees about the anchor",
+       "type": "number"
+      },
+      "scale": {
+       "description": "Scale [x, y] as a multiplier about the anchor (1 = unscaled)",
+       "items": false,
+       "maxItems": 2,
+       "minItems": 2,
+       "prefixItems": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        }
+       ],
+       "type": "array"
+      }
+     },
+     "required": [
+      "clip_index",
+      "group_id"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "project_id": {
+    "description": "The project ID",
+    "type": "string"
+   },
+   "returning": {
+    "description": "Declare what comes back, the way get_clip's `select` shapes a read. Omit it and you get ids, the measured layout, and the clip audit in compact form \u2014 which names every problem but drops the explanatory prose. Values: 'ids' (element_id per result), 'layout' (the measured text fit \u2014 font_size_px, text_width_px, natural_width_px, line_count, fits_width/fits_height/fits \u2014 `fits` is the WIDTH check (the widest rendered line inside the box), `fits_height` is the separate height one \u2014 plus an `adjusted` entry whenever the measured line box replaced the height you sent; widen a box to natural_width_px, NOT text_width_px, which is the widest RENDERED line and so a lower bound on text that is already wrapping; plus `placement` {y_anchor, top, center, bottom} \u2014 where the box landed and what your `y` meant, emitted only when the origin was implicit or resolves to 'center'. Compare placement.center with a container's centre line to verify centring: a mis-anchored label is the one layout error nothing else reports), 'qa.codes' (audit counts and summary plus severity/code/element_ids per finding), 'qa' (the same audit with the full message and suggested fix on every finding \u2014 ask for this when a code alone isn't enough to act on). A text element measured on a fallback face is listed in top-level `font_warnings` whichever you choose. ERROR-severity findings always come back with their full message whichever you choose \u2014 including `returning:[]` and `['ids']`, which suppress WARNINGS only. A failed item always returns complete. Pass [] for just {total, succeeded, failed} plus any errors, the leanest write.",
+    "items": {
+     "enum": [
+      "ids",
+      "layout",
+      "qa",
+      "qa.codes"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "project_id",
+   "items"
+  ],
+  "type": "object"
+ },
+ "name": "update_groups",
+ "title": "Update groups"
+}

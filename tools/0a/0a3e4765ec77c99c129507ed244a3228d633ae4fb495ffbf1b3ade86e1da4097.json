@@ -1,0 +1,87 @@
+{
+ "annotations": {
+  "cost": {
+   "all": 1
+  },
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Everything ThreatFox knows about one file hash (md5 / sha1 / sha256), across BOTH relations it stores hashes in \u2014 they are different facts and a caller with a hash in hand rarely knows which one they have. (1) sample_to_c2: the hash is a malware SAMPLE, and ThreatFox returns the botnet C&C servers that sample talks to (this is what abuse.ch's own `search_hash` query answers, and only this). (2) hash_listed_as_ioc: the hash is itself published as an indicator \u2014 threat_type \"payload\" \u2014 in which case the row IS the answer. `matched_relation` says which one fired, or is null when neither did. AN EMPTY RESULT IS A REAL ANSWER HERE, not a failure: ThreatFox is a C&C-tracking feed, not a sample database \u2014 most hashes on any malware site are in neither relation. It also expires every IOC older than six months, so a hash from an old report can legitimately return nothing today. For sample metadata (file type, size, signature, YARA) use the malwarebazaar pack, which is the same vendor and indexes every sample.",
+ "inputSchema": {
+  "examples": [
+   {
+    "hash": "2a85f2e5876b278a7af9393483de455b"
+   },
+   {
+    "hash": "da168c3ff95c749beec0a2f29a1e6b82"
+   }
+  ],
+  "properties": {
+   "hash": {
+    "description": "md5 (32 hex), sha1 (40 hex) or sha256 (64 hex). Anything else is rejected upstream as illegl_hash [sic] rather than answered empty.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "hash"
+  ],
+  "type": "object"
+ },
+ "name": "search_hash",
+ "outputSchema": {
+  "properties": {
+   "count": {
+    "description": "Number of results returned",
+    "type": "integer"
+   },
+   "matched_relation": {
+    "description": "WHICH of ThreatFox's two hash relations answered. \"sample_to_c2\": the hash is a malware sample and the rows are the C&C servers it talks to. \"hash_listed_as_ioc\": the hash is itself published as an indicator (threat_type \"payload\") and the row IS the answer. null: neither matched - both were searched, see searched_relations.",
+    "enum": [
+     "sample_to_c2",
+     "hash_listed_as_ioc",
+     null
+    ],
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "query": {
+    "description": "The query type sent (search_hash)",
+    "type": "string"
+   },
+   "results": {
+    "description": "IOCs associated with the file hash",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "searched_relations": {
+    "description": "Present only when nothing matched: the relations that WERE searched, so an empty answer cannot be mistaken for a partial lookup.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "status": {
+    "description": "Query status (ok, no_result, or null)",
+    "type": [
+     "string",
+     "null"
+    ]
+   }
+  },
+  "required": [
+   "query",
+   "status",
+   "count",
+   "results"
+  ],
+  "type": "object"
+ },
+ "title": "Search Hash",
+ "version": "v1.37fb2b73"
+}

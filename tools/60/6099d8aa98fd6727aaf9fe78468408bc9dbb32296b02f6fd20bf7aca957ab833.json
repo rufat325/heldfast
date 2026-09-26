@@ -1,0 +1,113 @@
+{
+ "description": "Record a governed action in DashClaw's audit trail. Use this to log significant decisions, completed tasks, or notable outcomes. Every important action the agent takes should be recorded for governance visibility in the Approvals inbox and the Decisions ledger.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "act": {
+    "additionalProperties": {},
+    "description": "The actual act this record covers \u2014 pass the SAME act object you sent to dashclaw_guard. For status pending_approval the server stamps a content hash from it, binding the operator's approval to this exact act. Claim-aware execution paths (dashclaw_invoke, governed SDK callbacks, and supported hooks) must present the same act when claiming that authority. The bare dashclaw_guard/record/wait flow remains cooperative policy and audit; it does not consume or reuse approval authority. Shape matches dashclaw_guard's act ({ kind: \"shell\"|\"http\"|\"sql\"|\"file\", ... }). Optional \u2014 omit when no concrete act exists.",
+    "type": "object"
+   },
+   "action_id": {
+    "description": "Close an EXISTING record instead of creating one: the action_id returned by an earlier dashclaw_record (status running). A dashclaw_guard decision_id is not an action record and cannot be closed here. Only status, output_summary and error_message are applied; the server stamps the outcome from status. Omit to create a new record.",
+    "type": "string"
+   },
+   "action_type": {
+    "description": "Category (e.g., research, analysis, code_change, deploy)",
+    "type": "string"
+   },
+   "agent_id": {
+    "description": "Fallback identity when no server-level agent id is configured (the configured id wins). With a configured id you may name a sub-agent under it as \"<configured id>/<name>\" (e.g. claude-desktop/nightly-seo) so this routine gets its own row on /decisions; anything else falls back to the configured id.",
+    "type": "string"
+   },
+   "approval_wait_seconds": {
+    "description": "For status pending_approval: how long you will poll for the decision (default 300; the approval expires after this window + a retry grace)",
+    "type": "integer"
+   },
+   "confidence": {
+    "description": "Your honest 0-100 confidence, stated BEFORE acting, that this action completes without a human stepping in. Scored against the real outcome on /decisions (Predicted vs actual). State it on dashclaw_guard where possible; here it belongs on the up-front record (status running/pending_approval), never backfilled onto a close. Leave it out rather than guess; exactly 50 is treated as unstated. A value stated on the preceding dashclaw_guard call for the same agent/action_type/declared_goal is carried over automatically \u2014 no need to restate it here.",
+    "type": "integer"
+   },
+   "cost_estimate": {
+    "description": "Estimated cost in USD",
+    "type": "number"
+   },
+   "declared_goal": {
+    "description": "What was accomplished",
+    "type": "string"
+   },
+   "deviation_note": {
+    "description": "Optional deviation self-report: how and why this action departed from the approved plan. Recorded as an agent-reported claim (never suppresses or downgrades the server's own deviation detection).",
+    "type": "string"
+   },
+   "error_message": {
+    "description": "For status failed: what went wrong (applied on the action_id close path; ignored otherwise)",
+    "type": "string"
+   },
+   "model": {
+    "description": "Model used",
+    "type": "string"
+   },
+   "output_summary": {
+    "description": "Brief summary of what was produced",
+    "type": "string"
+   },
+   "plan_step_id": {
+    "description": "Optional deviation self-report: the plan step (ps_...) this action was supposed to fulfil, when you knowingly departed from it.",
+    "type": "string"
+   },
+   "reasoning": {
+    "description": "Why this action was chosen",
+    "type": "string"
+   },
+   "reversible": {
+    "description": "Whether the action can be undone",
+    "type": "boolean"
+   },
+   "risk_score": {
+    "description": "Risk level 0-100 (default 30)",
+    "type": "integer"
+   },
+   "session_id": {
+    "description": "Session to attribute this action to. Defaults to the session started via dashclaw_session_start in this connection.",
+    "type": "string"
+   },
+   "status": {
+    "description": "Outcome status",
+    "enum": [
+     "running",
+     "completed",
+     "failed",
+     "pending_approval"
+    ],
+    "type": "string"
+   },
+   "systems_touched": {
+    "description": "Systems affected",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "tokens_in": {
+    "description": "Input tokens consumed",
+    "type": "integer"
+   },
+   "tokens_out": {
+    "description": "Output tokens produced",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "action_type",
+   "declared_goal",
+   "status"
+  ],
+  "type": "object"
+ },
+ "name": "dashclaw_record"
+}

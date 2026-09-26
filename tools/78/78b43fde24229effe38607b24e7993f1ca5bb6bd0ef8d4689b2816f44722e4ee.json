@@ -1,0 +1,333 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Bounded heart-rate time-series for one civil day (agent-safe-series/v1). Exact stats on full-resolution samples plus a downsampled series capped at 500 points. Prefer fitbit_get_heart_day / daily summary first; use this when you need the shape of HR over the day. Shared contract with garmin_activity_series / strava_activity_series / Kindred workout_series. Not medical advice.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "date": {
+    "default": "today",
+    "description": "Date as yyyy-MM-dd or today. ISO date-times are reduced to the written calendar day.",
+    "type": "string"
+   },
+   "detail_level": {
+    "default": "1min",
+    "description": "Upstream Fitbit sample density. Series tool still enforces max_points server-side. Prefer 1min; 1sec needs personal/intraday access.",
+    "enum": [
+     "1sec",
+     "1min",
+     "5min",
+     "15min"
+    ],
+    "type": "string"
+   },
+   "end_time": {
+    "description": "Optional HH:mm window end (local Fitbit day).",
+    "pattern": "^\\d{2}:\\d{2}$",
+    "type": "string"
+   },
+   "max_points": {
+    "default": 400,
+    "description": "Point budget. Server hard cap is 500.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "reference_max_hr": {
+    "description": "Reference max HR for zone math (reference_source=caller_provided).",
+    "maximum": 240,
+    "minimum": 100,
+    "type": "integer"
+   },
+   "resolution_seconds": {
+    "default": 60,
+    "description": "Requested bucket width. Raised automatically under max_points pressure.",
+    "maximum": 3600,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "response_format": {
+    "default": "markdown",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "start_time": {
+    "description": "Optional HH:mm window start (local Fitbit day).",
+    "pattern": "^\\d{2}:\\d{2}$",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "fitbit_heart_series",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "activity_id": {
+    "type": [
+     "string",
+     "number"
+    ]
+   },
+   "contract_version": {
+    "const": "agent-safe-series/v1",
+    "type": "string"
+   },
+   "data_quality": {
+    "additionalProperties": false,
+    "properties": {
+     "actual_samples": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "coverage_anchor": {
+      "enum": [
+       "nominal_duration",
+       "sample_span"
+      ],
+      "type": "string"
+     },
+     "coverage_ratio": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "expected_samples": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "longest_gap_seconds": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "sample_interval_seconds": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "expected_samples",
+     "actual_samples",
+     "coverage_ratio",
+     "longest_gap_seconds",
+     "sample_interval_seconds",
+     "coverage_anchor"
+    ],
+    "type": "object"
+   },
+   "downsampled": {
+    "type": "boolean"
+   },
+   "method": {
+    "enum": [
+     "time_bucket_mean",
+     "none"
+    ],
+    "type": "string"
+   },
+   "metric": {
+    "enum": [
+     "heart_rate"
+    ],
+    "type": "string"
+   },
+   "notes": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "points": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "max": {
+       "type": "number"
+      },
+      "min": {
+       "type": "number"
+      },
+      "samples": {
+       "exclusiveMinimum": 0,
+       "maximum": 9007199254740991,
+       "type": "integer"
+      },
+      "t": {
+       "type": "number"
+      },
+      "value": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "t",
+      "value",
+      "min",
+      "max",
+      "samples"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "requested_resolution_seconds": {
+    "type": "number"
+   },
+   "resolution_seconds": {
+    "type": "number"
+   },
+   "returned_points": {
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "source_points": {
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "start_time": {
+    "type": "string"
+   },
+   "stats": {
+    "additionalProperties": false,
+    "properties": {
+     "avg": {
+      "type": "number"
+     },
+     "max": {
+      "type": "number"
+     },
+     "min": {
+      "type": "number"
+     },
+     "p25": {
+      "type": "number"
+     },
+     "p50": {
+      "type": "number"
+     },
+     "p75": {
+      "type": "number"
+     },
+     "percentile_method": {
+      "const": "linear_interpolation",
+      "type": "string"
+     }
+    },
+    "required": [
+     "avg",
+     "min",
+     "max",
+     "p25",
+     "p50",
+     "p75",
+     "percentile_method"
+    ],
+    "type": "object"
+   },
+   "t_unit": {
+    "const": "seconds_from_start",
+    "type": "string"
+   },
+   "time_in_zone": {
+    "additionalProperties": false,
+    "properties": {
+     "reference_max_hr": {
+      "type": "number"
+     },
+     "reference_source": {
+      "enum": [
+       "caller_provided",
+       "activity_recorded_max",
+       "observed_max"
+      ],
+      "type": "string"
+     },
+     "zone_model": {
+      "const": "percent_of_reference_max_hr",
+      "type": "string"
+     },
+     "zones": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "max_bpm": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "min_bpm": {
+         "type": "number"
+        },
+        "percent": {
+         "type": "number"
+        },
+        "seconds": {
+         "type": "number"
+        },
+        "zone": {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "zone",
+        "min_bpm",
+        "max_bpm",
+        "seconds",
+        "percent"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "zone_model",
+     "reference_max_hr",
+     "reference_source",
+     "zones"
+    ],
+    "type": "object"
+   },
+   "unit": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "contract_version",
+   "activity_id",
+   "metric",
+   "unit",
+   "t_unit",
+   "resolution_seconds",
+   "requested_resolution_seconds",
+   "points",
+   "stats",
+   "downsampled",
+   "source_points",
+   "returned_points",
+   "method",
+   "data_quality",
+   "notes"
+  ],
+  "type": "object"
+ },
+ "title": "Fitbit Heart Series"
+}

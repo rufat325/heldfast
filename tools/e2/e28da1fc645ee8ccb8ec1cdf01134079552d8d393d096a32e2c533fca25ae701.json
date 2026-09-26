@@ -1,0 +1,203 @@
+{
+ "description": "Dispatch a task to a human worker via the best available backend service.\n\nThis is the primary tool for sending work to humans. You describe what needs to be done, and the system routes it to the most appropriate registered webhook provider based on category, task type, region, and budget. If no providers match or accept, the task falls through to the manual fallback.\n\nRegister providers first with human_register_provider, then dispatch tasks to them.\n\nPARAMETERS:\n- description: What the human should do. Be specific about location, timing, and deliverables.\n- category: Task category (errand, photo_video, data_collection, verification, delivery, digital_micro, in_person, custom)\n- task_type: physical (requires presence), digital (remote), or hybrid (both)\n- location: Where to perform the task (required for physical tasks). Include address or coordinates.\n- budget: Maximum USD to pay. Different providers have different ranges.\n- deadline: When it must be done, with urgency level.\n- proof_required: What evidence the worker must submit (photo, video, gps_checkin, text_report, receipt, signature).\n- quality_sla: low (fast/cheap), medium (default), high (verified workers, multiple proofs).\n- preferred_backends: Optional ordered list of backends to try first (webhook_provider, manual).\n- fallback_chain: Optional ordered fallback list if preferred backends fail.\n- metadata: Optional key-value pairs for your own tracking.\n\nEXAMPLES:\n1. Photo task: { description: \"Take a photo of the menu board at the Starbucks on 5th Ave and 42nd St, NYC\", category: \"photo_video\", task_type: \"physical\", location: { address: \"5th Ave & 42nd St, New York, NY\" }, budget: { max_usd: 15, currency: \"USD\" }, deadline: { complete_by: \"2027-01-15T18:00:00Z\", urgency: \"medium\" }, proof_required: [\"photo\", \"gps_checkin\"], quality_sla: \"medium\" }\n\n2. Data collection: { description: \"Count the number of electric vehicle charging stations within 1km of Times Square\", category: \"data_collection\", task_type: \"physical\", location: { address: \"Times Square, NYC\", radius_km: 1 }, budget: { max_usd: 25, currency: \"USD\" }, deadline: { complete_by: \"2027-01-20T00:00:00Z\", urgency: \"low\" }, proof_required: [\"text_report\", \"photo\"], quality_sla: \"high\" }\n\n3. Digital microtask: { description: \"Transcribe the handwritten text in the attached image to typed text\", category: \"digital_micro\", task_type: \"digital\", budget: { max_usd: 2, currency: \"USD\" }, deadline: { complete_by: \"2027-01-16T00:00:00Z\", urgency: \"medium\" }, proof_required: [\"text_report\"], quality_sla: \"low\" }\n\nDON'T USE WHEN:\n- The task can be done by an AI (use an AI tool instead)\n- You need instant results (humans take minutes to hours)\n- No providers are registered (use human_register_provider first, or rely on manual fallback)",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "budget": {
+    "additionalProperties": false,
+    "description": "Budget constraints for the task",
+    "properties": {
+     "currency": {
+      "const": "USD",
+      "default": "USD",
+      "description": "Currency code \u2014 only USD is supported",
+      "type": "string"
+     },
+     "max_usd": {
+      "description": "Maximum amount in USD you are willing to pay for this task (max 1,000,000)",
+      "exclusiveMinimum": 0,
+      "maximum": 1000000,
+      "type": "number"
+     }
+    },
+    "required": [
+     "max_usd"
+    ],
+    "type": "object"
+   },
+   "category": {
+    "description": "Category of the task \u2014 determines which backends are best suited",
+    "enum": [
+     "errand",
+     "photo_video",
+     "data_collection",
+     "verification",
+     "delivery",
+     "digital_micro",
+     "in_person",
+     "custom"
+    ],
+    "type": "string"
+   },
+   "deadline": {
+    "additionalProperties": false,
+    "description": "When the task needs to be completed",
+    "properties": {
+     "complete_by": {
+      "description": "ISO 8601 datetime by which the task must be completed (e.g. '2027-01-15T18:00:00Z')",
+      "format": "date-time",
+      "type": "string"
+     },
+     "urgency": {
+      "description": "Urgency level: low=days, medium=hours, high=under an hour, asap=immediately",
+      "enum": [
+       "low",
+       "medium",
+       "high",
+       "asap"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "complete_by",
+     "urgency"
+    ],
+    "type": "object"
+   },
+   "description": {
+    "description": "Clear, detailed description of what the human worker should do. Be specific about location, timing, and expected output. Example: 'Take a photo of the menu board at the Starbucks on 5th Ave and 42nd St, NYC'",
+    "maxLength": 2000,
+    "minLength": 10,
+    "type": "string"
+   },
+   "fallback_chain": {
+    "description": "Ordered list of fallback backends if the preferred ones fail. The 'manual' backend is always available as a last resort.",
+    "items": {
+     "$ref": "#/properties/preferred_backends/items"
+    },
+    "type": "array"
+   },
+   "idempotency_key": {
+    "description": "Optional client-supplied key to dedupe retried submissions. If a task with the same key was created within the last hour, the existing task is returned instead of a duplicate. Example: 'order-12345-attempt-1'",
+    "maxLength": 128,
+    "minLength": 1,
+    "type": "string"
+   },
+   "location": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "description": "Location where the task should be performed \u2014 required for physical tasks",
+      "properties": {
+       "address": {
+        "description": "Human-readable street address where the task should be performed",
+        "type": "string"
+       },
+       "latitude": {
+        "description": "Latitude coordinate of task location",
+        "maximum": 90,
+        "minimum": -90,
+        "type": "number"
+       },
+       "longitude": {
+        "description": "Longitude coordinate of task location",
+        "maximum": 180,
+        "minimum": -180,
+        "type": "number"
+       },
+       "radius_km": {
+        "description": "Acceptable radius in kilometers from the specified point (max 20000)",
+        "exclusiveMinimum": 0,
+        "maximum": 20000,
+        "type": "number"
+       },
+       "region": {
+        "description": "City, state, or country as a fallback when coordinates are not available",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Where the task should be performed. Required for physical tasks. Set to null or omit for digital tasks."
+   },
+   "metadata": {
+    "additionalProperties": {
+     "maxLength": 256,
+     "type": "string"
+    },
+    "description": "Arbitrary key-value pairs for your own tracking (e.g. {'order_id': '12345', 'agent_name': 'my-bot'})",
+    "propertyNames": {
+     "maxLength": 64
+    },
+    "type": "object"
+   },
+   "preferred_backends": {
+    "description": "Preferred backend services to route this task to, tried in order. If omitted, the router picks the best backend automatically.",
+    "items": {
+     "description": "Identifier for a backend task-routing service",
+     "enum": [
+      "webhook_provider",
+      "manual"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "proof_required": {
+    "description": "Types of proof the worker must submit upon completion. At least one is required. Example: ['photo', 'gps_checkin']",
+    "items": {
+     "description": "Type of proof-of-completion required from the human worker",
+     "enum": [
+      "photo",
+      "video",
+      "gps_checkin",
+      "text_report",
+      "receipt",
+      "signature"
+     ],
+     "type": "string"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "quality_sla": {
+    "description": "Quality/speed tradeoff: low=fastest/cheapest, medium=default, high=verified workers with multi-proof",
+    "enum": [
+     "low",
+     "medium",
+     "high"
+    ],
+    "type": "string"
+   },
+   "task_type": {
+    "description": "Whether the task requires physical presence, is digital-only, or both",
+    "enum": [
+     "physical",
+     "digital",
+     "hybrid"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "description",
+   "category",
+   "task_type",
+   "budget",
+   "deadline",
+   "proof_required",
+   "quality_sla"
+  ],
+  "type": "object"
+ },
+ "name": "human_dispatch_task"
+}

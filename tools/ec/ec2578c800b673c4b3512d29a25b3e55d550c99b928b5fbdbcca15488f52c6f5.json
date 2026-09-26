@@ -1,0 +1,32 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true,
+  "title": "Get the honest model-vs-market skill self-assessment"
+ },
+ "description": "Return Olympus Bets Analytics' own self-graded model-quality metrics \u2014 NOT pick win rate.\n\n    This is a different question than \"did our picks win money?\" (see\n    get_performance_summary / get_track_record for that). This tool answers\n    \"is our probability estimate actually SHARPER than the betting market's,\n    on every graded game \u2014 not just the ones we bet?\" It is graded against a\n    de-vigged (juice-removed) fair-probability market line at sim time, using\n    Brier skill score (paired, same games, same outcomes).\n\n    How to read the fields, in plain English:\n      - ``brier_skill_pct``: percent improvement in Brier score vs the\n        de-vigged market. POSITIVE = our model is sharper than the market.\n        NEGATIVE = the market is sharper than us. Most leagues are currently\n        negative \u2014 that is reported honestly, not hidden, because the point\n        of this tool is to show real self-graded skill, not a marketing number.\n      - ``model_weight_star`` (w*): the blend weight (0.0-1.0) our model\n        earned in a model+market blend that minimizes log-loss. 0.0 means\n        \"defer entirely to the market's number\"; 1.0 means \"our number alone\n        is already optimal.\" This is fit empirically per league/window, not\n        asserted.\n      - ``verdict`` / ``verdict_plain``: MODEL_AHEAD / MARKET_AHEAD /\n        INCONCLUSIVE, from a paired significance test (z-score) \u2014 not just\n        the sign of brier_skill_pct.\n      - ``vs_close`` fields (``clv_beat_rate``, ``clv_beat_n``): a second,\n        stricter benchmark against the de-vigged CLOSING line instead of the\n        market at sim time. clv_beat_rate = the share of model-edge rows\n        where the closing line moved toward the model's number. Coverage is\n        thinner here (fewer games have a captured closing line), which is\n        why it's reported separately.\n      - ``n`` / ``reliable``: sample size behind each cell. Cells with\n        n < 50 omit the skill numbers entirely (``reliable: false``) \u2014 below\n        that floor, the rate is noise, not signal.\n\n    Windows: ``30d`` (most current, smallest sample) and ``90d`` (steadier,\n    larger sample). Use 90d as the primary read; use 30d to see if something\n    is actively shifting.\n\n    Freshness: the underlying file rebuilds daily (~12:50 UTC). If it is\n    stale (>36h old), this tool returns ``{\"status\": \"updating\", ...}``\n    instead of presenting old numbers as current \u2014 never treat a missing\n    ``windows`` key as \"no skill data,\" check ``status`` first.\n\n    Args:\n        league: Optional league filter (e.g. \"MLB\", \"NHL\"). Omit for all\n            leagues covered by the scoreboard (NBA, NHL, MLB, SOCCER, WNBA,\n            TENNIS, LOL, CS2, GOLF, WC \u2014 CFB/NFL/CBB not yet in-season/covered).\n\n    Returns:\n        ``{status, generated_at, benchmark, close_benchmark, sample_floor_n,\n        windows: {\"30d\": {...}, \"90d\": {...}}}`` where each window has\n        ``overall`` (blended-across-leagues cell) and ``by_league`` (list of\n        per-league cells, each carrying its own ``league`` code).\n    ",
+ "inputSchema": {
+  "properties": {
+   "league": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "League"
+   }
+  },
+  "title": "get_model_vs_marketArguments",
+  "type": "object"
+ },
+ "name": "get_model_vs_market",
+ "outputSchema": {
+  "additionalProperties": true,
+  "title": "get_model_vs_marketDictOutput",
+  "type": "object"
+ }
+}

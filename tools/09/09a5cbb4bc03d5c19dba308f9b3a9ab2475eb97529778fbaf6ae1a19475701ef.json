@@ -1,0 +1,380 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "UN/LOCODE Lookup"
+ },
+ "description": "Search 116,232 UN/LOCODE transport locations worldwide \u2014 ports, airports, rail and road terminals, inland container depots and border crossings. Codes are 5 characters: a 2-letter ISO country code + a 3-character location code (GBLHR = London Heathrow, NLRTM = Rotterdam).\n\nProvide code for an exact record, or query (name search, min 2 chars) optionally narrowed by country and function_type; limit caps results (default 20, max 100).\n\nBehavior: read-only; exact code hits are provenance-based while fuzzy name hits report match quality via the envelope's confidence (basis match_quality); an unknown code errors with a not-found message. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: the location record(s) \u2014 code, name and name_ascii, country, subdivision, functions[], status, coordinates {lat, lon} and iata_code where assigned \u2014 under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: an administrative code list (UNECE UN/LOCODE 2025-1) \u2014 confirm operational status and coordinates with the port or authority before critical use.\n\nRelated: airport_lookup (airport-specific records including ICAO codes), nearest_airport (find airports by coordinates).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "code": {
+    "description": "Exact UN/LOCODE \u2014 5 characters. Examples: \"GBLHR\", \"NLRTM\".",
+    "pattern": "^[A-Za-z0-9]{5}$",
+    "type": "string"
+   },
+   "country": {
+    "description": "Filter by 2-letter ISO country code. Examples: \"GB\", \"NL\".",
+    "pattern": "^[A-Za-z]{2}$",
+    "type": "string"
+   },
+   "function_type": {
+    "description": "Filter by location function.",
+    "enum": [
+     "port",
+     "airport",
+     "rail",
+     "road",
+     "icd",
+     "border"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "description": "Maximum results. Default: 20, max: 100.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Location name search (min 2 chars). Examples: \"rotterdam\", \"heathrow\".",
+    "minLength": 2,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "unlocode_lookup",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "audited_at": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "code": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "coordinates": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "properties": {
+           "lat": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "lon": {
+            "type": [
+             "number",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "count": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "country": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "functions": {
+        "anyOf": [
+         {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "iata_code": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "location_code": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "name": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "name_ascii": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "results": {
+        "anyOf": [
+         {
+          "items": {},
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "status": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "subdivision": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "verified": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

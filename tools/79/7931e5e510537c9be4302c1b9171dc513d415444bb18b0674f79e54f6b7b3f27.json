@@ -1,0 +1,151 @@
+{
+ "annotations": {
+  "access": "paid",
+  "destructiveHint": false,
+  "front_door": "execute_plan",
+  "idempotentHint": true,
+  "limits": "supply-side signals, not a load-interconnection promise \u2014 generation is not deliverable load \u00b7 utility study timelines, large-load tariff processes and substation-grain delivery are declared out of coverage rather than estimated \u00b7 a state-scoped ranking needs a state the planner can resolve; an unresolved geography answers nationally and says so",
+  "maturity": "mature",
+  "openWorldHint": false,
+  "pricing_url": "https://dchub.cloud/pricing/upgrade?tool=get_grid_intelligence&ref=mcp-tools-list",
+  "problem": "grid headroom and power availability; site selection and buildable capacity",
+  "readOnlyHint": true,
+  "title": "Grid Intelligence",
+  "upgrade_relay": "Call the tool first: a gated result carries a session-bound checkout link (dchub.cloud/go/c/<token>) and a human relay (dchub.cloud/upgrade/h/<token>) minted for THIS session \u2014 relay those verbatim. This URL is only the fallback for a client that renders annotations before any call."
+ },
+ "description": "Use when a user asks \"can I get N MW of power in <ISO> and how long will it take?\" \u2014 the flagship grid-headroom + interconnection-queue brief for one ISO. Example: \"How much excess power does PJM have right now and what is the time-to-power for a 200MW load?\" \u2014 get_grid_intelligence region_id=\"PJM\". Params: region_id (aliases iso/region accepted) \u2014 one of the 7 US ISOs (\"PJM\" | \"ERCOT\" | \"CAISO\" | \"MISO\" | \"SPP\" | \"NYISO\" | \"ISO-NE\") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA \u2014 note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). You may instead pass market=\"Ashburn\" (or a metro slug like \"northern-virginia\") to name a MARKET rather than a grid code: it is resolved to the ISO for that market through the published DCPI market row, and the reply carries a resolved_from block naming what it resolved to \u2014 the figures then describe the ISO, which is larger than the market you named. Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,\u2026}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, avg_queue_wait_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. \u2605avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements and are not interchangeable: time-to-power is the DCPI per-market estimate averaged over the ISO, while queue-wait is a proxy derived from live interconnection-queue DEPTH (12 + 0.6 months per GW, clipped 12-66) and is the one that saturates on the deepest queues. Quote whichever you mean by name. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "anyOf": [
+   {
+    "properties": {
+     "region_id": {}
+    },
+    "required": [
+     "region_id"
+    ]
+   },
+   {
+    "properties": {
+     "iso": {}
+    },
+    "required": [
+     "iso"
+    ]
+   },
+   {
+    "properties": {
+     "region": {}
+    },
+    "required": [
+     "region"
+    ]
+   },
+   {
+    "properties": {
+     "market": {}
+    },
+    "required": [
+     "market"
+    ]
+   }
+  ],
+  "properties": {
+   "iso": {
+    "description": "Alias for region_id \u2014 the ISO/RTO or balancing-authority code",
+    "type": "string"
+   },
+   "market": {
+    "description": "Market NAME or metro slug instead of a grid code, e.g. \"Ashburn\", \"northern-virginia\", \"dallas\". Resolved to its ISO through the published DCPI market row before the brief is built; the answer carries a resolved_from block naming what it resolved to. Not an alias for region_id \u2014 \"Ashburn\" is not a grid code.",
+    "type": "string"
+   },
+   "mpp_credential": {
+    "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result \u2014 no API key, no subscription, no human. One payment covers one call.",
+    "type": "string"
+   },
+   "mpp_pay": {
+    "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves \u2014 a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+    "type": "boolean"
+   },
+   "region": {
+    "description": "Alias for region_id \u2014 the ISO/RTO or balancing-authority code",
+    "type": "string"
+   },
+   "region_id": {
+    "description": "Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id=\"PJM-DOM\" for live Ashburn / Northern Virginia zone load + real-time LMP (the world's #1 DC market, invisible in EIA)",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_grid_intelligence",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text \u2014 tool-specific data fields ride at the top level alongside these envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   }
+  },
+  "type": "object"
+ },
+ "title": "Grid Intelligence"
+}

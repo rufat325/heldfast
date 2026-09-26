@@ -1,0 +1,203 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Returns the outgoing reference list for a DOI \u2014 the works cited by this paper. Each reference includes the deposited citation string and, where Crossref has resolved it, a DOI you can look up with crossref_get_work. Results are paged: referenceCount is the full deposited total, and when more remain the response carries a nextOffset to pass back as offset. Reference list coverage varies by publisher; many older works and non-participating publishers have no indexed references. Incoming citations \u2014 the works that cite this paper \u2014 are not available through Crossref; use OpenAlex for that.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "doi": {
+    "description": "DOI in the format \"10.NNNN/suffix\", e.g. \"10.1038/nature12373\". A resolver-wrapped form \u2014 \"https://doi.org/10.1038/nature12373\", \"https://dx.doi.org/\u2026\", \"doi:10.1038/nature12373\" \u2014 is accepted and unwrapped.",
+    "pattern": "^(?:https?:\\/\\/(?:dx\\.)?doi\\.org\\/|doi:)?10\\.\\d{4,9}\\/\\S+$",
+    "type": "string"
+   },
+   "limit": {
+    "default": 100,
+    "description": "Maximum number of references to return in one page (1\u2013500, default 100). Most works fit in a single page; bibliography records can carry tens of thousands.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Zero-based index of the first reference to return. Pass the nextOffset value from the previous response to continue through a long reference list.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "doi"
+  ],
+  "type": "object"
+ },
+ "name": "crossref_get_references",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "doi",
+     "referenceCount",
+     "offset",
+     "references"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit that was applied to this page.",
+    "type": "number"
+   },
+   "doi": {
+    "description": "DOI of the citing work",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: Crossref answered HTTP 429 and the limit did not clear inside the retry budget. `upstream_unavailable`: Crossref was unreachable, returned a 5xx status, or served an HTML error page instead of JSON. `malformed_response`: Crossref returned HTTP 200 with a body that is not valid JSON. `request_timeout`: Crossref did not respond within CROSSREF_TIMEOUT_MS, or answered HTTP 408/504. `doi_not_found`: Valid DOI format but no Crossref record exists. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_unavailable",
+         "malformed_response",
+         "request_timeout",
+         "doi_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextOffset": {
+    "description": "Offset to pass in the next call to retrieve the following page. Absent when this page reaches the end of the reference list.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Coverage guidance when no references are indexed, or a range explanation when the requested offset is past the end of the list. Absent on a normal page.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Zero-based index of the first returned reference within the deposited list",
+    "type": "number"
+   },
+   "referenceCount": {
+    "description": "Total number of references in the deposited list",
+    "type": "number"
+   },
+   "references": {
+    "description": "Page of the outgoing reference list",
+    "items": {
+     "additionalProperties": false,
+     "description": "Reference entry",
+     "properties": {
+      "articleTitle": {
+       "description": "Article title of the referenced work, with inline formatting markup removed",
+       "type": "string"
+      },
+      "author": {
+       "description": "Author field from the reference entry, with inline formatting markup removed",
+       "type": "string"
+      },
+      "doi": {
+       "description": "Resolved DOI for this reference, when available",
+       "type": "string"
+      },
+      "firstPage": {
+       "description": "First page",
+       "type": "string"
+      },
+      "issn": {
+       "description": "ISSN of the referenced journal",
+       "type": "string"
+      },
+      "journalTitle": {
+       "description": "Journal title of the referenced work, with inline formatting markup removed",
+       "type": "string"
+      },
+      "key": {
+       "description": "Reference key as deposited",
+       "type": "string"
+      },
+      "unstructured": {
+       "description": "Citation string as deposited by the publisher, with formatting markup and structured-citation tags removed. Angle-bracketed text that is not recognizable as markup \u2014 a cited URL, a Miller index, a DOI fragment \u2014 is left exactly as deposited, and so is a link whose href holds an address the text it wraps does not already carry.",
+       "type": "string"
+      },
+      "volume": {
+       "description": "Volume",
+       "type": "string"
+      },
+      "year": {
+       "description": "Publication year of the referenced work",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Number of references returned in this page.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when references remain beyond this page. Absent when the page is the last.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Reference List"
+}

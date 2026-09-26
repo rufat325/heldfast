@@ -1,0 +1,304 @@
+{
+ "_meta": {
+  "securitySchemes": [
+   {
+    "scopes": [
+     "email"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "For each employer handle (companyToken, up to 20 per call), that employer's own record on this board: open_roles now, closed_90d (postings we watched come off this board in the last 90 days, re-lists excluded), superseded_90d (the re-lists, a floor), the two medians from the employer's own stated dates (lower bounds), tracking_days (how long we have watched THIS board, capped at 90) and feed_total (what its feed advertised at the last check). A takedown is not a hire \u2014 a filled role, a cancelled one and a withdrawn one look identical from here \u2014 and it is a record of one BOARD, never summed across an employer's boards, never a headcount. A board with no closure observed answers record:'unknown' with the reason, never a verdict about the employer: on a board bigger than one visit can read, no closure is observable to us until we complete a provable full pass and then watch a role go after it, so silence there is about our instrument. Every row carries its basis. Every row also carries layoff_filing \u2014 the newest layoff filing joined to that employer by a hand-curated alias or an exact multi-token name match, a US state WARN notice or an SEC 8-K Item 2.05 disclosure, printed as a filing (filer verbatim, its dates with their bases, count, state or form, link), read hourly from SEC EDGAR and nightly from state notices, null when none qualifies within 90 days, and no part of record or any verdict; layoff_basis on the response says what it is and is not. Pair with employer_growth for the other half of what the site calls \"Actively hiring\". Needs a key or a sign-in.",
+ "inputSchema": {
+  "properties": {
+   "companyTokens": {
+    "description": "companyToken values from job cards or search_jobs (a vendor tenant, e.g. 'acme' or 'gici~wd5~Careers'). Up to 20; more is refused with the count named.",
+    "items": {
+     "type": "string"
+    },
+    "maxItems": 20,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "companyTokens"
+  ],
+  "type": "object"
+ },
+ "name": "employer_hiring_record",
+ "outputSchema": {
+  "additionalProperties": true,
+  "properties": {
+   "asked": {
+    "type": "integer"
+   },
+   "basis": {
+    "type": "string"
+   },
+   "employers": {
+    "description": "One row per token asked, in the order asked. A token the board does not carry still answers, as unknown.",
+    "items": {
+     "additionalProperties": true,
+     "properties": {
+      "basis": {
+       "type": "string"
+      },
+      "closed_90d": {
+       "description": "Watched takedowns in the window, re-lists excluded. Never a count of hires.",
+       "type": "integer"
+      },
+      "company_token": {
+       "type": "string"
+      },
+      "feed_total": {
+       "description": "What the employer's feed advertised at the last verification. Null when never verified.",
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "layoff_filing": {
+       "additionalProperties": false,
+       "description": "The newest qualifying layoff filing joined to this employer, or null when none qualifies. A fact about the employer on one date, beside the record and no part of it.",
+       "properties": {
+        "effective_date": {
+         "description": "The date the WARN notice gives for the separations; null when it gives none or on an SEC filing.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "event_basis": {
+         "type": "string"
+        },
+        "event_date": {
+         "description": "The filing's own date: the WARN notice date or the 8-K report date. Named by event_basis.",
+         "type": "string"
+        },
+        "event_type": {
+         "description": "What the WARN notice says it is, as the state classifies it; null on an SEC filing.",
+         "enum": [
+          "closure",
+          "layoff",
+          "relocation",
+          "unknown",
+          null
+         ],
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "filer": {
+         "description": "The employer as the source names it, verbatim \u2014 never the board's own display name.",
+         "type": "string"
+        },
+        "form": {
+         "description": "The SEC form (an amendment never appears); null on a WARN notice.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "headcount": {
+         "description": "Positions the 8-K states, as parsed; null when it states none or on a WARN notice.",
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "more_n": {
+         "description": "Further qualifying filings for this employer beyond this newest one.",
+         "type": "integer"
+        },
+        "pct": {
+         "description": "Workforce share the 8-K states, as parsed; null when it states none or on a WARN notice.",
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "public_basis": {
+         "type": "string"
+        },
+        "public_date": {
+         "description": "When it became public: the SEC file date or the state's received/processed/posted stamp. Named by public_basis.",
+         "type": "string"
+        },
+        "read_at": {
+         "description": "When we read it. Our stamp, never a date basis for the filing.",
+         "type": "string"
+        },
+        "relation": {
+         "description": "filer: the filer is this board's employer. subsidiary_site: the filer is the parent company of this board's employer.",
+         "enum": [
+          "filer",
+          "subsidiary_site"
+         ],
+         "type": "string"
+        },
+        "site": {
+         "description": "The notice's site as the state lists it; null when not stated or on an SEC filing.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "source": {
+         "description": "state_warn: a US state WARN notice. sec_8k_205: an SEC 8-K Item 2.05 disclosure.",
+         "enum": [
+          "sec_8k_205",
+          "state_warn"
+         ],
+         "type": "string"
+        },
+        "source_name": {
+         "description": "SEC EDGAR, or the state agency as it names itself.",
+         "type": "string"
+        },
+        "source_url": {
+         "description": "The filing itself, at the source.",
+         "type": "string"
+        },
+        "state": {
+         "description": "Two-letter state of a WARN notice; null on an SEC filing.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "workers": {
+         "description": "Positions the WARN notice states at that site. Null on an SEC filing \u2014 never zero.",
+         "type": [
+          "integer",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "source",
+        "relation",
+        "filer",
+        "event_date",
+        "event_basis",
+        "public_date",
+        "public_basis",
+        "state",
+        "site",
+        "workers",
+        "event_type",
+        "effective_date",
+        "pct",
+        "headcount",
+        "form",
+        "source_url",
+        "source_name",
+        "read_at",
+        "more_n"
+       ],
+       "type": [
+        "object",
+        "null"
+       ]
+      },
+      "median_days_open": {
+       "description": "Median age of the roles served now, from the employer's stated dates only. Null when none carry one.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "median_days_to_close": {
+       "description": "Median stated-date-to-takedown over the window's dated closures. A lower bound; null when no closure carries a date.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "note": {
+       "description": "Present on an unknown row: what the absence means and does not mean.",
+       "type": "string"
+      },
+      "open_roles": {
+       "description": "Postings served from this board right now, under the same two serving rules as search.",
+       "type": "integer"
+      },
+      "record": {
+       "description": "observed: the ledger holds at least one closure for this board in the window, so the figures speak. unknown: it holds none, with unknown_reason saying why that is not a finding.",
+       "enum": [
+        "observed",
+        "unknown"
+       ],
+       "type": "string"
+      },
+      "superseded_90d": {
+       "description": "Re-lists in the window \u2014 a FLOOR, one logged per title per day.",
+       "type": "integer"
+      },
+      "tracking_days": {
+       "description": "Days this board has been watched, capped.",
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "unknown_reason": {
+       "enum": [
+        "no_record",
+        "no_closures_observed",
+        null
+       ],
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "company_token",
+      "record",
+      "basis",
+      "layoff_filing"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "layoff_basis": {
+    "description": "What layoff_filing is and is not, beside every row's record.",
+    "type": "string"
+   },
+   "layoff_read": {
+    "description": "\"ok\" when the filing reader answered for every employer; otherwise \"unread: <fault>\" and every layoff_filing on this response is null for that reason, never because nothing qualified. The record is unaffected either way.",
+    "type": "string"
+   },
+   "window_days": {
+    "type": "integer"
+   }
+  },
+  "required": [
+   "employers",
+   "basis",
+   "layoff_basis",
+   "layoff_read"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "email"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "An employer's hiring record on this board"
+}

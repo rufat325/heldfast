@@ -1,0 +1,443 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get insider (SEC Form 4) transactions for one company. Two grains, and the answer says which: (1) with `executive_cik` -> one row per Form 4 transaction line, with its SEC code (P open-market or private purchase, S open-market or private sale, M/X/C option or RSU exercise/conversion, A grant/award, F shares withheld for tax, G gift, ...), shares, price and value; (2) without it -> one row per insider per trade date that AGGREGATES all that day's lines, split into code P/S purchases/sales (open market or private) versus all acquisitions/dispositions (which also count vests, exercises and tax withholding), with both dollar totals and the line count; when ko.io reports them, the Lines cell and structuredContent also carry that day's SEC codes (e.g. '4 (F 1, M 2, S 1)'). Do not read an aggregate day's total disposed value as a sale decision; use the P/S columns, whose dollar totals cover priced lines only (unpriced lines are counted and flagged as partial). Keyless/Free access covers the trailing 92 days; `period` beyond 1Q requires Pro. structuredContent carries the exact share counts and dollar amounts.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "executive_cik": {
+    "description": "Insider's SEC CIK (from a previous answer's person_cik, or list_insider_traders). When given, returns that insider's individual Form 4 transaction lines in this company, newest first.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 50,
+    "description": "Rows per page, 1-200",
+    "maximum": 200,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "period": {
+    "default": "1Q",
+    "description": "Trade-date window for the per-day view: 1Q = trailing 90 days (default, allowed on every plan); 2Q / 1Y / ALL require Pro. Ignored when executive_cik is given (that view returns the full history your plan allows).",
+    "enum": [
+     "1Q",
+     "2Q",
+     "1Y",
+     "ALL"
+    ],
+    "type": "string"
+   },
+   "ticker": {
+    "description": "Stock ticker symbol (e.g. 'AAPL')",
+    "maxLength": 200,
+    "type": "string"
+   }
+  },
+  "required": [
+   "ticker"
+  ],
+  "type": "object"
+ },
+ "name": "get_insider_trades",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "executive_cik": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "grain": {
+    "description": "insider_trade_date = one row per insider per day, aggregating that day's Form 4 lines; form4_transaction_line = one row per line",
+    "enum": [
+     "insider_trade_date",
+     "form4_transaction_line"
+    ],
+    "type": "string"
+   },
+   "paging": {
+    "additionalProperties": false,
+    "description": "Paging state reconciled from ko.io meta.total_count and meta.softwall",
+    "properties": {
+     "continuation": {
+      "description": "SIGNIN_REQUIRED = page>1 needs a (free) ko.io API key",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "has_more": {
+      "description": "null = a full page came back and more MAY exist",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "next_page": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/rows/items/properties/form4_lines/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Next page THIS caller can open; null when there is none (or sign-in is required)"
+     },
+     "page": {
+      "type": "integer"
+     },
+     "per_page": {
+      "type": "integer"
+     },
+     "plan_row_cap": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/rows/items/properties/form4_lines/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Row cap the caller's plan applied to this page, if any"
+     },
+     "returned": {
+      "type": "integer"
+     },
+     "total_count": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/rows/items/properties/form4_lines/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Total rows matching the request, when ko.io reported it"
+     },
+     "truncated_by_plan": {
+      "description": "True when the plan's row cap withheld rows from this page",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "page",
+     "per_page",
+     "returned",
+     "total_count",
+     "has_more",
+     "next_page",
+     "continuation",
+     "plan_row_cap",
+     "truncated_by_plan"
+    ],
+    "type": "object"
+   },
+   "period": {
+    "$ref": "#/properties/executive_cik"
+   },
+   "plan_limit": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "continuation": {
+        "$ref": "#/properties/executive_cik"
+       },
+       "date_basis": {
+        "$ref": "#/properties/executive_cik"
+       },
+       "effective_period": {
+        "$ref": "#/properties/executive_cik"
+       },
+       "policy_version": {
+        "$ref": "#/properties/executive_cik"
+       },
+       "row_cap": {
+        "$ref": "#/properties/rows/items/properties/form4_lines"
+       },
+       "truncated": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "window_end": {
+        "$ref": "#/properties/executive_cik"
+       },
+       "window_start": {
+        "$ref": "#/properties/executive_cik"
+       }
+      },
+      "required": [
+       "policy_version",
+       "window_start",
+       "window_end",
+       "effective_period",
+       "date_basis",
+       "row_cap",
+       "truncated",
+       "continuation"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The Free/keyless plan limits ko.io applied to this answer (null for paid callers)"
+   },
+   "rows": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "acquired_disposed": {
+       "anyOf": [
+        {
+         "enum": [
+          "A",
+          "D"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "all_shares_acquired": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "all_shares_disposed": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "all_value_acquired": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "all_value_disposed": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "code_meaning": {
+       "$ref": "#/properties/executive_cik"
+      },
+      "code_p_or_s": {
+       "description": "true for SEC codes P (purchase) and S (sale) -- open market OR private; the code does not distinguish",
+       "type": "boolean"
+      },
+      "first_filed_date": {
+       "$ref": "#/properties/executive_cik"
+      },
+      "form4_lines": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "is_derivative": {
+       "type": "boolean"
+      },
+      "last_filed_date": {
+       "$ref": "#/properties/executive_cik"
+      },
+      "officer_title": {
+       "$ref": "#/properties/executive_cik"
+      },
+      "person_cik": {
+       "$ref": "#/properties/executive_cik"
+      },
+      "person_name": {
+       "$ref": "#/properties/executive_cik"
+      },
+      "price": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "ps_buy_lines": {
+       "$ref": "#/properties/rows/items/properties/form4_lines",
+       "description": "Code P lines that day (open market or private purchases)"
+      },
+      "ps_buy_unpriced_lines": {
+       "$ref": "#/properties/rows/items/properties/form4_lines",
+       "description": "Code P lines with no dollar value; > 0 means ps_value_bought is partial"
+      },
+      "ps_sell_lines": {
+       "$ref": "#/properties/rows/items/properties/form4_lines",
+       "description": "Code S lines that day (open market or private sales)"
+      },
+      "ps_sell_unpriced_lines": {
+       "$ref": "#/properties/rows/items/properties/form4_lines",
+       "description": "Code S lines with no dollar value; > 0 means ps_value_sold is partial"
+      },
+      "ps_shares_bought": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "null = unknown (a line had no share count)"
+      },
+      "ps_shares_sold": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "ps_value_bought": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "Dollar total of PRICED code P lines only"
+      },
+      "ps_value_bought_complete": {
+       "description": "false = some code P lines unpriced; null = not reported",
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "ps_value_sold": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "Dollar total of PRICED code S lines only"
+      },
+      "ps_value_sold_complete": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "security_title": {
+       "$ref": "#/properties/executive_cik"
+      },
+      "shares": {
+       "anyOf": [
+        {
+         "pattern": "^-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "shares_owned_after": {
+       "$ref": "#/properties/rows/items/properties/shares"
+      },
+      "trade_date": {
+       "$ref": "#/properties/executive_cik"
+      },
+      "transaction_code": {
+       "$ref": "#/properties/executive_cik"
+      },
+      "transaction_code_breakdown": {
+       "anyOf": [
+        {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "acquired_disposed": {
+            "enum": [
+             "A",
+             "D"
+            ],
+            "type": "string"
+           },
+           "code": {
+            "$ref": "#/properties/executive_cik"
+           },
+           "code_meaning": {
+            "type": "string"
+           },
+           "is_derivative": {
+            "type": "boolean"
+           },
+           "lines": {
+            "$ref": "#/properties/rows/items/properties/form4_lines"
+           },
+           "shares": {
+            "$ref": "#/properties/rows/items/properties/shares"
+           },
+           "value": {
+            "$ref": "#/properties/rows/items/properties/shares"
+           }
+          },
+          "required": [
+           "code",
+           "code_meaning",
+           "acquired_disposed",
+           "is_derivative",
+           "lines",
+           "shares",
+           "value"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Per code x acquired/disposed x table: line count, shares, value (null = unknown, not partial)"
+      },
+      "transaction_codes": {
+       "anyOf": [
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Distinct SEC Form 4 codes aggregated into this day (e.g. [\"F\",\"M\",\"S\"]); null = not reported by ko.io"
+      },
+      "value": {
+       "$ref": "#/properties/rows/items/properties/shares",
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      }
+     },
+     "required": [
+      "trade_date",
+      "person_cik",
+      "person_name",
+      "shares_owned_after"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "ticker": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "ticker",
+   "grain",
+   "executive_cik",
+   "period",
+   "rows",
+   "paging",
+   "plan_limit"
+  ],
+  "type": "object"
+ }
+}

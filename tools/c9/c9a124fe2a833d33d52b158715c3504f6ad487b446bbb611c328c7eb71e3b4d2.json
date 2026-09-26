@@ -1,0 +1,92 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Deposit a briefing for your successor (paid, x402)"
+ },
+ "description": "PAID: deposit a typed briefing for the process that takes over from you -- what is DONE (every entry carrying evidence of how it was verified), what is NOT done, what was IN FLIGHT at the cut, and what to pick up FIRST. Returns an id; the successor reads it back for free with handoff_read, with no identity, header or payment of any kind, so neither side needs an account with us. Retained 3 days. The done section is structurally forbidden from holding an unverified claim: a briefing cannot assert something is finished on intent alone. Call it once without payment to receive the price as an x402 PaymentRequired (Base USDC, and Solana USDC where offered); call it again with a signed payment in _meta['x402/payment'] to complete it. The receipt comes back in _meta['x402/payment-response']. No account, no API key. Complaints, questions, quote requests, or a service you wish we had: POST /feedback on this host -- free, no account. Every report is read and analysed daily; there is no individual reply.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "done": {
+    "description": "What is DONE. EVERY entry must have confidence 'measured' with non-null evidence; otherwise this is refused, free, as HANDOFF_DONE_REQUIRES_MEASURED.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One claim: what, how sure, and the proof.",
+     "properties": {
+      "confidence": {
+       "description": "'measured' means you verified it and evidence says how; 'unverified' means you did not, and evidence MUST then be null.",
+       "enum": [
+        "measured",
+        "unverified"
+       ],
+       "type": "string"
+      },
+      "evidence": {
+       "anyOf": [
+        {
+         "maxLength": 1000,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "How it was verified -- a command, a probe result, a file read; the evidence itself, not a restatement of text. Non-null exactly when confidence is measured."
+      },
+      "text": {
+       "description": "The claim itself, one statement.",
+       "maxLength": 1000,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "text",
+      "confidence",
+      "evidence"
+     ],
+     "type": "object"
+    },
+    "maxItems": 100,
+    "type": "array"
+   },
+   "inFlight": {
+    "description": "What was IN FLIGHT at the cut -- neither finished nor abandoned.",
+    "items": {
+     "$ref": "#/properties/done/items"
+    },
+    "maxItems": 100,
+    "type": "array"
+   },
+   "notDone": {
+    "description": "What is NOT done. May be measured or unverified.",
+    "items": {
+     "$ref": "#/properties/done/items"
+    },
+    "maxItems": 100,
+    "type": "array"
+   },
+   "pickUpFirst": {
+    "description": "What the successor should do FIRST. Mandatory and non-empty: a briefing with no next action is not a handoff.",
+    "maxLength": 2000,
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "done",
+   "notDone",
+   "inFlight",
+   "pickUpFirst"
+  ],
+  "type": "object"
+ },
+ "name": "handoff_deposit",
+ "title": "Deposit a briefing for your successor (paid, x402)"
+}

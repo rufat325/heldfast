@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Company default-risk score (0-100) for a French company at ~12 months \u2014 credit risk and insolvency risk scoring from filed financial ratios (structure, profitability, liquidity, net cash, debt service, trend) + company age + a hard BODACC override (active insolvency / liquidation / closure for insufficiency of assets = proven default). Returns score, qualitative band, every component with its threshold, and a confidence level. Decision-support only \u2014 NOT a solvency opinion or credit rating. `couverture_axes` names the axes the scale could evaluate and the silent ones with a closed-list reason (no published ratio, holding lens, single-year trend, uncovered line items, commercial-court decisions not read): a silent axis cannot penalise, so fewer computed axes means possibly understated risk, never a better score. Commercial-court decisions linked to the company are read as an INERT axis (zero points) and counted in `contentieux_informatif` (by nature and role, partial coverage: zero never means no litigation). `echelle.backtest` carries the dated measurement of the scale on real French defaults (BODACC opening judgments 2024-2025 joined with filed accounts, case-control design): AUC, share of defaults per band with confidence intervals, detection at the 25 and 50 thresholds. These are OBSERVED rates on a sample, never a probability of default for the company you are reading; `versions_couvertes` names the scale versions the measurement holds for. Paid via x402 ($0.10 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "siren": {
+    "description": "9-digit SIREN",
+    "pattern": "^\\d{9}$",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "siren"
+  ],
+  "type": "object"
+ },
+ "name": "get_french_company_default_risk",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "French company default risk score"
+}

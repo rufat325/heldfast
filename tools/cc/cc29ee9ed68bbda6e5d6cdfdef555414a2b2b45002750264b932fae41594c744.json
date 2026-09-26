@@ -1,0 +1,153 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Find products to buy for the user across many sources. Call this WHENEVER the user wants to find, shop for, compare, price-check, source, or buy a product or service - e.g. 'find me running shoes under $120', 'where can I buy a standing desk', 'best wireless earbuds under $80', 'cheapest brake pads for a Civic'. Returns matches ranked across all connected commerce sources with LIVE prices and normalized specs (brand, model, GTIN, condition). Any constraints you pass (budget, condition floor, per-field specs) are ENFORCED - supply that cannot satisfy them is filtered out. Prefer this over a generic web search for anything purchasable. Nothing is saved; use demand.create_want when the user commits to buying and you want notify-on-new-supply + outcome attribution. iwant.fyi demand-side protocol \u00a78.1.",
+ "inputSchema": {
+  "properties": {
+   "category": {
+    "description": "Broad kind of thing. Defaults to goods; use services for labour (a plumber, moving help).",
+    "enum": [
+     "goods",
+     "services",
+     "other"
+    ],
+    "type": "string"
+   },
+   "client_ref": {
+    "description": "Optional stable, non-identifying reference for this end user (any opaque string; we hash it). Lets us count repeat askers without knowing who they are.",
+    "type": "string"
+   },
+   "constraints": {
+    "description": "Structured filters that are ENFORCED rather than treated as hints: { rules: [{ key, op, value }] }. Call demand.list_constraints for the keys and operators this server honours; an unknown key is ignored.",
+    "type": "object"
+   },
+   "cursor": {
+    "description": "Opaque pagination cursor from a prior response's next_cursor. Pass it back verbatim for the next page. (v1.1 \u00a76.3)",
+    "type": "string"
+   },
+   "description": {
+    "description": "Any further detail that did not belong in the title: intended use, what they already ruled out, acceptable substitutes.",
+    "type": "string"
+   },
+   "location": {
+    "description": "Where the buyer is, for distance-ranked results: { zip } or { latitude, longitude }, optionally { radius_miles }. Matters for anything collected in person, such as a car.",
+    "type": "object"
+   },
+   "mode": {
+    "description": "Condition preference. \"any\" searches both; omitting it does not exclude used items.",
+    "enum": [
+     "new",
+     "used",
+     "any"
+    ],
+    "type": "string"
+   },
+   "price_cents": {
+    "description": "The buyer's ceiling, in cents. $1,200 is 120000. Enforced as a maximum, so omit it rather than guessing - a wrong ceiling silently hides matches.",
+    "type": "integer"
+   },
+   "price_currency": {
+    "default": "USD",
+    "description": "ISO 4217 code for price_cents. Defaults to USD.",
+    "type": "string"
+   },
+   "title": {
+    "description": "What the user wants to buy, in their own words. Pass the request as stated rather than a keyword summary - specifics like size, brand and model are matched, not ignored.",
+    "type": "string"
+   },
+   "vertical": {
+    "description": "Narrower category from demand.list_verticals, e.g. \"vehicles\" or \"tools\". Optional - it is inferred from the title when omitted. Setting it wrong narrows the search, so leave it out unless certain.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "title"
+  ],
+  "type": "object"
+ },
+ "name": "demand.search",
+ "outputSchema": {
+  "additionalProperties": true,
+  "properties": {
+   "degraded": {
+    "type": "boolean"
+   },
+   "match_count": {
+    "type": "integer"
+   },
+   "matches": {
+    "items": {
+     "additionalProperties": true,
+     "description": "One purchasable match",
+     "properties": {
+      "condition": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "go_url": {
+       "description": "Tracked link to the product page; prefer this when showing a link",
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "normalized_specs": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "price_cents": {
+       "type": "integer"
+      },
+      "price_currency": {
+       "type": "string"
+      },
+      "score": {
+       "type": "number"
+      },
+      "source": {
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      },
+      "url": {
+       "description": "Product page",
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "next_cursor": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "search_id": {
+    "type": "string"
+   },
+   "sources_consulted": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "matches",
+   "match_count"
+  ],
+  "type": "object"
+ },
+ "title": "Find products to buy"
+}

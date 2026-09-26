@@ -1,0 +1,339 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Passively probe a single URL with one HTTP(S) GET, following redirects. Returns the final status, the full redirect chain, response headers, a security-header audit (HSTS, CSP, X-Frame-Options, cookie Secure/HttpOnly/SameSite flags, and CORS origin-reflection), and an evidence-bound technology fingerprint (server, framework, CDN, WAF, CMS) drawn from headers and lightweight body markers. Strictly one request per host \u2014 no path traversal, parameter injection, or multi-method probing. Each redirect hop is validated against an SSRF guard. Use only on assets you own or are authorized to assess.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "timeoutMs": {
+    "default": 10000,
+    "description": "Per-request timeout in milliseconds.",
+    "maximum": 30000,
+    "minimum": 1000,
+    "type": "integer"
+   },
+   "url": {
+    "description": "Absolute http:// or https:// URL to probe (e.g. \"https://example.com\"). Must be an http(s) URL; other schemes and private/loopback targets are rejected.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "userAgent": {
+    "description": "Override the User-Agent header. Omit to use the server default.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "url"
+  ],
+  "type": "object"
+ },
+ "name": "attacksurface_probe_http",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "url",
+     "finalUrl",
+     "finalStatus",
+     "redirectChain",
+     "headers",
+     "securityAudit",
+     "technologies",
+     "checkedAt",
+     "transportError"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "checkedAt": {
+    "description": "ISO 8601 timestamp of the probe.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `blocked_target`: The URL resolves to a private/loopback/metadata address, or uses a non-http(s) scheme. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "blocked_target"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "finalStatus": {
+    "description": "Final HTTP status code (0 when the probe errored).",
+    "type": "number"
+   },
+   "finalUrl": {
+    "description": "Final URL after following redirects.",
+    "type": "string"
+   },
+   "headers": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Final-response headers (lower-cased keys).",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when the probe could not reach the target.",
+    "type": "string"
+   },
+   "redirectChain": {
+    "description": "Redirect chain leading to the final response.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One hop in the redirect chain.",
+     "properties": {
+      "location": {
+       "description": "Location header that drove the next hop.",
+       "type": "string"
+      },
+      "status": {
+       "description": "HTTP status returned at this hop.",
+       "type": "number"
+      },
+      "url": {
+       "description": "URL requested at this hop.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "url",
+      "status"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "securityAudit": {
+    "additionalProperties": false,
+    "description": "Security-header audit.",
+    "properties": {
+     "cookies": {
+      "description": "Per-cookie security-flag audit.",
+      "items": {
+       "additionalProperties": false,
+       "description": "Security-flag audit for one Set-Cookie header.",
+       "properties": {
+        "httpOnly": {
+         "description": "Whether the HttpOnly flag is set.",
+         "type": "boolean"
+        },
+        "name": {
+         "description": "Cookie name.",
+         "type": "string"
+        },
+        "sameSite": {
+         "description": "SameSite attribute value, or null when absent.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "secure": {
+         "description": "Whether the Secure flag is set.",
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "name",
+        "secure",
+        "httpOnly",
+        "sameSite"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "corsAllowOrigin": {
+      "description": "Access-Control-Allow-Origin value, or null.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "corsReflectsOrigin": {
+      "description": "True when the server reflected an arbitrary request Origin into ACAO.",
+      "type": "boolean"
+     },
+     "csp": {
+      "description": "Content-Security-Policy value, or null when absent.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "findings": {
+      "description": "Human-readable findings for missing or weak headers.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "hsts": {
+      "description": "Strict-Transport-Security value, or null when absent.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "permissionsPolicy": {
+      "description": "Permissions-Policy value, or null when absent.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "referrerPolicy": {
+      "description": "Referrer-Policy value, or null when absent.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "xContentTypeOptions": {
+      "description": "X-Content-Type-Options value, or null.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "xFrameOptions": {
+      "description": "X-Frame-Options value, or null when absent.",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "hsts",
+     "csp",
+     "xFrameOptions",
+     "xContentTypeOptions",
+     "referrerPolicy",
+     "permissionsPolicy",
+     "cookies",
+     "corsAllowOrigin",
+     "corsReflectsOrigin",
+     "findings"
+    ],
+    "type": "object"
+   },
+   "technologies": {
+    "description": "Technology detections with evidence.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A technology detection with its triggering evidence.",
+     "properties": {
+      "category": {
+       "description": "Detection category.",
+       "enum": [
+        "server",
+        "framework",
+        "cdn",
+        "waf",
+        "cms",
+        "language",
+        "analytics",
+        "other"
+       ],
+       "type": "string"
+      },
+      "evidence": {
+       "description": "The concrete evidence (header or body marker) that triggered the detection.",
+       "type": "string"
+      },
+      "name": {
+       "description": "Detected technology or product name.",
+       "type": "string"
+      },
+      "version": {
+       "description": "Version string when disclosed by the evidence.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "category",
+      "evidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "transportError": {
+    "description": "Transport error, or null on success.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "url": {
+    "description": "The initial request URL.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "attacksurface_probe_http"
+}

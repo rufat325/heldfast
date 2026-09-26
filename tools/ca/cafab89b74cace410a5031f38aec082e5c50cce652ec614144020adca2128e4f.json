@@ -1,0 +1,351 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "YNAB: Create Transaction"
+ },
+ "description": "Create a single transaction in YNAB.\n\nArgs:\n  - budget_id (string, optional): Budget UUID. Omit to use the default budget.\n  - account_id (string, required): Account UUID.\n  - amount_decimal (number, preferred): Amount in decimal currency units (for example, -50.00). Negative for expenses.\n  - amount_milliunits (int, alternative): Explicit raw YNAB milliunits (for example, -50000).\n  - amount (int, deprecated): Backward-compatible alias for amount_milliunits. Values are never guessed by magnitude.\n  - date (string, required): ISO date YYYY-MM-DD.\n  - payee_name (string, optional): Payee name (creates new payee if not found).\n  - payee_id (string, optional): Existing payee UUID (alternative to payee_name).\n  - category_id (string, optional): Category UUID.\n  - memo (string, optional): Memo text.\n  - cleared (string, optional): \"cleared\", \"uncleared\", or \"reconciled\". Default: \"uncleared\".\n  - approved (boolean, optional): Mark as approved. Default: false.\n  - flag_color (string, optional): Transaction flag color (\"red\", \"orange\", \"yellow\", \"green\", \"blue\", \"purple\").\n  - dry_run (boolean, optional): Preview without saving. Default: false.\n  - subtransactions (array, optional): Manual split lines. Each entry uses exactly one of amount_decimal, amount_milliunits, or deprecated amount, plus optional \"memo\", \"category_id\", \"payee_id\", and \"payee_name\".\n\nUse \"subtransactions\" for manual split transactions. Use \"ynab_create_receipt_split_transaction\" when you have itemized receipt data and want proportional tax allocation handled for you.\nAdvanced: \"import_id\" is supported, but it is intentionally not part of normal guidance. Usually omit it if you want the transaction to remain eligible for later bank-import matching.\n\nReturns: created transaction with account_balance.\n\nExamples:\n  - $50 expense: set amount_decimal=-50.00\n  - Already-converted data: set amount_milliunits=-50000\n\nWrite safety: call without confirmation_token to preview. Execute the identical validated request with the short-lived confirmation_token returned by that preview.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "account_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "amount": {
+    "description": "Deprecated legacy alias for amount_milliunits. Use amount_decimal for currency input or amount_milliunits for raw YNAB values.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "amount_decimal": {
+    "description": "Preferred: amount in decimal currency units (for example, -12.34). Rounded exactly to the nearest YNAB milliunit.",
+    "type": "number"
+   },
+   "amount_milliunits": {
+    "description": "Raw YNAB milliunits. Use only when the value is already converted.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "approved": {
+    "type": "boolean"
+   },
+   "budget_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "category_id": {
+    "type": "string"
+   },
+   "cleared": {
+    "enum": [
+     "cleared",
+     "uncleared",
+     "reconciled"
+    ],
+    "type": "string"
+   },
+   "confirmation_token": {
+    "description": "Short-lived, single-use token returned by the immediately preceding preview of this exact validated request.",
+    "minLength": 16,
+    "type": "string"
+   },
+   "date": {
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "dry_run": {
+    "type": "boolean"
+   },
+   "flag_color": {
+    "enum": [
+     "red",
+     "orange",
+     "yellow",
+     "green",
+     "blue",
+     "purple"
+    ],
+    "type": "string"
+   },
+   "import_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "memo": {
+    "type": "string"
+   },
+   "payee_id": {
+    "type": "string"
+   },
+   "payee_name": {
+    "type": "string"
+   },
+   "subtransactions": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "amount": {
+       "description": "Deprecated legacy alias for amount_milliunits on this split line.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "amount_decimal": {
+       "description": "Preferred: amount in decimal currency units (for example, -12.34). Rounded exactly to the nearest YNAB milliunit.",
+       "type": "number"
+      },
+      "amount_milliunits": {
+       "description": "Raw YNAB milliunits. Use only when the value is already converted.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "category_id": {
+       "type": "string"
+      },
+      "memo": {
+       "type": "string"
+      },
+      "payee_id": {
+       "type": "string"
+      },
+      "payee_name": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "account_id",
+   "date"
+  ],
+  "type": "object"
+ },
+ "name": "ynab_create_transaction",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+   {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "const": "ynab_create_transaction",
+      "type": "string"
+     },
+     "dry_run": {
+      "const": true,
+      "type": "boolean"
+     },
+     "request": {
+      "additionalProperties": {},
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     }
+    },
+    "required": [
+     "dry_run",
+     "action",
+     "request"
+    ],
+    "type": "object"
+   },
+   {
+    "additionalProperties": false,
+    "properties": {
+     "transaction": {
+      "additionalProperties": false,
+      "properties": {
+       "account_balance": {
+        "type": "number"
+       },
+       "account_cleared_balance": {
+        "type": "number"
+       },
+       "account_id": {
+        "description": "Account ID",
+        "type": "string"
+       },
+       "account_name": {
+        "description": "Account name",
+        "type": "string"
+       },
+       "amount": {
+        "description": "Transaction amount in dollars",
+        "type": "number"
+       },
+       "approved": {
+        "description": "Approved flag",
+        "type": "boolean"
+       },
+       "category_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Category ID"
+       },
+       "category_name": {
+        "description": "Category name",
+        "type": "string"
+       },
+       "cleared": {
+        "description": "Cleared status",
+        "type": "string"
+       },
+       "date": {
+        "description": "Transaction date",
+        "type": "string"
+       },
+       "deleted": {
+        "description": "Deleted flag",
+        "type": "boolean"
+       },
+       "flag_color": {
+        "description": "Flag color",
+        "type": "string"
+       },
+       "id": {
+        "description": "Transaction ID",
+        "type": "string"
+       },
+       "import_id": {
+        "description": "Import ID",
+        "type": "string"
+       },
+       "matched_transaction_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Matched transaction ID"
+       },
+       "memo": {
+        "description": "Transaction memo",
+        "type": "string"
+       },
+       "payee_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Payee ID"
+       },
+       "payee_name": {
+        "description": "Payee name",
+        "type": "string"
+       },
+       "subtransactions": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "amount": {
+           "type": "number"
+          },
+          "category_id": {
+           "type": "string"
+          },
+          "category_name": {
+           "type": "string"
+          },
+          "deleted": {
+           "type": "boolean"
+          },
+          "id": {
+           "type": "string"
+          },
+          "memo": {
+           "type": "string"
+          },
+          "payee_id": {
+           "type": "string"
+          },
+          "payee_name": {
+           "type": "string"
+          },
+          "transaction_id": {
+           "type": "string"
+          },
+          "transfer_account_id": {
+           "type": "string"
+          },
+          "transfer_transaction_id": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "id",
+          "transaction_id",
+          "amount",
+          "deleted"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "transfer_account_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Transfer account ID"
+       },
+       "transfer_transaction_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Transfer transaction ID"
+       }
+      },
+      "required": [
+       "id",
+       "date",
+       "amount",
+       "cleared",
+       "approved",
+       "account_id",
+       "deleted"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "transaction"
+    ],
+    "type": "object"
+   }
+  ],
+  "type": "object"
+ }
+}

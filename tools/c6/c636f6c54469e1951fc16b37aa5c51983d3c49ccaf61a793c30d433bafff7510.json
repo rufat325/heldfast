@@ -1,0 +1,141 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List valid field names for an OpenAlex entity type and context (filter, group_by, or select). Use proactively before constructing a filter or group_by to avoid invalid-field 400 errors. Pass `query` to rank the list by name similarity \u2014 useful when you have a partial or guessed field name. Ranking never drops a field: the full list comes back either way.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "context": {
+    "description": "Field usage context. \"filter\": fields accepted in the filter param. \"group_by\": fields accepted in group_by \u2014 a subset of the filter set that leaves out what OpenAlex refuses to aggregate (raw dates, *.search operators, decimal scores, display_name, and external-ID fields among them). \"select\": fields accepted in select.",
+    "enum": [
+     "filter",
+     "group_by",
+     "select"
+    ],
+    "type": "string"
+   },
+   "entity_type": {
+    "description": "OpenAlex entity type to list fields for.",
+    "enum": [
+     "works",
+     "authors",
+     "sources",
+     "institutions",
+     "topics",
+     "keywords",
+     "publishers",
+     "funders"
+    ],
+    "type": "string"
+   },
+   "query": {
+    "description": "Optional partial or guessed field name to sort results by similarity. Pass the field you tried (e.g. \"funder\") to get the closest matches first. The complete field list is returned either way \u2014 a query reorders it, it does not filter it, so a nested value's parent object (e.g. `summary_stats` for \"h_index\") is still reachable further down.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "entity_type",
+   "context"
+  ],
+  "type": "object"
+ },
+ "name": "openalex_describe_fields",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "entity_type",
+     "context",
+     "fields",
+     "total"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "context": {
+    "description": "Context queried (filter, group_by, or select).",
+    "type": "string"
+   },
+   "entity_type": {
+    "description": "Entity type queried.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode.",
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "fields": {
+    "description": "Every valid field name for this entity_type + context \u2014 the complete pool, ranked by similarity when `query` is provided. Never truncated, so this always holds `total` entries.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "total": {
+    "description": "Total number of valid fields for this entity_type + context.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Openalex Describe Fields"
+}

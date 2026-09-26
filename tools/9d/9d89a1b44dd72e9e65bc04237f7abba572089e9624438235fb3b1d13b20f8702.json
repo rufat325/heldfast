@@ -1,0 +1,194 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Report what diff data is available between two versions of a terminology.\n\nFor most terminologies this is **guidance only** \u2014 the server doesn't ship historical snapshots, so the tool points at the publisher's official changelog and explains the cadence. `bundled_versions` lists the version(s) this server actually has on hand.\n\nFor **ICD-10 vs ICD-11** specifically, the tool surfaces a real cross-revision summary from the bundled WHO transition tables (the ICD-10 \u2192 ICD-11 case is a structural diff between two WHO revisions). Use `terminology: \"icd10\"` with no `to_version` to get the cross-revision summary: total mapped ICD-10 categories, how many are 1:1 vs split into multiple ICD-11 codes, and the average number of alternatives when split.\n\nInputs:\n- `terminology` (required): which terminology to report on.\n- `from_version` (optional): the version you have data from. If omitted, the tool reports against the currently-bundled version.\n- `to_version` (optional): the version you want to compare to. If omitted, the tool reports against the publisher's latest known release.\n\nThis tool is intentionally a metadata + guidance layer, not a diff engine \u2014 for terminologies that change frequently (SNOMED, LOINC, RxNorm, MeSH), the publisher's official changelog is the authoritative source.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "from_version": {
+    "description": "Version you have data from. Optional; behavior depends on terminology.",
+    "type": "string"
+   },
+   "terminology": {
+    "description": "Which terminology to report on.",
+    "enum": [
+     "icd11",
+     "icd10",
+     "snomed",
+     "loinc",
+     "rxnorm",
+     "mesh",
+     "atc",
+     "cid10"
+    ],
+    "type": "string"
+   },
+   "to_version": {
+    "description": "Version you want to compare to. Optional.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "terminology"
+  ],
+  "type": "object"
+ },
+ "name": "terminology_diff",
+ "outputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "attribution": {
+    "description": "Canonical source URLs of this response (attribution list)",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "bundled_versions": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "changelog_url": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "cross_revision_summary": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "avg_alternatives_when_split": {
+        "type": "number"
+       },
+       "icd10_categories_total": {
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       },
+       "one_to_many_splits": {
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       },
+       "one_to_one_mappings": {
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "icd10_categories_total",
+       "one_to_one_mappings",
+       "one_to_many_splits",
+       "avg_alternatives_when_split"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Populated only for terminology=\"icd10\" today \u2014 the bundled WHO ICD-10 \u2192 ICD-11 transition tables let us surface a real structural diff between the two WHO revisions."
+   },
+   "diff_available": {
+    "description": "True when this server has the data to compute a real diff for the requested terminology. False = guidance-only response.",
+    "type": "boolean"
+   },
+   "from_version": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "message": {
+    "type": "string"
+   },
+   "provenance": {
+    "additionalProperties": false,
+    "description": "Provenance block (contract v1.0): source, URL, data vintage, extraction instant, citation, license",
+    "properties": {
+     "citation": {
+      "description": "Ready-to-use citation/attribution string",
+      "type": "string"
+     },
+     "data_vintage": {
+      "description": "Version/release of the data as exposed by the source; null when not exposed",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "license": {
+      "description": "License / legal regime of the data",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "retrieved_at": {
+      "description": "Real instant of the upstream extraction (ISO-8601, UTC). Responses served from cache keep the ORIGINAL fetch instant.",
+      "type": "string"
+     },
+     "source": {
+      "description": "Official upstream source of this data",
+      "type": "string"
+     },
+     "source_url": {
+      "description": "Canonical URL of the source (API base or dataset release)",
+      "type": "string"
+     }
+    },
+    "required": [
+     "source",
+     "source_url",
+     "data_vintage",
+     "retrieved_at",
+     "citation",
+     "license"
+    ],
+    "type": "object"
+   },
+   "terminology": {
+    "enum": [
+     "icd11",
+     "icd10",
+     "snomed",
+     "loinc",
+     "rxnorm",
+     "mesh",
+     "atc",
+     "cid10"
+    ],
+    "type": "string"
+   },
+   "to_version": {
+    "type": [
+     "string",
+     "null"
+    ]
+   }
+  },
+  "required": [
+   "terminology",
+   "from_version",
+   "to_version",
+   "diff_available",
+   "message",
+   "changelog_url",
+   "bundled_versions",
+   "cross_revision_summary",
+   "provenance",
+   "attribution"
+  ],
+  "type": "object"
+ },
+ "title": "Terminology Version Diff"
+}

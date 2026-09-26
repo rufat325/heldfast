@@ -1,0 +1,47 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Download an OFW message attachment by fileId and return content you can actually read. Inline delivery walks a ladder and returns the first rung that works: (1) host-renderable images (PNG/JPEG/GIF/WEBP) come back as ImageContent; (2) .xlsx/.csv/.tsv, .pdf, .docx, .pptx and text files come back as EXTRACTED CONTENT \u2014 per-sheet CSV, per-page/slide text, document text \u2014 in the response JSON under `extracted`; (3) anything else comes back as an EmbeddedResource blob of the raw bytes. The meta block names the rung as `deliveredVia` and, when it falls through to bytes, lists what was tried in `deliveryAttempts`. Reported mime types are always normalized to a bare media type (no charset/name parameters). In disk mode the bytes are saved to ~/Downloads/ofw-mcp/ and the response carries the absolute path; pass extract:true to ALSO get the extracted content in that response. The default for `inline` can be flipped server-side via the OFW_INLINE_ATTACHMENTS env var. On a hosted deployment with no filesystem, disk mode is unavailable, so inline is forced (forcedInline:true) rather than failing \u2014 a saveTo path never costs you the content. fileId comes from attachments[].fileId on ofw_get_message. Override disk destination with OFW_ATTACHMENTS_DIR or saveTo; saveTo must stay inside the attachments directory, and an existing file is never overwritten unless force:true. Re-downloading to the same path is a no-op (disk mode only).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "extract": {
+    "description": "Whether to extract readable content from the file. Default: on for inline delivery of any non-image type, off in disk mode. Set false to get the raw bytes inline instead of extracted text (e.g. to hash or re-upload the file); set true in disk mode to get both the saved path and the extracted content.",
+    "type": "boolean"
+   },
+   "fileId": {
+    "description": "Attachment file id (from ofw_get_message \u2192 attachments[].fileId)",
+    "type": "number"
+   },
+   "force": {
+    "description": "Re-download even if already on disk, replacing any existing file at the destination. Default false. Ignored when inline:true (inline always fetches fresh bytes, or reuses an on-disk copy if present).",
+    "type": "boolean"
+   },
+   "inline": {
+    "description": "If true, return content inline as MCP content blocks and skip the disk write. If false, write to disk and return the path \u2014 except on a hosted deployment with no filesystem, where inline is forced (forcedInline:true) so the content is still returned. If omitted, falls back to the OFW_INLINE_ATTACHMENTS env var (default: false = disk).",
+    "type": "boolean"
+   },
+   "maxChars": {
+    "description": "Ceiling on extracted characters (default 50000). Over it, content is clipped on a row/line boundary, `truncated` is set, and anything dropped whole is listed in `extracted.omitted`.",
+    "maximum": 500000,
+    "minimum": 500,
+    "type": "integer"
+   },
+   "parts": {
+    "description": "Which sheets / slides / pages to extract, e.g. \"1-3,5\" (1-based positions) or a sheet name like \"2026\". A bare number matches either a position or a name. Omit for everything. Unselected parts are listed in `extracted.omitted`.",
+    "type": "string"
+   },
+   "saveTo": {
+    "description": "Path or directory to write to, INSIDE the attachments directory (OFW_ATTACHMENTS_DIR, default ~/Downloads/ofw-mcp); a relative path is resolved against it and anything outside it is refused. If a directory (trailing /), the OFW filename is used. Default: <attachments dir>/<fileId>-<filename>. An existing file is not overwritten unless force:true. Ignored when inline is in effect.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "fileId"
+  ],
+  "type": "object"
+ },
+ "name": "ofw_download_attachment"
+}

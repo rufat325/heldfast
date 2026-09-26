@@ -1,0 +1,372 @@
+{
+ "_legacy": {
+  "bucket": "checkout",
+  "successor": "https://api.trusteed.xyz/demo-store/mcp/checkout"
+ },
+ "_meta": {
+  "openai/outputTemplate": "ui://widget/receipt.html",
+  "openai/toolInvocation/invoked": "Compra completada",
+  "openai/toolInvocation/invoking": "Completando la compra\u2026",
+  "openai/widgetAccessible": true,
+  "ui": {
+   "resourceUri": "ui://widget/receipt.html"
+  },
+  "ui/resourceUri": "ui://widget/receipt.html"
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Complete the purchase. Collects buyer contact info via elicitation if supported. Idempotent \u2014 replay is keyed on checkout_session_id: any retry against a session that already has an order returns that same order (COMPLETED or PENDING_EXTERNAL_CONFIRMATION) without re-charging. The provided idempotency_key is recorded on the session for audit and short-circuits a repeated call with the same key.\n\nIf the response has status PENDING_EXTERNAL_CONFIRMATION, no purchase has completed yet: read `order_placed` and `next_action` \u2014 a person has to approve or pay at its `url`; `next_action` says whether calling again with the same checkout_session_id and idempotency_key can read the outcome. SKYFIRE TOKEN (payment_method=KYAPAY): Requires a Skyfire pay or kya-pay token. Preferred: pass the JWT in the skyfire-pay-id request header. Alternative: pass as kyapay_token parameter. Claims validated: sub (account ID), jti (replay prevention), amount (USD, matched against cart total), cur (must be USD), sps (pricing scheme). Missing token with KYAPAY method \u2192 error. Invalid token \u2192 error 'Invalid Skyfire token'. For other payment methods (MOCK, PAYPAL) no Skyfire token is required. PAYMENT MANDATE: this tool also requires one. Send it as the `payment_mandate` argument if your client cannot set headers, or as an `X-Payment-Mandate` header. It must carry `mandate_id`, `max_amount_cents`, `currency`, `exp`, `sub`, `aud`. Two of these are rejected outright if guessed: `exp` is an INTEGER of Unix seconds (not an ISO 8601 date), and `aud` is this store's slug (the one in the URL you are calling, not a domain). Its `currency` must match the cart's currency. Demo Store enforces `max_amount_cents` against the cart total; a real merchant may only observe that boundary, so enforce the buyer's limit in the agent too. The mandate is a spending cap you declare to limit yourself \u2014 it authorises nothing and does not prove the buyer's consent \u2014 and its `sub` must be the identity you authenticate as. `max_amount_cents` is the spending limit the person you are buying for gave you: ask them if they gave none. Schema: https://trusteed.xyz/.well-known/payment-mandate.schema.json. Checkout guide: https://trusteed.xyz/.well-known/agent-checkout-guide.json. CREDENTIAL: this store needs one. Call the `create_sandbox_key` tool first (it is in this tool list and needs no credential), then pass the key you get back as the `agent_key` argument \u2014 or as an `Authorization: Bearer` header if your client can set headers. Do not ask a person to log in: there is no human login for this store.",
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "agent_key": {
+    "description": "Sandbox credential from `create_sandbox_key`. Use this when your client cannot set an `Authorization: Bearer` header.",
+    "type": "string"
+   },
+   "buyer": {
+    "additionalProperties": true,
+    "description": "Optional buyer contact information",
+    "properties": {
+     "email": {
+      "description": "Buyer email address",
+      "format": "email",
+      "type": "string"
+     },
+     "name": {
+      "description": "Buyer full name",
+      "type": "string"
+     },
+     "phone": {
+      "description": "Buyer phone number",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "cel_context": {
+    "additionalProperties": true,
+    "description": "Optional enforcement context for Trusteed native MCP flows (no Shopify/WooCommerce/PrestaShop/Magento plugin). Providing these fields enables full evaluation of rules R004, R006, R008, R012-R013, R015-R017, R026-R028. See each field's own description for what it means and whether the server verifies it. These values are not signed into the receipt \u2014 do not include values you cannot substantiate.",
+    "properties": {
+     "agent_provider_id": {
+      "description": "Your provider identifier (e.g. \"openai\", \"anthropic\"), lowercase \u2014 send only if it applies to you.",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9_\\-]+$",
+      "type": "string"
+     },
+     "autorenew_consent": {
+      "description": "True if the buyer explicitly consented to auto-renewal for a subscription \u2014 send only if it applies to you.",
+      "type": "boolean"
+     },
+     "completed_orders_24h": {
+      "description": "Orders this agent has completed with this merchant in the last 24 hours. Merchant/platform fact \u2014 send only with evidence; it can only make a check stricter, never looser.",
+      "maximum": 1000000,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "cross_merchant_abuse": {
+      "description": "True if you have flagged this same buyer/agent for abuse at another merchant. Merchant/platform fact \u2014 send only with evidence; it can only make a check stricter, never looser.",
+      "type": "boolean"
+     },
+     "digital_good_types": {
+      "description": "Digital-good categories present in this cart \u2014 send only if it applies to you.",
+      "items": {
+       "enum": [
+        "gift_card",
+        "license_key",
+        "downloadable",
+        "stored_value"
+       ],
+       "type": "string"
+      },
+      "maxItems": 10,
+      "type": "array"
+     },
+     "discount_bps": {
+      "description": "Discount applied to this cart, in basis points \u2014 send only if it applies to you.",
+      "maximum": 10000,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "discount_codes_tried": {
+      "description": "Number of discount codes you attempted before this checkout \u2014 send only if it applies to you.",
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "dispute_count": {
+      "description": "Number of payment disputes this agent has had with this merchant. Merchant/platform fact \u2014 send only with evidence; it can only make a check stricter, never looser.",
+      "maximum": 1000000,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "is_b2b": {
+      "description": "True if you are buying on behalf of a business \u2014 send only if it applies to you.",
+      "type": "boolean"
+     },
+     "is_subscription": {
+      "description": "True if this checkout creates a recurring subscription. The server checks this itself; a value you send cannot hide what it detects.",
+      "type": "boolean"
+     },
+     "key_age_hours": {
+      "description": "Age in hours of the API key/credential you are using with this store. Merchant/platform fact \u2014 send only with evidence; it can only make a check stricter, never looser.",
+      "maximum": 720,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lowest_stock": {
+      "description": "Lowest remaining stock you observed across this cart's line items. Merchant/platform fact \u2014 send only with evidence; it can only make a check stricter, never looser.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "merchant_orders_1h": {
+      "description": "Orders this merchant has received from any agent in the last hour. Merchant/platform fact \u2014 send only with evidence; it can only make a check stricter, never looser.",
+      "maximum": 1000000,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "price_delta_bps": {
+      "description": "Difference, in basis points, between the price you discovered earlier and the cart's current price. The server may recompute this from the catalogue and replace your value.",
+      "maximum": 10000,
+      "minimum": -10000,
+      "type": "integer"
+     },
+     "product_categories": {
+      "description": "Product categories present in this cart, as you understand them \u2014 send only if it applies to you.",
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 50,
+      "type": "array"
+     },
+     "provider_confidence": {
+      "description": "Your confidence (0-1) in your own agent-provider identification \u2014 send only if it applies to you.",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "purchase_order_hash": {
+      "description": "Hash of a purchase order backing a B2B purchase \u2014 send only if it applies to you.",
+      "maxLength": 128,
+      "type": "string"
+     },
+     "refund_ratio": {
+      "description": "This agent's refund ratio with this merchant (0-1). Merchant/platform fact \u2014 send only with evidence; it can only make a check stricter, never looser.",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "requested_scopes": {
+      "description": "OAuth/permission scopes you requested when authenticating with this store \u2014 send only if it applies to you.",
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+     },
+     "return_policy_mismatch": {
+      "description": "True if the return policy you were shown does not match what this store publishes elsewhere. Merchant/platform fact \u2014 send only with evidence; it can only make a check stricter, never looser.",
+      "type": "boolean"
+     },
+     "shipping_freight_forwarder": {
+      "description": "True if the shipping address is a freight-forwarder address \u2014 send only if it applies to you.",
+      "type": "boolean"
+     },
+     "shipping_po_box": {
+      "description": "True if the shipping address is a PO box. The server checks this itself; a value you send cannot hide what it detects.",
+      "type": "boolean"
+     },
+     "stored_value_cents": {
+      "description": "Stored-value amount (e.g. gift card) applied to this cart, in cents. The server checks this itself; a value you send cannot hide what it detects.",
+      "maximum": 100000000,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "checkout_session_id": {
+    "description": "Checkout session ID from preview_checkout \u2014 the same value as create_cart's cart_id (must be a valid UUID)",
+    "type": "string"
+   },
+   "idempotency_key": {
+    "description": "Unique key to prevent duplicate charges on retry. Generate once per purchase attempt. Replay is enforced primarily on checkout_session_id (the existing order is returned). The first key seen for a session is recorded; reusing the same key short-circuits to the existing order.",
+    "type": "string"
+   },
+   "kyapay_token": {
+    "description": "Skyfire pay or kya-pay JWT for autonomous payment via Skyfire (payment_method=KYAPAY). Alternative to passing the token in the skyfire-pay-id request header \u2014 the header takes precedence if both are provided. Claims required: sub, jti, amount (USD), cur=USD, sps.",
+    "type": "string"
+   },
+   "payment_mandate": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Payment mandate with `mandate_id`, `max_amount_cents` (integer, minor units), `currency` (3 letters, must match the cart's), `exp` (expiry as an INTEGER of Unix seconds \u2014 not an ISO 8601 date string), `sub` (the identity you authenticate as \u2014 it is compared against it) and `aud` (the store slug this mandate is for, e.g. the slug in the URL you are calling \u2014 not a domain). It is a spending cap you declare to limit yourself: it authorises nothing and does not prove the buyer's consent. Use this when your client cannot set an `X-Payment-Mandate` header."
+   },
+   "payment_method": {
+    "description": "Payment method to use. PAYPAL creates a PayPal order and presents approval URL. KYAPAY requires kyapay_token. ACP (Stripe-native settlement) returns a 'not enabled' response unless this deployment enables native settlement; when enabled it charges the Stripe Shared Payment Token passed as shared_payment_token. X402 is available through the configured x402 protocol flow, not this checkout tool. MOCK moves no money: it completes the order without charging. Whether a store accepts it depends on the store's configuration (it is the default on demo-store). Defaults to MOCK if not specified.",
+    "enum": [
+     "ACP",
+     "KYAPAY",
+     "PAYPAL",
+     "MOCK",
+     "X402"
+    ],
+    "type": "string"
+   },
+   "reconfirmed_state_hash": {
+    "description": "SHA-256 of the authoritative merchant state, as returned in details.reconfirm_state_hash by a previous STATE_RECONFIRMATION_REQUIRED error. Required to proceed when the merchant state moved after the approved preview. Passing a stale hash is refused: it means the state moved again and must be reconfirmed anew.",
+    "pattern": "^[0-9a-f]{64}$",
+    "type": "string"
+   },
+   "shared_payment_token": {
+    "description": "Stripe Shared Payment Token (spt_\u2026) granted by the buyer's agent wallet for payment_method=ACP. Issued by Stripe, scoped to this merchant, amount and currency, and consumed when used: it can be charged once. Only honoured when this deployment enables native ACP settlement.",
+    "pattern": "^spt_[A-Za-z0-9_]+$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "checkout_session_id",
+   "idempotency_key"
+  ],
+  "type": "object"
+ },
+ "name": "complete_checkout",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "approval_url": {
+    "type": "string"
+   },
+   "checkout_session_id": {
+    "type": "string"
+   },
+   "currency": {
+    "type": "string"
+   },
+   "external_order_id": {
+    "type": "string"
+   },
+   "idempotent": {
+    "type": "boolean"
+   },
+   "money_moves": {
+    "type": "boolean"
+   },
+   "next_action": {
+    "additionalProperties": true,
+    "properties": {
+     "actor": {
+      "const": "buyer",
+      "type": "string"
+     },
+     "do": {
+      "enum": [
+       "approve",
+       "pay"
+      ],
+      "type": "string"
+     },
+     "instruction": {
+      "type": "string"
+     },
+     "reuse_arguments": {
+      "items": {
+       "enum": [
+        "checkout_session_id",
+        "idempotency_key"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "then_call": {
+      "const": "complete_checkout",
+      "type": "string"
+     },
+     "url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "actor",
+     "do",
+     "url",
+     "instruction"
+    ],
+    "type": "object"
+   },
+   "order_id": {
+    "type": "string"
+   },
+   "order_placed": {
+    "type": "boolean"
+   },
+   "payment_captured": {
+    "type": "boolean"
+   },
+   "payment_method": {
+    "enum": [
+     "ACP",
+     "KYAPAY",
+     "PAYPAL",
+     "MOCK",
+     "X402"
+    ],
+    "type": "string"
+   },
+   "payment_url": {
+    "type": "string"
+   },
+   "shipping_authoritative": {
+    "type": "boolean"
+   },
+   "shipping_source": {
+    "enum": [
+     "platform",
+     "merchant_policy",
+     "estimated"
+    ],
+    "type": "string"
+   },
+   "status": {
+    "enum": [
+     "COMPLETED",
+     "ALREADY_PLACED",
+     "PENDING_EXTERNAL_CONFIRMATION"
+    ],
+    "type": "string"
+   },
+   "store_name": {
+    "type": "string"
+   },
+   "total_cents": {
+    "type": "number"
+   }
+  },
+  "required": [
+   "order_id",
+   "checkout_session_id",
+   "store_name",
+   "total_cents",
+   "currency",
+   "status",
+   "idempotent"
+  ],
+  "type": "object"
+ }
+}

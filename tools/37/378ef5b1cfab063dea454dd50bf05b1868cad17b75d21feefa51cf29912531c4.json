@@ -1,0 +1,51 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Reconstitue la timeline compl\u00e8te d'un \u00e9tablissement de sant\u00e9 (ouvertures, fermetures, changements de NAF/enseigne) en croisant FINESS DREES \u2194 resolver SIRET (RPPS + DINUM) \u2194 SIRENE INSEE V3.11. Lit les `periodesEtablissement` compl\u00e8tes pour chaque SIRET candidat.\n\n**V0.7.0** : SIRET candidats \u00e9largis via le resolver \u2014 inclut d\u00e9sormais les SIRET ferm\u00e9s du SIREN parent qui matchent l'adresse FINESS (invisibles c\u00f4t\u00e9 RPPS seul). Permet de tracer la fermeture exacte d'un site m\u00eame quand FINESS le liste encore actif.\n\nUsage typique :\n- Tracer l'historique d'un site apr\u00e8s une fusion-acquisition\n- Identifier la date de fermeture exacte d'un SIRET encore list\u00e9 actif c\u00f4t\u00e9 FINESS\n- Comprendre une cascade de rebrandings via les changements de `enseigne1Etablissement` au fil des p\u00e9riodes\n\nFormat : objet `LookupResult`. Quand `found: true`, retourne `finess` (vue DREES synth\u00e9tique) + `siret_timelines` (1 entr\u00e9e par SIRET candidat avec `periodes` chronologiques).\n\nCo\u00fbt : 1 RPC FINESS + 1 SELECT rpps + N appels DINUM + N appels INSEE en parall\u00e8le (N \u2264 5 typiquement). Pas de cache.",
+ "inputSchema": {
+  "properties": {
+   "num_finess": {
+    "description": "Num\u00e9ro FINESS exact (9 chiffres).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "num_finess"
+  ],
+  "type": "object"
+ },
+ "name": "historique_etablissement",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

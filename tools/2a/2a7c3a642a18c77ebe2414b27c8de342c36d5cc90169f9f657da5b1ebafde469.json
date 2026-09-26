@@ -1,0 +1,341 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Bounded time-series for one activity metric (agent-safe-series/v1). Returns exact stats on full-resolution samples plus a downsampled series capped at 500 points, so a multi-hour ride never blows the context window. Prefer strava_get_activity / zones first; reach for this when you need the shape of the effort. GPS is never returned here. Shared contract with garmin_activity_series / Kindred workout_series.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "id": {
+    "anyOf": [
+     {
+      "minLength": 1,
+      "type": "string"
+     },
+     {
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     }
+    ],
+    "description": "Strava activity id."
+   },
+   "max_points": {
+    "default": 400,
+    "description": "Point budget for the returned series. Server hard cap is 500.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "metric": {
+    "default": "heart_rate",
+    "description": "Which sample stream to shape. GPS is never available here; use strava_get_activity_streams with include_gps for latlng.",
+    "enum": [
+     "heart_rate",
+     "power",
+     "cadence",
+     "speed",
+     "elevation"
+    ],
+    "type": "string"
+   },
+   "reference_max_hr": {
+    "description": "Reference max heart rate for zone math (reference_source=caller_provided). Without it, uses activity max_heartrate when available, else series observed max.",
+    "maximum": 240,
+    "minimum": 100,
+    "type": "integer"
+   },
+   "resolution_seconds": {
+    "default": 60,
+    "description": "Requested bucket width. Raised automatically when it would exceed max_points; response reports what was used.",
+    "maximum": 3600,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "response_format": {
+    "default": "markdown",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "id"
+  ],
+  "type": "object"
+ },
+ "name": "strava_activity_series",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "activity_id": {
+    "type": [
+     "string",
+     "number"
+    ]
+   },
+   "contract_version": {
+    "const": "agent-safe-series/v1",
+    "type": "string"
+   },
+   "data_quality": {
+    "additionalProperties": false,
+    "properties": {
+     "actual_samples": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "coverage_anchor": {
+      "enum": [
+       "nominal_duration",
+       "sample_span"
+      ],
+      "type": "string"
+     },
+     "coverage_ratio": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "expected_samples": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "longest_gap_seconds": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "sample_interval_seconds": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "expected_samples",
+     "actual_samples",
+     "coverage_ratio",
+     "longest_gap_seconds",
+     "sample_interval_seconds",
+     "coverage_anchor"
+    ],
+    "type": "object"
+   },
+   "downsampled": {
+    "type": "boolean"
+   },
+   "method": {
+    "enum": [
+     "time_bucket_mean",
+     "none"
+    ],
+    "type": "string"
+   },
+   "metric": {
+    "enum": [
+     "heart_rate",
+     "power",
+     "cadence",
+     "speed",
+     "elevation"
+    ],
+    "type": "string"
+   },
+   "notes": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "points": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "max": {
+       "type": "number"
+      },
+      "min": {
+       "type": "number"
+      },
+      "samples": {
+       "exclusiveMinimum": 0,
+       "maximum": 9007199254740991,
+       "type": "integer"
+      },
+      "t": {
+       "description": "Seconds since activity start.",
+       "type": "number"
+      },
+      "value": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "t",
+      "value",
+      "min",
+      "max",
+      "samples"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "requested_resolution_seconds": {
+    "type": "number"
+   },
+   "resolution_seconds": {
+    "type": "number"
+   },
+   "returned_points": {
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "source_points": {
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "start_time": {
+    "type": "string"
+   },
+   "stats": {
+    "additionalProperties": false,
+    "properties": {
+     "avg": {
+      "type": "number"
+     },
+     "max": {
+      "type": "number"
+     },
+     "min": {
+      "type": "number"
+     },
+     "p25": {
+      "type": "number"
+     },
+     "p50": {
+      "type": "number"
+     },
+     "p75": {
+      "type": "number"
+     },
+     "percentile_method": {
+      "const": "linear_interpolation",
+      "type": "string"
+     }
+    },
+    "required": [
+     "avg",
+     "min",
+     "max",
+     "p25",
+     "p50",
+     "p75",
+     "percentile_method"
+    ],
+    "type": "object"
+   },
+   "t_unit": {
+    "const": "seconds_from_start",
+    "type": "string"
+   },
+   "time_in_zone": {
+    "additionalProperties": false,
+    "properties": {
+     "reference_max_hr": {
+      "type": "number"
+     },
+     "reference_source": {
+      "enum": [
+       "caller_provided",
+       "activity_recorded_max",
+       "observed_max"
+      ],
+      "type": "string"
+     },
+     "zone_model": {
+      "const": "percent_of_reference_max_hr",
+      "type": "string"
+     },
+     "zones": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "max_bpm": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "min_bpm": {
+         "type": "number"
+        },
+        "percent": {
+         "type": "number"
+        },
+        "seconds": {
+         "type": "number"
+        },
+        "zone": {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "zone",
+        "min_bpm",
+        "max_bpm",
+        "seconds",
+        "percent"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "zone_model",
+     "reference_max_hr",
+     "reference_source",
+     "zones"
+    ],
+    "type": "object"
+   },
+   "unit": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "contract_version",
+   "activity_id",
+   "metric",
+   "unit",
+   "t_unit",
+   "resolution_seconds",
+   "requested_resolution_seconds",
+   "points",
+   "stats",
+   "downsampled",
+   "source_points",
+   "returned_points",
+   "method",
+   "data_quality",
+   "notes"
+  ],
+  "type": "object"
+ },
+ "title": "Strava Activity Series"
+}

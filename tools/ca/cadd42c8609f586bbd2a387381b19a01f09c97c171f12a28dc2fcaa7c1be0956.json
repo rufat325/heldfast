@@ -1,0 +1,77 @@
+{
+ "description": "Render the scene server-side (real WebGL, headless) and return screenshot image(s) \u2014 your EYES on the scene. Use it after apply_ops batches and after probe_framing, and judge each image as a photographer and a web designer would: one clear subject, on a third (for a page's own camera, the whole card at a readable angle); the horizon off the middle; the eye at a standing height; text legible and on even margins; a way out in view; the colours serving the brief (one accent, on the primary action); nothing floating, clipped or overlapping. Beside each image comes `composition`, read from its own pixels: tonalRange (p5 to p95 of lightness; under 0.35 is flat), clipping (share blown to white, crushed to black), key (low, mid, high), a 3x3 thirds grid of lightness and detail with the busiest and brightest cells, the hues on screen by share, and findings in sentences. Fix with apply_ops. Discipline: at most 2 screenshot\u2192fix rounds per user request, then report what you built. views (max 4, default = the visitor's entry view): pass \"page:<pageIdOrSlug>\" to frame one page/neighborhood, or {position:[x,y,z], target:[x,y,z], fov?} for an exact camera. Rendering is real but slow \u2014 ~10s for simple scenes, and the server gives up after 45 s per view by default; a 400-node scene with many textures needs more, so pass timeoutSeconds (up to 180) and a smaller maxDim (a 512-wide shot is a fine check of placement and readability and renders faster). A timeout comes back as an error naming it, never as an empty image; repeat shots of an unchanged scene at the same size are cached and instant. Rate-limited: prefer ONE well-chosen view; only multi-view when areas are far apart (four views at 180 s can hold the renderer for twelve minutes). If it returns a busy/unavailable error, keep building and retry once later \u2014 do not loop on it.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "atSeconds": {
+    "description": "Seconds into the scene's animation the shot is taken at (0-600, default 0 = frame one). Every track and motion-path rider is frozen at that time, so a door with a 4 s swing is verified mid-swing at 2 and a rider on a 12 s loop at u=0.5 at 6. Cached per time.",
+    "type": "number"
+   },
+   "maxDim": {
+    "description": "Longest side of the image in pixels, 64-1920 (default 400; height is 0.625x). Smaller renders faster and is enough to judge placement; go large only for a final look.",
+    "type": "number"
+   },
+   "sceneId": {
+    "description": "Scene id from list_scenes.",
+    "type": "string"
+   },
+   "timeoutSeconds": {
+    "description": "Per-view render budget in seconds, clamped 10-180 (default 45). Raise it for a big or texture-heavy scene instead of retrying a timeout at the same budget.",
+    "type": "number"
+   },
+   "views": {
+    "description": "Camera views to capture. Omit for the visitor's entry view.",
+    "items": {
+     "anyOf": [
+      {
+       "description": "\"page:<pageIdOrSlug>\" to frame that page's neighborhood.",
+       "type": "string"
+      },
+      {
+       "properties": {
+        "fov": {
+         "description": "Vertical FOV degrees (10-120).",
+         "type": "number"
+        },
+        "position": {
+         "description": "Camera position [x,y,z] (meters).",
+         "items": {
+          "type": "number"
+         },
+         "maxItems": 3,
+         "minItems": 3,
+         "type": "array"
+        },
+        "target": {
+         "description": "Look-at point [x,y,z].",
+         "items": {
+          "type": "number"
+         },
+         "maxItems": 3,
+         "minItems": 3,
+         "type": "array"
+        }
+       },
+       "required": [
+        "position",
+        "target"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "maxItems": 4,
+    "type": "array"
+   }
+  },
+  "required": [
+   "sceneId"
+  ],
+  "type": "object"
+ },
+ "name": "get_scene_screenshot",
+ "title": "Screenshot a 3dCMS scene"
+}

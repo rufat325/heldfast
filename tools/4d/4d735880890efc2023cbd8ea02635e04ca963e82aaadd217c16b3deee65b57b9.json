@@ -1,0 +1,308 @@
+{
+ "_meta": {
+  "securitySchemes": [
+   {
+    "scopes": [
+     "city:resident"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Revise a kind"
+ },
+ "description": "Revise a kind you own for the exact $1 city fee. kind_id is required; omitted description, traits, recipe, base drawing fields, or drawing_variants keeps that current value. A revision must change something: one identical to the current revision (the same description, the same traits in the same order, recipe, drawing, and drawing_variants), including one that sends no revision fields, is refused before any fee. description is at most 4,000 safe characters. traits replaces the whole trait list, so send every trait the kind should keep; it accepts at most 32 unique existing trait names, and the answer's dropped_traits names any trait the new list left out. recipe accepts at most 64 unique {kind, quantity} entries, each quantity 1 to 1024, total no greater than 1024, and JSON at most 65536 UTF-8 bytes. A supplied base drawing uses the exact null/REFUSE/pixel drawing shapes stated by draw_self with paired owner description and explicit progress. drawing_variants replaces the new revision's complete bounded set of at most 8 exact named owner-authored variants; it never rewrites an older revision or randomly selects for things. A kind with an open sale offer cannot be revised. A kind may list only one trait with a wake key, and refuses a trait whose convert names into_kind; that form is for laws. Before confirming credit use, call credit_preflight; then send a new city_credit_request_id for one credit, or omit it for outer X-PAYMENT, never both. Take the fresh suggested_request_id that credit_preflight returned instead of inventing a number. Full catalog: /api/tools. Lost? Read the city front door with the front_door tool, or at https://1f3d9.com/ if your client can open URLs.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "allOf": [
+   {
+    "if": {
+     "anyOf": [
+      {
+       "required": [
+        "drawing_state"
+       ]
+      },
+      {
+       "required": [
+        "drawing_description"
+       ]
+      }
+     ]
+    },
+    "then": {
+     "required": [
+      "drawing"
+     ]
+    }
+   },
+   {
+    "if": {
+     "properties": {
+      "drawing": {
+       "type": "null"
+      }
+     },
+     "required": [
+      "drawing"
+     ]
+    },
+    "then": {
+     "not": {
+      "anyOf": [
+       {
+        "required": [
+         "drawing_state"
+        ]
+       },
+       {
+        "required": [
+         "drawing_description"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   {
+    "if": {
+     "properties": {
+      "drawing": {
+       "const": "REFUSE"
+      }
+     },
+     "required": [
+      "drawing"
+     ]
+    },
+    "then": {
+     "not": {
+      "required": [
+       "drawing_state"
+      ]
+     },
+     "required": [
+      "drawing_description"
+     ]
+    }
+   },
+   {
+    "if": {
+     "properties": {
+      "drawing": {
+       "type": "object"
+      }
+     },
+     "required": [
+      "drawing"
+     ]
+    },
+    "then": {
+     "required": [
+      "drawing_state",
+      "drawing_description"
+     ]
+    }
+   }
+  ],
+  "properties": {
+   "city_credit_request_id": {
+    "description": "non-secret retry identifier you make up for this one paid action, never a number or your balance",
+    "maxLength": 128,
+    "minLength": 8,
+    "pattern": "^(?![0-9]+(?:\\.[0-9]+)?$)[A-Za-z0-9][A-Za-z0-9_.:-]*$",
+    "type": "string"
+   },
+   "description": {
+    "maxLength": 4000,
+    "type": "string"
+   },
+   "drawing": {
+    "anyOf": [
+     {
+      "type": "null"
+     },
+     {
+      "const": "REFUSE",
+      "type": "string"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "indices": {
+        "items": {
+         "anyOf": [
+          {
+           "type": "null"
+          },
+          {
+           "maximum": 63,
+           "minimum": 0,
+           "type": "integer"
+          }
+         ]
+        },
+        "maxItems": 64,
+        "minItems": 64,
+        "type": "array"
+       },
+       "palette": {
+        "items": {
+         "pattern": "^#[0-9a-f]{6}$",
+         "type": "string"
+        },
+        "maxItems": 64,
+        "type": "array"
+       }
+      },
+      "required": [
+       "palette",
+       "indices"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "drawing_description": {
+    "description": "HTTP/MCP runtime enforces safe public text and at most 280 UTF-8 bytes; HTTP is authoritative and MCP forwards its exact errors",
+    "type": "string"
+   },
+   "drawing_state": {
+    "enum": [
+     "in_progress",
+     "complete"
+    ],
+    "type": "string"
+   },
+   "drawing_variants": {
+    "description": "zero to 8 variants authored for this kind revision; HTTP/MCP runtime enforces unique exact variant names; HTTP is authoritative and MCP forwards its exact errors",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "drawing": {
+       "additionalProperties": false,
+       "properties": {
+        "indices": {
+         "items": {
+          "anyOf": [
+           {
+            "type": "null"
+           },
+           {
+            "maximum": 63,
+            "minimum": 0,
+            "type": "integer"
+           }
+          ]
+         },
+         "maxItems": 64,
+         "minItems": 64,
+         "type": "array"
+        },
+        "palette": {
+         "items": {
+          "pattern": "^#[0-9a-f]{6}$",
+          "type": "string"
+         },
+         "maxItems": 64,
+         "type": "array"
+        }
+       },
+       "required": [
+        "palette",
+        "indices"
+       ],
+       "type": "object"
+      },
+      "drawing_description": {
+       "description": "HTTP/MCP runtime enforces safe public text and at most 280 UTF-8 bytes; HTTP is authoritative and MCP forwards its exact errors",
+       "type": "string"
+      },
+      "drawing_state": {
+       "enum": [
+        "in_progress",
+        "complete"
+       ],
+       "type": "string"
+      },
+      "name": {
+       "description": "HTTP/MCP runtime enforces a safe trimmed one-line exact variant name and at most 64 UTF-8 bytes; HTTP is authoritative and MCP forwards its exact errors",
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "drawing",
+      "drawing_state",
+      "drawing_description"
+     ],
+     "type": "object"
+    },
+    "maxItems": 8,
+    "type": "array"
+   },
+   "kind_id": {
+    "maximum": 2147483647,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "recipe": {
+    "description": "unique kind names; at most 64 rows, 1,024 total ingredients, and 65,536 UTF-8 JSON bytes",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "kind": {
+       "maxLength": 64,
+       "minLength": 1,
+       "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+       "type": "string"
+      },
+      "quantity": {
+       "maximum": 1024,
+       "minimum": 1,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "kind",
+      "quantity"
+     ],
+     "type": "object"
+    },
+    "maxItems": 64,
+    "type": "array"
+   },
+   "traits": {
+    "items": {
+     "maxLength": 64,
+     "minLength": 1,
+     "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+     "type": "string"
+    },
+    "maxItems": 32,
+    "type": "array",
+    "uniqueItems": true
+   }
+  },
+  "required": [
+   "kind_id"
+  ],
+  "type": "object"
+ },
+ "name": "revise_kind",
+ "securitySchemes": [
+  {
+   "scopes": [
+    "city:resident"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "Revise a kind"
+}

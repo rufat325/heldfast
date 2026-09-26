@@ -1,0 +1,91 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Recherche d'entreprises fran\u00e7aises avec filtres NAF, code postal, d\u00e9partement ou rayon g\u00e9ographique. Couvre tous secteurs (sant\u00e9 via NAF 8690B, 4773Z, 8710A, 8621Z, etc.). Source : DINUM Recherche Entreprises (SIRENE + RNE). Renvoie CA, dirigeants, tranches d'effectif et dates de cr\u00e9ation.\n\nDeux modes EXCLUSIFs (endpoints DINUM distincts) : (1) proximit\u00e9 \u2014 `lat`+`lon`+`radiusKm` (optionnellement + `naf`), r\u00e9solu nativement via `/near_point` ; (2) administratif \u2014 `q` (texte libre) et/ou `naf` + `codePostal`/`departement`, via `/search`. La recherche de proximit\u00e9 ne supporte PAS `q` ni `codePostal`/`departement` (combinaison rejet\u00e9e avec une erreur explicite : choisir un seul mode). `radiusKm` born\u00e9 \u00e0 50 km.\n\n**R\u00e9duction de payload (V0.13)** : `includeDirigeants: false` strip la liste des dirigeants RNE de chaque entreprise du r\u00e9sultat \u2014 utile en \u00e9num\u00e9ration volume (Geo Intel) o\u00f9 les dirigeants ne sont pas exploit\u00e9s et o\u00f9 les groupes type Biogroup peuvent en lister 20+ par entit\u00e9 (gonflement inutile du payload). D\u00e9faut `true` pour pr\u00e9server le contrat V0.12 (backward-compat strict).",
+ "inputSchema": {
+  "properties": {
+   "codePostal": {
+    "description": "Filtre alternatif : code postal exact.",
+    "type": "string"
+   },
+   "departement": {
+    "description": "Filtre alternatif : code d\u00e9partement.",
+    "type": "string"
+   },
+   "includeDirigeants": {
+    "default": true,
+    "description": "Inclure la liste des dirigeants RNE dans chaque entreprise (d\u00e9faut true). `false` strip `dirigeants: []` c\u00f4t\u00e9 handler \u2014 utile en \u00e9num\u00e9ration volume o\u00f9 les dirigeants ne sont pas exploit\u00e9s (\u00e9conomie de tokens, groupes type Biogroup peuvent lister 20+ dirigeants par entit\u00e9).",
+    "type": "boolean"
+   },
+   "lat": {
+    "description": "Latitude du centre du cercle de recherche.",
+    "type": "number"
+   },
+   "lon": {
+    "description": "Longitude du centre du cercle de recherche.",
+    "type": "number"
+   },
+   "naf": {
+    "description": "Code NAF principal (ex: '8690B' = labos, '4773Z' = pharmacies, '8710A' = EHPAD, '8621Z' = MG).",
+    "type": "string"
+   },
+   "page": {
+    "default": 1,
+    "description": "Page (1-indexed).",
+    "type": "number"
+   },
+   "perPage": {
+    "default": 10,
+    "description": "R\u00e9sultats par page (1-25, d\u00e9faut 10).",
+    "type": "number"
+   },
+   "q": {
+    "description": "Recherche textuelle libre (raison sociale, dirigeant\u2026).",
+    "type": "string"
+   },
+   "radiusKm": {
+    "description": "Rayon en km (1-50).",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "name": "entreprises_in_radius",
+ "outputSchema": {
+  "description": "R\u00e9sultat de recherche DINUM avec pagination native (total, page, perPage, totalPages, entreprises).",
+  "properties": {
+   "entreprises": {
+    "description": "Entreprises retourn\u00e9es (SIREN, nomComplet, NAF, finances, etablissements).",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "page": {
+    "type": "number"
+   },
+   "perPage": {
+    "type": "number"
+   },
+   "total": {
+    "description": "Total d'entreprises matchant la query c\u00f4t\u00e9 DINUM.",
+    "type": "number"
+   },
+   "totalPages": {
+    "type": "number"
+   }
+  },
+  "required": [
+   "total",
+   "page",
+   "perPage",
+   "totalPages",
+   "entreprises"
+  ],
+  "type": "object"
+ }
+}

@@ -1,0 +1,76 @@
+{
+ "description": "Execute a Proctor exam against an MCP server.\n\nRuns the specified exam using the provided runtime and MCP configuration. The exam\ntests the MCP server's functionality and returns detailed results.\n\n**Returns:**\n- Streaming logs showing exam progress\n- Final result with status and detailed test outcomes\n\n**Use cases:**\n- Test an MCP server's initialization and tool listing\n- Verify authentication mechanisms work correctly\n- Run comprehensive functionality tests\n- Validate MCP protocol compliance\n- Test before publishing a new MCP server version\n\n**mcp_json Format:**\nThe mcp_json parameter accepts a JSON object with server configurations. Each server entry can include:\n- Standard fields: type, url, headers, env, command, args\n- Advanced fields (underscore-prefixed, stripped before execution):\n  - _proctor_files: Files to create in working directory (map of filename to content)\n  - _proctor_pre_registered_client: Pre-registered OAuth client credentials for non-DCR providers\n\n**Note:**\n- Use get_proctor_metadata first to discover available runtimes and exams\n- The mcp_json must be a valid JSON string representing the mcp.json format\n- Custom runtime images require the \"__custom__\" runtime_id and custom_runtime_image parameter\n- Underscore-prefixed fields in mcp_json are used for exam setup only and stripped before server execution\n- Results are auto-truncated to reduce response size. Long strings (>200 chars) and deep nested objects are replaced with truncation messages. Use the expand_fields parameter to retrieve full content for specific fields",
+ "inputSchema": {
+  "properties": {
+   "custom_runtime_image": {
+    "description": "Required if runtime_id is \"__custom__\". Docker image URL in format: registry/image:tag",
+    "type": "string"
+   },
+   "exam_id": {
+    "description": "Exam ID from get_proctor_metadata. Example: \"proctor-mcp-client-init-tools-list\" or \"proctor-mcp-client-auth-check\"",
+    "type": "string"
+   },
+   "expand_fields": {
+    "description": "Array of dot-notation paths to show in full (not truncated). By default, long strings (>200 chars) and deep objects in exam results are auto-truncated to reduce response size. Use this to expand specific fields. Examples: [\"tools[].inputSchema\", \"input\"].",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "max_retries": {
+    "description": "Maximum number of retry attempts (0-10). Default is 0.",
+    "type": "number"
+   },
+   "mcp_json": {
+    "description": "JSON string of the mcp.json configuration for the MCP server to test.\n\n**Simple examples:**\n\nHTTP server:\n```json\n{\n  \"my-server\": {\n    \"type\": \"streamable-http\",\n    \"url\": \"https://example.com/mcp\"\n  }\n}\n```\n\nstdio server:\n```json\n{\n  \"my-server\": {\n    \"command\": \"npx\",\n    \"args\": [\"-y\", \"my-mcp-server\"]\n  }\n}\n```\n\n**Standard fields per server entry:**\n- type: Transport type (\"streamable-http\", \"sse\", \"stdio\")\n- url: Server URL (for HTTP transports)\n- headers: HTTP headers as { \"Header-Name\": \"value\" } (optional)\n- env: Environment variables as { \"VAR_NAME\": \"value\" } (optional)\n- command: Command for stdio transport (e.g., \"npx\", \"uvx\")\n- args: Arguments for stdio command as [\"arg1\", \"arg2\"]\n\n**Advanced/internal fields (underscore-prefixed, added inside a server entry):**\n- _proctor_files: Object mapping filenames to content. Files are created in the working directory before exam execution.\n- _proctor_pre_registered_client: Pre-registered OAuth client for providers that don't support Dynamic Client Registration (DCR).\n\nExample with advanced fields:\n```json\n{\n  \"my-server\": {\n    \"type\": \"streamable-http\",\n    \"url\": \"https://example.com/mcp\",\n    \"_proctor_files\": {\n      \"config.json\": \"{\\\"apiKey\\\": \\\"test\\\"}\"\n    },\n    \"_proctor_pre_registered_client\": {\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"secret\",\n      \"redirect_uri\": \"https://pulsemcp.com/oauth/callback\"\n    }\n  }\n}\n```\n\nThese underscore-prefixed fields are stripped from the config before execution and are used only for exam setup.",
+    "type": "string"
+   },
+   "preloaded_credentials": {
+    "description": "Optional pre-loaded OAuth credentials for servers that require authentication.\n\nWhen provided, these credentials are passed to proctor-mcp-client which loads them into its credential store before connecting to the server. This allows testing OAuth-protected servers without requiring interactive login.\n\n**Example:**\n```json\n{\n  \"server_key\": \"remotes[0]\",\n  \"access_token\": \"eyJhbGciOiJSUzI1NiIs...\",\n  \"refresh_token\": \"dGhpcyBpcyBhIHJlZnJl...\",\n  \"token_endpoint\": \"https://auth.example.com/oauth/token\",\n  \"client_id\": \"abc123\",\n  \"client_secret\": \"secret\",\n  \"expires_at\": \"2024-12-31T23:59:59Z\"\n}\n```\n\n**Fields:**\n- server_key (required): Server key from mcp.json (e.g., \"remotes[0]\")\n- access_token (required): OAuth access token\n- refresh_token: OAuth refresh token for token renewal\n- token_endpoint: URL for token refresh operations\n- client_id: OAuth client ID\n- client_secret: OAuth client secret\n- expires_at: ISO 8601 timestamp when the access token expires",
+    "properties": {
+     "access_token": {
+      "type": "string"
+     },
+     "client_id": {
+      "type": "string"
+     },
+     "client_secret": {
+      "type": "string"
+     },
+     "expires_at": {
+      "type": "string"
+     },
+     "refresh_token": {
+      "type": "string"
+     },
+     "server_key": {
+      "type": "string"
+     },
+     "token_endpoint": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "server_key",
+     "access_token"
+    ],
+    "type": "object"
+   },
+   "runtime_id": {
+    "description": "Runtime ID from get_proctor_metadata, or \"__custom__\" for a custom Docker image. Example: \"v0.0.37\"",
+    "type": "string"
+   },
+   "server_json": {
+    "description": "Optional JSON string of server.json for result enrichment. Provides additional context about the server being tested.\n\n**Simple example:**\n```json\n{\n  \"name\": \"my-mcp-server\",\n  \"title\": \"My MCP Server\",\n  \"description\": \"A helpful MCP server\",\n  \"remotes\": [\n    { \"url\": \"https://example.com/mcp\", \"type\": \"streamable-http\" }\n  ]\n}\n```\n\nThe server.json follows the server.json specification and can include: name, title, description, version, websiteUrl, remotes (with url, type, headers), and packages (for stdio servers with identifier, registryType, runtimeHint, environmentVariables, runtimeArguments).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "runtime_id",
+   "exam_id",
+   "mcp_json"
+  ],
+  "type": "object"
+ },
+ "name": "run_exam"
+}

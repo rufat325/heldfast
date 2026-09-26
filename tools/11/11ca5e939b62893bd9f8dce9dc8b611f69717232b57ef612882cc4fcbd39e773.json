@@ -1,0 +1,126 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Post to Bluesky"
+ },
+ "description": "Publish a post to Bluesky as the connected account. Text up to 300 characters \u2014 Bluesky ALSO caps a post at 3000 UTF-8 bytes, so an emoji-heavy post can be under 300 characters and still be refused; Hermoso checks both before spending the round trip and says which limit and by how much. MEDIA: either up to 4 images (imageUrls + altText) OR one MP4 video (videoUrl + videoAlt), never both \u2014 a Bluesky post record carries a single embed and images and video are two different embed types. Video is MP4 only, up to 300MB at Bluesky's end (Hermoso can fetch up to 150MB from a URL), with optional WebVTT caption tracks; the aspect ratio is measured from the file. Bluesky requires a CONFIRMED EMAIL on the account before it will process any video \u2014 if it is unconfirmed you get a refusal saying so, and reconnecting will not help. Links in the text are made clickable automatically. LINK CARDS: Bluesky does NOT scrape links, so a URL posted bare renders as plain blue text \u2014 the client composing the post has to build the card. Hermoso builds one AUTOMATICALLY when the post has a URL and NO media: it fetches the page, uses its title/description and uploads its image as the card thumbnail. Pass linkCard:false to suppress it, or linkCard:{uri,title,description,thumbUrl} to control it (give both title and description and the page is not fetched at all). A POST CARRIES ONE EMBED, so a card and images/video cannot both ride: if you pass linkCard explicitly ALONGSIDE media the call is REFUSED by name rather than silently dropping one, and if the URL was merely in the text the MEDIA WINS and the reply says the card was skipped (the link stays clickable either way). Returns the post's public bsky.app URL. Connect at Settings > Connectors > Bluesky, or here with connect_connector, with a handle and an APP PASSWORD.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "account": {
+    "description": "WHICH connected account of this channel to post as \u2014 its @handle or id from list_connector_accounts. Needed only when the brand has more than one bluesky account connected (several and none named is refused by name, never guessed); omit when there is one.",
+    "type": "string"
+   },
+   "allowDuplicate": {
+    "description": "post it even though an identical post was just made",
+    "type": "boolean"
+   },
+   "altText": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    ],
+    "description": "Alt text \u2014 an ARRAY, one per image in the same order, or a single STRING to describe every image with it. WRITE ONE: Bluesky\u2019s own lexicon makes `alt` a REQUIRED property of every image, so a post without it is undescribed by design rather than by omission, and Bluesky users expect it. No maximum length is published, so nothing is truncated."
+   },
+   "brand": {
+    "description": "WHICH BRAND this post belongs to \u2014 id or exact name from list_brands (a shared workspace: its profile id). Beats the connection's pin for THIS CALL ONLY; a name that matches no brand, or two, is REFUSED and nothing is posted.",
+    "type": "string"
+   },
+   "captions": {
+    "description": "Up to 20 WebVTT caption tracks: [{lang:'en', url:'https://\u2026/en.vtt'}] or [{lang:'en', content:'WEBVTT\\n\\n00:00\u2026'}]. Each file is capped at 20000 bytes.",
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "hook": {
+    "description": "the post's angle \u2014 a list_hooks id or your own wording, reused exactly",
+    "type": "string"
+   },
+   "ideaId": {
+    "description": "short id of the content-plan idea this post came from",
+    "type": "string"
+   },
+   "idempotencyKey": {
+    "description": "any stable string: a repeat within 24h returns the original post instead of posting again",
+    "type": "string"
+   },
+   "imageUrls": {
+    "description": "Up to 4 public image URLs to attach. Cannot be combined with videoUrl.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "langs": {
+    "description": "BCP-47 language tags, e.g. ['en'].",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "linkCard": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "additionalProperties": {},
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     }
+    ],
+    "description": "Rich link card (`app.bsky.embed.external`). OMIT for the default (a card is built automatically when the post has a URL and no media). `false` never builds one. `true` builds one from the first URL in the text. An object {uri,title,description,thumbUrl} overrides any field \u2014 supply BOTH title and description and the page is never fetched. Cannot be combined with imageUrls/videoUrl: a post has ONE embed, so an explicit linkCard beside media is refused."
+   },
+   "platformCover": {
+    "description": "VIDEO COVER. Bluesky has no cover setting and shows the video\u2019s FIRST frame, so by default Hermoso checks it and, only when that frame is blank (a template ad\u2019s empty opening card), sends Bluesky a copy with the first frame replaced by the video\u2019s best frame. Your Library file is never changed. true = send the file exactly as it is.",
+    "type": "boolean"
+   },
+   "recipe": {
+    "description": "the post's FORMAT id, e.g. \"slideshow\" or \"imessage_chat\" \u2014 post_performance groups by it, so reuse one id per format",
+    "type": "string"
+   },
+   "subject": {
+    "description": "what the post is about",
+    "type": "string"
+   },
+   "text": {
+    "description": "The post, up to 300 characters / 3000 UTF-8 bytes.",
+    "type": "string"
+   },
+   "videoAlt": {
+    "description": "Alt text describing the video, for accessibility.",
+    "type": "string"
+   },
+   "videoUrl": {
+    "description": "One public MP4 URL. Cannot be combined with imageUrls. Bluesky transcodes it, which takes a minute or two.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "text"
+  ],
+  "type": "object"
+ },
+ "name": "post_to_bluesky",
+ "title": "Post to Bluesky"
+}

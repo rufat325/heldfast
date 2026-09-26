@@ -1,0 +1,236 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Recommended first step for open-ended or topic discovery: free-text search across 14.5 million Smithsonian objects, with optional exact filters. Filters narrow by museum unit, object type, indexed date term, culture, geographic place, subject topic, named party, and online/CC0 availability. Returns curated summaries (title, date, museum, thumbnail URL, CC0 flag) with the total match count. The record_id in each result is the identifier for smithsonian_get_object, smithsonian_find_related, and smithsonian_get_media. To browse one exact category \u2014 a single museum, culture, date term, object type, or topic \u2014 use smithsonian_browse_category instead.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "filters": {
+    "description": "Optional structured filters to narrow the search.",
+    "properties": {
+     "cc0_only": {
+      "description": "When true, restrict to records that have CC0-licensed media attached (the Lucene term media_usage:CC0). This selects on media presence, not license status \u2014 the roughly 9.2M records it excludes are CC0 too, they simply have nothing digitized. Read has_media on each result to decide whether smithsonian_get_media will return anything.",
+      "type": "boolean"
+     },
+     "culture": {
+      "description": "Culture term from the controlled vocabulary \u2014 often plural or qualified (e.g. \"Aztecs\", \"Plains Indian\"). The vocabulary is enumerable via smithsonian_list_terms (field \"culture\").",
+      "type": "string"
+     },
+     "date": {
+      "description": "Indexed date term. Decades (\"1920s\", \"1960s\") are the most common form, but the vocabulary also carries year ranges (\"500-1500\"), century terms (\"21st century\"), and BCE forms (\"-2500\", \"BCE 1000s\"). The value must be an exact term \u2014 the full set is enumerable via smithsonian_list_terms (field \"date\").",
+      "type": "string"
+     },
+     "name": {
+      "description": "Indexed named party \u2014 maker, collector, donor, issuing authority, or any other role the catalog records. Written surname-first (e.g. \"Warhol, Andy\"). This field is not enumerable via smithsonian_list_terms. A smithsonian_find_related name signal carries the indexed form verbatim and is the reliable source; smithsonian_get_object's makers[] is the catalog's free-text form of the same parties and is often written differently (\"Major J. A. L. M\u00f6ller (Jacob A.L. M\u00f6ller/Monty M\u00f6ller), Non-Indian, 1883-1957\" for the indexed \"M\u00f6ller, Major J. A. L.\"), so treat it as a starting guess.",
+      "type": "string"
+     },
+     "object_type": {
+      "description": "Object type term from Smithsonian's controlled vocabulary \u2014 commonly plural (e.g. \"Paintings\", \"Photographs\", \"Aircraft\"). Singular everyday forms like \"Painting\" usually return nothing. This field is not enumerable via smithsonian_list_terms; harvest valid values from the object_type field in smithsonian_search_objects results. Matched exactly and case-sensitively, and casing variants are indexed as SEPARATE categories \u2014 \"button\" and \"Button\" each hold their own records, and neither casing is reliably the larger \u2014 so probe a harvested value's other casings rather than assuming one covers the concept.",
+      "type": "string"
+     },
+     "online_only": {
+      "description": "When true, restrict to records carrying an indexed online_media_type value. That vocabulary covers digitized surrogates \u2014 finding aids, catalog cards, scanned books, full text, electronic resources \u2014 alongside images, 3D models, and video, and the surrogate types often have no deliverable media attached, so a match can still report has_media: false. Read has_media on each result to decide whether smithsonian_get_media will return anything.",
+      "type": "boolean"
+     },
+     "place": {
+      "description": "Geographic place (e.g. \"United States of America\"). The full set is enumerable via smithsonian_list_terms (field \"place\").",
+      "type": "string"
+     },
+     "topic": {
+      "description": "Subject term from the controlled vocabulary (e.g. \"Quilts\", \"Aviation\"). Matches the topics[] values smithsonian_get_object returns, and is a hard constraint \u2014 topic \"Quilts\" matches 1,134 objects where the same word as free text matches 2,677. The full set is enumerable via smithsonian_list_terms (field \"topic\").",
+      "type": "string"
+     },
+     "unit_code": {
+      "description": "Museum unit code (e.g. \"NASM\", \"SAAM\", \"NMAH\", \"NMAAHC\", \"NMAI\", \"NPG\", \"CHNDM\", \"SIL\"); the National Museum of Natural History is indexed under discipline sub-units like \"NMNHBIRDS\" and \"NMNHPALEO\", not a bare \"NMNH\". The full set is enumerable via smithsonian_list_terms (field \"unit_code\").",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "query": {
+    "description": "Free-text search. Use specific terms for precision (\"Tlingit totem pole\") or broad terms for browsing (\"quilt\").",
+    "type": "string"
+   },
+   "rows": {
+    "default": 20,
+    "description": "Page size (default 20, max 100).",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "start": {
+    "default": 0,
+    "description": "Pagination offset \u2014 0-indexed. Use with rows for paging through large result sets.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "smithsonian_search_objects",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "objects",
+     "total_count"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The rows cap that was applied.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_results`: An unfiltered query matched no objects. `invalid_filter`: A filtered search matched nothing \u2014 most often a filter value outside the Smithsonian controlled vocabulary (e.g. a singular \"Painting\" instead of \"Paintings\"). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_results",
+         "invalid_filter"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance naming the input that retrieves the objects this page omitted.",
+    "type": "string"
+   },
+   "objects": {
+    "description": "Curated object summaries for the current page.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Curated summary of a single Smithsonian catalog object.",
+     "properties": {
+      "date": {
+       "description": "Indexed date term for the object \u2014 commonly a decade (\"1960s\"), but the vocabulary also carries year ranges (\"500-1500\"), century terms (\"21st century\"), and BCE forms (\"-2500\", \"BCE 1000s\"). Sparse \u2014 omitted when the record has no indexed date.",
+       "type": "string"
+      },
+      "has_media": {
+       "description": "True when the object carries deliverable online media items. This is the signal smithsonian_get_media reads, so it \u2014 not the online_only filter \u2014 predicts whether that call returns anything.",
+       "type": "boolean"
+      },
+      "is_cc0": {
+       "description": "True when the object metadata is CC0 (open access). The Smithsonian Open Access corpus is CC0 throughout, so this flag rarely varies and cannot gate an image download \u2014 read has_media for that.",
+       "type": "boolean"
+      },
+      "museum_name": {
+       "description": "Full museum name for the unit code. A few rarely-indexed archive sub-unit codes have no mapped name and fall back to the raw unit code.",
+       "type": "string"
+      },
+      "object_type": {
+       "description": "Object type term (e.g. \"Aircraft\", \"Paintings\", \"Photographs\"). Harvest it here to filter a later search, but it is case-sensitive and casing variants are separate categories upstream \u2014 this row carries one casing of the concept, not all of it.",
+       "type": "string"
+      },
+      "record_id": {
+       "description": "Unique object identifier \u2014 pass to smithsonian_get_object, smithsonian_get_media, or smithsonian_find_related.",
+       "type": "string"
+      },
+      "thumbnail_url": {
+       "description": "Thumbnail image URL (~120px) if the object has online media.",
+       "type": "string"
+      },
+      "title": {
+       "description": "Object title from the catalog.",
+       "type": "string"
+      },
+      "unit_code": {
+       "description": "Museum unit code (e.g. \"NASM\", \"SAAM\", \"NMNHBIRDS\"). Use as a filter in future searches.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "record_id",
+      "title",
+      "unit_code",
+      "museum_name",
+      "is_cc0",
+      "has_media"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Number of objects returned in this page.",
+    "type": "number"
+   },
+   "total_count": {
+    "description": "Total matching objects in the Smithsonian catalog before pagination.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when matching objects remain past this page. False on a terminal or past-the-end page, where nothing is being withheld.",
+    "type": "boolean"
+   },
+   "truncationCeiling": {
+    "description": "Total matching objects (upper bound for omitted items).",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search Smithsonian Objects"
+}

@@ -1,0 +1,188 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch full metadata and column schema for a Socrata dataset by ID. Returns field names, data types, descriptions, row count, and licensing. Always call this before writing a socrata_query_dataset \u2014 the column types determine correct WHERE clause syntax: Number columns accept bare literals (year=2023) while Text columns require single-quoted strings (year='2023').",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "dataset_id": {
+    "description": "Four-by-four dataset ID matching pattern like kzjm-xkqj. IDs are portal-scoped: take it from socrata_find_datasets together with that result\u2019s domain.",
+    "type": "string"
+   },
+   "domain": {
+    "description": "Portal the dataset lives on, as a bare hostname (e.g. data.cityofnewyork.us); URL forms like https://data.cityofnewyork.us/ are accepted and reduced to the host. Pass the domain from the same socrata_find_datasets result as dataset_id. Defaults to SOCRATA_DEFAULT_DOMAIN or data.seattle.gov, which is wrong for another portal\u2019s ID.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "dataset_id"
+  ],
+  "type": "object"
+ },
+ "name": "socrata_get_dataset",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "dataset_id",
+     "domain",
+     "name",
+     "tags",
+     "columns"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "category": {
+    "description": "Domain category when available.",
+    "type": "string"
+   },
+   "columns": {
+    "description": "Column schema. Computed region columns (:@computed_region_*) are excluded to reduce noise.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single column in the dataset schema.",
+     "properties": {
+      "data_type": {
+       "description": "Socrata data type (e.g. Number, Text, Calendar date). Determines WHERE clause quoting: Number \u2192 bare literal, Text \u2192 single-quoted string.",
+       "type": "string"
+      },
+      "description": {
+       "description": "Column description when available.",
+       "type": "string"
+      },
+      "field_name": {
+       "description": "Column field name as used in SoQL queries.",
+       "type": "string"
+      },
+      "non_null_count": {
+       "description": "Non-null row count for this column when available.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "field_name",
+      "data_type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "data_updated_at": {
+    "description": "ISO 8601 timestamp of last data update when available.",
+    "type": "string"
+   },
+   "dataset_id": {
+    "description": "Four-by-four dataset ID.",
+    "type": "string"
+   },
+   "description": {
+    "description": "Dataset description when available.",
+    "type": "string"
+   },
+   "domain": {
+    "description": "Portal domain hosting this dataset.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_id`: Dataset ID does not match the four-by-four pattern. `not_found`: Valid ID format but the dataset does not exist on the domain queried \u2014 including a gateway HTTP 403 for an ID the portal does not serve. `unknown_domain`: The domain does not serve the Socrata API to this server: its hostname does not resolve (DNS ENOTFOUND), its API answered HTTP 404 without a Socrata error body, it redirected the request to another host that did not answer with Socrata data, or a gateway refused a dataset the Discovery catalog lists there. `invalid_domain`: The domain is not a hostname, even after dropping a URL scheme, path, or query. `rate_limited`: SODA endpoint returned 429. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_id",
+         "not_found",
+         "unknown_domain",
+         "invalid_domain",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "license": {
+    "description": "License name when available.",
+    "type": "string"
+   },
+   "name": {
+    "description": "Dataset display name.",
+    "type": "string"
+   },
+   "row_count": {
+    "description": "Approximate row count when available. See row_count_source for provenance.",
+    "type": "number"
+   },
+   "row_count_source": {
+    "description": "How row_count was obtained: 'top_level_cached_contents' \u2014 reported directly by the portal's views metadata; 'column_cached_contents' \u2014 derived as the maximum per-column cached count when the top-level value is absent. Absent when row_count is absent.",
+    "enum": [
+     "top_level_cached_contents",
+     "column_cached_contents"
+    ],
+    "type": "string"
+   },
+   "tags": {
+    "description": "Associated tags.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Dataset Schema"
+}

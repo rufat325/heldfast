@@ -1,0 +1,428 @@
+{
+ "_meta": {
+  "openai/outputTemplate": "ui://bestprice/shopping-results-v1.html",
+  "openai/toolInvocation/invoked": "Price history ready.",
+  "openai/toolInvocation/invoking": "Checking BestPrice price history\u2026",
+  "ui": {
+   "resourceUri": "ui://bestprice/shopping-results-v1.html"
+  },
+  "ui/resourceUri": "ui://bestprice/shopping-results-v1.html"
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Use this when the user asks whether today's price is good, low, typical, or high, whether it recently became cheaper, or wants price history for one exact grouped product_id. Do not use it to discover products, compare merchants, guarantee a future price, or repeat advertised discount claims. It returns deterministic minimum and median statistics, compact daily history, coverage gaps, methodology, and a bounded deal classification. period_days selects the daily series and coverage gaps only: deal_classification and price_delta_vs_180d_median_pct always compare the current price with the 180-day median, and window_stats always carries the 30-, 90- and 180-day statistics.",
+ "icons": [
+  {
+   "mimeType": "image/svg+xml",
+   "sizes": [
+    "any"
+   ],
+   "src": "https://www.bestprice.gr/images/logo.svg"
+  }
+ ],
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "period_days": {
+    "default": 180,
+    "description": "Requested history window in days for series and data_gaps. deal_classification and price_delta_vs_180d_median_pct always compare with the 180-day median; window_stats always carries the 30-, 90- and 180-day statistics. Use 180 unless the user asks otherwise.",
+    "enum": [
+     30,
+     90,
+     180
+    ],
+    "type": "number"
+   },
+   "product_id": {
+    "description": "Exact grouped BestPrice product id returned by search_products, in bp_<id> form.",
+    "pattern": "^bp_[0-9]{10}$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "product_id"
+  ],
+  "type": "object"
+ },
+ "name": "get_price_history",
+ "outputSchema": {
+  "$defs": {
+   "__schema0": {
+    "description": "Result schema version. Currently 2.0; a later <major>.<minor> is returned without a tools/list change.",
+    "pattern": "^[1-9][0-9]*\\.[0-9]+$",
+    "type": "string"
+   },
+   "__schema1": {
+    "format": "date-time",
+    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+    "type": "string"
+   },
+   "__schema10": {
+    "properties": {
+     "date": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": "string"
+     },
+     "merchant_count": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "price": {
+      "$ref": "#/$defs/__schema7"
+     }
+    },
+    "required": [
+     "date",
+     "price",
+     "merchant_count"
+    ],
+    "type": "object"
+   },
+   "__schema2": {
+    "const": "EUR",
+    "type": "string"
+   },
+   "__schema3": {
+    "const": "el-GR",
+    "type": "string"
+   },
+   "__schema4": {
+    "items": {
+     "$ref": "#/$defs/__schema5"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "__schema5": {
+    "maxLength": 240,
+    "minLength": 1,
+    "type": "string"
+   },
+   "__schema6": {
+    "anyOf": [
+     {
+      "$ref": "#/$defs/__schema7"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "__schema7": {
+    "maximum": 10000000,
+    "minimum": 0,
+    "type": "number"
+   },
+   "__schema8": {
+    "properties": {
+     "coverage_pct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+     },
+     "days": {
+      "anyOf": [
+       {
+        "const": 30,
+        "type": "number"
+       },
+       {
+        "const": 90,
+        "type": "number"
+       },
+       {
+        "const": 180,
+        "type": "number"
+       }
+      ]
+     },
+     "longest_gap_days": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "median_price": {
+      "$ref": "#/$defs/__schema6"
+     },
+     "minimum_price": {
+      "$ref": "#/$defs/__schema6"
+     },
+     "observations": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "days",
+     "minimum_price",
+     "median_price",
+     "observations",
+     "coverage_pct"
+    ],
+    "type": "object"
+   },
+   "__schema9": {
+    "type": "number"
+   }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+   {
+    "properties": {
+     "as_of": {
+      "$ref": "#/$defs/__schema1"
+     },
+     "bestprice_url": {
+      "format": "uri",
+      "type": "string"
+     },
+     "currency": {
+      "$ref": "#/$defs/__schema2"
+     },
+     "current_price": {
+      "$ref": "#/$defs/__schema6"
+     },
+     "current_price_source": {
+      "enum": [
+       "live_offer_minimum",
+       "latest_daily_history",
+       "unavailable"
+      ],
+      "type": "string"
+     },
+     "data_gaps": {
+      "properties": {
+       "coverage_note": {
+        "maxLength": 180,
+        "minLength": 1,
+        "type": "string"
+       },
+       "longest_gap_days": {
+        "maximum": 9007199254740991,
+        "minimum": 0,
+        "type": "integer"
+       },
+       "missing_days": {
+        "maximum": 9007199254740991,
+        "minimum": 0,
+        "type": "integer"
+       },
+       "stale_days": {
+        "maximum": 9007199254740991,
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "missing_days",
+       "longest_gap_days",
+       "stale_days",
+       "coverage_note"
+      ],
+      "type": "object"
+     },
+     "deal_classification": {
+      "description": "Classification against the 180-day window statistics, independent of period_days.",
+      "enum": [
+       "record_low",
+       "excellent_price",
+       "good_price",
+       "typical_price",
+       "above_typical",
+       "insufficient_data",
+       "unavailable"
+      ],
+      "type": "string"
+     },
+     "decision_id": {
+      "description": "Signed, anonymous id joining this recommendation to its BestPrice landing and outbound-click telemetry.",
+      "pattern": "^d1\\.[a-f0-9]{32}\\.[A-Za-z0-9_-]{43}$",
+      "type": "string"
+     },
+     "locale": {
+      "$ref": "#/$defs/__schema3"
+     },
+     "methodology_id": {
+      "description": "Price-history method. Currently bestprice_daily_min_v1; a revised method is returned as a new <name>_v<N> id without a tools/list change.",
+      "maxLength": 100,
+      "pattern": "^[a-z][a-z0-9_]*_v[1-9][0-9]*$",
+      "type": "string"
+     },
+     "period_days": {
+      "enum": [
+       30,
+       90,
+       180
+      ],
+      "type": "number"
+     },
+     "price_delta_vs_180d_median_pct": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/__schema9"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Current price versus the 180-day median, in percent. Always 180 days, independent of period_days."
+     },
+     "product_id": {
+      "pattern": "^bp_[0-9]{10}$",
+      "type": "string"
+     },
+     "product_title": {
+      "anyOf": [
+       {
+        "maxLength": 220,
+        "minLength": 1,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "quality": {
+      "properties": {
+       "cluster_continuity": {
+        "enum": [
+         "same_cluster",
+         "discontinuous",
+         "unknown"
+        ],
+        "type": "string"
+       },
+       "outlier_status": {
+        "enum": [
+         "protected",
+         "unsafe",
+         "unknown"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "cluster_continuity",
+       "outlier_status"
+      ],
+      "type": "object"
+     },
+     "schema_version": {
+      "$ref": "#/$defs/__schema0"
+     },
+     "series": {
+      "items": {
+       "$ref": "#/$defs/__schema10"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "source_last_observed_at": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/__schema1"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "warnings": {
+      "$ref": "#/$defs/__schema4"
+     },
+     "window_stats": {
+      "description": "Minimum and median statistics for the 30-, 90- and 180-day windows, whatever period_days was requested.",
+      "items": {
+       "$ref": "#/$defs/__schema8"
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "type": "array"
+     }
+    },
+    "required": [
+     "schema_version",
+     "as_of",
+     "currency",
+     "locale",
+     "warnings",
+     "product_id",
+     "product_title",
+     "decision_id",
+     "bestprice_url",
+     "period_days",
+     "current_price",
+     "current_price_source",
+     "source_last_observed_at",
+     "window_stats",
+     "price_delta_vs_180d_median_pct",
+     "deal_classification",
+     "methodology_id",
+     "data_gaps",
+     "series"
+    ],
+    "type": "object"
+   },
+   {
+    "properties": {
+     "as_of": {
+      "$ref": "#/$defs/__schema1"
+     },
+     "currency": {
+      "$ref": "#/$defs/__schema2"
+     },
+     "error": {
+      "properties": {
+       "code": {
+        "pattern": "^[A-Z][A-Z0-9_]{2,63}$",
+        "type": "string"
+       },
+       "message": {
+        "maxLength": 240,
+        "minLength": 1,
+        "type": "string"
+       },
+       "retryable": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "code",
+       "message",
+       "retryable"
+      ],
+      "type": "object"
+     },
+     "locale": {
+      "$ref": "#/$defs/__schema3"
+     },
+     "schema_version": {
+      "$ref": "#/$defs/__schema0"
+     },
+     "warnings": {
+      "$ref": "#/$defs/__schema4"
+     }
+    },
+    "required": [
+     "schema_version",
+     "as_of",
+     "currency",
+     "locale",
+     "warnings",
+     "error"
+    ],
+    "type": "object"
+   }
+  ],
+  "type": "object"
+ },
+ "title": "Inspect BestPrice price history"
+}

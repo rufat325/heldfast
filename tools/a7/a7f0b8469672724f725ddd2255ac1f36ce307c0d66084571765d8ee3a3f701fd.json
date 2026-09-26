@@ -1,0 +1,303 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Look up valid makes, models, and vehicle types in NHTSA's database. Use to resolve ambiguous vehicle names, find correct make/model spelling, or discover what models a manufacturer produces.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "limit": {
+    "description": "Max results in the returned slice. Defaults to 100; max 200.",
+    "maximum": 200,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "make": {
+    "description": "Make name (required for \"models\" and \"vehicle_types\"). Partial match supported.",
+    "type": "string"
+   },
+   "manufacturer": {
+    "description": "Manufacturer name or ID (for \"manufacturer\" operation). Partial match supported.",
+    "type": "string"
+   },
+   "modelYear": {
+    "description": "Filter models to a specific year, a whole number. Only for \"models\" operation.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "offset": {
+    "description": "Pagination offset into the full result list. Defaults to 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "operation": {
+    "description": "\"makes\" (all NHTSA makes), \"models\" (models for a make), \"vehicle_types\" (types for a make), \"manufacturer\" (manufacturer details).",
+    "enum": [
+     "makes",
+     "models",
+     "vehicle_types",
+     "manufacturer"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "operation"
+  ],
+  "type": "object"
+ },
+ "name": "nhtsa_lookup_vehicles",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "operation",
+     "totalCount",
+     "returned",
+     "offset",
+     "limit",
+     "effectiveQuery"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "Maximum manufacturer records a single lookup retrieves.",
+    "type": "number"
+   },
+   "effectiveQuery": {
+    "description": "The operation with key args, e.g. \"models make=Toyota year=2020\".",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `missing_operation_arg`: A required argument for the chosen operation was not provided. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "missing_operation_arg"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "limit": {
+    "description": "Pagination limit used for this response",
+    "type": "number"
+   },
+   "makes": {
+    "description": "Results for \"makes\" operation",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single make entry",
+     "properties": {
+      "makeId": {
+       "description": "VPIC make ID",
+       "type": "number"
+      },
+      "makeName": {
+       "description": "Make name",
+       "type": "string"
+      }
+     },
+     "required": [
+      "makeId",
+      "makeName"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "manufacturers": {
+    "description": "Results for \"manufacturer\" operation",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single manufacturer entry",
+     "properties": {
+      "country": {
+       "description": "Country of origin when provided",
+       "type": "string"
+      },
+      "manufacturerId": {
+       "description": "Manufacturer ID",
+       "type": "number"
+      },
+      "manufacturerName": {
+       "description": "Manufacturer name",
+       "type": "string"
+      },
+      "vehicleTypes": {
+       "description": "Vehicle types produced",
+       "items": {
+        "additionalProperties": false,
+        "description": "A single vehicle-type entry produced by this manufacturer",
+        "properties": {
+         "id": {
+          "description": "Vehicle type ID",
+          "type": "number"
+         },
+         "name": {
+          "description": "Vehicle type name",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "manufacturerId",
+      "manufacturerName",
+      "vehicleTypes"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "models": {
+    "description": "Results for \"models\" operation",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single model entry",
+     "properties": {
+      "makeId": {
+       "description": "VPIC make ID",
+       "type": "number"
+      },
+      "makeName": {
+       "description": "Make name",
+       "type": "string"
+      },
+      "modelId": {
+       "description": "VPIC model ID",
+       "type": "number"
+      },
+      "modelName": {
+       "description": "Model name",
+       "type": "string"
+      }
+     },
+     "required": [
+      "modelId",
+      "modelName",
+      "makeId",
+      "makeName"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance when the result set is empty or the page is out of bounds.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Pagination offset used for this response",
+    "type": "number"
+   },
+   "operation": {
+    "description": "The operation that was performed",
+    "type": "string"
+   },
+   "returned": {
+    "description": "Number of results in the returned slice",
+    "type": "number"
+   },
+   "shown": {
+    "description": "Manufacturer records retrieved before pagination, when the cap was reached.",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Results retrieved before pagination. For \"manufacturer\" this is capped \u2014 check the truncated field, since VPIC reports no match total.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the \"manufacturer\" lookup stopped at its retrieval cap and further matches may exist upstream.",
+    "type": "boolean"
+   },
+   "vehicleTypes": {
+    "description": "Results for \"vehicle_types\" operation",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single vehicle-type entry",
+     "properties": {
+      "vehicleTypeId": {
+       "description": "Vehicle type ID",
+       "type": "number"
+      },
+      "vehicleTypeName": {
+       "description": "Vehicle type name",
+       "type": "string"
+      }
+     },
+     "required": [
+      "vehicleTypeId",
+      "vehicleTypeName"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Nhtsa Lookup Vehicles"
+}

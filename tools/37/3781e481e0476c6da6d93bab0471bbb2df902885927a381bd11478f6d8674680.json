@@ -1,0 +1,2368 @@
+{
+ "_meta": {
+  "_fastmcp": {
+   "tags": []
+  }
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Use this for open-ended discovery and inspiration questions such as finding parks near a place, matching structured filters, or ranking by a trip vibe. Accepts structured search.v1 geo, filter, vibe, paging objects, and natural_language original wording, and returns lightweight public property_ref/property_url candidates with matched signals, channel_state and canonical actions. Request to Book sends an unconfirmed request to the park; directory-only results have a neutral View park handoff. Fill structured fields you are confident about and also pass the traveller's phrasing in natural_language; structured geo/filter/vibe fields take precedence, and natural_language only augments deterministic alias recovery and vibe ranking. This tool resolves places with geo.type='place' and geo.query, and family-friendly prompts should use the soft vibe.traveller_appeal=['families'] preference rather than an unsupported hard family_friendly filter. To filter on amenities or curated highlights (campfires, pools, pet-friendly, waterfront, etc.), call tp_search_filter_options to discover the catalog, then pass filter.feature_names/filter.highlight_names; the server resolves them to canonical feature_ids/highlight_ids. For room/site option wording such as ensuite, drive-through, slab, powered, unpowered, tent-only, accessible, spa, pet-friendly cabin, or pet-fee, set filter.option_facets and still include the traveller's original wording in natural_language. For off-site needs, use filter.local_proximity entries with a topic and maximum straight-line kilometres. Supported topics are supermarket, pharmacy, boat_ramp, dump_point, ev_charging, beach, and brewery; multiple entries are ANDed. Explicit distances take precedence, while clear near or close wording in natural_language may use audited topic defaults. Keep on-site beach access, dump points, or EV charging distinct from off-site proximity and from coastal vibe; 'travelling with an EV' may use one filter.any_of group for on-site or nearby charging. Never present these distances as walking or driving distance. Missing or stale local evidence means unverified, not that no venue exists. For an explicit Google star threshold, set filter.min_google_rating; properties with a lower or missing cached Google rating are excluded. Do not invent a numeric threshold from vague wording such as top-rated. When quoting a score, identify it as a Google rating. For dog-friendly or pet-friendly searches, also set filter.pet_friendly=true. This discovery tool does not accept booking intent and does not verify pets, rig fit, dates, restrictions, or price. For open-ended searches with dates, guests, rig details, or pet intent, use tp_search_stays. For a concrete stay at a chosen park, call tp_assess_stay. When the answer is ready for presentation, pass this search output to tp_render_result_cards once; this data tool does not render a widget itself.",
+ "inputSchema": {
+  "properties": {
+   "filter": {
+    "anyOf": [
+     {
+      "description": "Authoritative structured filters applied before vibe ranking.",
+      "properties": {
+       "accessible": {
+        "anyOf": [
+         {
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Optional accessibility-oriented filter signal."
+       },
+       "accommodation_kind": {
+        "anyOf": [
+         {
+          "enum": [
+           "site",
+           "accommodation"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Optional stay-kind filter: use site for caravan, campervan, motorhome, fifth-wheeler, tent, camping, powered-site, unpowered-site, ensuite-site, slab-site, and drive-through-site requests; use accommodation for cabins, villas, cottages, glamping, and similar roofed stays."
+       },
+       "any_of": {
+        "description": "OR-groups: each group is satisfied when a candidate has any listed feature, highlight, or confirmed local-proximity match. Groups are ANDed together; members within a group are ORed.",
+        "items": {
+         "description": "An OR-group of on-property and/or off-site structured facts.\n\nA candidate satisfies the group when it has *any* of the listed feature IDs\nor highlight IDs (overlap, not contains-all), or satisfies any listed local\nproximity constraint. Groups let a single real-world concept represented in\ndifferent source stores \u2014 e.g. on-site EV charging or a confirmed charger\nnearby \u2014 match without merging those stores.\n\nMultiple groups on a filter are ANDed together; members *within* a group are\nORed.",
+         "properties": {
+          "feature_ids": {
+           "description": "Feature IDs; matching any one satisfies this group.",
+           "items": {
+            "type": "integer"
+           },
+           "type": "array"
+          },
+          "highlight_ids": {
+           "description": "Highlight IDs; matching any one satisfies this group.",
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "local_proximity": {
+           "description": "Independent off-site topic/distance alternatives; matching any one satisfies this group.",
+           "items": {
+            "description": "One confirmed off-site topic required within a straight-line bound.",
+            "properties": {
+             "max_distance_km": {
+              "description": "Required maximum straight-line distance in kilometres. REST and GUI callers and explicit MCP arguments must provide a bound; the controlled MCP natural-language adapter may fill an audited topic default for clear 'near' or 'close' wording.",
+              "exclusiveMinimum": 0,
+              "type": "number"
+             },
+             "topic": {
+              "description": "Allowlisted off-site topic: supermarket, pharmacy, boat_ramp, dump_point, ev_charging, beach, or brewery.",
+              "enum": [
+               "supermarket",
+               "pharmacy",
+               "boat_ramp",
+               "dump_point",
+               "ev_charging",
+               "beach",
+               "brewery"
+              ],
+              "type": "string"
+             }
+            },
+            "required": [
+             "topic",
+             "max_distance_km"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "booking_enabled": {
+        "anyOf": [
+         {
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "When true, restricts to parks bookable on Total Parks."
+       },
+       "feature_ids": {
+        "description": "Property feature IDs that candidates must satisfy.",
+        "items": {
+         "type": "integer"
+        },
+        "type": "array"
+       },
+       "highlight_ids": {
+        "description": "Curated property highlight IDs that candidates must satisfy. Use stable highlight slugs when the traveller asks for known curated signals such as campfire-friendly, swimming-pool, resort-style-pool, beach-access, or pet-friendly.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "local_proximity": {
+        "description": "Confirmed current off-site topic/distance requirements. Every entry is required (AND semantics). Use this for explicit 'near', 'close', or 'within X km' venue needs, not on-property amenities, coastal vibe, or walking/driving claims.",
+        "items": {
+         "description": "One confirmed off-site topic required within a straight-line bound.",
+         "properties": {
+          "max_distance_km": {
+           "description": "Required maximum straight-line distance in kilometres. REST and GUI callers and explicit MCP arguments must provide a bound; the controlled MCP natural-language adapter may fill an audited topic default for clear 'near' or 'close' wording.",
+           "exclusiveMinimum": 0,
+           "type": "number"
+          },
+          "topic": {
+           "description": "Allowlisted off-site topic: supermarket, pharmacy, boat_ramp, dump_point, ev_charging, beach, or brewery.",
+           "enum": [
+            "supermarket",
+            "pharmacy",
+            "boat_ramp",
+            "dump_point",
+            "ev_charging",
+            "beach",
+            "brewery"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "topic",
+          "max_distance_km"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "management_ids": {
+        "description": "Optional management or chain IDs to include.",
+        "items": {
+         "type": "integer"
+        },
+        "type": "array"
+       },
+       "min_google_rating": {
+        "anyOf": [
+         {
+          "maximum": 5,
+          "minimum": 1,
+          "type": "number"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Optional explicit minimum cached Google star rating. Properties with a lower or missing rating do not satisfy this hard filter."
+       },
+       "option_facets": {
+        "description": "Canonical room/site option facts requested by the traveller, e.g. powered, ensuite, drive_through, slab, accessible, spa, pet_friendly, family. Search annotates and tiers by scoped room-type evidence rather than treating these as park-level amenity checkboxes. Do not leave requested room/site option words only in vibe.query: copy every explicit option requirement here. For powered-site requests include option_facets=['powered'] and also set intent.equipment.power_required=true when using tp_search_stays.",
+        "items": {
+         "description": "Traveller-facing inventory-option facts at room/site scope.",
+         "enum": [
+          "powered",
+          "unpowered",
+          "ensuite",
+          "drive_through",
+          "slab",
+          "tent_only",
+          "accessible",
+          "spa",
+          "pet_friendly",
+          "family",
+          "pet_fee_applies",
+          "no_pet_fee",
+          "declaration_required"
+         ],
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "pet_friendly": {
+        "anyOf": [
+         {
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Property-level pet-friendly filter. For dog-friendly or pet-friendly discovery/stay searches, set this true as a search filter and also put the declared travelling pet facts in intent.pet when using tp_search_stays. Phase B hard pet checks use the capability graph and room-type truth before claiming fit."
+       },
+       "region_ids": {
+        "description": "Canonical tourism-region IDs to include with exact, OR-within-dimension matching against Property.region (for example, nsw-north-coast). Regions are distinct from state filters.",
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 57,
+        "type": "array"
+       },
+       "setting": {
+        "anyOf": [
+         {
+          "enum": [
+           "beachside",
+           "riverside",
+           "lakeside",
+           "bushland",
+           "mountain",
+           "rural",
+           "town_centre",
+           "city_fringe",
+           "coastal",
+           "outback"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Canonical enrichment setting, e.g. beachside or bushland."
+       },
+       "states": {
+        "description": "Uppercase Australian state names aligned with map geobuf data.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "traveller_appeal": {
+        "description": "Traveller segment hints from the enrichment taxonomy.",
+        "items": {
+         "enum": [
+          "grey_nomads",
+          "families",
+          "couples",
+          "groups",
+          "fishers",
+          "hikers",
+          "pet_owners",
+          "big_rig_tourers"
+         ],
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "search.v1 hard filters applied before vibe ranking: states, features, highlights, pet_friendly, option_facets, and local_proximity. Discover names via tp_search_filter_options. Example: {\"states\":[\"TASMANIA\"],\"pet_friendly\":true}.",
+    "examples": [
+     {
+      "pet_friendly": true,
+      "states": [
+       "TASMANIA"
+      ]
+     }
+    ]
+   },
+   "geo": {
+    "anyOf": [
+     {
+      "discriminator": {
+       "propertyName": "type"
+      },
+      "oneOf": [
+       {
+        "description": "Server-resolved place, region, POI, or park-name query.",
+        "properties": {
+         "query": {
+          "description": "Place, region, POI, or park name to resolve server-side.",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+         },
+         "radius_km": {
+          "anyOf": [
+           {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Optional radius around the resolved anchor in kilometres."
+         },
+         "type": {
+          "const": "place",
+          "default": "place",
+          "type": "string"
+         }
+        },
+        "required": [
+         "query"
+        ],
+        "type": "object"
+       },
+       {
+        "description": "Pre-resolved point geometry from a trusted client.",
+        "properties": {
+         "lat": {
+          "description": "Latitude in WGS84.",
+          "maximum": 90.0,
+          "minimum": -90.0,
+          "type": "number"
+         },
+         "lon": {
+          "description": "Longitude in WGS84.",
+          "maximum": 180.0,
+          "minimum": -180.0,
+          "type": "number"
+         },
+         "radius_km": {
+          "anyOf": [
+           {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Optional radius around the point in kilometres."
+         },
+         "type": {
+          "const": "point",
+          "default": "point",
+          "type": "string"
+         }
+        },
+        "required": [
+         "lat",
+         "lon"
+        ],
+        "type": "object"
+       },
+       {
+        "description": "Pre-resolved rectangular viewport or region bounds.",
+        "properties": {
+         "east": {
+          "description": "Eastern longitude bound in WGS84.",
+          "maximum": 180.0,
+          "minimum": -180.0,
+          "type": "number"
+         },
+         "north": {
+          "description": "Northern latitude bound in WGS84.",
+          "maximum": 90.0,
+          "minimum": -90.0,
+          "type": "number"
+         },
+         "south": {
+          "description": "Southern latitude bound in WGS84.",
+          "maximum": 90.0,
+          "minimum": -90.0,
+          "type": "number"
+         },
+         "type": {
+          "const": "bbox",
+          "default": "bbox",
+          "type": "string"
+         },
+         "west": {
+          "description": "Western longitude bound in WGS84.",
+          "maximum": 180.0,
+          "minimum": -180.0,
+          "type": "number"
+         }
+        },
+        "required": [
+         "west",
+         "south",
+         "east",
+         "north"
+        ],
+        "type": "object"
+       },
+       {
+        "description": "Pre-resolved polygon ring in WGS84 `[lon, lat]` coordinates.",
+        "properties": {
+         "coordinates": {
+          "description": "Closed polygon ring as `[lon, lat]` coordinate pairs. Corridor geometry is deliberately reserved for Phase C.",
+          "items": {
+           "items": {
+            "type": "number"
+           },
+           "type": "array"
+          },
+          "minItems": 4,
+          "type": "array"
+         },
+         "type": {
+          "const": "polygon",
+          "default": "polygon",
+          "type": "string"
+         }
+        },
+        "required": [
+         "coordinates"
+        ],
+        "type": "object"
+       }
+      ]
+     },
+     {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "search.v1 geo gate. Prefer a place object or a place-name string. Do not invent geo.type='state'; use filter.states for a whole Australian state. Example: {\"type\":\"place\",\"query\":\"Aireys Inlet\"}.",
+    "examples": [
+     {
+      "query": "Aireys Inlet",
+      "type": "place"
+     }
+    ]
+   },
+   "natural_language": {
+    "anyOf": [
+     {
+      "maxLength": 500,
+      "minLength": 1,
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Traveller's original search wording. Fill structured geo, filter, vibe, and intent fields when known, and also pass the traveller's phrasing here so Total Parks can recover deterministic aliases, including controlled off-site near/close/within-km local facts, and use it for vibe ranking. Explicit structured distances remain authoritative. Walking or driving distance requires clarification because stored local distances are straight-line only.",
+    "examples": [
+     "powered sites near Lakes Entrance with a dump point nearby"
+    ]
+   },
+   "paging": {
+    "anyOf": [
+     {
+      "description": "Cursor pagination for search results.",
+      "properties": {
+       "cursor": {
+        "anyOf": [
+         {
+          "maxLength": 512,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Opaque cursor returned by a previous search response."
+       },
+       "limit": {
+        "default": 20,
+        "description": "Maximum number of candidates to return.",
+        "maximum": 100,
+        "minimum": 1,
+        "type": "integer"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "search.v1 cursor pagination. Example: {\"limit\":20}.",
+    "examples": [
+     {
+      "limit": 20
+     }
+    ]
+   },
+   "vibe": {
+    "anyOf": [
+     {
+      "description": "Soft preference signals used to rank within the gated candidate set.",
+      "properties": {
+       "category_slug": {
+        "anyOf": [
+         {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Optional editorial vibe/category slug."
+       },
+       "query": {
+        "anyOf": [
+         {
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Free-text vibe or inspiration phrase for semantic ranking."
+       },
+       "setting": {
+        "anyOf": [
+         {
+          "enum": [
+           "beachside",
+           "riverside",
+           "lakeside",
+           "bushland",
+           "mountain",
+           "rural",
+           "town_centre",
+           "city_fringe",
+           "coastal",
+           "outback"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Soft setting preference used for ranking, not hard gating."
+       },
+       "traveller_appeal": {
+        "description": "Soft traveller segment preferences used for ranking.",
+        "items": {
+         "enum": [
+          "grey_nomads",
+          "families",
+          "couples",
+          "groups",
+          "fishers",
+          "hikers",
+          "pet_owners",
+          "big_rig_tourers"
+         ],
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "search.v1 soft ranking signals such as vibe.query or traveller_appeal=['families']. Does not hard-gate candidates. Example: {\"traveller_appeal\":[\"families\"]}.",
+    "examples": [
+     {
+      "traveller_appeal": [
+       "families"
+      ]
+     }
+    ]
+   }
+  },
+  "type": "object"
+ },
+ "name": "tp_search_parks",
+ "outputSchema": {
+  "description": "Versioned response envelope for the unified search primitive.",
+  "properties": {
+   "candidates": {
+    "description": "Ranked, tiered primary candidate results.",
+    "items": {
+     "description": "Lightweight search result; deep judgement lives in assess tools.",
+     "properties": {
+      "actions": {
+       "anyOf": [
+        {
+         "description": "Optional handoff links for a candidate.",
+         "properties": {
+          "request_to_book_url": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Traveller-facing Request-to-Book form for an eligible request-only property. A submitted request is not a confirmed booking."
+          },
+          "start_booking_url": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Traveller-facing Total Parks booking link when a specific option is ready for checkout handoff. It does not reserve inventory."
+          },
+          "start_watch_url": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Traveller-facing Total Parks link to review a paid availability watch for this sold-out stay. It does not hold a site, create a watch, or take payment."
+          }
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Optional Total Parks handoff URLs."
+      },
+      "channel_state": {
+       "description": "Server-authoritative booking channel; separate from candidate tier.",
+       "enum": [
+        "live_booking",
+        "request_only",
+        "directory_only"
+       ],
+       "type": "string"
+      },
+      "confidence": {
+       "description": "Orthogonal confidence axis for the candidate tier.",
+       "enum": [
+        "confirmed",
+        "inferred"
+       ],
+       "type": "string"
+      },
+      "google_rating": {
+       "anyOf": [
+        {
+         "maximum": 5,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Cached Google star rating for grounded result summaries."
+      },
+      "google_user_rating_count": {
+       "anyOf": [
+        {
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Cached Google review count associated with google_rating."
+      },
+      "image_urls": {
+       "description": "Approved public property image URLs in display order.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "indicative_pricing": {
+       "anyOf": [
+        {
+         "description": "Separate indicative price summaries for supported stay kinds.",
+         "properties": {
+          "accommodation": {
+           "anyOf": [
+            {
+             "description": "Cache-backed public ARI price summary safe for search result cards.",
+             "properties": {
+              "amount": {
+               "description": "Indicative cached stay total.",
+               "minimum": 0,
+               "type": "number"
+              },
+              "currency": {
+               "default": "AUD",
+               "maxLength": 3,
+               "minLength": 3,
+               "type": "string"
+              },
+              "last_updated": {
+               "description": "Most recent ARI timestamp contributing to the stay check.",
+               "format": "date-time",
+               "type": "string"
+              },
+              "nights": {
+               "description": "Number of sleeping nights priced.",
+               "minimum": 1,
+               "type": "integer"
+              },
+              "recheck_caveat": {
+               "description": "Traveller/agent-facing note: rates come from live inventory and are confirmed at checkout before payment.",
+               "type": "string"
+              },
+              "source": {
+               "const": "tp_cached_ari",
+               "default": "tp_cached_ari",
+               "description": "Pricing source: Total Parks live inventory (PMS-synced ARI).",
+               "type": "string"
+              },
+              "stay_kind": {
+               "description": "Stay-kind lane this indicative price applies to.",
+               "enum": [
+                "site",
+                "accommodation"
+               ],
+               "type": "string"
+              }
+             },
+             "required": [
+              "amount",
+              "nights",
+              "stay_kind",
+              "last_updated",
+              "recheck_caveat"
+             ],
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Indicative cabin/accommodation stay price when complete cached rates exist."
+          },
+          "site": {
+           "anyOf": [
+            {
+             "description": "Cache-backed public ARI price summary safe for search result cards.",
+             "properties": {
+              "amount": {
+               "description": "Indicative cached stay total.",
+               "minimum": 0,
+               "type": "number"
+              },
+              "currency": {
+               "default": "AUD",
+               "maxLength": 3,
+               "minLength": 3,
+               "type": "string"
+              },
+              "last_updated": {
+               "description": "Most recent ARI timestamp contributing to the stay check.",
+               "format": "date-time",
+               "type": "string"
+              },
+              "nights": {
+               "description": "Number of sleeping nights priced.",
+               "minimum": 1,
+               "type": "integer"
+              },
+              "recheck_caveat": {
+               "description": "Traveller/agent-facing note: rates come from live inventory and are confirmed at checkout before payment.",
+               "type": "string"
+              },
+              "source": {
+               "const": "tp_cached_ari",
+               "default": "tp_cached_ari",
+               "description": "Pricing source: Total Parks live inventory (PMS-synced ARI).",
+               "type": "string"
+              },
+              "stay_kind": {
+               "description": "Stay-kind lane this indicative price applies to.",
+               "enum": [
+                "site",
+                "accommodation"
+               ],
+               "type": "string"
+              }
+             },
+             "required": [
+              "amount",
+              "nights",
+              "stay_kind",
+              "last_updated",
+              "recheck_caveat"
+             ],
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Indicative site stay price when complete cached rates exist."
+          }
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Cache-only indicative pricing split by stay kind. Omitted when search did not run dated/flexible planning, rates are incomplete, or the candidate is discovery-only."
+      },
+      "lat": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "WGS84 latitude for search-owned map pins when known."
+      },
+      "location_label": {
+       "anyOf": [
+        {
+         "maxLength": 200,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Compact traveller-facing location, e.g. 'Lakes Entrance, VIC'."
+      },
+      "lon": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "WGS84 longitude for search-owned map pins when known."
+      },
+      "management_ids": {
+       "description": "Management group IDs for logo lookup on result cards.",
+       "items": {
+        "type": "integer"
+       },
+       "type": "array"
+      },
+      "matched_signals": {
+       "description": "Lane-specific annotations; not full constraint results.",
+       "items": {
+        "description": "One lane-specific reason a candidate matched the structured query.",
+        "properties": {
+         "code": {
+          "description": "Stable machine-readable match code.",
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+         },
+         "confidence": {
+          "anyOf": [
+           {
+            "enum": [
+             "confirmed",
+             "inferred"
+            ],
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Confidence for this annotation when applicable."
+         },
+         "detail": {
+          "additionalProperties": true,
+          "description": "Optional structured detail for clients that need it.",
+          "type": "object"
+         },
+         "label": {
+          "anyOf": [
+           {
+            "maxLength": 200,
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Short traveller-facing match label."
+         },
+         "lane": {
+          "description": "Search lane that produced this annotation.",
+          "enum": [
+           "geo",
+           "filter",
+           "vibe",
+           "intent"
+          ],
+          "type": "string"
+         },
+         "provenance": {
+          "anyOf": [
+           {
+            "maxLength": 100,
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Source class for the matched signal when known."
+         }
+        },
+        "required": [
+         "lane",
+         "code"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "pet_friendly": {
+       "default": false,
+       "description": "True when the property-level pet-friendly feature is set.",
+       "type": "boolean"
+      },
+      "planning": {
+       "anyOf": [
+        {
+         "description": "Freshness/provenance wrapper for planning-tier availability facts.",
+         "properties": {
+          "checkout_note": {
+           "default": "Availability and rates from Total Parks live inventory, kept current by park PMS sync. Confirmed at checkout before payment.",
+           "description": "Traveller/agent-facing note: availability comes from live Total Parks inventory and is confirmed at checkout before payment.",
+           "type": "string"
+          },
+          "last_updated": {
+           "description": "Most recent source timestamp contributing to this status.",
+           "format": "date-time",
+           "type": "string"
+          },
+          "planning_tier_caveat": {
+           "default": "Availability and rates from Total Parks live inventory, kept current by park PMS sync. Confirmed at checkout before payment.",
+           "description": "Deprecated alias of checkout_note. Emitted for ChatGPT plugin / MCP compatibility until the next directory release; prefer checkout_note. See docs/features/CHATGPT_PLUGIN.md.",
+           "type": "string"
+          },
+          "provenance": {
+           "const": "tp_cached_ari",
+           "default": "tp_cached_ari",
+           "description": "Total Parks live inventory source (PMS-synced ARI). Search reads this replica rather than issuing per-candidate PMS round-trips.",
+           "type": "string"
+          },
+          "status": {
+           "description": "Live inventory availability status from Total Parks ARI.",
+           "enum": [
+            "available",
+            "limited",
+            "unavailable",
+            "unknown"
+           ],
+           "type": "string"
+          },
+          "status_label": {
+           "default": "",
+           "description": "Traveller-facing availability phrase derived from status. Render this in answers instead of the raw status enum.",
+           "type": "string"
+          }
+         },
+         "required": [
+          "status",
+          "last_updated"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Planning-tier availability envelope when intent was supplied."
+      },
+      "property_id": {
+       "description": "Internal property ID for list/map sync and conversion.",
+       "minimum": 1,
+       "type": "integer"
+      },
+      "property_name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Display name for lightweight cards and agent summaries."
+      },
+      "property_ref": {
+       "description": "Public property reference accepted by MCP/search consumers.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "property_url": {
+       "description": "Traveller-facing Total Parks URL for the property.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "room_type_url": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Traveller-facing room/site URL when the candidate is option-specific."
+      },
+      "tier": {
+       "description": "Outer candidate tier: bookable, likely, or discovery.",
+       "enum": [
+        "bookable",
+        "likely",
+        "discovery"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "property_ref",
+      "property_url",
+      "property_id",
+      "tier",
+      "channel_state",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "contract_version": {
+    "const": "search.v1",
+    "default": "search.v1",
+    "description": "Stable search contract version.",
+    "type": "string"
+   },
+   "facets": {
+    "anyOf": [
+     {
+      "description": "Filter-lane facet counts for the current search result set.",
+      "properties": {
+       "accessible": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "accommodation_kind": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "booking_enabled": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "channel_state": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "feature_ids": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "highlight_ids": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "management_ids": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "option_facets": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "pet_friendly": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "setting": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "states": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "traveller_appeal": {
+        "items": {
+         "description": "Count for one search filter value in the current result set.",
+         "properties": {
+          "count": {
+           "description": "Number of current candidates with this value.",
+           "minimum": 0,
+           "type": "integer"
+          },
+          "value": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "integer"
+            },
+            {
+             "type": "boolean"
+            }
+           ],
+           "description": "Filter value represented by this facet."
+          }
+         },
+         "required": [
+          "value",
+          "count"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Filter facet counts for the primary result set."
+   },
+   "map_candidates": {
+    "description": "Compact unpaginated marker projection for every primary candidate matching the canonical query. List pagination does not apply to this field.",
+    "items": {
+     "description": "Compact, unpaginated marker state for search map projections.",
+     "properties": {
+      "bookable_option_count": {
+       "default": 0,
+       "description": "Matching bookable room options for the dated planning request.",
+       "minimum": 0,
+       "type": "integer"
+      },
+      "channel_state": {
+       "description": "Server-authoritative booking channel; separate from candidate tier.",
+       "enum": [
+        "live_booking",
+        "request_only",
+        "directory_only"
+       ],
+       "type": "string"
+      },
+      "confidence": {
+       "description": "Orthogonal confidence axis for the candidate tier.",
+       "enum": [
+        "confirmed",
+        "inferred"
+       ],
+       "type": "string"
+      },
+      "google_rating": {
+       "anyOf": [
+        {
+         "maximum": 5,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Cached Google star rating for map popovers."
+      },
+      "google_user_rating_count": {
+       "anyOf": [
+        {
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Cached Google review count associated with google_rating."
+      },
+      "headline_price": {
+       "anyOf": [
+        {
+         "description": "Single compact headline price for map marker labels.",
+         "properties": {
+          "amount": {
+           "description": "Indicative cached stay total.",
+           "minimum": 0,
+           "type": "number"
+          },
+          "currency": {
+           "default": "AUD",
+           "maxLength": 3,
+           "minLength": 3,
+           "type": "string"
+          },
+          "nights": {
+           "description": "Number of sleeping nights priced.",
+           "minimum": 1,
+           "type": "integer"
+          },
+          "stay_kind": {
+           "description": "Stay-kind lane this indicative price applies to.",
+           "enum": [
+            "site",
+            "accommodation"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "amount",
+          "nights",
+          "stay_kind"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Single cache-only headline price for marker labels."
+      },
+      "image_url": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Single approved cover image URL for map popovers."
+      },
+      "lat": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "WGS84 latitude for search-owned pin geometry when known."
+      },
+      "location_label": {
+       "anyOf": [
+        {
+         "maxLength": 200,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Compact traveller-facing location for map popovers."
+      },
+      "lon": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "WGS84 longitude for search-owned pin geometry when known."
+      },
+      "pet_friendly": {
+       "default": false,
+       "description": "True when the property-level pet-friendly feature is set.",
+       "type": "boolean"
+      },
+      "planning_status": {
+       "anyOf": [
+        {
+         "description": "Live Total Parks inventory status from PMS-synced ARI.",
+         "enum": [
+          "available",
+          "limited",
+          "unavailable",
+          "unknown"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Planning status for marker colour, when intent was supplied."
+      },
+      "planning_status_label": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Traveller-facing planning label for marker popovers."
+      },
+      "property_id": {
+       "description": "Internal property ID for map pins and conversion.",
+       "minimum": 1,
+       "type": "integer"
+      },
+      "property_name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Display name for lightweight map popovers."
+      },
+      "property_ref": {
+       "description": "Public property reference accepted by MCP/search consumers.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "property_url": {
+       "description": "Traveller-facing Total Parks URL for the property.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "request_to_book_url": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Traveller-facing request form for an eligible request-only property."
+      },
+      "start_booking_url": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Traveller-facing booking handoff URL when available."
+      },
+      "tier": {
+       "description": "Outer candidate tier: bookable, likely, or discovery.",
+       "enum": [
+        "bookable",
+        "likely",
+        "discovery"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "property_id",
+      "property_ref",
+      "property_url",
+      "tier",
+      "channel_state",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "nearby_candidates": {
+    "description": "Ranked, tiered candidates outside the primary search envelope but within the request's nearby radius. Not included in paging totals or facet counts.",
+    "items": {
+     "description": "Lightweight search result; deep judgement lives in assess tools.",
+     "properties": {
+      "actions": {
+       "anyOf": [
+        {
+         "description": "Optional handoff links for a candidate.",
+         "properties": {
+          "request_to_book_url": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Traveller-facing Request-to-Book form for an eligible request-only property. A submitted request is not a confirmed booking."
+          },
+          "start_booking_url": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Traveller-facing Total Parks booking link when a specific option is ready for checkout handoff. It does not reserve inventory."
+          },
+          "start_watch_url": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Traveller-facing Total Parks link to review a paid availability watch for this sold-out stay. It does not hold a site, create a watch, or take payment."
+          }
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Optional Total Parks handoff URLs."
+      },
+      "channel_state": {
+       "description": "Server-authoritative booking channel; separate from candidate tier.",
+       "enum": [
+        "live_booking",
+        "request_only",
+        "directory_only"
+       ],
+       "type": "string"
+      },
+      "confidence": {
+       "description": "Orthogonal confidence axis for the candidate tier.",
+       "enum": [
+        "confirmed",
+        "inferred"
+       ],
+       "type": "string"
+      },
+      "google_rating": {
+       "anyOf": [
+        {
+         "maximum": 5,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Cached Google star rating for grounded result summaries."
+      },
+      "google_user_rating_count": {
+       "anyOf": [
+        {
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Cached Google review count associated with google_rating."
+      },
+      "image_urls": {
+       "description": "Approved public property image URLs in display order.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "indicative_pricing": {
+       "anyOf": [
+        {
+         "description": "Separate indicative price summaries for supported stay kinds.",
+         "properties": {
+          "accommodation": {
+           "anyOf": [
+            {
+             "description": "Cache-backed public ARI price summary safe for search result cards.",
+             "properties": {
+              "amount": {
+               "description": "Indicative cached stay total.",
+               "minimum": 0,
+               "type": "number"
+              },
+              "currency": {
+               "default": "AUD",
+               "maxLength": 3,
+               "minLength": 3,
+               "type": "string"
+              },
+              "last_updated": {
+               "description": "Most recent ARI timestamp contributing to the stay check.",
+               "format": "date-time",
+               "type": "string"
+              },
+              "nights": {
+               "description": "Number of sleeping nights priced.",
+               "minimum": 1,
+               "type": "integer"
+              },
+              "recheck_caveat": {
+               "description": "Traveller/agent-facing note: rates come from live inventory and are confirmed at checkout before payment.",
+               "type": "string"
+              },
+              "source": {
+               "const": "tp_cached_ari",
+               "default": "tp_cached_ari",
+               "description": "Pricing source: Total Parks live inventory (PMS-synced ARI).",
+               "type": "string"
+              },
+              "stay_kind": {
+               "description": "Stay-kind lane this indicative price applies to.",
+               "enum": [
+                "site",
+                "accommodation"
+               ],
+               "type": "string"
+              }
+             },
+             "required": [
+              "amount",
+              "nights",
+              "stay_kind",
+              "last_updated",
+              "recheck_caveat"
+             ],
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Indicative cabin/accommodation stay price when complete cached rates exist."
+          },
+          "site": {
+           "anyOf": [
+            {
+             "description": "Cache-backed public ARI price summary safe for search result cards.",
+             "properties": {
+              "amount": {
+               "description": "Indicative cached stay total.",
+               "minimum": 0,
+               "type": "number"
+              },
+              "currency": {
+               "default": "AUD",
+               "maxLength": 3,
+               "minLength": 3,
+               "type": "string"
+              },
+              "last_updated": {
+               "description": "Most recent ARI timestamp contributing to the stay check.",
+               "format": "date-time",
+               "type": "string"
+              },
+              "nights": {
+               "description": "Number of sleeping nights priced.",
+               "minimum": 1,
+               "type": "integer"
+              },
+              "recheck_caveat": {
+               "description": "Traveller/agent-facing note: rates come from live inventory and are confirmed at checkout before payment.",
+               "type": "string"
+              },
+              "source": {
+               "const": "tp_cached_ari",
+               "default": "tp_cached_ari",
+               "description": "Pricing source: Total Parks live inventory (PMS-synced ARI).",
+               "type": "string"
+              },
+              "stay_kind": {
+               "description": "Stay-kind lane this indicative price applies to.",
+               "enum": [
+                "site",
+                "accommodation"
+               ],
+               "type": "string"
+              }
+             },
+             "required": [
+              "amount",
+              "nights",
+              "stay_kind",
+              "last_updated",
+              "recheck_caveat"
+             ],
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "description": "Indicative site stay price when complete cached rates exist."
+          }
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Cache-only indicative pricing split by stay kind. Omitted when search did not run dated/flexible planning, rates are incomplete, or the candidate is discovery-only."
+      },
+      "lat": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "WGS84 latitude for search-owned map pins when known."
+      },
+      "location_label": {
+       "anyOf": [
+        {
+         "maxLength": 200,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Compact traveller-facing location, e.g. 'Lakes Entrance, VIC'."
+      },
+      "lon": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "WGS84 longitude for search-owned map pins when known."
+      },
+      "management_ids": {
+       "description": "Management group IDs for logo lookup on result cards.",
+       "items": {
+        "type": "integer"
+       },
+       "type": "array"
+      },
+      "matched_signals": {
+       "description": "Lane-specific annotations; not full constraint results.",
+       "items": {
+        "description": "One lane-specific reason a candidate matched the structured query.",
+        "properties": {
+         "code": {
+          "description": "Stable machine-readable match code.",
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+         },
+         "confidence": {
+          "anyOf": [
+           {
+            "enum": [
+             "confirmed",
+             "inferred"
+            ],
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Confidence for this annotation when applicable."
+         },
+         "detail": {
+          "additionalProperties": true,
+          "description": "Optional structured detail for clients that need it.",
+          "type": "object"
+         },
+         "label": {
+          "anyOf": [
+           {
+            "maxLength": 200,
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Short traveller-facing match label."
+         },
+         "lane": {
+          "description": "Search lane that produced this annotation.",
+          "enum": [
+           "geo",
+           "filter",
+           "vibe",
+           "intent"
+          ],
+          "type": "string"
+         },
+         "provenance": {
+          "anyOf": [
+           {
+            "maxLength": 100,
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Source class for the matched signal when known."
+         }
+        },
+        "required": [
+         "lane",
+         "code"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "pet_friendly": {
+       "default": false,
+       "description": "True when the property-level pet-friendly feature is set.",
+       "type": "boolean"
+      },
+      "planning": {
+       "anyOf": [
+        {
+         "description": "Freshness/provenance wrapper for planning-tier availability facts.",
+         "properties": {
+          "checkout_note": {
+           "default": "Availability and rates from Total Parks live inventory, kept current by park PMS sync. Confirmed at checkout before payment.",
+           "description": "Traveller/agent-facing note: availability comes from live Total Parks inventory and is confirmed at checkout before payment.",
+           "type": "string"
+          },
+          "last_updated": {
+           "description": "Most recent source timestamp contributing to this status.",
+           "format": "date-time",
+           "type": "string"
+          },
+          "planning_tier_caveat": {
+           "default": "Availability and rates from Total Parks live inventory, kept current by park PMS sync. Confirmed at checkout before payment.",
+           "description": "Deprecated alias of checkout_note. Emitted for ChatGPT plugin / MCP compatibility until the next directory release; prefer checkout_note. See docs/features/CHATGPT_PLUGIN.md.",
+           "type": "string"
+          },
+          "provenance": {
+           "const": "tp_cached_ari",
+           "default": "tp_cached_ari",
+           "description": "Total Parks live inventory source (PMS-synced ARI). Search reads this replica rather than issuing per-candidate PMS round-trips.",
+           "type": "string"
+          },
+          "status": {
+           "description": "Live inventory availability status from Total Parks ARI.",
+           "enum": [
+            "available",
+            "limited",
+            "unavailable",
+            "unknown"
+           ],
+           "type": "string"
+          },
+          "status_label": {
+           "default": "",
+           "description": "Traveller-facing availability phrase derived from status. Render this in answers instead of the raw status enum.",
+           "type": "string"
+          }
+         },
+         "required": [
+          "status",
+          "last_updated"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Planning-tier availability envelope when intent was supplied."
+      },
+      "property_id": {
+       "description": "Internal property ID for list/map sync and conversion.",
+       "minimum": 1,
+       "type": "integer"
+      },
+      "property_name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Display name for lightweight cards and agent summaries."
+      },
+      "property_ref": {
+       "description": "Public property reference accepted by MCP/search consumers.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "property_url": {
+       "description": "Traveller-facing Total Parks URL for the property.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "room_type_url": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Traveller-facing room/site URL when the candidate is option-specific."
+      },
+      "tier": {
+       "description": "Outer candidate tier: bookable, likely, or discovery.",
+       "enum": [
+        "bookable",
+        "likely",
+        "discovery"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "property_ref",
+      "property_url",
+      "property_id",
+      "tier",
+      "channel_state",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "paging": {
+    "description": "Pagination metadata for primary candidates only.",
+    "properties": {
+     "has_more": {
+      "default": false,
+      "description": "Whether another page is available.",
+      "type": "boolean"
+     },
+     "limit": {
+      "description": "Page size used for the response.",
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Opaque cursor for the next page, when has_more is true."
+     },
+     "returned": {
+      "description": "Number of candidates returned.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "total": {
+      "anyOf": [
+       {
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Total matching candidates when cheaply known."
+     }
+    },
+    "required": [
+     "limit",
+     "returned"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "description": "Query-level warnings, refusals, or coverage caveats.",
+    "items": {
+     "description": "Non-fatal warning or query-level limitation.",
+     "properties": {
+      "code": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "message": {
+       "maxLength": 500,
+       "minLength": 1,
+       "type": "string"
+      },
+      "recovery_hint": {
+       "anyOf": [
+        {
+         "maxLength": 500,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "paging"
+  ],
+  "type": "object"
+ },
+ "title": "Search Total Parks discovery candidates"
+}

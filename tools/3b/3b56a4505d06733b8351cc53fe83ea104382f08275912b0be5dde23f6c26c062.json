@@ -1,0 +1,407 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search the World Bank lending portfolio \u2014 the individual loans, credits, and grants the Bank finances \u2014 by free text, country, region, status, financing window (IBRD, IDA, Grants, Other), and board approval date. Returns the project ID, name, borrowing country, region, status, board approval and closing dates, the commitment amount in USD with its IBRD, IDA, and grant parts, financing windows, major sectors, and a link to the project page. This is the operations catalogue, not the statistics catalogue: use it for \"what is the World Bank funding in Kenya\", \"which climate adaptation projects are active\", or \"how much was committed to education in South Asia since 2020\". For development statistics and time series, use worldbank_search_indicators and worldbank_get_data instead. Countries take the ISO3 or ISO2 codes the other tools take (BRA or BR), and multi-country operations carry a World Bank regional code such as 3A; WDI aggregates such as SSF or WLD are rejected, since the portfolio lists operations by economy \u2014 use region for those. Every filter is an exact match upstream and combines with the others by AND, so a narrow search can legitimately return nothing; when it does, the response says whether the country codes matched anything on their own.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "approved_from": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Earliest board approval date to include.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Earliest board approval date, as YYYY-MM-DD and inclusive. It must be a real calendar day (2024-02-29, not 2023-02-29) and, when approved_to is also set, on or before it. Board approval is the date the Bank committed to the operation; pipeline projects carry a scheduled date in the future."
+   },
+   "approved_to": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Latest board approval date to include.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Latest board approval date, as YYYY-MM-DD and inclusive. It must be a real calendar day."
+   },
+   "countries": {
+    "anyOf": [
+     {
+      "description": "A single country code, or a list of them separated by commas, semicolons, or pipes.",
+      "type": "string"
+     },
+     {
+      "description": "An array of country codes; an element holding several codes separated by commas, semicolons, or pipes is split too.",
+      "items": {
+       "description": "An ISO3, ISO2, or World Bank regional code.",
+       "type": "string"
+      },
+      "type": "array"
+     }
+    ],
+    "description": "Borrowing countries: an economy by ISO3 or ISO2 code (BRA or BR), or a World Bank regional code for a multi-country operation (3A for Africa, 4E for East Asia and Pacific). Several codes \u2014 an array, or one string separated by commas, semicolons, or pipes \u2014 are combined as OR: a project matching any of them is returned. A value made only of separators is rejected rather than read as every country. Yemen, DR Congo, West Bank and Gaza, and Timor-Leste are searched under the legacy codes the portfolio files them by (RY, ZR, GZ, TP), which are also accepted as sent. A WDI aggregate (SSF, WLD, SAS) is rejected; use region for a regional search. Omit for every country."
+   },
+   "financial_type": {
+    "description": "Financing windows to include, combined as OR: a project matches when its financialTypes holds any of them. IBRD, IDA, Grants, Other are the complete set, case-sensitive. A project that publishes no financing window \u2014 36% of the portfolio, older and dropped operations mostly \u2014 never matches. The Grants window says how an operation is financed; it is not the grantAmount figure.",
+    "items": {
+     "enum": [
+      "IBRD",
+      "IDA",
+      "Grants",
+      "Other"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "include_abstract": {
+    "default": false,
+    "description": "Include each project's abstract. Abstracts run long \u2014 a median of roughly 1,200 characters, up to 8,000 \u2014 so a page carrying them holds at most 8 projects rather than 80, and an abstract longer than 5,000 characters (about 2% of them) is cut there and marked with \u2026, with notice naming the projects cut and each project's url leading to the full text; leave this off while narrowing a search and turn it on once the result set is small enough to read. Projects that publish no abstract report null either way, which appliedFilters.includeAbstract distinguishes.",
+    "type": "boolean"
+   },
+   "page": {
+    "default": 1,
+    "description": "Pagination page number (1-based).",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "description": "Results per page (default: server default, max: 1000). One page holds at most 80 projects, or 8 with include_abstract, which keeps a response within about 50 KB; a larger value, the server default included, is reduced to that cap and echoed as appliedFilters.perPage, and totalPages is counted at the reduced size; notice discloses the reduction whenever the result runs past one page.",
+    "maximum": 1000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Free-text search across project names, abstracts, and objectives. Every word must appear, so extra words narrow the result. A balanced quoted phrase and AND or OR between words parse; brackets, braces, an unmatched double quote, a slash between words, a trailing backslash, an AND or OR at either end, a trailing NOT, and # are not. Omit to browse the portfolio by filter alone. Results come newest board approval first either way.",
+    "type": "string"
+   },
+   "region": {
+    "description": "World Bank operational regions to include, combined as OR. These are the lending regions the portfolio is organized by, not the WDI aggregate codes worldbank_get_data accepts.",
+    "items": {
+     "enum": [
+      "East Asia and Pacific",
+      "Europe and Central Asia",
+      "Latin America and Caribbean",
+      "Middle East, North Africa, Afghanistan, and Pakistan",
+      "South Asia",
+      "Eastern and Southern Africa",
+      "Western and Central Africa",
+      "Africa",
+      "Other"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "status": {
+    "description": "Lifecycle stages to include, combined as OR. \"Active\" is under implementation, \"Pipeline\" is approved but not yet effective, \"Closed\" has finished disbursing, and \"Dropped\" was abandoned before approval. Most of the portfolio is closed, so omitting this returns mostly historical operations.",
+    "items": {
+     "enum": [
+      "Active",
+      "Closed",
+      "Dropped",
+      "Pipeline"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "name": "worldbank_search_projects",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "projects",
+     "appliedFilters",
+     "totalCount",
+     "currentPage",
+     "totalPages"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "appliedFilters": {
+    "additionalProperties": false,
+    "description": "The effective search sent upstream \u2014 confirms country-code normalization and which filters were in force for these results.",
+    "properties": {
+     "approvedFrom": {
+      "description": "Earliest board approval date applied, omitted when none.",
+      "type": "string"
+     },
+     "approvedTo": {
+      "description": "Latest board approval date applied, omitted when none.",
+      "type": "string"
+     },
+     "countries": {
+      "description": "Country codes as sent upstream \u2014 each resolved to the code the portfolio keys on (BRA \u2192 BR, YEM or YE \u2192 RY), uppercased, deduplicated, and comma-joined here for readability, though the API itself takes them caret-separated. Omitted when no country filter was applied.",
+      "type": "string"
+     },
+     "financialType": {
+      "description": "Financing windows applied, comma-joined, omitted when none.",
+      "type": "string"
+     },
+     "includeAbstract": {
+      "description": "Whether abstracts were requested, including the server default of false. A null abstract means \"not requested\" when this is false and \"none published\" when it is true.",
+      "type": "boolean"
+     },
+     "page": {
+      "description": "Page number requested.",
+      "type": "number"
+     },
+     "perPage": {
+      "description": "Results per page actually served \u2014 the requested size or server default, reduced to the page cap when larger. totalPages is counted at this size.",
+      "type": "number"
+     },
+     "query": {
+      "description": "Free-text query applied, omitted when none.",
+      "type": "string"
+     },
+     "region": {
+      "description": "Regions applied, omitted when none.",
+      "type": "string"
+     },
+     "requestedPerPage": {
+      "description": "Page size asked for, requested or server default, present only when it exceeded the page cap and perPage was reduced.",
+      "type": "number"
+     },
+     "status": {
+      "description": "Statuses applied, omitted when none.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "includeAbstract",
+     "page",
+     "perPage"
+    ],
+    "type": "object"
+   },
+   "currentPage": {
+    "description": "Page number requested \u2014 past totalPages when the request ran off the end.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_country_code`: A countries entry resolves to no economy: it is not two or three letters or digits, no economy in the World Bank country index has that three-character code, or it is a WDI aggregate such as SSF or WLD, which the portfolio lists no operations under. Also when countries holds only separators and so names no code at all. `invalid_date`: approved_from or approved_to is shaped YYYY-MM-DD but names no real day \u2014 a month outside 01\u201312, or a day outside its month. `reversed_date_range`: approved_from falls after approved_to, an interval no project can match. `invalid_query`: The Projects API could not parse query and answered HTTP 400, or query contains #, which the API answers with rows unrelated to the search. `page_out_of_range`: The requested page starts past the 100,000-result offset the Projects API serves. `upstream_unavailable`: The Projects API answered with a non-success status other than a query it could not parse \u2014 a rate limit, a timeout, a 5xx \u2014 or with an HTML error page, or the World Bank Indicators API country listing that resolves an ISO3 code could not be loaded. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_country_code",
+         "invalid_date",
+         "reversed_date_range",
+         "invalid_query",
+         "page_out_of_range",
+         "upstream_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Context for an empty result set \u2014 including whether the country filter matched anything on its own \u2014 for a page past the end of the results, for a page size reduced to the page cap, or naming the projects whose abstracts were cut.",
+    "type": "string"
+   },
+   "projects": {
+    "description": "Projects on this page, newest board approval date first with or without query, and projects with no board date last. Pagination walks the same order.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One World Bank lending operation.",
+     "properties": {
+      "abstract": {
+       "description": "Project abstract, cut at 5,000 characters and marked with \u2026 when longer. Null when include_abstract was not requested and when the project publishes none \u2014 appliedFilters.includeAbstract separates the two.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "boardApprovalDate": {
+       "description": "Date the Board approved the operation, as YYYY-MM-DD. A future date belongs to a pipeline project with a scheduled board date.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "closingDate": {
+       "description": "Scheduled or actual closing date, as YYYY-MM-DD. Null on roughly 44% of the portfolio, which publishes none \u2014 almost all dropped operations among them.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "countryCodes": {
+       "description": "Two-character code of the borrowing country \u2014 the economy's ISO2 code, which chains into the other tools (YE for Yemen, though the portfolio files it under RY), or a World Bank regional code such as 3A for a multi-country operation. Upstream publishes it as a list, though every project in the portfolio carries exactly one.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "countryName": {
+       "description": "Borrowing country, as the portfolio names it.",
+       "type": "string"
+      },
+      "financialTypes": {
+       "description": "Financing windows behind the operation: IBRD, IDA, Grants, Other \u2014 the values financial_type filters on. A blended operation lists more than one; empty where the project publishes none.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "grantAmount": {
+       "description": "Grant amount in USD: trust-fund grants and, on some operations, other agencies' co-financing recorded on the project, so it is not all World Bank money. Counted in totalCommitment. It is its own figure, unrelated to which financialTypes the project lists.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "ibrdCommitment": {
+       "description": "IBRD commitment in USD. Null when the project publishes no IBRD or IDA amount, as on a grant-only operation \u2014 not a commitment of zero.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "id": {
+       "description": "World Bank project ID, e.g. P513206.",
+       "type": "string"
+      },
+      "idaCommitment": {
+       "description": "IDA commitment in USD, IDA grants included. Null when the project publishes no IBRD or IDA amount \u2014 not a commitment of zero.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "majorSectors": {
+       "description": "Major sectors the operation is classified under, e.g. Health, Education, Transportation. Empty where the portfolio publishes no sector classification.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "name": {
+       "description": "Project name.",
+       "type": "string"
+      },
+      "regionName": {
+       "description": "World Bank operational region.",
+       "type": "string"
+      },
+      "status": {
+       "description": "Lifecycle stage: Active, Closed, Dropped, or Pipeline.",
+       "type": "string"
+      },
+      "totalCommitment": {
+       "description": "Commitment amount in USD as the project page reports it: ibrdCommitment + idaCommitment + grantAmount. Null on 35.8% of the portfolio (28,153 projects, 2026-09-25), which publishes no amount \u2014 dropped and older operations mostly \u2014 and that is not the same as a commitment of zero. It can include other agencies' co-financing through grantAmount; World Bank lending alone is ibrdCommitment + idaCommitment.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "url": {
+       "description": "Project page on projects.worldbank.org.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "name",
+      "status",
+      "countryCodes",
+      "countryName",
+      "regionName",
+      "boardApprovalDate",
+      "closingDate",
+      "totalCommitment",
+      "ibrdCommitment",
+      "idaCommitment",
+      "grantAmount",
+      "financialTypes",
+      "majorSectors",
+      "abstract",
+      "url"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalCount": {
+    "description": "Total projects matching the search, before pagination.",
+    "type": "number"
+   },
+   "totalPages": {
+    "description": "Total number of pages.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search World Bank Projects"
+}

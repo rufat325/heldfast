@@ -1,0 +1,51 @@
+{
+ "_meta": {
+  "anthropic/alwaysLoad": true,
+  "anthropic/searchHint": "batch sequence multiple gesture steps sequentially"
+ },
+ "description": "Execute multiple device interaction steps in a single call (iOS simulator or physical device, Android emulator, Apple TV / Android TV, or Chromium app).\nOn a physical iOS device only gesture-tap, gesture-swipe, gesture-custom, button, keyboard, and await-ui-element steps run; others fail at their own gate.\nUse when you need sequential actions and do NOT need to observe the screen between them\n(e.g. scrolling multiple times, typing then pressing enter, rotating back and forth).\nReturns { completed, total, steps } with per-step results. Fails if an unrecognised tool name is used in a step (error returned at that step, execution stops).\nOne screenshot is captured automatically after the whole sequence (not per step) \u2014 call screenshot separately only for a baseline BEFORE it, or to observe an intermediate step.\nThat single capture is also why a secret belongs in this call rather than in two bare ones: the skip is decided from the whole request, so a `{{secret:...}}` in any step suppresses the capture that would otherwise follow the submit.\n\nONLY use this when every step is known in advance. If any step depends on the\nresult of a previous one (e.g. tapping a menu item that only appears after\na prior tap), use individual tool calls instead.\n\nAllowed tools and their args (udid is auto-injected, do NOT include it in args):\n\n  gesture-tap:    { x: number, y: number, clickCount?: number }                                                        [ios/android/chromium]\n  gesture-swipe:  { fromX: number, fromY: number, toX: number, toY: number, durationMs?: number, momentum?: boolean }   [ios/android]\n  gesture-scroll: { x: number, y: number, deltaX?: number, deltaY?: number, durationMs?: number }                       [chromium only]\n  gesture-drag:   { fromX: number, fromY: number, toX: number, toY: number, durationMs?: number, momentum?: boolean }   [chromium only]\n  gesture-custom: { events: [{ type: \"Down\"|\"Move\"|\"Up\", x: number, y: number, x2?: number, y2?: number, delayMs?: number }], interpolate?: number }  [ios/android]\n  gesture-pinch:  { centerX: number, centerY: number, startDistance: number, endDistance: number, endCenterX?: number, endCenterY?: number, angle?: number, durationMs?: number }  [ios/android]\n  gesture-rotate: { centerX: number, centerY: number, radius?: number, radiusX?: number, radiusY?: number, startAngle: number, endAngle: number, durationMs?: number }  [ios/android]\n  button:         { button: \"home\"|\"back\"|\"power\"|\"volumeUp\"|\"volumeDown\"|\"appSwitch\"|\"actionButton\" }                  [ios/android]\n  keyboard:       { text?: string, key?: string, delayMs?: number }  (text OR key per step, never both; TV: text only)  [ios/android/chromium/vega/tv]\n                  text supports {{secret:<NAME>}} placeholders, resolved server-side from ARGENT_SECRET_<NAME> env vars or an argent secrets file \u2014 credentials never enter agent context\n  paste:          { text: string }  (device clipboard + paste shortcut; only where a user would paste, e.g. an OTP \u2014 keyboard otherwise)   [ios sim/android emu]\n  rotate:         { orientation: \"Portrait\"|\"LandscapeLeft\"|\"LandscapeRight\"|\"PortraitUpsideDown\" }                     [ios/android]\n  shake:          { count?: number }                                                                                    [ios sim/android emu]\n  fold:           { posture?: \"closed\"|\"half-open\"|\"open\", angle?: 0-180 }  (one of posture/angle; the next step lands on the new panel, whose coordinates are different)  [foldable ios sim]\n  tv-remote:      { button: <remote button | array of them>, repeat?: number }                                          [apple tv/android tv/vega]\n                  buttons: up/down/left/right/select/back/home/menu/playPause (+ rewind/fastForward/next/previous/volumeUp/volumeDown/mute \u2014 work on Android TV and Vega; rejected on the Apple TV simulator)\n  await-ui-element: { condition: \"exists\"|\"visible\"|\"hidden\"|\"text\", selector: {text?,identifier?,role?}, expectedText?, timeoutMs?, pollIntervalMs? }  [ios/android/chromium]\n\nExample \u2014 scroll down three times (use gesture-scroll with positive deltaY on Chromium):\n  { \"udid\": \"<UDID>\", \"steps\": [\n    { \"tool\": \"gesture-swipe\", \"args\": { \"fromX\": 0.5, \"fromY\": 0.7, \"toX\": 0.5, \"toY\": 0.3 } },\n    { \"tool\": \"gesture-swipe\", \"args\": { \"fromX\": 0.5, \"fromY\": 0.7, \"toX\": 0.5, \"toY\": 0.3 } },\n    { \"tool\": \"gesture-swipe\", \"args\": { \"fromX\": 0.5, \"fromY\": 0.7, \"toX\": 0.5, \"toY\": 0.3 } }\n  ]}\n\nExample \u2014 type text and submit (two keyboard steps; one call cannot carry both):\n  { \"udid\": \"<UDID>\", \"steps\": [\n    { \"tool\": \"keyboard\", \"args\": { \"text\": \"hello world\" } },\n    { \"tool\": \"keyboard\", \"args\": { \"key\": \"enter\" } }\n  ]}\n\nExample \u2014 TV: move focus right twice then activate (one tv-remote step with a path is cheaper):\n  { \"udid\": \"<TV-TARGET-ID>\", \"steps\": [\n    { \"tool\": \"tv-remote\", \"args\": { \"button\": [\"right\", \"right\", \"select\"] } }\n  ]}\n\nExample \u2014 tap, wait for the next screen's element, then tap it:\n  { \"udid\": \"<UDID>\", \"steps\": [\n    { \"tool\": \"gesture-tap\", \"args\": { \"x\": 0.5, \"y\": 0.9 } },\n    { \"tool\": \"await-ui-element\", \"args\": { \"condition\": \"visible\", \"selector\": { \"text\": \"Continue\" } } },\n    { \"tool\": \"gesture-tap\", \"args\": { \"x\": 0.5, \"y\": 0.5 } }\n  ]}\nIf the await-ui-element condition is not met before its timeout, the sequence stops there and the\nfollowing steps do NOT run \u2014 so the tap above only fires once \"Continue\" is actually on screen.\n\nStops on the first error (or unmet await-ui-element condition) and returns partial results.",
+ "inputSchema": {
+  "properties": {
+   "steps": {
+    "description": "Ordered list of interaction steps to execute sequentially",
+    "items": {
+     "properties": {
+      "args": {
+       "additionalProperties": {},
+       "description": "Tool arguments (excluding udid, which is injected automatically)",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "delayMs": {
+       "description": "Wait time in ms after this step before the next (default 100)",
+       "type": "number"
+      },
+      "tool": {
+       "description": "Tool name \u2014 one of: gesture-tap, gesture-swipe, gesture-scroll, gesture-drag, gesture-custom, gesture-pinch, gesture-rotate, button, keyboard, paste, rotate, shake, fold, tv-remote, await-ui-element. On a TV target (Apple TV / Android TV / Vega) use tv-remote (remote presses) and keyboard (text).",
+       "type": "string"
+      }
+     },
+     "required": [
+      "tool",
+      "args"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "udid": {
+    "description": "Target device id from `list-devices` (iOS UDID, Android serial, Vega serial, or Chromium id) \u2014 shared across all steps.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "udid",
+   "steps"
+  ],
+  "type": "object"
+ },
+ "name": "run-sequence"
+}

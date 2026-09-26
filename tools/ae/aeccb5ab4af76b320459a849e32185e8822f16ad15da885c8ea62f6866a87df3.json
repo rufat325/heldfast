@@ -1,0 +1,320 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Check CVE IDs against the CISA Known Exploited Vulnerabilities catalog \u2014 up to 200 per call, served from a cached catalog snapshot at no upstream cost. Returns, per CVE, whether it is in KEV and if so the date added, the federal remediation due date, days remaining or days overdue, which binding operational directive the entry cites, the required action text, whether it is linked to ransomware campaigns, whether it falls in the three-day forensic-triage tier, CISA's own vendor and product labels, associated CWEs, and the reference URLs parsed from the entry's notes. A CVE that is not in KEV is a normal result, not an error. For a large batch, detail \"summary\" keeps only the triage fields \u2014 the deadline and overdue status, directive, ransomware and forensic-triage flags, and vendor and product labels \u2014 and drops the descriptive text, CWEs, and references, so a full batch stays compact. The CWE IDs returned chain directly into the cwe filter of cisa_search_kev and cisa_search_ics_advisories, and the parsed NVD reference gives the canonical record for scoring detail. For the reverse direction \u2014 which ICS advisories cover a CVE \u2014 pass it as cve to cisa_search_ics_advisories, or set inKev there to list the advisories covering any KEV CVE.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cveIds": {
+    "description": "CVE identifiers to check, up to 200 per call. The whole batch costs zero upstream requests, so a full CVE alias list from a dependency audit can be checked in one call \u2014 pair a large batch with detail \"summary\".",
+    "items": {
+     "description": "One CVE identifier, e.g. CVE-2025-39964. Case and surrounding whitespace are normalized.",
+     "pattern": "^CVE-[0-9]{4}-[0-9]{4,19}$",
+     "type": "string"
+    },
+    "maxItems": 200,
+    "minItems": 1,
+    "type": "array"
+   },
+   "detail": {
+    "default": "full",
+    "description": "full returns every field of each in-KEV entry. summary returns only cveId, inKev, dateAdded, dueDate, daysUntilDue, overdue, directive, vendorProject, product, knownRansomwareCampaignUse, and forensicTriage \u2014 the triage view for a large batch. Not-in-KEV results are the same under both.",
+    "enum": [
+     "full",
+     "summary"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "cveIds"
+  ],
+  "type": "object"
+ },
+ "name": "cisa_check_cve_status",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results",
+     "foundCount",
+     "notFoundCount",
+     "catalog",
+     "asOf"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "asOf": {
+    "description": "The UTC date daysUntilDue and overdue were computed against, YYYY-MM-DD.",
+    "type": "string"
+   },
+   "catalog": {
+    "additionalProperties": false,
+    "description": "Which catalog snapshot answered this call.",
+    "properties": {
+     "catalogVersion": {
+      "description": "Version string of the loaded catalog snapshot.",
+      "type": "string"
+     },
+     "count": {
+      "description": "Entries in the loaded snapshot.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "dateReleased": {
+      "description": "Release timestamp the snapshot carries.",
+      "type": "string"
+     },
+     "fetchedAt": {
+      "description": "When this server fetched the snapshot, ISO 8601.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "catalogVersion",
+     "dateReleased",
+     "count",
+     "fetchedAt"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `catalog_unavailable`: No KEV catalog snapshot is held and the fetch from cisa.gov failed. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "catalog_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "foundCount": {
+    "description": "How many of the requested CVEs are in the catalog.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "notFoundCount": {
+    "description": "How many of the requested CVEs are not in the catalog.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "notice": {
+    "description": "Guidance when none of the supplied CVE IDs are in the catalog.",
+    "type": "string"
+   },
+   "results": {
+    "description": "One result per requested CVE, in the order supplied.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One KEV catalog entry, or a not-in-KEV result carrying only cveId and inKev. Under cisa_check_cve_status detail \"summary\" an entry carries only cveId, inKev, the dates and deadline status, directive, vendor and product labels, and the ransomware and forensic-triage flags.",
+     "properties": {
+      "cveId": {
+       "description": "The CVE identifier that was looked up.",
+       "pattern": "^CVE-[0-9]{4}-[0-9]{4,19}$",
+       "type": "string"
+      },
+      "cwes": {
+       "description": "Associated CWEs. Empty on some entries, and a CWE filter excludes those. Absent under detail \"summary\".",
+       "items": {
+        "description": "One CWE identifier.",
+        "pattern": "^CWE-[0-9]+$",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "dateAdded": {
+       "description": "Date CISA added the entry to the catalog, YYYY-MM-DD.",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "daysUntilDue": {
+       "description": "Whole days from the echoed asOf date to the due date; negative once overdue.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "directive": {
+       "anyOf": [
+        {
+         "enum": [
+          "BOD 26-04",
+          "BOD 22-01"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "The binding operational directive the entry cites, or null when it cites neither \u2014 most entries name none, and none is never inferred from age."
+      },
+      "dueDate": {
+       "description": "Federal remediation deadline CISA assigned, YYYY-MM-DD.",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "forensicTriage": {
+       "description": "Whether the entry falls in the BOD 26-04 three-day forensic-triage tier.",
+       "enum": [
+        "Yes",
+        "No"
+       ],
+       "type": "string"
+      },
+      "inKev": {
+       "description": "Whether the CVE is in the KEV catalog. False is a normal result, not an error.",
+       "type": "boolean"
+      },
+      "kevUrl": {
+       "description": "Absolute URL of the KEV catalog page for this CVE. Absent under detail \"summary\".",
+       "type": "string"
+      },
+      "knownRansomwareCampaignUse": {
+       "description": "Whether CISA has linked the vulnerability to a ransomware campaign. Unknown means no link on record, not that none exists.",
+       "enum": [
+        "Known",
+        "Unknown"
+       ],
+       "type": "string"
+      },
+      "notesCommentary": {
+       "description": "The prose segments of the notes field, verbatim with any URLs they contain; present when the notes carry prose. Absent under detail \"summary\".",
+       "type": "string"
+      },
+      "overdue": {
+       "description": "True when the due date is strictly before the echoed asOf date.",
+       "type": "boolean"
+      },
+      "product": {
+       "description": "CISA's own product label \u2014 free text, not a CPE.",
+       "type": "string"
+      },
+      "references": {
+       "description": "Every reference URL in the notes field, in notes order, each classified by kind. Absent under detail \"summary\".",
+       "items": {
+        "additionalProperties": false,
+        "description": "One reference URL parsed from the entry notes.",
+        "properties": {
+         "kind": {
+          "description": "What the link points at: the NVD detail record, a cisa.gov page, BOD 26-04 guidance, the forensic-triage requirements, a vendor page, or an unclassifiable URL.",
+          "enum": [
+           "nvd",
+           "cisa",
+           "bod_guidance",
+           "forensic_triage",
+           "vendor",
+           "other"
+          ],
+          "type": "string"
+         },
+         "label": {
+          "description": "CISA's own label for the segment, when the notes entry carried one.",
+          "type": "string"
+         },
+         "url": {
+          "description": "Absolute reference URL, verbatim from the notes field.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "kind",
+         "url"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "requiredAction": {
+       "description": "CISA's required-action text for the entry, verbatim. Absent under detail \"summary\".",
+       "type": "string"
+      },
+      "shortDescription": {
+       "description": "CISA's one-paragraph description. Absent under detail \"summary\".",
+       "type": "string"
+      },
+      "vendorProject": {
+       "description": "CISA's own vendor label \u2014 free text, not a CPE vendor component.",
+       "type": "string"
+      },
+      "vulnerabilityName": {
+       "description": "CISA's short name for the vulnerability. Absent under detail \"summary\".",
+       "type": "string"
+      }
+     },
+     "required": [
+      "cveId",
+      "inKev"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "summaryNote": {
+    "description": "Present only under detail \"summary\": which fields each in-KEV result omits and how to restore them.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "cisa_check_cve_status"
+}

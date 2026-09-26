@@ -1,0 +1,30 @@
+{
+ "description": "What happened at the last Deribit expiry? Max pain and how spot settled against it: max_pain_strike, spot_at_expiry, %-diff, put_call_ratio, notional. Plus up to 10 upcoming expiries, each with current live max-pain level, days_to_expiry, open_interest_contracts and open_notional_usd. Field semantics: days_to_expiry is floored at 0 and cannot separate \"expires later today\" from \"already settled\" \u2014 settles_at (full ISO timestamp) and hours_to_settlement (SIGNED; negative = settled but not yet finalized) carry that distinction. settlement_time_utc names the settlement time where evidenced against the exchange (08:00:00Z for DERIBIT_BTC); where not evidenced, all three timing fields are null. open_interest_contracts (upcoming: latest daily snapshot) and total_contracts (settled: last snapshot BEFORE expiry) are the SAME measurement at different observation times; contracts_as_of names the snapshot. total_notional_usd is computed against the SETTLEMENT spot and never changes; open_notional_usd uses the CURRENT spot and moves with spot (notional_spot/notional_spot_date name the reference). oi_available distinguishes \"null\" from \"not collected\". Expiry flags NEST rather than partition (quarterly \u2282 monthly \u2282 weekly \u2282 daily): filter on the booleans, read expiry_type as the label \u2014 only it separates a Friday expiry from a mid-week one. All flags are calendar-derived, so upcoming expiries carry them too. spot_at_expiry is the exchange settlement price: for DERIBIT_BTC the Deribit delivery price (30-min index TWAP before 08:00 UTC \u2014 rows before 2026-08-31 were recomputed from that series; they had carried the BTCUSDT daily close, 16 h later), for IBIT the ETF close of the expiry day. Pass `market` to switch venue (DERIBIT_BTC default, IBIT). `include_strike_ladder=true` adds, per expiry, open interest per 2.5 % price band around spot (\u00b125 %, calls/puts, absolute contracts) with day-over-day delta \u2014 a stock, not a side: no hedge direction follows from it. `include_gex=true` (DERIBIT_BTC only) adds per expiry a gex block plus gex_totals across the book \u2014 Black-Scholes gamma notional per band from LIVE Deribit mark IV (gex_data_as_of names the fetch, a different observation time than the snapshot fields); the dealer sign is an ASSUMPTION, both conventions published side by side; zero_gamma_level flips only under the SqueezeMetrics convention (short-all has no zero crossing by construction, its null is structural \u2014 zero_gamma_level.note says so). Cron collects daily 02:00 UTC from Deribit Public API. Related: arena_get_max_pain_history (base rates + daily snapshots of open expiries), arena_get_iv_snapshot (implied vol for the same expiries). [Free tier]",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "include_gex": {
+    "description": "Default false (response unchanged). DERIBIT_BTC only. When true, each upcoming expiry carries a `gex` block plus `gex_totals` across the whole book: Black-Scholes gamma notional (USD per 1 % spot move) per 2.5 % band from LIVE Deribit mark IV per strike (gex_data_as_of names the fetch, ~10 min cache \u2014 a different observation time than the 02:00 UTC snapshot fields). The dealer SIGN is an assumption, not a measurement: both conventions are published side by side (assuming_dealers_short_all, assuming_squeezemetrics_convention); where they disagree, the data does not know the answer. zero_gamma_level flips only under the SqueezeMetrics convention \u2014 short-all is <= 0 everywhere and has no zero crossing by construction (its null is structural; zero_gamma_level.note says so). Tau floor 2 h near expiry (tau_clamped flags it); instruments without usable IV are excluded and counted.",
+    "type": "boolean"
+   },
+   "include_strike_ladder": {
+    "description": "Default false (response unchanged). When true, every expiry carries a `strike_ladder`: open interest per 2.5 % price band around the snapshot spot (\u00b125 %, calls/puts separate, absolute contracts, share_pct), below_range/above_range sums, max_pain_recomputed (cross-check against the stored level) and `delta` vs the previous day's snapshot on the same band grid (null with delta_reason when there is none). OI is a stock, not a side \u2014 no hedge direction follows; the note travels with the response.",
+    "type": "boolean"
+   },
+   "market": {
+    "description": "Options market. Only DERIBIT_BTC is served: IBIT (BlackRock spot-ETF options) is still collected daily but no longer delivered \u2014 the chain comes from an unlicensed source, so it cannot be redistributed (2026-09-24).",
+    "enum": [
+     "DERIBIT_BTC"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "arena_get_max_pain",
+ "title": "Get Deribit BTC Max Pain (latest + upcoming)"
+}

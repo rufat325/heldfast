@@ -1,0 +1,27 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Execute arbitrary JavaScript with access to scene, renderer, camera. Returns the result. Runtime only (lost on reload). If the code mutates scene state, ASK the user first: runtime preview or persistent code change?\n\nSHADER PATCHING RECIPE \u2014 when modifying materials via onBeforeCompile:\n1. Reset patch flags: mat._curvedWorldPatched = false; mat._windPatched = false;\n2. Delete old shader refs: delete mat.userData.shakeShader; stop old animations via mesh.userData._stopShake?.();\n3. ONE onBeforeCompile pass (never chain) \u2014 include curved world + your effect together\n4. Replace '#include <project_vertex>' with full transform: USE_BATCHING/USE_INSTANCING guards \u2192 effect in world space \u2192 curved world (worldPos.y -= dist\u00b2*0.005) \u2192 viewMatrix*worldPos \u2192 gl_Position\n5. Declare uniforms before main(): shader.vertexShader.replace('void main() {', 'uniform float uTime;\\nvoid main() {')\n6. Set mat.customProgramCacheKey = () => 'effect-' + Date.now(); \u2014 forces recompilation\n7. mat.needsUpdate = true;\n8. Animate uniforms via requestAnimationFrame loop\n9. Use transformed.y for height-based effects (local vertex Y), worldPos for spatial phase\n\nDebug only \u2014 page reload will reset. No code changes needed.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "code": {
+    "description": "JavaScript code. Available vars: scene, renderer, camera, gl. Use return for results.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "code"
+  ],
+  "type": "object"
+ },
+ "name": "run_js"
+}

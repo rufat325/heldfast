@@ -1,0 +1,242 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch a Bluesky actor's public profile by handle (e.g. \"bsky.app\") or DID (e.g. \"did:plc:z72i7hdynmk6r22z27h6tvur\"). Returns displayName, handle, DID, bio, pronouns, website, follower/following/post counts, avatar URL, moderation labels, pinned post AT-URI, and Bluesky verification \u2014 whether the account is verified or a trusted verifier, and who verified it. Use this as the first step to resolve a handle to a DID before calling tools that require a DID or AT-URI. Handles and DIDs are interchangeable as input, and \"@bsky.app\" or the account's bsky.app page (https://bsky.app/profile/bsky.app) work as-is.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "actor": {
+    "description": "Handle (e.g. \"bsky.app\", \"alice.bsky.social\") or DID (e.g. \"did:plc:z72i7hdynmk6r22z27h6tvur\") of the actor to look up. A leading \"@\" (\"@bsky.app\") and the account's bsky.app page (\"https://bsky.app/profile/bsky.app\") are accepted and read as the handle or DID they carry. A bare name without a dot is not a handle \u2014 use bsky_search_actors to resolve one.",
+    "maxLength": 2048,
+    "minLength": 1,
+    "pattern": "^(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?|did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-]|@(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?|https:\\/\\/bsky\\.app\\/profile\\/(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?|did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-])\\/?(?:[?#].*)?)$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "actor"
+  ],
+  "type": "object"
+ },
+ "name": "bsky_get_profile",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "did",
+     "handle"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "avatar": {
+    "description": "URL of the profile avatar image.",
+    "type": "string"
+   },
+   "createdAt": {
+    "description": "ISO 8601 timestamp of account creation.",
+    "type": "string"
+   },
+   "description": {
+    "description": "Biography / about text.",
+    "type": "string"
+   },
+   "did": {
+    "description": "Decentralized Identifier \u2014 the permanent, portable identity key for this account.",
+    "type": "string"
+   },
+   "displayName": {
+    "description": "Display name set by the user. May differ from the handle.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `actor_not_found`: The handle does not resolve or the profile does not exist. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "actor_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "followersCount": {
+    "description": "Number of accounts following this actor.",
+    "type": "number"
+   },
+   "followsCount": {
+    "description": "Number of accounts this actor follows.",
+    "type": "number"
+   },
+   "handle": {
+    "description": "Human-readable username, e.g. \"alice.bsky.social\".",
+    "type": "string"
+   },
+   "indexedAt": {
+    "description": "ISO 8601 timestamp when the AppView last indexed this profile.",
+    "type": "string"
+   },
+   "labels": {
+    "description": "Moderation labels applied to this profile.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A moderation label applied by the AppView or a labeler service.",
+     "properties": {
+      "cts": {
+       "description": "ISO 8601 timestamp when the label was applied.",
+       "type": "string"
+      },
+      "src": {
+       "description": "DID of the labeler that applied this label.",
+       "type": "string"
+      },
+      "val": {
+       "description": "Label value (content warning or moderation tag, e.g. \"porn\", \"spam\").",
+       "type": "string"
+      }
+     },
+     "required": [
+      "val"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "pinnedPostUri": {
+    "description": "AT-URI of the pinned post, if any. Pass to bsky_get_post_thread to read it.",
+    "type": "string"
+   },
+   "postsCount": {
+    "description": "Total posts authored by this actor.",
+    "type": "number"
+   },
+   "pronouns": {
+    "description": "Free-form pronouns the account set, e.g. \"they/he\". Absent when it set none. Account-authored text bounded only by length, not a fixed vocabulary \u2014 read it as written rather than parsing it.",
+    "type": "string"
+   },
+   "verification": {
+    "additionalProperties": false,
+    "description": "Bluesky verification state \u2014 what tells a verified account from a look-alike handle. Absent when Bluesky sent none, which it does for an account neither verified nor a trusted verifier.",
+    "properties": {
+     "trustedVerifierStatus": {
+      "description": "Whether this account is itself a trusted verifier, whose verifications Bluesky honors \u2014 same values as verifiedStatus.",
+      "type": "string"
+     },
+     "verifications": {
+      "description": "Verifications issued by trusted verifiers \u2014 empty for an account that verifies others but was never verified itself.",
+      "items": {
+       "additionalProperties": false,
+       "description": "One verification a trusted verifier issued for this account.",
+       "properties": {
+        "createdAt": {
+         "description": "ISO 8601 timestamp when it was issued.",
+         "type": "string"
+        },
+        "isValid": {
+         "description": "Whether this verification still holds.",
+         "type": "boolean"
+        },
+        "issuer": {
+         "description": "DID of the trusted verifier that issued it.",
+         "type": "string"
+        },
+        "issuerDisplayName": {
+         "description": "Display name of the issuer, when Bluesky sent it. Account-authored text.",
+         "type": "string"
+        },
+        "issuerHandle": {
+         "description": "Handle of the issuer, when Bluesky sent it.",
+         "type": "string"
+        },
+        "uri": {
+         "description": "AT-URI of the verification record.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "issuer",
+        "uri",
+        "isValid",
+        "createdAt"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "verifiedStatus": {
+      "description": "Whether a trusted verifier verified this account: \"valid\", \"invalid\" (verified once, no longer holds), or \"none\". Passed through as Bluesky sends it, so another value may appear.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "verifiedStatus",
+     "trustedVerifierStatus",
+     "verifications"
+    ],
+    "type": "object"
+   },
+   "website": {
+    "description": "URL the account set as its website, in the profile field of that name rather than in the bio. Absent when it set none. The one link on a profile that points somewhere else \u2014 follow it before reading the bio for one.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Bluesky Profile"
+}

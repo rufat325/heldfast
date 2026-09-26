@@ -1,0 +1,288 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get historical XBRL financial data for a company. Accepts friendly concept names (e.g., \"revenue\", \"net_income\", \"assets\") or raw XBRL tags. Discover available friendly names with secedgar_search_concepts. Handles historical tag changes and deduplicates data automatically. The full series is also staged as df_<id> when a canvas is available \u2014 inspect it with secedgar_dataframe_describe, then analyze it with secedgar_dataframe_query.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "company": {
+    "description": "Ticker symbol (e.g., \"AAPL\") or CIK number. Ticker is preferred.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "concept": {
+    "description": "Financial concept \u2014 friendly name (e.g., \"revenue\", \"net_income\", \"assets\", \"eps_diluted\") or raw XBRL tag (e.g., \"AccountsPayableCurrent\"). Friendly names auto-resolve to the correct XBRL tags and handle historical tag changes.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "limit": {
+    "description": "Cap the inline data[] to the most-recent N periods (the series is newest-first). The full series is always registered to the dataframe, so older periods stay queryable via secedgar_dataframe_query. Omit to return every period inline.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "period_type": {
+    "description": "Filter to annual (FY) or quarterly (Q1-Q4) data. \"all\" returns both. When omitted, defaults to \"annual\"; instant (balance-sheet) concepts automatically fall back to returning the full series on the first call when the annual filter yields nothing (#48).",
+    "enum": [
+     "annual",
+     "quarterly",
+     "all"
+    ],
+    "type": "string"
+   },
+   "taxonomy": {
+    "default": "us-gaap",
+    "description": "XBRL taxonomy. us-gaap for US companies, ifrs-full for foreign filers, dei for entity info (shares outstanding).",
+    "enum": [
+     "us-gaap",
+     "ifrs-full",
+     "dei"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "company",
+   "concept"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_get_financials",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "company",
+     "cik",
+     "concept",
+     "label",
+     "unit",
+     "data"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit cap applied.",
+    "type": "number"
+   },
+   "caveats": {
+    "description": "Data-completeness warnings about the returned series. Two kinds. On quarterly results, one entry when one or two calendar quarters are absent from every recent qualifying year \u2014 SEC reports a filer's fiscal Q4 as the 10-K residual rather than a discrete quarterly fact, so the calendar quarter fiscal Q4 spans has no frame-tagged value, and a filer whose other fiscal quarters span non-calendar durations loses a second quarter the same way. Applies to calendar-year filers (no discrete Q4) as much as to off-calendar ones. On any result, one entry when the series stops well short of today \u2014 either because the concept resolved to an XBRL tag SEC has retired from the taxonomy (the current tags reported nothing), or because a current tag's series ends more than two years plus a filing window back, which is what a filer migrating to a different element or dropping the disclosure looks like. Absent when the series has nothing to flag.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "cik": {
+    "description": "Resolved CIK, zero-padded to 10 digits.",
+    "type": "string"
+   },
+   "company": {
+    "description": "Resolved entity name (SEC-conformed).",
+    "type": "string"
+   },
+   "concept": {
+    "description": "XBRL tag behind the newest value. A friendly name can walk several tags, so each row names its own.",
+    "type": "string"
+   },
+   "data": {
+    "description": "Deduplicated time series, newest first \u2014 one value per calendar period. Where SEC's period frame sits on a proxy statement's figure (the pay-versus-performance table re-tags net income), the value comes from the filer's own report of the same period; an annual period SEC framed on a 10-Q's trailing-twelve-month figure is left out, since the filer has not closed that year.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One reported value with its period, fiscal context, source filing, and source tag.",
+     "properties": {
+      "accession_number": {
+       "description": "Source filing accession number for secedgar_get_filing.",
+       "type": "string"
+      },
+      "end": {
+       "description": "Period end date (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "filed": {
+       "description": "Date the source filing was submitted (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "fiscal_period": {
+       "description": "Fiscal period of the source filing (FY, Q1, Q2, Q3, Q4), not the data period. Null when the source filing did not encode a fiscal period.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "fiscal_year": {
+       "description": "Fiscal year of the source filing, not the data period \u2014 every comparative period restated in the same filing carries that filing's fiscal year, so use end (or period) as the time key. Null when the source filing did not encode a fiscal year.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "form": {
+       "description": "Source filing type (10-K, 10-Q, etc.).",
+       "type": "string"
+      },
+      "period": {
+       "description": "Calendar period label (e.g., \"CY2023\", \"CY2023Q3\").",
+       "type": "string"
+      },
+      "start": {
+       "description": "Period start date (YYYY-MM-DD). Duration items only.",
+       "type": "string"
+      },
+      "tag": {
+       "description": "XBRL tag this value was reported under \u2014 differs from concept when an older or successor tag in the friendly name answers this period.",
+       "type": "string"
+      },
+      "value": {
+       "description": "Reported value.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "period",
+      "value",
+      "end",
+      "fiscal_year",
+      "fiscal_period",
+      "form",
+      "filed",
+      "accession_number",
+      "tag"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe handle holding the same time series. Use for cross-company JOINs via secedgar_dataframe_query. The source-filing fiscal keys are materialized as source_filing_fy/source_filing_fp \u2014 order, group, and window by period_end, not by those columns. Absent when canvas is unavailable.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at"
+    ],
+    "type": "object"
+   },
+   "description": {
+    "description": "XBRL taxonomy description of the concept tag. Often absent for company-extension tags or older concepts.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `company_not_found`: The company input does not resolve to a CIK. `ambiguous_company`: The company input resolves to multiple entities and the target is ambiguous. `unknown_concept`: The concept input is neither a supported friendly name nor shaped like an XBRL tag, so no request is sent. `no_concept_data`: The company does not report any XBRL data for the resolved concept and taxonomy. `no_frame_data`: Concept exists but has no frame-aligned (standard calendar period) entries. `no_period_data`: Concept has data but the period_type filter excluded all of it. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "company_not_found",
+         "ambiguous_company",
+         "unknown_concept",
+         "no_concept_data",
+         "no_frame_data",
+         "no_period_data",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "label": {
+    "description": "Human-readable taxonomy label of the concept tag.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when the inline series was capped, or when the full series is staged as a dataframe.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of periods shown inline.",
+    "type": "number"
+   },
+   "tags_tried": {
+    "description": "XBRL tags that were attempted (shown when using friendly names that map to multiple tags).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "truncated": {
+    "description": "True when the inline data[] was capped by limit.",
+    "type": "boolean"
+   },
+   "unit": {
+    "description": "Unit of measure of the newest value (e.g., \"USD\", \"shares\", \"USD/shares\").",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Secedgar Get Financials"
+}

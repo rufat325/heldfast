@@ -1,0 +1,457 @@
+{
+ "annotations": {
+  "access": "paid",
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "maturity": "unknown",
+  "openWorldHint": false,
+  "pricing_url": "https://dchub.cloud/pricing/upgrade?tool=analyze_site&ref=mcp-tools-list",
+  "readOnlyHint": true,
+  "title": "Analyze Site",
+  "upgrade_relay": "Call the tool first: a gated result carries a session-bound checkout link (dchub.cloud/go/c/<token>) and a human relay (dchub.cloud/upgrade/h/<token>) minted for THIS session \u2014 relay those verbatim. This URL is only the fallback for a client that renders annotations before any call."
+ },
+ "description": "Use when a user has ONE specific lat/lon (a parcel, a candidate site) and wants the full multi-factor data-center suitability read in one call \u2014 the single-site step of site selection. Example: \"Score this Phoenix parcel for a 100MW build \u2014 power, gas, fiber, market & risk.\" \u2014 analyze_site lat=33.45 lon=-112.07 capacity_mw=100 state=AZ. Params: lat (-90 to 90, required unless candidate_id or location), lon (-180 to 180, required unless candidate_id or location), location (a market NAME or metro slug instead of coordinates, e.g. location=\"ashburn\" \u2014 resolved to that market's PUBLISHED CENTROID through the DCPI market row, with a resolved_from block naming what it resolved to; a MARKET-level read, NOT the parcel you named, and a trailing state is not stripped so \"Ashburn, VA\" will not resolve), candidate_id (a cand_\u2026 from get_refined_queue \u2014 resolves coordinates from the frozen mint and ignores lat/lon), capacity_mw (target load in MW, e.g. 50-500 \u2014 returns a `capacity_context` block sizing that load against nearby installed generation; it deliberately does NOT move overall_score, and the block names where the load IS applied), state (2-letter US, optional \u2014 improves the tax-incentive/context lookup), include_grid/include_risk/include_fiber (booleans, default true). Returns (full, paid): {overall_score (aka composite_score, 0-100 composite \u2014 for the integrity-first version that never imputes a missing factor, use get_composite_site_score), interpretation (verdict string, e.g. \"Excellent site\"), scores{power_infrastructure, gas_pipeline_access, fiber_connectivity, market_conditions, risk_resilience \u2014 each 0-100}, nearby{substations_50km, power_plants_80km, gas_pipelines_50km, facilities_100km, fiber_carriers_in_state, generation_capacity_mw, total_capacity_mw}, power_cost{industrial_cents_kwh, commercial_cents_kwh, period, basis}, fiber{connectivity_score, nearest_carrier_km, near_net_bucket, top_carriers[], single_carrier_risk}, location, citation}. FREE tier returns a REAL, citable HEADLINE \u2014 composite_score + verdict + the single top limiting factor (the lowest sub-score) + citation; the full per-factor breakdown, nearby infrastructure, power cost, fiber carriers, and the branded Site Analysis PDF (generate_site_analysis) are Pro. For dedicated water / disaster / climate / tax reads use get_water_risk / get_disaster_risk / get_climate_intel / get_tax_incentives. Do NOT use to compare 2+ sites (use compare_sites) or to find sites that match a target (use find_alternatives).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "candidate_id": {
+    "description": "PREFERRED for queue survivors: a cand_\u2026 id from get_refined_queue \u2014 coordinates come from the FROZEN mint (lat/lon args are ignored; zero transcription drift; expired ids fail closed with candidate_expired). See dchub.cloud/docs/candidate-lifecycle",
+    "type": "string"
+   },
+   "capacity_mw": {
+    "description": "Target power load for the build in megawatts (MW), e.g. 100 (typical 50-500)",
+    "type": "number"
+   },
+   "include_fiber": {
+    "description": "Include fiber-connectivity analysis (default true)",
+    "type": "boolean"
+   },
+   "include_grid": {
+    "description": "Include grid-headroom / substation analysis (default true)",
+    "type": "boolean"
+   },
+   "include_risk": {
+    "description": "Include water/drought/climate risk analysis (default true)",
+    "type": "boolean"
+   },
+   "lat": {
+    "description": "Site latitude in decimal degrees (-90 to 90; required unless candidate_id or location given), e.g. 33.45",
+    "type": "number"
+   },
+   "latitude": {
+    "description": "Alias for lat \u2014 either name works",
+    "type": "number"
+   },
+   "lng": {
+    "description": "Alias for lon \u2014 either name works",
+    "type": "number"
+   },
+   "location": {
+    "description": "Market NAME or metro slug instead of coordinates, e.g. \"ashburn\", \"northern-virginia\", \"dallas\". Resolved to that market's PUBLISHED CENTROID through the DCPI market row, and the answer carries a resolved_from block saying so. This is a MARKET-level read, not the parcel you named \u2014 pass lat/lon for a specific site. Not an alias for lat/lon: a place name is not a coordinate.",
+    "type": "string"
+   },
+   "lon": {
+    "description": "Site longitude in decimal degrees (-180 to 180; required unless candidate_id or location given), e.g. -112.07",
+    "type": "number"
+   },
+   "longitude": {
+    "description": "Alias for lon \u2014 either name works",
+    "type": "number"
+   },
+   "mpp_credential": {
+    "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result \u2014 no API key, no subscription, no human. One payment covers one call.",
+    "type": "string"
+   },
+   "mpp_pay": {
+    "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves \u2014 a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+    "type": "boolean"
+   },
+   "state": {
+    "description": "US state abbreviation (optional) \u2014 improves the tax-incentive lookup, e.g. AZ",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "analyze_site",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "Multi-factor site suitability for one lat/lon: composite score + verdict (+ per-factor breakdown, nearby infra, power cost, fiber on paid) \u2014 alongside the DC Hub envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "composite_score": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "0-100 composite site suitability score (free HEADLINE tier and full tier)"
+   },
+   "fiber": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Fiber read: {connectivity_score, nearest_carrier_km, near_net_bucket, top_carriers[], single_carrier_risk} (full payload)"
+   },
+   "interpretation": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Verdict prose on the full payload"
+   },
+   "limiting_factor": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {
+       "factor": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "The lowest-scoring factor"
+       },
+       "note": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Why it limits the site"
+       },
+       "of": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Scale maximum (100)"
+       },
+       "score": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Its score"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Single top limiting factor (the lowest sub-score) \u2014 always present on the free headline"
+   },
+   "location": {
+    "description": "Echo of the analyzed location (full payload)"
+   },
+   "locked": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Which sections are Pro-locked on the free headline: {per_factor_breakdown, nearby_infrastructure, power_cost, fiber_carriers, site_analysis_report}"
+   },
+   "nearby": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Nearby infrastructure counts: {substations_50km, power_plants_80km, gas_pipelines_50km, facilities_100km, fiber_carriers_in_state, generation_capacity_mw, total_capacity_mw} (full payload)"
+   },
+   "overall_score": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Alias of composite_score on the full payload"
+   },
+   "power_cost": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Power cost read: {industrial_cents_kwh, commercial_cents_kwh, period, basis} (full payload)"
+   },
+   "preview": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Headline preview line (free tier)"
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "scores": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {
+       "fiber_connectivity": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "0-100"
+       },
+       "gas_pipeline_access": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "0-100"
+       },
+       "market_conditions": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "0-100"
+       },
+       "power_infrastructure": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "0-100"
+       },
+       "risk_resilience": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "0-100"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Per-factor breakdown (full/paid payload)"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   },
+   "site_headline": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "true when this is the free citable HEADLINE (score + verdict + limiting factor)"
+   },
+   "verdict": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Verdict string, e.g. \"Excellent site\" / BUILD-CAUTION-AVOID read"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Analyze Site"
+}

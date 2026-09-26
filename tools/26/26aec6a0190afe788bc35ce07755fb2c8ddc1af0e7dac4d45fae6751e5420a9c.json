@@ -1,0 +1,208 @@
+{
+ "description": "Operate TraderMIND \u2014 the agentic trading engine. Use whenever the user asks about markets, the trader, a MIND Vision forecast, their trading journal, or wants to react to a trade idea. Read the engine: feed (live trade-idea feed) \u00b7 forecast_latest (latest MIND Vision cone for a symbol) \u00b7 forecasts (recent forecast history incl. resolution \u2014 every hit and miss) \u00b7 bar_scores (per-candle predicted-vs-actual for one resolved forecast_id) \u00b7 candles (OHLCV) \u00b7 cycles (engine cycle summaries: regime, ideas, lessons) \u00b7 health (is the engine up) \u00b7 calibration (published honesty curve) \u00b7 ai_journal (the trader's own narrated 'what I saw / did / why'). Act as the user: save | star | like an object (object_type forecast|idea|journal_ai + object_id) \u00b7 unsave (undo one of those \u2014 pass undo_action) \u00b7 note (attach a note) \u00b7 feedback (agree/disagree/context \u2014 reaches the engine's brain and shapes future hypotheses) \u00b7 interactions (what you already saved/starred on a batch of object_ids \u2014 check before writing) \u00b7 notes (read back your notes) \u00b7 saved (your saved/starred items, filterable via filter_action). Writes are rate-limited (300 save/star/like per hour, 60 notes/feedback per hour) \u2014 batch-check with action=interactions before writing. Your journal: journal_list \u00b7 journal_create \u00b7 journal_get \u00b7 journal_update \u00b7 journal_delete (entry_id). insights = personalized insights from your activity + the trader brain (cached 15 min). Auth: all engine reads (feed, forecast_latest, forecasts, bar_scores, candles, cycles, health, calibration, ai_journal) plus counts are public \u2014 they work even with a missing or invalid key. Only the act-as-you actions (save/star/like/unsave, note/feedback, notes, interactions, saved, journal_*, insights) authenticate as the key's owner. Saves, notes, feedback, and journal entries also land in the owner's MIND knowledge graph.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "action": {
+    "description": "The operation to run \u2014 see the tool description for the grouped taxonomy and per-action requirements.",
+    "enum": [
+     "feed",
+     "forecast_latest",
+     "forecasts",
+     "bar_scores",
+     "candles",
+     "cycles",
+     "health",
+     "calibration",
+     "ai_journal",
+     "save",
+     "star",
+     "like",
+     "unsave",
+     "note",
+     "feedback",
+     "notes",
+     "interactions",
+     "counts",
+     "journal_list",
+     "journal_create",
+     "journal_get",
+     "journal_update",
+     "journal_delete",
+     "saved",
+     "insights"
+    ],
+    "type": "string"
+   },
+   "body": {
+    "description": "Journal entry body (\u226450000 chars) \u2014 journal_create/journal_update.",
+    "maxLength": 50000,
+    "type": "string"
+   },
+   "days": {
+    "description": "History window in days for calibration (1\u2013365, default 90).",
+    "maximum": 365,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "entry_id": {
+    "description": "Journal entry id (\u2264200 chars) \u2014 required for journal_get/journal_update/journal_delete.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "filter_action": {
+    "description": "action=saved: return only items with this interaction (e.g. only what you starred). Default: saves + stars.",
+    "enum": [
+     "save",
+     "star",
+     "like"
+    ],
+    "type": "string"
+   },
+   "forecast_id": {
+    "description": "Numeric forecast id \u2014 required for bar_scores. Get ids from action=forecasts.",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "kind": {
+    "description": "Feed filter for action=feed.",
+    "enum": [
+     "execute",
+     "no_trade",
+     "error",
+     "all"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "description": "Max items. Per-action bounds/defaults: candles 1\u20132000 default 300 \u00b7 forecasts \u2264500 default 50 \u00b7 feed/ai_journal/journal_list \u2264200 default 50 \u00b7 cycles \u2264200 default 20 \u00b7 saved/notes \u2264500 default 100. Values above an action's cap are clamped to the cap. Use 'page' to continue past 'limit' on notes/saved/journal_list.",
+    "maximum": 2000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "linked_ids": {
+    "description": "Forecast/idea ids linked to a journal entry, \u226450 (journal_create/journal_update \u2014 update REPLACES the list).",
+    "items": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "maxItems": 50,
+    "type": "array"
+   },
+   "note_kind": {
+    "description": "action=notes: filter your notes by kind.",
+    "enum": [
+     "note",
+     "feedback"
+    ],
+    "type": "string"
+   },
+   "object_id": {
+    "description": "Id of the actable object (\u2264200 chars) \u2014 required for save/star/like/unsave/note/feedback; optional filter for notes.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "object_ids": {
+    "description": "Batch of object ids (1\u2013200, each \u2264200 chars) \u2014 required for interactions and counts.",
+    "items": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "maxItems": 200,
+    "minItems": 1,
+    "type": "array"
+   },
+   "object_type": {
+    "description": "Type of the actable object \u2014 required for save/star/like/unsave/note/feedback.",
+    "enum": [
+     "forecast",
+     "idea",
+     "journal_ai"
+    ],
+    "type": "string"
+   },
+   "page": {
+    "description": "notes / saved / journal_list: page number (default 1); responses include 'total' and 'page' so you can walk pages.",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "refresh": {
+    "description": "action=insights: bypass the 15-minute cache and recompose. A 60-second floor still applies \u2014 refresh=true within 60s of the last compose returns the cached result.",
+    "type": "boolean"
+   },
+   "symbol": {
+    "description": "Instrument symbol, 1\u201312 chars of A-Z, 0-9, '.' or '-' (e.g. ES, NQ, SPY, BTC-USD; case-insensitive \u2014 normalized to uppercase). Required for forecast_latest and candles; optional filter on forecasts/ai_journal/saved; recommended on save/star/like/note/feedback.",
+    "pattern": "^[A-Za-z0-9.\\-]{1,12}$",
+    "type": "string"
+   },
+   "symbols": {
+    "description": "Symbols linked to a journal entry, \u226420 of \u226412 chars each (journal_create/journal_update \u2014 update REPLACES the list).",
+    "items": {
+     "pattern": "^[A-Za-z0-9.\\-]{1,12}$",
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "tag": {
+    "description": "Structured tag stored with the note/feedback (agree | disagree | context). On feedback it reaches the engine's Hypothesizer and shapes future forecasts.",
+    "enum": [
+     "agree",
+     "disagree",
+     "context"
+    ],
+    "type": "string"
+   },
+   "tags": {
+    "description": "Tags for a journal entry, \u226420 (journal_create/journal_update \u2014 update REPLACES the list).",
+    "items": {
+     "maxLength": 50,
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "text": {
+    "description": "Note or feedback text (\u22648000 chars) \u2014 required for note/feedback.",
+    "maxLength": 8000,
+    "type": "string"
+   },
+   "tf": {
+    "description": "Candle timeframe for candles (default 5m).",
+    "enum": [
+     "1m",
+     "5m",
+     "15m",
+     "1h",
+     "4h",
+     "1d"
+    ],
+    "type": "string"
+   },
+   "title": {
+    "description": "Journal entry title (\u2264300 chars) \u2014 required for journal_create; optional on journal_update.",
+    "maxLength": 300,
+    "type": "string"
+   },
+   "undo_action": {
+    "description": "Which interaction to undo \u2014 required for unsave.",
+    "enum": [
+     "save",
+     "star",
+     "like"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "action"
+  ],
+  "type": "object"
+ },
+ "name": "mind_trader"
+}

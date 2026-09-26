@@ -1,0 +1,78 @@
+{
+ "description": "Evaluate DashClaw governance policies before taking a risky action. Call this BEFORE any action that modifies external systems, deploys code, sends messages, or touches production data. Returns a decision: \"allow\" (proceed), \"warn\" (proceed with caution), \"block\" (stop), or \"require_approval\". This tool only EVALUATES \u2014 it creates no approval request. On \"require_approval\", call dashclaw_record with status \"pending_approval\" to put the action in the human Approvals inbox, then dashclaw_wait_for_approval with the returned action_id. If the decision is \"block\", do NOT proceed with the action.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "act": {
+    "additionalProperties": {},
+    "description": "Evidence-first guard: attach the actual act being evaluated so the server classifies it and folds the derived risk in, instead of trusting only the declared action_type/risk_score above. Shape: { kind: \"shell\"|\"http\"|\"sql\"|\"file\", command? (shell), request?: { method, url, body_excerpt? } (http), statement? (sql), file?: { path, content_excerpt?, bytes? } (file) }. Optional \u2014 omit when you have no concrete evidence to attach.",
+    "type": "object"
+   },
+   "action_type": {
+    "description": "Category of action (e.g., deploy, send_email, database_write, api_call)",
+    "type": "string"
+   },
+   "agent_id": {
+    "description": "Fallback identity when no server-level agent id is configured (the configured id wins). With a configured id you may name a sub-agent under it as \"<configured id>/<name>\" (e.g. claude-desktop/nightly-seo) so this routine gets its own row on /decisions; anything else falls back to the configured id.",
+    "type": "string"
+   },
+   "approval_wait_seconds": {
+    "description": "How long you will poll dashclaw_wait_for_approval if the decision is require_approval (default 300; the approval expires after this window + a retry grace)",
+    "type": "integer"
+   },
+   "confidence": {
+    "description": "Your honest 0-100 confidence, stated BEFORE acting, that this action completes without a human stepping in. Stored on the action record and scored against the real outcome on /decisions (Predicted vs actual). Leave it out rather than guess; exactly 50 is treated as unstated.",
+    "type": "integer"
+   },
+   "content": {
+    "description": "Outbound content excerpt (file content, message body) so secret-scan and content policies can evaluate it",
+    "type": "string"
+   },
+   "declared_goal": {
+    "description": "What you intend to do, in plain language",
+    "type": "string"
+   },
+   "reversible": {
+    "description": "Whether the action can be undone",
+    "type": "boolean"
+   },
+   "risk_score": {
+    "description": "Estimated risk 0-100. Use 70+ for production systems.",
+    "type": "integer"
+   },
+   "systems_touched": {
+    "description": "Systems affected (e.g., production, database, email)",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "target": {
+    "description": "Primary file path, URL, or resource the action touches (lets protected-path policies match)",
+    "type": "string"
+   },
+   "tool_name": {
+    "description": "Name of the tool that will perform the action (e.g., Write, Bash, send_email)",
+    "type": "string"
+   },
+   "write_paths": {
+    "description": "File paths the action will write or modify (protected-path policy matching)",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "action_type",
+   "declared_goal",
+   "risk_score"
+  ],
+  "type": "object"
+ },
+ "name": "dashclaw_guard"
+}

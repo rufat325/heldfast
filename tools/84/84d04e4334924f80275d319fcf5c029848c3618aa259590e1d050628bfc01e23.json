@@ -1,0 +1,435 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Query World Bank indicator values for one or more countries across a time range \u2014 the primary data-access tool; find indicator_id values with worldbank_search_indicators. Observations carry a null value where data is not available for a country\u00d7year cell, which is common for sparse series. Set at most one of date_range (a time window), mrv (the latest N periods across the requested countries), or mrnev (each country's own latest N values). Some series, such as Global Economic Monitor's, publish quarterly or monthly values beside annual ones: frequency picks the form mrv and mrnev select from (annual by default), and a date_range's own form (2024, 2024Q1, 2024M01) picks it for a window. lastUpdated gives the serving source's last update date, the data vintage to cite. For \"all\" countries, page through the results at up to 200 per page, since the API returns several hundred entries per indicator. Indicators the standard data endpoint does not serve \u2014 WDI Database Archives, PEFA, ICP, GDLD, International Debt Statistics: DSSI, Food Prices for Nutrition \u2014 are answered from their own dataset instead; the response then carries sourceScoped, naming that dataset and the release, classification, sector, or counterpart area applied (see dimension_value), because those values can be archived or superseded figures rather than current ones.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "countries": {
+    "anyOf": [
+     {
+      "description": "A single country code, a list separated by commas, semicolons, or pipes, or \"all\".",
+      "pattern": "[^\\s;,|]",
+      "type": "string"
+     },
+     {
+      "description": "An array of country codes; an element holding several codes separated by commas, semicolons, or pipes is split too.",
+      "items": {
+       "description": "A country code.",
+       "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+     }
+    ],
+    "description": "Country codes. Accepts: ISO2 (US, CN), ISO3 (USA, CHN), regional aggregate codes (EAS, LCN, MEA, SAS, SSF, ECS, NAC), income group codes (HIC, UMC, LMC, LIC), world code (WLD), or \"all\" on its own for every entry (use pagination). Pass a single code, an array, or one string separated by commas, semicolons, or pipes (US,JP \u00b7 US;JP \u00b7 US|JP). At least one code is required \u2014 an empty value, or one made only of separators, is rejected rather than treated as \"all\"."
+   },
+   "date_range": {
+    "description": "Time window to filter observations to. Accepts a whole year (`2020`), a quarter (`2020Q1`), or a month (`2020M03`), or a range of two periods of the same type separated by a colon, earliest first (`2010:2023`, `2020Q1:2021Q4`, `2020M01:2020M06`); a range running latest first is rejected. On a series publishing more than one period form, the window's form picks which: `2024` returns the annual value, `2024Q1:2024Q4` the quarters, `2024M01:2024M12` the months, and a quarter or month window is null-filled where the series has none (a notice then names the other forms). On a series with one form, a window at another form keeps the periods it overlaps (`2019:2021` on a quarterly series returns its twelve quarters). A window covering no part of the series returns zero observations rather than the full series. Mutually exclusive with mrv, mrnev, and frequency.",
+    "pattern": "^\\s*(?:\\d{4}(?::\\d{4})?|\\d{4}[Qq][1-4](?::\\d{4}[Qq][1-4])?|\\d{4}[Mm](?:0[1-9]|1[0-2])(?::\\d{4}[Mm](?:0[1-9]|1[0-2]))?)?\\s*$",
+    "type": "string"
+   },
+   "dimension_value": {
+    "description": "For indicators answered from their own dataset (the response carries sourceScoped), the id of the value of that dataset's extra dimension to query, matched case-insensitively: a WDI Database Archives release (\"202503\"), an ICP or Food Prices for Nutrition classification (\"PPPGlob\", \"FPN 5.0\"), a GDLD sector (\"WHT\"), or an International Debt Statistics counterpart area (\"265\"). Omit it for the default, which sourceScoped.dimension reports: the only value when the dataset has one, \"WLD\" (World) for counterpart areas, the newest WDI Database Archives release holding data for the requested countries and periods (the newest release when none does), or otherwise every value with each row labelled. A value the dataset does not list is rejected with the valid ids, and a value for an indicator the standard data endpoint serves is rejected too.",
+    "type": "string"
+   },
+   "frequency": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "annual (2025), quarterly (2025Q4), or monthly (2025M12) periods.",
+      "enum": [
+       "annual",
+       "quarterly",
+       "monthly"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "The period form to return, for series such as Global Economic Monitor's that publish quarterly or monthly values beside annual ones: annual (the default), quarterly, or monthly. With mrv or mrnev it picks the form they select from \u2014 frequency \"monthly\" with mrv 3 returns the three latest months, where mrv 3 alone returns the three latest years. With neither, it returns the whole series at that form. A series that does not publish the form returns an empty result with a notice saying so, except that with neither mrv nor mrnev a source that null-fills the form (Global Economic Monitor) returns null rows, and a page of them carries a notice. Mutually exclusive with date_range, whose own form (2024, 2024Q1, 2024M01) picks the periods of a window."
+   },
+   "indicator_id": {
+    "description": "One indicator code to query (e.g. NY.GDP.PCAP.CD, SP.POP.TOTL) \u2014 not \"all\" or a list of codes. Use worldbank_search_indicators to find valid IDs.",
+    "pattern": "^[A-Za-z0-9._-]+$",
+    "type": "string"
+   },
+   "mrnev": {
+    "description": "Return each requested country's own N most recent periods (1\u2013100) holding a value \u2014 its latest non-null observations, however far back they sit. A country with fewer values in the series returns the ones it has, and a country with none returns no rows. The periods are annual unless frequency names another form (a series with no annual periods keeps its own). Mutually exclusive with date_range and mrv.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "mrv": {
+    "description": "Return the N most recent periods (1\u2013100) holding a value for any requested country, clamped to the length of the series. Every requested country comes back at those periods, null where it has no value there rather than with its own older values; mrnev returns each country's own latest values instead. The periods are annual unless frequency names another form (a series with no annual periods keeps its own). Rows are mrv \u00d7 countries, so page through them with per_page. Mutually exclusive with date_range and mrnev.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "page": {
+    "default": 1,
+    "description": "Pagination page number (1-based).",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "description": "Results per page (default: server default, max: 1000). One page holds at most 200 observations, which keeps a response within about 50 KB; a larger value is reduced to that cap and echoed as appliedFilters.perPage, and totalPages is counted at the reduced size, so page + 1 continues where a page ends; notice discloses the reduction whenever the result runs past one page.",
+    "maximum": 1000,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "indicator_id",
+   "countries"
+  ],
+  "type": "object"
+ },
+ "name": "worldbank_get_data",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "data",
+     "indicator",
+     "nullCount",
+     "appliedFilters",
+     "totalCount",
+     "currentPage",
+     "totalPages"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "appliedFilters": {
+    "additionalProperties": false,
+    "description": "The effective parameters sent to the World Bank API \u2014 confirms country code normalization and which filters were in force for these observations.",
+    "properties": {
+     "countries": {
+      "description": "Country codes as requested, normalized \u2014 array elements and strings separated by commas, semicolons, or pipes are split and rejoined with semicolons, the separator the API takes.",
+      "type": "string"
+     },
+     "dateRange": {
+      "description": "Date window applied, omitted when none was requested.",
+      "type": "string"
+     },
+     "dimensionValue": {
+      "description": "dimension_value as requested, omitted when none was given.",
+      "type": "string"
+     },
+     "frequency": {
+      "description": "Period form applied (annual, quarterly, monthly), omitted when none was requested.",
+      "enum": [
+       "annual",
+       "quarterly",
+       "monthly"
+      ],
+      "type": "string"
+     },
+     "indicatorId": {
+      "description": "Indicator ID queried.",
+      "type": "string"
+     },
+     "mrnev": {
+      "description": "Most-recent-non-empty-values count applied, omitted when none was requested.",
+      "type": "number"
+     },
+     "mrv": {
+      "description": "Most-recent-values count applied, omitted when none was requested.",
+      "type": "number"
+     },
+     "page": {
+      "description": "Page number requested.",
+      "type": "number"
+     },
+     "perPage": {
+      "description": "Results per page actually served \u2014 the requested size or server default, reduced to the page cap when larger. totalPages is counted at this size.",
+      "type": "number"
+     },
+     "requestedPerPage": {
+      "description": "Page size asked for, present only when it exceeded the page cap and perPage was reduced.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "indicatorId",
+     "countries",
+     "page",
+     "perPage"
+    ],
+    "type": "object"
+   },
+   "currentPage": {
+    "description": "Page number requested \u2014 past totalPages when the request ran off the end.",
+    "type": "number"
+   },
+   "data": {
+    "description": "Indicator observations for this page. Null values are common for sparse series.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single country\u00d7period observation.",
+     "properties": {
+      "countryCode": {
+       "description": "ISO2 code of the country or aggregate (US, XD for High income).",
+       "type": "string"
+      },
+      "countryIso3": {
+       "description": "Three-character code of the country or aggregate (USA, HIC) \u2014 the form the countries input takes. Empty only for an entity the World Bank country listing does not carry.",
+       "type": "string"
+      },
+      "countryName": {
+       "description": "Country or aggregate name.",
+       "type": "string"
+      },
+      "date": {
+       "description": "Period of observation: a year (2020), quarter (2020Q1), or month (2020M03).",
+       "type": "string"
+      },
+      "dimension": {
+       "additionalProperties": false,
+       "description": "The value of the dataset's extra dimension (sourceScoped.dimension.concept) this row belongs to. Present on source-scoped rows from a dataset that has one.",
+       "properties": {
+        "id": {
+         "description": "Dimension value id, e.g. \"202503\".",
+         "type": "string"
+        },
+        "label": {
+         "description": "Dimension value label, e.g. \"2025 Mar\".",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "label"
+       ],
+       "type": "object"
+      },
+      "isAggregate": {
+       "description": "True when this row is a regional or income-group aggregate rather than an individual country.",
+       "type": "boolean"
+      },
+      "obsStatus": {
+       "description": "Observation status code (empty string when no special status; non-empty values signal data quality notes).",
+       "type": "string"
+      },
+      "value": {
+       "description": "Indicator value. Null when data is not available for this country\u00d7year cell.",
+       "type": [
+        "number",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "countryCode",
+      "countryIso3",
+      "countryName",
+      "date",
+      "value",
+      "obsStatus",
+      "isAggregate"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_params`: More than one of date_range, mrv, and mrnev is provided, or frequency is provided with date_range. `mixed_all_selector`: countries combines \"all\" with one or more country codes. `reversed_date_range`: date_range names a range whose first period comes after its second. `multiple_indicators`: The indicator ID is \"all\", which selects every indicator rather than one. `indicator_not_found`: The indicator ID does not exist. `indicator_not_queryable`: The standard data endpoint does not serve the indicator, and no catalog source can serve it through the source-scoped data API instead \u2014 the catalog no longer lists the ID, the catalog lookup failed, or the source is not organized by country, series, and time plus at most one further dimension. `unknown_dimension_value`: dimension_value is not a value the indicator's dataset lists for its extra dimension. `dimension_not_applicable`: dimension_value is given for an indicator the standard data endpoint serves, or whose dataset has no dimension beyond country, series, and time. `source_scope_too_large`: A source-scoped query would read more rows (countries \u00d7 periods \u00d7 unpinned dimension values) than one request allows. `country_not_found`: One or more country codes are invalid. The message and countryCodes name the codes the World Bank country listing lacks, or every requested code when it lacks none. `indicator_and_country_not_found`: The indicator ID and the country codes are both invalid. The codes are named as on country_not_found. `upstream_inconsistent`: The World Bank API answered a data read, and its one re-read, with rows that do not fit the request \u2014 its response cache served another query's result \u2014 so nothing was served. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_params",
+         "mixed_all_selector",
+         "reversed_date_range",
+         "multiple_indicators",
+         "indicator_not_found",
+         "indicator_not_queryable",
+         "unknown_dimension_value",
+         "dimension_not_applicable",
+         "source_scope_too_large",
+         "country_not_found",
+         "indicator_and_country_not_found",
+         "upstream_inconsistent"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "indicator": {
+    "additionalProperties": false,
+    "description": "Indicator metadata echoed from the response.",
+    "properties": {
+     "id": {
+      "description": "Indicator ID echoed for chaining context.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Indicator name.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name"
+    ],
+    "type": "object"
+   },
+   "lastUpdated": {
+    "description": "Last update date of the World Bank source that served these values (YYYY-MM-DD) \u2014 the data vintage to cite with them. Omitted when upstream reports none, as for an empty result.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Recovery hint for an empty result set \u2014 how to broaden the query when nothing matched, whether the series publishes the requested frequency, or the page range that exists when the requested page is past the end \u2014 a quarter or month date_range whose observations are all null, with the same span at the other period forms, a frequency page whose observations are all null, a page size reduced to the page cap, and, for source-scoped data, the requested country codes the serving dataset publishes nothing for.",
+    "type": "string"
+   },
+   "nullCount": {
+    "description": "Count of null values on this page \u2014 indicates data sparsity for the requested filter.",
+    "type": "number"
+   },
+   "sourceScoped": {
+    "additionalProperties": false,
+    "description": "Present only when the standard data endpoint does not serve the indicator and its catalog source served the values instead. Absent for indicators the standard endpoint serves.",
+    "properties": {
+     "dimension": {
+      "anyOf": [
+       {
+        "additionalProperties": false,
+        "properties": {
+         "concept": {
+          "description": "The extra dimension: Version, Classification, Sector, or Counterpart-Area.",
+          "type": "string"
+         },
+         "id": {
+          "description": "Applied value id; null for every_value.",
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "label": {
+          "description": "Applied value label; null for every_value.",
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "selection": {
+          "description": "How the value was chosen: requested (dimension_value), only_value (the only one the dataset lists), world_total (WLD, all counterpart areas), newest_with_data (newest release holding a value for the requested countries and periods), newest (newest release; none holds a value in that scope), or every_value (no single value; each row carries its own).",
+          "enum": [
+           "requested",
+           "only_value",
+           "world_total",
+           "newest_with_data",
+           "newest",
+           "every_value"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "concept",
+         "selection",
+         "id",
+         "label"
+        ],
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The dimension value applied; null when the dataset has no extra dimension."
+     },
+     "note": {
+      "description": "States that the values came from the source-scoped data API rather than the standard World Bank data endpoint, and may be archived or superseded figures.",
+      "type": "string"
+     },
+     "sourceId": {
+      "description": "ID of the World Bank data source that served the values.",
+      "type": "string"
+     },
+     "sourceName": {
+      "description": "Name of that data source, e.g. \"WDI Database Archives\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "sourceId",
+     "sourceName",
+     "dimension",
+     "note"
+    ],
+    "type": "object"
+   },
+   "totalCount": {
+    "description": "Total observations before pagination.",
+    "type": "number"
+   },
+   "totalPages": {
+    "description": "Total number of pages.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get World Bank Indicator Data"
+}

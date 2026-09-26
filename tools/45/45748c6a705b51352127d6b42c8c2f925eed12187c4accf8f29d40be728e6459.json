@@ -1,0 +1,44 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Research a Polymarket bet by pulling the relevant Pipeworx data for it in one call. Pass a market slug (\"will-kristi-noem-win-the-2028-republican-presidential-nomination\"), a polymarket.com URL, or a question text. Prefer an UNDATED slug: a dated one (\"...-by-june-30-2026\") stops resolving the day it settles, because Polymarket de-indexes resolved markets. The tool resolves the market, classifies the bet, fans out to category-specific data packs in parallel, and returns an evidence packet + simple market-vs-model comparison. Use for \"should I bet on X\", \"what does the data say about Y\", or \"is there edge in Z\". CLASSIFIERS: crypto_price, fed_rate, geopolitical, sports, sports_championship, drug_approval, election_candidate, tech_launch, space_launch, corporate, corporate_earnings, corporate_event, public_figure_speech, weather, other. FAN-OUT EXAMPLES: BTC bet \u2192 coingecko + fred + gdelt+gnews; Fed bet \u2192 fred (DFEDTARU + EFFR + CPIAUCSL) + kalshi_macro (KXFED implied probs) + recent_fed_actions (federal-register rules, last 365d); Hormuz bet \u2192 imf_portwatch + airspace + gdelt; Yankees WS \u2192 mlb_stats_standings + parent_event partition + news; hottest-year bet \u2192 climate_projection_nyc + gistemp_latest (NASA global anomaly, rank since 1880) + news; NVDA-vs-AAPL \u2192 finnhub get_quote + edgar shares-outstanding (derived market cap) + edgar filings + news. RESPONSE SHAPES: result.market carries best_bid/best_ask/spread_pp/liquidity/price_change_1h/1d/1w; result.analysis carries model_probability/edge_pp/kelly_fraction_half when a closed-form model fires PLUS a 24h-move warning (\"Market moved X.Xpp in 24h, comparable to model edge \u2014 your edge may already be priced in\") when relevant; result.evidence is keyed by source. RESOLVER CONTRACT: result.market_match_confidence \u2208 {high, medium, low, none}, market_match_score (0-1 token-overlap), market_match_alternatives[] (other candidate markets the resolver considered), and suggestions[] (explicit re-query hints when the match is fuzzy) \u2014 ALWAYS inspect these before trusting the analysis block, because medium/low matches can still surface other fields. PARENT_EVENT EXTRACTOR: when the bet is one leg of a partition (Yankees WS, Romania election), result.parent_event{matched_candidate, top_legs_by_price[], partition_size, placeholders_filtered} gives you the peer prices in one place \u2014 that's the headline for elections/championships. NEWS FIELDS: news entries carry _fallback_attempted / _fallback_failed_reason / retry_after_sec when GDELT 429s and GNews backfill ran or failed. SAFETY: low-confidence resolutions short-circuit with status:\"low_confidence_match\" and suppress analysis fields so agents can't accidentally size on phantom matches. Closed/dead markets that ARE still indexed by Polymarket (yes_price\u22480, no volume, no liquidity) return status:\"market_closed_or_inactive\" and skip fan-out. A market whose own deadline has already passed returns status:\"market_expired_or_resolved\" + expired_deadline (the date), which is deliberately NOT the same answer as low_confidence_match: your slug was right and is merely settled, so the useful retry is the successor market for the same question, not a corrected spelling. In practice resolved markets are usually de-indexed and instead surface via one of those two paths \u2014 both routes are BLOCKING, just different mechanisms. Wide-spread markets (>10pp) carry tradeability:\"illiquid_wide_spread\" + an explanatory note. RESOLUTION-RULE RISK: market.cancellation_rule parses the void/postponement settlement out of the resolution text \u2014 refund_50_50 (shares settle flat 50\u00a2 on void; EV-material for any entry away from 50\u00a2, with ev_impact quantified), resolves_no_on_cancel, resolves_yes_on_cancel, carries_to_reschedule, or mentioned_unclear. null means the description never mentions cancellation. Check this before sizing sports/esports/event-occurrence bets \u2014 audited arb-bot ledgers show flat-50\u00a2 void settlements are a recurring pure-rules loss.",
+ "inputSchema": {
+  "examples": [
+   {
+    "market": "will-kristi-noem-win-the-2028-republican-presidential-nomination"
+   },
+   {
+    "market": "https://polymarket.com/event/will-kristi-noem-win-the-2028-republican-presidential-nomination"
+   }
+  ],
+  "properties": {
+   "depth": {
+    "description": "quick = 2-3 evidence sources, thorough = full fan-out. Default thorough.",
+    "enum": [
+     "quick",
+     "thorough"
+    ],
+    "type": "string"
+   },
+   "include_raw": {
+    "description": "Default false. When false (recommended), FRED/FDA/GDELT/Federal-Register evidence is summarized to the few fields agents actually use \u2014 keeps responses under ~20KB. Pass true to get full upstream payloads (50KB-500KB) when you need to recompute deltas, cite specific observations, or post-process.",
+    "type": "boolean"
+   },
+   "market": {
+    "description": "Polymarket slug (\"will-kristi-noem-win-the-2028-republican-presidential-nomination\"), full URL (\"https://polymarket.com/event/...\"), or question text (\"Will Bitcoin hit $150k?\"). Dated slugs stop resolving once they settle \u2014 Polymarket de-indexes resolved markets \u2014 so prefer an undated one.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "market"
+  ],
+  "type": "object"
+ },
+ "name": "bet_research",
+ "title": "Bet Research",
+ "version": "v1.d94e60b5"
+}

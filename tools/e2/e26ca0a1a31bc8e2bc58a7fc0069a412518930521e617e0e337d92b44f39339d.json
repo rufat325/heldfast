@@ -1,0 +1,68 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Use when asked to compare, rank or choose between 2 to 5 French companies (suppliers, candidates, competitors). Returns a cross-table (identity, deterministic default-risk score, latest filed accounts with their accounting scope, BODACC legal alerts, sanctions screening of the legal name), per-axis rankings and \u2014 importantly \u2014 an explicit comparabilite block stating when the companies are NOT comparable (different sectors, different sizes, a holding in the batch). NEVER returns an overall winner: a holding with no debt outranks a large industrial group on default risk, which would be misread as a verdict on quality. Since 2026-09-08 nine rankings (risk, revenue, net result, EBITDA margin, lowest debt ratio, liquidity, revenue growth, cash vs short-term debt, seniority) each carry a status in `eligibilite_classements` (`statut` autorise/interdit with `raison`, `type` evaluatif/descriptif, `donnee`, `perimetre`, `exercices`, `couverture`): the evaluative `risque_le_plus_faible` is served ONLY when the batch is comparable for a score and the ranked scores rest on exactly the same axes (`axes_communs`); amounts are forbidden across different fiscal years, ratios also across different sectors or sizes; a forbidden ranking is absent from `classements` \u2014 never rank companies from `solidite.score_risque` or the ratios yourself when it is `interdit`. `solidite.classement_risque` repeats per company whether it is eligible, ranked, and why not (`score_non_concluant`, `axes_differents`); the score stays served with its `couverture_axes`. Billed per company at $0.12 via x402 \u2014 the amount is the unit price times the number of SIREN.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "sirens": {
+    "description": "List of 2 to 5 nine-digit SIRENs",
+    "items": {
+     "pattern": "^\\d{9}$",
+     "type": "string"
+    },
+    "maxItems": 5,
+    "minItems": 2,
+    "type": "array"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "sirens"
+  ],
+  "type": "object"
+ },
+ "name": "compare_french_companies",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Compare French companies"
+}

@@ -1,0 +1,392 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "LDM Calculator"
+ },
+ "description": "Calculate loading metres (LDM) for European road freight \u2014 how much trailer length a pallet load occupies. 1 LDM = 1 linear metre of a 2.4m-wide trailer; a standard artic is 13.6 LDM.\n\nProvide a pallet preset OR custom length_mm + width_mm \u2014 omitting both errors with a usage hint. Behavior: deterministic; stackable=true with stack_height 2 or 3 divides the floor footprint accordingly; fits reports whether the load fits the chosen vehicle's LENGTH (give weight_kg to also see total_weight_kg against the vehicle's max payload); utilisation_percent is of the vehicle's length. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: ldm, vehicle (name, length_m, max_payload_kg), utilisation_percent, pallet_spaces (used/available), total_weight_kg, fits and warnings under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nRelated: vehicle_lookup (the trailer specs behind the vehicle presets), pallet_fitting_calculator (boxes onto one pallet), consignment_calculator (mixed lines including LDM).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "length_mm": {
+    "description": "Custom pallet length in millimetres (use with width_mm instead of a preset). Example: 1140.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "pallet": {
+    "description": "Pallet preset: euro=1200x800mm, uk=1200x1000mm, half=800x600mm, quarter=600x400mm. Provide this OR length_mm + width_mm.",
+    "enum": [
+     "euro",
+     "uk",
+     "half",
+     "quarter"
+    ],
+    "type": "string"
+   },
+   "quantity": {
+    "description": "Number of pallets. Default: 1.",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "stack_height": {
+    "description": "Stack height when stackable: 2 or 3. Default: 2.",
+    "maximum": 3,
+    "minimum": 2,
+    "type": "integer"
+   },
+   "stackable": {
+    "description": "Whether pallets can be double/triple-stacked \u2014 halves (or thirds) the floor footprint. Default: false.",
+    "type": "boolean"
+   },
+   "vehicle": {
+    "description": "Vehicle preset: artic = 13.6m curtainsider (default), rigid10 = DEPRECATED, removal in 3.0.0 (it still answers with the same figures and returns a DEPRECATED advisory in warnings[]; its 10 m length is published by no manufacturer for any rigid \u2014 use custom with vehicle_length_m, or artic), rigid75 = 7.5t rigid, luton = 3.5t Luton van, us53 = 53ft US/Canada trailer, us48 = 48ft US trailer, or custom. EU presets divide by the 2.40 m loading-metre convention; US trailers divide by their own 2.591 m internal width, because loading metres are not the North American pricing unit.",
+    "enum": [
+     "artic",
+     "rigid10",
+     "rigid75",
+     "luton",
+     "us53",
+     "us48",
+     "custom"
+    ],
+    "type": "string"
+   },
+   "vehicle_length_m": {
+    "description": "Custom vehicle load length in metres (required when vehicle=custom).",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "weight_kg": {
+    "description": "Weight per pallet in kg \u2014 enables the payload side of the fits check.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "width_mm": {
+    "description": "Custom pallet width in millimetres. Example: 980.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "name": "ldm_calculator",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "fits": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "ldm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "meta": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "pallet_spaces": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "properties": {
+           "available": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "used": {
+            "type": [
+             "number",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "total_weight_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "utilisation_percent": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "vehicle": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "properties": {
+           "length_m": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "max_payload_kg": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "name": {
+            "type": [
+             "string",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "warnings": {
+        "anyOf": [
+         {
+          "items": {},
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

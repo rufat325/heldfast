@@ -1,0 +1,355 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch statistical data from a Eurostat dataset with dimension filters. Returns a deterministic inline prefix of decoded observations with dimension codes and labels, numeric values, an OBS_FLAG status (e.g., \"p\" = provisional, \"e\" = estimated) and a separate CONF_STATUS confidentiality marker (e.g., \"C\" = confidential, which is usually why a value is null). preview_limit controls only that prefix; filters and period controls reduce the matched result itself. Call eurostat_get_dataset_info first to discover valid dimension codes and values. Apply filters to keep the result set manageable \u2014 large unfiltered queries may trigger an async response error. Use filters.geo for specific country/region codes, or geo_level for NUTS hierarchy filtering (mutually exclusive). Use last_n_periods for the N most recent periods without knowing the end date. Matches above 5,000 observations are staged whole when this deployment runs a dataframe canvas: call eurostat_dataframe_describe first, then eurostat_dataframe_query. Matches at or below 5,000 are never staged. When the target is a whole dataset rather than a slice, eurostat_download_dataset reads the SDMX bulk endpoint instead and is the cheaper route.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Reuse an existing dataframe canvas, so a result staged by this call lands beside earlier ones and can be joined against them. Pass the canvasId a previous eurostat_query_dataset or eurostat_download_dataset response returned; omit to start a fresh canvas. Ignored on deployments without a dataframe canvas and when the match is at or below 5,000 observations.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   },
+   "dataset_code": {
+    "description": "Dataset code (e.g., \"nama_10_gdp\"). Required. A DS-* code \u2014 Comext detailed trade or PRODCOM, in any case \u2014 is served by the Comext host: filter freq on its trade flows, which mix annual and monthly series, and note that product, reporter and partner carry aggregates (TOTAL, EU27_2020) that double-count when summed with their members.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "filters": {
+    "additionalProperties": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "default": {},
+    "description": "Dimension filters as a map of dimension code \u2192 array of valid values. Example: {\"unit\": [\"CP_MEUR\"], \"na_item\": [\"B1GQ\"], \"geo\": [\"DE\", \"FR\"]}. An empty array is treated as no filter for that dimension and is dropped from the request. Dimension codes match in any case (\"GEO\" is geo). Do not include \"geo\" here if using geo_level. A value that matches nothing contributes no rows rather than an error; the response names it in unmatchedValues, or in the no_results error when nothing matched at all. eurostat_get_dimension_values lists the valid values.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "geo_level": {
+    "description": "Filter by NUTS hierarchy level. Mutually exclusive with a \"geo\" key in filters. Options: \"aggregate\" (EU/EA totals), \"country\" (41 member/candidate states), \"nuts1\" (127 major regions), \"nuts2\" (309 basic regions), \"nuts3\" (1,343 small regions).",
+    "enum": [
+     "aggregate",
+     "country",
+     "nuts1",
+     "nuts2",
+     "nuts3"
+    ],
+    "type": "string"
+   },
+   "lang": {
+    "default": "EN",
+    "description": "Language for labels in the response. Default is \"EN\". Options: \"EN\", \"FR\", \"DE\".",
+    "enum": [
+     "EN",
+     "FR",
+     "DE"
+    ],
+    "type": "string"
+   },
+   "last_n_periods": {
+    "description": "Return only the N most recent periods. N counts back from the dataset's latest period, not from the latest period published for this slice, so a slice that lags the rest of the dataset can come back empty \u2014 raise N, or use until_period ending at a period the slice has published. Mutually exclusive with since_period and until_period.",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "preview_limit": {
+    "default": 50,
+    "description": "How many matched observations to return inline, from the deterministic start of the JSON-stat cell order. Default 50; maximum 500. This changes only the inline prefix: it does not reduce obsCount, missingObsCount, timeRange, the upstream response, or the rows staged when the match exceeds 5,000. Use filters or period controls to reduce the match itself.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "since_period": {
+    "description": "Start of the time range, inclusive. Accepted forms: YYYY, YYYY-MM, YYYY-MM-DD, YYYY-Qn (1\u20134), YYYY-Sn (1\u20132), YYYY-Tn (1\u20133), YYYY-Mnn (01\u201312), YYYY-Wnn (a week the year has, up to 53) or YYYY-Dnnn (a day the year has, up to 366) (e.g., \"2020\", \"2023-Q1\", \"2024-01\"). Extra leading zeros after the letter are dropped (\"2020-Q01\" is sent as \"2020-Q1\"), a day of the year is sent as three digits (\"2026-D1\" as \"2026-D001\"), and YYYY-A1 is sent as YYYY. A period of another frequency is mapped onto the dataset's own, so \"2020-01\" works on annual data. A malformed or non-existent period (e.g., \"2020-13\") is rejected as invalid_period. Mutually exclusive with last_n_periods.",
+    "type": "string"
+   },
+   "until_period": {
+    "description": "End of the time range, inclusive (e.g., \"2024\"), in the same forms as since_period. Omit for data through the latest available period. The range must hold at least one day: a since_period that starts after until_period ends is rejected as invalid_period, while pairs of different frequencies are fine (\"2020-06\" to \"2020\"). Mutually exclusive with last_n_periods.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "dataset_code"
+  ],
+  "type": "object"
+ },
+ "name": "eurostat_query_dataset",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "datasetCode",
+     "datasetLabel",
+     "dimensionsUsed",
+     "observations",
+     "obsCount",
+     "truncated",
+     "timeRange",
+     "missingObsCount",
+     "appliedFilters"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "appliedFilters": {
+    "additionalProperties": false,
+    "description": "Effective query parameters applied to the Eurostat API.",
+    "properties": {
+     "filters": {
+      "additionalProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "description": "Dimension filters actually sent to Eurostat. Empty arrays from the request are dropped and do not appear here.",
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "geoLevel": {
+      "description": "NUTS geo level filter applied, if any.",
+      "type": "string"
+     },
+     "lastNPeriods": {
+      "description": "Last N periods filter applied, if any.",
+      "type": "number"
+     },
+     "sincePeriod": {
+      "description": "Start of time range applied, if any.",
+      "type": "string"
+     },
+     "untilPeriod": {
+      "description": "End of time range applied, if any.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "filters"
+    ],
+    "type": "object"
+   },
+   "canvasId": {
+    "description": "Dataframe canvas holding the staged result. Pass to eurostat_dataframe_describe, eurostat_dataframe_query, or a later eurostat_query_dataset call. Omitted when nothing was staged.",
+    "type": "string"
+   },
+   "datasetCode": {
+    "description": "Dataset code as provided.",
+    "type": "string"
+   },
+   "datasetLabel": {
+    "description": "Human-readable dataset title.",
+    "type": "string"
+   },
+   "dimensionsUsed": {
+    "description": "Ordered list of dimension codes present in the response (e.g., [\"freq\", \"unit\", \"na_item\", \"geo\", \"time\"]).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `not_found`: The dataset code does not exist (HTTP 404 carrying Eurostat error id 100). `no_results`: The query matched no observation cells \u2014 including Eurostat HTTP-200 error id 100. The dataset is valid, but no cell carries a value or a status flag for that filter combination and period range. When Eurostat returns the empty table, the error names the filter values that matched nothing (data.unmatchedValues) and the selected periods that carry no value (data.matchedPeriods, the newest 24, with data.matchedPeriodCount counting all of them). `invalid_period`: since_period or until_period is not a period literal, or names a month, quarter, semester, trimester, week or day that does not exist, or since_period starts after until_period ends. Checked before any request; a period Eurostat itself rejects maps here too. `async_response`: Eurostat returned an async warning or an HTTP-413 error array \u2014 the query matched too many observations, including an EXTRACTION_TOO_BIG refusal past Eurostat's 5,000,000-row limit. `invalid_dimension`: A dimension code in filters does not exist in this dataset (HTTP 400, Eurostat error id 150). `conflicting_params`: Mutually exclusive parameters were combined: \"geo\" filter + geo_level, or since_period/until_period + last_n_periods. `canvas_not_found`: A canvas_id was supplied for staging but is unknown or its lifetime has elapsed. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "not_found",
+         "no_results",
+         "invalid_period",
+         "async_response",
+         "invalid_dimension",
+         "conflicting_params",
+         "canvas_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "missingObsCount": {
+    "description": "Number of matched observations carrying no numeric value, counted across everything matched rather than only the returned rows. Covers both unavailable and withheld cells \u2014 a slice can be wholly confidential, so this equalling obsCount does not mean the data is absent.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when a filter value matched nothing, when preview_limit omits matched rows, or when the match was staged \u2014 names the unmatched values, distinguishes the inline prefix from filters that reduce the match and, when staged, gives the describe-then-query sequence. Omitted when every filter value matched and the preview contains the whole match.",
+    "type": "string"
+   },
+   "obsCount": {
+    "description": "Total number of observations matched (before any cap).",
+    "type": "number"
+   },
+   "observations": {
+    "description": "The first preview_limit decoded observations in deterministic JSON-stat cell order \u2014 the leading combinations of the dataset dimensions, neither a sample nor necessarily the most recent periods. This prefix is independent of the 5,000-observation staging threshold. When tableName is set, the table holds every matched row; otherwise use filters or a period range to reduce the match itself.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single decoded observation with dimension values, numeric value, and the optional OBS_FLAG and CONF_STATUS markers.",
+     "properties": {
+      "confStatus": {
+       "additionalProperties": false,
+       "description": "Eurostat CONF_STATUS for this observation \u2014 a different codelist from status. Present when Eurostat restricts the cell, which is usually why value is null. Omitted otherwise.",
+       "properties": {
+        "code": {
+         "description": "CONF_STATUS code: \"C\", \"N\", or \"P\".",
+         "type": "string"
+        },
+        "label": {
+         "description": "Confidentiality description (e.g., \"confidential\", \"not for publication\").",
+         "type": "string"
+        }
+       },
+       "required": [
+        "code",
+        "label"
+       ],
+       "type": "object"
+      },
+      "dimensions": {
+       "additionalProperties": {},
+       "description": "Map of dimension code \u2192 {code, label}. One entry per dimension in dimensionsUsed, keyed by dimension code (e.g., {\"geo\": {\"code\": \"DE\", \"label\": \"Germany\"}, \"time\": {\"code\": \"2023\", \"label\": \"2023\"}}).",
+       "properties": {},
+       "type": "object"
+      },
+      "status": {
+       "additionalProperties": false,
+       "description": "Eurostat OBS_FLAG for this observation. Omitted for unflagged observations, and never carries a confidentiality code \u2014 that arrives in confStatus.",
+       "properties": {
+        "code": {
+         "description": "OBS_FLAG code (e.g., \"p\", \"e\", \"d\").",
+         "type": "string"
+        },
+        "label": {
+         "description": "Status description (e.g., \"provisional\", \"estimated\", \"definition differs\").",
+         "type": "string"
+        }
+       },
+       "required": [
+        "code",
+        "label"
+       ],
+       "type": "object"
+      },
+      "value": {
+       "description": "Numeric observation value, or null when Eurostat reports none \u2014 unavailable in the source data, withheld (confStatus says so), or published as text (valueText holds it).",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "valueText": {
+       "description": "A value Eurostat published as text rather than a number, verbatim \u2014 PRODCOM (DS-*) flag and unit indicators such as QNTUNIT publish a unit like \"KG\" \u2014 with value null. PRODCOM's \":C\" is decoded to confStatus \"C\" instead. Omitted for numeric and missing values.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "dimensions",
+      "value"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "stagedRowCount": {
+    "description": "Rows written to the canvas table. Matches obsCount. Omitted alongside tableName when nothing was staged.",
+    "type": "number"
+   },
+   "tableName": {
+    "description": "Canvas table holding every matched observation in flat form \u2014 one code column per dimension plus a \"_label\" companion, then obs_value, obs_flag, obs_flag_label, conf_status, conf_status_label. A DS-* table also carries obs_value_text, the valueText of each row. Call eurostat_dataframe_describe with canvasId first to confirm the table and columns, then eurostat_dataframe_query. Omitted when nothing was staged: either the match was at or below 5,000 observations, or this deployment runs without a dataframe canvas.",
+    "type": "string"
+   },
+   "timeRange": {
+    "additionalProperties": false,
+    "description": "Time coverage of everything matched \u2014 the same set obsCount counts, so it can reach periods absent from observations when truncated is true. Each bound is omitted when neither the match nor Eurostat report it \u2014 an omitted bound is unknown, not empty.",
+    "properties": {
+     "end": {
+      "description": "Most recent period matched. Omitted when the match carries no time dimension and Eurostat reports no overall period.",
+      "type": "string"
+     },
+     "start": {
+      "description": "Earliest period matched. Omitted when the match carries no time dimension and Eurostat reports no overall period.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "truncated": {
+    "description": "True only when the match exceeded the 5,000-observation staging threshold. Independent of preview_limit: observations can be a shorter prefix while truncated is false. When tableName is set, call eurostat_dataframe_describe first and then eurostat_dataframe_query; when it is absent, use filters or period controls to reduce the match.",
+    "type": "boolean"
+   },
+   "unmatchedValues": {
+    "additionalProperties": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "description": "Filter values that matched nothing in the dataset, keyed by dimension code and spelled as sent (matching ignores case). The observations cover only the values that did match. Omitted when every filter value matched.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Query Eurostat Dataset"
+}

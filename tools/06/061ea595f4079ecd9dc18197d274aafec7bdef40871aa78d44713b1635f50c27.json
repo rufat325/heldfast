@@ -1,0 +1,120 @@
+{
+ "annotations": {
+  "access": "free_preview",
+  "connect_url": "https://dchub.cloud/connect?ref=mcp-tools-list&tool=rank_sites",
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "maturity": "unknown",
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Rank Sites"
+ },
+ "description": "Deterministic multi-site ranking/optimization under constraints \u2014 the normalization contract that lets you compare sites across separate analyze_site calls WITHOUT dropping into code. Pass candidates you already enriched (each an object with lat/lng + metric fields like risk_resilience, water_stress, fiber_km \u2014 pull these from analyze_site + get_refined_queue and pass site_evaluation_handoff through untouched), hard constraints, and weighted objectives; get back _entity=ranked_sites: top_k ranked with rank, objective_score, per-field normalized{} (0-100 relative to the set), and normalization_basis. objectives use SIGNED weights: +weight maximizes a field (e.g. risk_resilience:1), -weight minimizes it (e.g. water_stress:-0.6, fiber_km:-0.4). constraints are hard filters, fail-closed on a missing field. Use for \"pick the best N sites under constraints\"; for one site use analyze_site; to get the candidate set first use get_refined_queue. SCORING MECHANICS (2026-07-11): a candidate missing a validated objective is weight-RENORMALIZED over the objectives it carries and the gap is DECLARED in missing_objectives (never silently scored 0); a candidate carrying none scores null and ranks last. percentile=true fields without a population baseline fall back to RELATIVE in-batch scoring (basis reported per-objective in objective_status). CANDIDATE CONTRACT: candidates may be {candidate_id: \"cand_\u2026\"} entries from get_refined_queue \u2014 frozen identity (lat/lng/capacity_mw/fiber_km/iso) loads from the mint, your metrics overlay the rest; expired/unknown ids are dropped AND declared in candidate_contract, never re-resolved.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "absolute": {
+    "description": "false (default) = min-max normalize within THIS batch (best-in-set, NOT stable across runs). true = score on a FIXED 0-100 scale for CROSS-RUN-STABLE, auditable scores \u2014 use ONLY when the objective fields are already 0-100 (analyze_site scores like risk_resilience/fiber_connectivity), not raw distances like fiber_km",
+    "type": "boolean"
+   },
+   "candidates": {
+    "description": "Array of candidate objects. PREFERRED: {candidate_id: \"cand_\u2026\", <your metric fields>} using ids from get_refined_queue \u2014 frozen coordinates/capacity/fiber_km load from the mint (zero transcription drift), your enrichments (e.g. overall_score from analyze_site) overlay. Legacy: {id?, lat?, lng?, <metric fields>} flat objects also work. Omit if using shortlist_name"
+   },
+   "constraints": {
+    "description": "Hard filters {field: {min?, max?}} \u2014 a candidate missing a constrained field is dropped (fail-closed). e.g. {\"risk_resilience\": {\"min\": 70}, \"estimated_ttp_months\": {\"max\": 34}}"
+   },
+   "objectives": {
+    "description": "Weighted objectives {field: signedWeight} \u2014 +weight maximizes, -weight minimizes. e.g. {\"water_stress\": -0.6, \"fiber_km\": -0.4}. Omit with shortlist_name to reuse the shortlist's saved objectives; required with candidates"
+   },
+   "percentile": {
+    "description": "true = score each objective as its PERCENTILE against the viable-site POPULATION (\"better than X% of viable sites\") \u2014 the strongest cross-run + cross-region comparability. Works for fields with a maintained baseline (analyze_site metrics: overall_score, risk_resilience, fiber_connectivity, power_infrastructure, market_conditions, gas_pipeline_access, fiber_km, power_cost); other fields fall back to absolute (listed in unbaselined_fields). Takes precedence over absolute",
+    "type": "boolean"
+   },
+   "require_complete": {
+    "description": "true = DROP any candidate missing one or more of your (validated) objectives \u2014 dropped candidates are DECLARED in excluded_incomplete, never silent. Default false keeps incomplete candidates ranked on their carried objectives with missing_objectives flagged. Recommended true for autonomous take-rank-1 workflows (an incomplete candidate can otherwise top the ranking on its single best metric).",
+    "type": "boolean"
+   },
+   "shortlist_name": {
+    "description": "Alternative to candidates: re-rank a SAVED shortlist (created via save_to_shortlist) in one shot \u2014 loads its sites (scoped to your API key) + reuses their saved objectives if you pass none, and re-scores against the current baseline",
+    "type": "string"
+   },
+   "top_k": {
+    "description": "How many top-ranked sites to return (1-50, default 3)",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "rank_sites",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text \u2014 tool-specific data fields ride at the top level alongside these envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   }
+  },
+  "type": "object"
+ },
+ "title": "Rank Sites"
+}

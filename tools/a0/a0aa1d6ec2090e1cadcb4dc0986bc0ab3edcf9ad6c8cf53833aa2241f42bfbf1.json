@@ -1,0 +1,226 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search the 29,500+ World Bank indicator catalog by keyword, topic, or source, returning indicator IDs and metadata for worldbank_get_data. Provide at least one of query, topic_id, or source_id; a topic and a source together narrow to indicators in both. A keyword query matches every term against indicator ID, name, and full description, in any word order, across the whole catalog or the whole selected topic or source; punctuation is ignored, so the query needs at least one letter or digit. Exact ID or name matches rank first, then names starting with the phrase as whole words, then whole-phrase matches, then matches where every term is a whole word of the ID or name, then other ID/name matches, then description-only matches; within each of those, World Development Indicators series come first, then other live sources, then archives, and a series comes ahead of its own breakdowns by sex, area, or age. Each indicator ID appears once, even where the catalog publishes it under two sources. Each result carries the first 150 characters of its description; worldbank_get_indicator returns the whole of it. Find topic IDs with worldbank_list_topics and source IDs with worldbank_list_sources.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "page": {
+    "default": 1,
+    "description": "Pagination page number (1-based).",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "description": "Results per page (default: server default, max: 100).",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Keyword search terms \u2014 an indicator name, ID, or any words from either (e.g. \"GDP per capita\", \"NY.GDP.MKTP.CD\", \"CO2 emissions\"). Every term must match; punctuation is ignored, so the query needs at least one letter or digit. At least one of query, topic_id, or source_id must be provided.",
+    "type": "string"
+   },
+   "source_id": {
+    "description": "Filter by data source ID (e.g. \"2\" for World Development Indicators). Use worldbank_list_sources to browse valid IDs.",
+    "pattern": "^\\s*\\d*\\s*$",
+    "type": "string"
+   },
+   "topic_id": {
+    "description": "Filter by topic ID (e.g. \"1\" for Agriculture, \"3\" for Economy & Growth). Use worldbank_list_topics to browse valid IDs.",
+    "pattern": "^\\s*\\d*\\s*$",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "worldbank_search_indicators",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "indicators",
+     "appliedFilters",
+     "totalCount",
+     "currentPage",
+     "totalPages"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "appliedFilters": {
+    "additionalProperties": false,
+    "description": "The effective search parameters, field by field \u2014 confirms which filter combination produced these results without parsing the effectiveQuery string.",
+    "properties": {
+     "query": {
+      "description": "Trimmed keyword query sent to the search, omitted when none was given.",
+      "type": "string"
+     },
+     "sourceId": {
+      "description": "Source ID the results were scoped to, omitted when none was given.",
+      "type": "string"
+     },
+     "topicId": {
+      "description": "Topic ID the results were scoped to, omitted when none was given.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "currentPage": {
+    "description": "Current page number.",
+    "type": "number"
+   },
+   "effectiveQuery": {
+    "description": "Active filters echoed: keyword, topic ID, and/or source ID that were applied.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `missing_filter`: None of query, topic_id, or source_id were provided. `invalid_filter`: The topic_id or source_id does not exist upstream. `empty_query`: The query contains no letters or digits once punctuation is ignored. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "missing_filter",
+         "invalid_filter",
+         "empty_query"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "indicators": {
+    "description": "Matching indicators for this page.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A matching indicator with metadata.",
+     "properties": {
+      "id": {
+       "description": "Indicator ID (e.g. NY.GDP.PCAP.CD). Use as indicator_id in worldbank_get_data.",
+       "type": "string"
+      },
+      "name": {
+       "description": "Indicator name.",
+       "type": "string"
+      },
+      "sourceId": {
+       "description": "Source dataset ID.",
+       "type": "string"
+      },
+      "sourceName": {
+       "description": "Source dataset name.",
+       "type": "string"
+      },
+      "sourceNote": {
+       "description": "Indicator description, cut to its first 150 characters and marked with \u2026 when longer. worldbank_get_indicator returns it whole.",
+       "type": "string"
+      },
+      "topics": {
+       "description": "Thematic topics this indicator belongs to.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A thematic topic entry.",
+        "properties": {
+         "id": {
+          "description": "Topic ID.",
+          "type": "string"
+         },
+         "name": {
+          "description": "Topic name.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "id",
+      "name",
+      "sourceId",
+      "sourceName",
+      "sourceNote",
+      "topics"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Recovery hint for an empty page \u2014 how to broaden the search when no indicators matched, or the page range that exists when the requested page is past the end.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Total matching indicators before pagination.",
+    "type": "number"
+   },
+   "totalPages": {
+    "description": "Total number of pages.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search World Bank Indicators"
+}

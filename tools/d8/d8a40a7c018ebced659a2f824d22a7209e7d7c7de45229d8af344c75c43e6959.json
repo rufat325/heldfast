@@ -1,0 +1,82 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Push Leads to Sequencer"
+ },
+ "description": "Push enriched lead rows into an existing Instantly or Smartlead campaign. Maps common Clay column names onto each sequencer's own field names, optionally drops leads below a minimum ICP score, optionally deduplicates against the leads already in the destination campaign, and sends the rest in batches. Returns one flat summary row: how many leads were received, dropped for having no usable email, dropped by the ICP gate, dropped as duplicates, eligible, actually created by the sequencer, skipped by the sequencer, and failed, plus the vendor's own error message per failed address. The campaign must already exist; this does not create campaigns or write sequence copy. Set dry_run true to get back the exact request payload that would be sent without creating a single lead and without being charged, which is the safe way to check a mapping against a new campaign. Billing is per lead the sequencer confirms it created, so gated, duplicate, skipped, failed and dry-run leads are all free. Instantly uses API v2 and needs a v2 key; Smartlead uses API v1. Requires an APIFY_TOKEN and consumes Apify credits. This WRITES to your sequencer campaign unless dry_run is true.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Your Instantly v2 API key, your Smartlead API key or your HeyReach API key. An Instantly v1 key will not work: v1 was deprecated on January 19, 2026. Required for any run that calls the sequencer. A dry run with deduplicate false makes no calls and needs no key.",
+    "type": "string"
+   },
+   "campaign_id": {
+    "description": "The target campaign in the sequencer. It must already exist. Instantly campaign IDs are UUIDs; Smartlead campaign IDs are numeric.",
+    "type": "string"
+   },
+   "custom_variables": {
+    "description": "Extra column names to pass through as custom variables under their own name. Columns that are neither mapped nor listed here are dropped.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "dataset_id": {
+    "description": "An Apify dataset ID from an upstream run, for example the output of the ICP Fit Scorer. Used only when leads is empty.",
+    "type": "string"
+   },
+   "deduplicate": {
+    "description": "Read the campaign's existing leads first and drop any email already there. Default true. This is a read, so it needs an API key even on a dry run.",
+    "type": "boolean"
+   },
+   "dry_run": {
+    "description": "Run every step, return the exact payload that would be sent, and make zero write calls. Creates no leads and charges nothing. Default false.",
+    "type": "boolean"
+   },
+   "field_mapping": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Override the default Clay column to sequencer field map. Keys are your column names, values are the sequencer field names. Set a value to an empty string to drop that column. A target the sequencer does not have is sent as a custom variable rather than rejected.",
+    "type": "object"
+   },
+   "leads": {
+    "description": "Lead rows to push. Each row needs an email at minimum. Takes precedence over dataset_id when both are set.",
+    "items": {
+     "additionalProperties": {},
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "min_icp_score": {
+    "description": "Drop leads whose icp_score is below this number. Default 0, which pushes everything. Rows with no icp_score are always kept.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "sequencer": {
+    "description": "Which sequencer to push to. Instantly uses API v2, Smartlead uses API v1, HeyReach uses its public API. HeyReach is LinkedIn native: it keys a lead on linkedin_person_url rather than on email, so a HeyReach run drops rows with no LinkedIn profile URL and keeps rows with no email at all.",
+    "enum": [
+     "instantly",
+     "smartlead",
+     "heyreach"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "sequencer",
+   "campaign_id"
+  ],
+  "type": "object"
+ },
+ "name": "push_leads_to_sequencer",
+ "title": "Push Leads to Sequencer"
+}

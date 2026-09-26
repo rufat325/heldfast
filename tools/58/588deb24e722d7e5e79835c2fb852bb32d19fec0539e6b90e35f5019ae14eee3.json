@@ -1,0 +1,343 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Explore the codified Code of Federal Regulations via eCFR in two modes. \"structure\" lists all 50 titles; with a title, that title's top-level divisions (its chapters, or subtitles); and with a title and part, every section and appendix in the part, flattened and paged, each naming the subpart and subject group it sits under \u2014 the way to enumerate a part's sections without reading its text. \"search\" runs a full-text query across the codified CFR and returns matching sections with their hierarchy path and a snippet, one result per section, paged. Both modes accept title and part to narrow the scope. Both feed regulations_get_cfr_section. Every search result reports which corpus answered it \u2014 the synced local mirror or the live eCFR index \u2014 and what that corpus covers, in `source` and `sourceScope`.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "date": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "ISO 8601 date (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Point-in-time date, ISO 8601 (YYYY-MM-DD). Defaults to current. Structure mode uses it for the historical hierarchy, and rejects a date past the title's up-to-date date. Search mode matches only the section text in effect on that day, so a past date searches the CFR as it read then; eCFR indexes 2017-01-03 onward and rejects a date past its current index date."
+   },
+   "mode": {
+    "description": "\"structure\": list titles, a title's top-level divisions, or a part's sections and appendices, to find a cite. \"search\": full-text search the codified CFR for sections matching a phrase.",
+    "enum": [
+     "structure",
+     "search"
+    ],
+    "type": "string"
+   },
+   "page": {
+    "default": 1,
+    "description": "1-based page of search results, or of a part's listing in structure mode (default 1); ignored by a structure listing above a part, which comes back whole. A truncation notice names the next page. Live eCFR search pages through its first 10,000 hits only, so a page starting past them is refused \u2014 narrow the query instead of paging deeper.",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "part": {
+    "description": "CFR part within the title, in both modes \u2014 structure mode lists every section and appendix in the part, flattened and paged by page/per_page; search mode restricts matches to text inside that part. Requires title; a part on its own is rejected. Parts can be alphanumeric (\"1203a\", \"16A\") and are matched exactly once a leading \"Part\" or \"Pt.\" is dropped, so pass the identifier as eCFR writes it \u2014 \"58\" (\"Part 58\" also reads as 58), not \"058\".",
+    "type": "string"
+   },
+   "per_page": {
+    "default": 20,
+    "description": "Rows per page \u2014 search results, or nodes of a part's listing in structure mode (1\u201350, default 20).",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Search phrase, at least 2 characters.",
+      "minLength": 2,
+      "type": "string"
+     }
+    ],
+    "description": "Full-text search phrase (search mode, required in that mode). Ignored in structure mode."
+   },
+   "title": {
+    "description": "CFR title number (1\u201350). Structure mode: omit to list all 50 titles; provide it alone to list the title's top-level divisions (chapters, or subtitles) \u2014 not the parts beneath them \u2014 or with part to list that part. Search mode: optional filter restricting matches to that title \u2014 e.g. 40 for environmental rules, 21 for food and drugs.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "mode"
+  ],
+  "type": "object"
+ },
+ "name": "regulations_browse_cfr",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "mode"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "countBasis": {
+    "description": "What a search totalCount counts. \"sections\": distinct sections and appendices, one per result row. \"section_versions\": eCFR's own hit count, which counts every indexed version of each section \u2014 an upper bound on the rows the query pages through, reported until the whole hit list has been read.",
+    "enum": [
+     "sections",
+     "section_versions"
+    ],
+    "type": "string"
+   },
+   "date": {
+    "description": "Resolved point-in-time date \u2014 the hierarchy snapshot (structure mode), or the day whose section text was searched (search mode).",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `query_required`: mode=\"search\" with no query phrase. `title_not_found`: Structure mode where eCFR publishes no tree for the title at that date (a reserved title, or a date before its coverage), or where the part is absent from the tree it does publish. `title_required_for_part`: A part was given with no title. Part identifiers repeat across titles, and eCFR rejects a part filter that names no title. `date_out_of_range`: A date past what eCFR serves: in structure mode, past the title's up-to-date date; in search mode, outside the indexed window (before 2017-01-03, or past its current index date). `page_out_of_window`: A live search page that starts past the 10,000 hits eCFR pages through for one query. `upstream_unavailable`: eCFR returned a 5xx, timed out, or served an HTML error page (live path). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "query_required",
+         "title_not_found",
+         "title_required_for_part",
+         "date_out_of_range",
+         "page_out_of_window",
+         "upstream_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "mode": {
+    "description": "Which mode produced this result.",
+    "enum": [
+     "structure",
+     "search"
+    ],
+    "type": "string"
+   },
+   "nodes": {
+    "description": "Structure mode: the 50 titles, a title's top-level divisions, or this page of a part's sections and appendices in document order.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One hierarchy node.",
+     "properties": {
+      "appendix": {
+       "description": "On an appendix node, the identifier to pass straight back as regulations_get_cfr_section's `appendix` input; null on every other node type. It is free-form prose, not a letter (\"Schedule I to Part 789\", \"Special Federal Aviation Regulation No. 88\"), so pass it verbatim rather than abbreviating it.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "cfrCite": {
+       "description": "Assembled cite \u2192 regulations_get_cfr_section: \"40 CFR 50.1\" for a section (\"14 CFR 241 \u00a7 25\" for one numbered without its part), \"Appendix A-1 to Part 50, Title 40\" for an appendix. Null on a level with no read path (title, subtitle, chapter).",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "description": {
+       "description": "Label description, or null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "identifier": {
+       "description": "Node identifier (e.g. \"40\", \"I\", \"50.1\").",
+       "type": "string"
+      },
+      "label": {
+       "description": "Human-readable label, plain text.",
+       "type": "string"
+      },
+      "reserved": {
+       "description": "True when the node is reserved/empty.",
+       "type": "boolean"
+      },
+      "subjectGroup": {
+       "description": "In a part listing, the heading of the subject group the node sits under (a group of sections inside a part or subpart); null when it sits in none, and on every node above a part.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "subpart": {
+       "description": "In a part listing, the label of the subpart the node sits under (\"Subpart A\u2014General\"); null when no subpart encloses it, and on every node above a part.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "type": {
+       "description": "Node type: title, subtitle, or chapter above a part; section or appendix in a part listing. Treat an unknown type as passthrough.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "identifier",
+      "label",
+      "description",
+      "reserved",
+      "cfrCite",
+      "appendix",
+      "subpart",
+      "subjectGroup"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance: the next page to request, a page past the end, an empty result, or what the count means.",
+    "type": "string"
+   },
+   "page": {
+    "description": "The page served \u2014 of search results, or of a part's listing.",
+    "type": "number"
+   },
+   "results": {
+    "description": "Matching CFR sections and appendices, this page, one row per section however many of its versions matched (search mode).",
+    "items": {
+     "additionalProperties": false,
+     "description": "One matching CFR section or appendix.",
+     "properties": {
+      "appendix": {
+       "description": "On an appendix hit, the identifier to pass straight back as regulations_get_cfr_section's `appendix` input; null on a section hit. Always null on a mirror hit \u2014 the index holds section text only, so mirror-sourced results never match an appendix.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "cfrCite": {
+       "description": "Assembled cite \u2192 regulations_get_cfr_section. A section hit cites the section (\"40 CFR 51.190\"); an appendix hit cites the appendix in eCFR's own form (\"Appendix C to Part 58, Title 40\"), not the part around it, since the part's sections do not contain the matched text.",
+       "type": "string"
+      },
+      "excerpt": {
+       "description": "Matched text snippet.",
+       "type": "string"
+      },
+      "heading": {
+       "description": "What the matched node is called \u2014 the section, appendix, or part heading. Distinct from cfrCite, which is where it lives.",
+       "type": "string"
+      },
+      "hierarchyPath": {
+       "description": "Path down to the match. A live hit names the part it sits in \u2014 \"Title 40 \u203a Chapter I \u203a Subchapter C \u203a Part 51 \u2014 Requirements for Preparation, Adoption, and Submittal of Implementation Plans \u203a \u00a7 51.190\" \u2014 so the subject matter is readable without a second call. A mirror hit is structural only (\"Title 14 \u203a Part 25 \u203a \u00a7 25.1043\"): the index stores no level names. Check `source` before comparing paths across results.",
+       "type": "string"
+      },
+      "part": {
+       "description": "CFR part.",
+       "type": "string"
+      },
+      "section": {
+       "description": "Section identifier, or null when the match is an appendix or a whole part.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "title": {
+       "description": "CFR title number.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "title",
+      "part",
+      "section",
+      "appendix",
+      "heading",
+      "hierarchyPath",
+      "excerpt",
+      "cfrCite"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Rows returned on this page.",
+    "type": "number"
+   },
+   "source": {
+    "description": "Provenance: the synced mirror index, or the live eCFR search API (search mode).",
+    "enum": [
+     "mirror",
+     "live"
+    ],
+    "type": "string"
+   },
+   "sourceScope": {
+    "description": "What the answering corpus covers \u2014 the mirror's title coverage, or the live index and the date it was read at \u2014 narrowed by whichever of title and part the call supplied (search mode). Read it before concluding a query found nothing.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Total matches before pagination \u2014 search results (see countBasis for what they count), or the nodes in a part's listing.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when another page follows this one.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "regulations_browse_cfr"
+}

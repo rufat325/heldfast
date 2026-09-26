@@ -1,0 +1,122 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Run Payroll"
+ },
+ "description": "Run payroll for a household employee end-to-end in a single call. Creates the record, runs all tax calculations (federal, state, FICA, FUTA) with year-to-date tracking, approves the payroll, and kicks off payment processing. Returns the finalized status (processing/pending_funding/completed/scheduled) plus full tax breakdown, net pay, employer costs, and the payroll ID for reference. Requires a Starter+ subscription. Plans cap active employees per employer (Starter 1, Plus 5, Professional 5 included, expandable to 25 at $6/mo each); if the roster exceeds the plan's count, the API returns 403 with guidance \u2014 the user adds employees at Settings \u2192 Billing in the dashboard (never billed implicitly via API), then retry. pay_date is optional \u2014 when omitted, the server picks the earliest valid pay date based on ACH submission lead time and echoes it back. If supplied and past the submission deadline, the request is rejected with next_valid_pay_date in the error. If pay_date is more than 5 business days in the future on a DD payroll, status=scheduled and the payroll will auto-fire at scheduled_send_at (5 biz days before pay_date). Scheduled responses include is_estimated=true \u2014 numbers may shift slightly at fire time if YTD or rate configs change between approve and fire. Direct deposit callers: set confirm_large_payroll=true for totals >$5,000 or any single net pay >$3,000; set confirm_ach_debit=true for first-time DD or if no DD in 30 days. Tip: use preview_payroll first to validate your request and see results before committing. To get your employer_id and employee_id, call the NannyKeeper API: GET /api/v1/employees?employer_id=YOUR_ID (employer_id is visible in your dashboard URL).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "bonus": {
+    "description": "Bonus amount in dollars for this period",
+    "type": "number"
+   },
+   "confirm_ach_debit": {
+    "description": "Required for first-time direct-deposit payroll or when the last DD authorization is >30 days old.",
+    "type": "boolean"
+   },
+   "confirm_large_payroll": {
+    "description": "Required for direct-deposit payrolls with total net pay >$5,000 or any single net pay >$3,000.",
+    "type": "boolean"
+   },
+   "employee_id": {
+    "description": "Employee UUID \u2014 from GET /api/v1/employees response",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "employer_id": {
+    "description": "Employer UUID \u2014 visible in your NannyKeeper dashboard URL or from GET /api/v1/employees",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "idempotency_key": {
+    "description": "Unique key to prevent duplicate payroll creation (e.g., 'payroll-2026-04-07-emp123')",
+    "type": "string"
+   },
+   "notes": {
+    "description": "Notes (use 'catch-up' for retroactive payrolls that auto-complete)",
+    "type": "string"
+   },
+   "off_cycle": {
+    "description": "Deprecated and ignored. Runs for an Autopilot-covered employee are classified by pay period: a past/current period Autopilot has NOT scheduled runs normally; a period Autopilot already scheduled returns 409 with error code 'autopilot_run_scheduled' (it must be replaced in the NannyKeeper app, or Autopilot turned off first); a period beyond Autopilot's next run returns 409 'period_ahead_of_anchor'. Do NOT retry with off_cycle=true \u2014 there is no additive off-cycle run. On a 409, surface the message to the user rather than retrying.",
+    "type": "boolean"
+   },
+   "other_earnings": {
+    "description": "Other earnings in dollars for this period",
+    "type": "number"
+   },
+   "overtime_hours": {
+    "description": "Overtime hours worked this period",
+    "type": "number"
+   },
+   "pay_date": {
+    "description": "Date employee is paid (YYYY-MM-DD). Optional \u2014 server picks the earliest valid date if omitted.",
+    "type": "string"
+   },
+   "pay_frequency": {
+    "description": "How often the employee is paid",
+    "enum": [
+     "weekly",
+     "biweekly",
+     "semimonthly",
+     "monthly"
+    ],
+    "type": "string"
+   },
+   "pay_period_end": {
+    "description": "End of pay period in YYYY-MM-DD format (e.g., 2026-04-13)",
+    "type": "string"
+   },
+   "pay_period_start": {
+    "description": "Start of pay period in YYYY-MM-DD format (e.g., 2026-04-07)",
+    "type": "string"
+   },
+   "payment_method": {
+    "description": "How the employee is paid (default: check)",
+    "enum": [
+     "direct_deposit",
+     "check",
+     "cash"
+    ],
+    "type": "string"
+   },
+   "regular_hours": {
+    "description": "Regular hours worked this period (e.g., 40 for a full week)",
+    "type": "number"
+   },
+   "voluntary_set_aside": {
+    "description": "Override or skip the employee's voluntary post-tax set-aside rule for this paycheck only. The recurring rule itself is configured via the dashboard. Omit this field to apply the rule normally.",
+    "properties": {
+     "amount": {
+      "description": "Override the rule's computed amount for this paycheck only",
+      "maximum": 9999,
+      "minimum": 0,
+      "type": "number"
+     },
+     "skip": {
+      "description": "Skip the active set-aside rule for this paycheck only",
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "employer_id",
+   "employee_id",
+   "pay_period_start",
+   "pay_period_end",
+   "pay_frequency"
+  ],
+  "type": "object"
+ },
+ "name": "run_payroll"
+}

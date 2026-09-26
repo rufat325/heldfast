@@ -1,0 +1,475 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Run the deterministic preflight on an intent spec before handing it to an implementation agent. Six calibrated checks \u2014 title, objective, outcomes, constraints, edge cases, verification \u2014 computed by pure functions: no model call, no network, the same spec always gets the same verdict. Pass a spec inline to check before saving, pass intentId to check a specific saved intent, pass repoRoot to check the intent.md of the repository you are working in, or pass nothing to resolve the repo-bound intent.md from MCP workspace roots or the launch directory. The repo-bound intent.md is the one at the repository root or, when there is none, the single intent.md in an intent/ folder (intent/intent.md or intent/<feature>/intent.md), where Anthropic's AI-native SDLC playbook keeps it. Pass path to choose among several, or to check a file with another name. When the repository has no intent.md, or cannot be identified, it refuses rather than grading an unrelated intent; pass repoRoot to name the repository, or intentId to check a specific saved intent. A failing verdict names the exact blockers; repair the fields and re-run. This is the gate that runs at preflight.pathmode.io.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "intentId": {
+    "description": "Check a specific saved intent by id. Ignored when spec is passed.",
+    "type": "string"
+   },
+   "path": {
+    "description": "The intent file to check, when the repository keeps several in intent/ or names it something other than intent.md, e.g. intent/checkout/intent.md. Relative to repoRoot when that is passed, otherwise to the repository a no-argument call resolves; an absolute path is used as is. Ignored when spec or intentId is passed.",
+    "type": "string"
+   },
+   "repoRoot": {
+    "description": "Absolute path of the repository you are working in; Pathmode checks its intent.md, at the root or in its intent/ folder. Pass it when a no-argument call is refused because your MCP client declares no workspace roots, or declares several. Ignored when spec or intentId is passed.",
+    "type": "string"
+   },
+   "spec": {
+    "description": "Check this spec directly (before saving). When omitted, resolve the repo-bound intent.md from MCP roots or cwd. A repository with no intent.md is refused, not answered with the workspace current intent; pass intentId to choose a saved intent deliberately.",
+    "properties": {
+     "constraints": {
+      "description": "Hard limits the implementation must respect",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "context": {
+      "not": {}
+     },
+     "currentState": {
+      "description": "How this works today, before the change \u2014 existing behavior and workarounds, so the implementation knows what must not regress. Omit for net-new capability.",
+      "type": "string"
+     },
+     "decisions": {
+      "description": "Decisions settled during design + the alternatives ruled out, so the agent does not relitigate them. Omit to keep the existing decisions. Locally a supplied list replaces them ([] clears); connected, supplied decisions are added to the workspace log, which a save never shrinks.",
+      "items": {
+       "properties": {
+        "choice": {
+         "type": "string"
+        },
+        "reason": {
+         "type": "string"
+        },
+        "ruledOut": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "choice",
+        "reason"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "edgeCases": {
+      "description": "Failure modes and boundary conditions",
+      "items": {
+       "properties": {
+        "expectedBehavior": {
+         "type": "string"
+        },
+        "scenario": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "scenario",
+        "expectedBehavior"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "healthMetrics": {
+      "description": "What to monitor after shipping",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "id": {
+      "description": "Existing intent id. Pass it back when re-saving an intent you already saved so the file is updated (version bumped, status preserved) instead of replaced. Omit for a new intent.",
+      "type": "string"
+     },
+     "implementationContext": {
+      "description": "What the repo actually looks like where this change lands: the files and modules involved, what already exists, what it would touch, how to verify it. You are in the working tree \u2014 go read it. Markdown, sub-headings welcome. Advisory: it never changes the readiness verdict, it just stops the implementing agent from rediscovering the codebase.",
+      "type": "string"
+     },
+     "objective": {
+      "description": "Why this matters \u2014 the problem and who has it",
+      "type": "string"
+     },
+     "outcomes": {
+      "description": "Observable, testable state changes. The structured form may carry an optional provider-neutral saved-query measurement recipe.",
+      "items": {
+       "anyOf": [
+        {
+         "minLength": 1,
+         "type": "string"
+        },
+        {
+         "properties": {
+          "id": {
+           "minLength": 1,
+           "type": "string"
+          },
+          "measurement": {
+           "anyOf": [
+            {
+             "properties": {
+              "expectation": {
+               "properties": {
+                "operator": {
+                 "enum": [
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte",
+                  "eq"
+                 ],
+                 "type": "string"
+                },
+                "target": {
+                 "type": "number"
+                },
+                "unit": {
+                 "maxLength": 50,
+                 "type": "string"
+                }
+               },
+               "required": [
+                "operator",
+                "target"
+               ],
+               "type": "object"
+              },
+              "resultSelector": {
+               "description": "Optional path into a compound provider response",
+               "maxLength": 500,
+               "minLength": 1,
+               "type": "string"
+              },
+              "source": {
+               "properties": {
+                "provider": {
+                 "description": "System that owns the saved query, e.g. \"posthog\"",
+                 "maxLength": 100,
+                 "minLength": 1,
+                 "type": "string"
+                },
+                "queryRef": {
+                 "properties": {
+                  "id": {
+                   "description": "Stable id of the query. An id, never a name \u2014 names get renamed and the record then points nowhere.",
+                   "maxLength": 500,
+                   "minLength": 1,
+                   "type": "string"
+                  },
+                  "kind": {
+                   "description": "How to interpret the id, e.g. \"saved_insight\"",
+                   "maxLength": 100,
+                   "minLength": 1,
+                   "type": "string"
+                  }
+                 },
+                 "required": [
+                  "kind",
+                  "id"
+                 ],
+                 "type": "object"
+                }
+               },
+               "required": [
+                "provider",
+                "queryRef"
+               ],
+               "type": "object"
+              },
+              "window": {
+               "properties": {
+                "duration": {
+                 "description": "REQUIRED when kind is \"rolling\", e.g. \"28d\"",
+                 "maxLength": 100,
+                 "minLength": 1,
+                 "type": "string"
+                },
+                "end": {
+                 "description": "REQUIRED when kind is \"fixed\"",
+                 "maxLength": 100,
+                 "minLength": 1,
+                 "type": "string"
+                },
+                "kind": {
+                 "description": "How the window is bounded",
+                 "enum": [
+                  "rolling",
+                  "fixed",
+                  "since_ship"
+                 ],
+                 "type": "string"
+                },
+                "start": {
+                 "description": "REQUIRED when kind is \"fixed\"",
+                 "maxLength": 100,
+                 "minLength": 1,
+                 "type": "string"
+                }
+               },
+               "required": [
+                "kind"
+               ],
+               "type": "object"
+              }
+             },
+             "required": [
+              "source",
+              "expectation",
+              "window"
+             ],
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "priority": {
+           "enum": [
+            "must",
+            "should",
+            "could"
+           ],
+           "type": "string"
+          },
+          "text": {
+           "minLength": 1,
+           "type": "string"
+          }
+         },
+         "required": [
+          "text"
+         ],
+         "type": "object"
+        }
+       ]
+      },
+      "type": "array"
+     },
+     "productChoices": {
+      "description": "New open product choices, never human answers. Existing choices are preserved.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "alternative": {
+         "maxLength": 1000,
+         "minLength": 1,
+         "type": "string"
+        },
+        "claims": {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "field": {
+            "enum": [
+             "outcome",
+             "constraint",
+             "edgeCase"
+            ],
+            "type": "string"
+           },
+           "scenario": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+           },
+           "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+           }
+          },
+          "required": [
+           "field",
+           "text"
+          ],
+          "type": "object"
+         },
+         "maxItems": 8,
+         "minItems": 1,
+         "type": "array"
+        },
+        "cost": {
+         "maxLength": 1000,
+         "minLength": 1,
+         "type": "string"
+        },
+        "dependsOn": {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "answer": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+           },
+           "id": {
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "type": "string"
+           }
+          },
+          "required": [
+           "id",
+           "answer"
+          ],
+          "type": "object"
+         },
+         "maxItems": 12,
+         "type": "array"
+        },
+        "id": {
+         "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+         "type": "string"
+        },
+        "question": {
+         "maxLength": 1000,
+         "minLength": 1,
+         "type": "string"
+        },
+        "reason": {
+         "maxLength": 1000,
+         "minLength": 1,
+         "type": "string"
+        },
+        "recommendation": {
+         "maxLength": 1000,
+         "minLength": 1,
+         "type": "string"
+        },
+        "reopenTrigger": {
+         "maxLength": 1000,
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "question",
+        "recommendation",
+        "alternative",
+        "reason",
+        "cost",
+        "reopenTrigger",
+        "claims"
+       ],
+       "type": "object"
+      },
+      "maxItems": 12,
+      "type": "array"
+     },
+     "productId": {
+      "description": "Which product this intent belongs to (cloud mode only). Omit it and the server resolves it when the workspace has exactly one real product; if it cannot, the save fails with PRODUCT_REQUIRED and the candidate list, and you should ask the user which one and retry with an explicit id rather than guessing \u2014 a GitHub binding hangs off the product, so it decides which repository merge verification applies to.",
+      "type": "string"
+     },
+     "scope": {
+      "description": "Scope boundaries \u2014 what to build and what to avoid",
+      "properties": {
+       "inScope": {
+        "description": "What is in scope for this intent",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "outOfScope": {
+        "description": "What is explicitly out of scope",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "type": "object"
+     },
+     "title": {
+      "description": "Short name for the intent",
+      "type": "string"
+     },
+     "verification": {
+      "description": "How to confirm it works",
+      "properties": {
+       "checks": {
+        "description": "Feedback-loop checks (preferred over the legacy test buckets)",
+        "items": {
+         "properties": {
+          "description": {
+           "type": "string"
+          },
+          "id": {
+           "minLength": 1,
+           "type": "string"
+          },
+          "kind": {
+           "enum": [
+            "fastest",
+            "manual",
+            "shipped-signal",
+            "regression-guard",
+            "test"
+           ],
+           "type": "string"
+          },
+          "status": {
+           "enum": [
+            "unknown",
+            "passing",
+            "failing"
+           ],
+           "type": "string"
+          },
+          "verifies": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "kind",
+          "description"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "e2eTests": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "manualChecks": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "unitTests": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "type": "object"
+     }
+    },
+    "required": [
+     "title",
+     "objective",
+     "outcomes"
+    ],
+    "type": "object"
+   }
+  },
+  "type": "object"
+ },
+ "name": "check_intent_readiness",
+ "title": "Check Intent Readiness (Preflight)"
+}

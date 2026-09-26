@@ -1,0 +1,275 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get the latest instantaneous (~15-min, real-time) values for up to 100 USGS sites in one call \u2014 per-site, per-parameter records with timestamp, value, unit, and provisional/approved qualifiers. Omitting parameterCd returns every parameter each site publishes. A site measuring one parameter with several sensors returns one series per method, each named by methodId and methodDescription. At most 100 series return per call \u2014 every site that returned data keeps at least one, and totalSeries reports how many NWIS returned; pass parameterCd or split the sites across calls to reach the rest. Each series returns only its 10 most recent records (totalValues reports the true count); truncated=true when either cap applied. Use water_get_series for a full date-range series. Sites NWIS returns nothing for are listed in missingSites, not dropped silently. Use water_find_sites first to discover site numbers and available parameters.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "parameterCd": {
+    "description": "Parameter codes to return. Omit to get every parameter each site publishes \u2014 one series per site, parameter, and method, so a large batch can exceed the 100-series cap. Use water_list_parameters to discover codes.",
+    "items": {
+     "description": "A 5-digit USGS parameter code (e.g. \"00060\" for discharge).",
+     "pattern": "^\\d{5}$",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "period": {
+    "default": "PT2H",
+    "description": "ISO 8601 duration for the lookback period (e.g. \"PT2H\" = last 2 hours, \"P1D\" = last 1 day, \"P7D\" = last 7 days). Default: \"PT2H\" (last 2 hours of readings). Widening it raises totalValues, but each series still returns only its 10 most recent records \u2014 use water_get_series to retrieve a full series.",
+    "pattern": "^P(?!$)(\\d+Y)?(\\d+M)?(\\d+W)?(\\d+D)?(T(?=\\d)(\\d+H)?(\\d+M)?(\\d+(\\.\\d+)?S)?)?$",
+    "type": "string"
+   },
+   "sites": {
+    "description": "One or more USGS site numbers to query. Maximum 100 per call.",
+    "items": {
+     "description": "A USGS site number (8\u201315 digits, e.g. \"01646500\").",
+     "pattern": "^\\d{8,15}$",
+     "type": "string"
+    },
+    "maxItems": 100,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "sites"
+  ],
+  "type": "object"
+ },
+ "name": "water_get_readings",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "readings",
+     "total",
+     "totalSeries",
+     "truncated",
+     "missingSites",
+     "query"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_data_for_parameter`: NWIS returned no time series \u2014 the site(s) may not exist, or may not have data for the requested parameter(s) in the requested period. NWIS returns the same empty response for both cases. `invalid_request`: NWIS rejected the request. Input formats are validated against NWIS-accepted patterns before the call, so this surfaces a value that is well-formed but unacceptable upstream. `upstream_error`: NWIS returned a 5xx error, timed out, or sent a response body that is not valid WaterML-JSON (cut off mid-document), and retrying did not clear it. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_data_for_parameter",
+         "invalid_request",
+         "upstream_error"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "missingSites": {
+    "description": "Requested site numbers NWIS returned no series for \u2014 the site may not exist, or may not measure the requested parameter(s) in the requested period. Empty when every requested site returned data. Verify these with water_find_sites.",
+    "items": {
+     "description": "A requested USGS site number that returned no time series.",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "query": {
+    "additionalProperties": false,
+    "description": "Query parameters used for this request.",
+    "properties": {
+     "parameterCd": {
+      "description": "Parameter codes requested, if filtered.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "period": {
+      "description": "Lookback period applied (ISO 8601 duration).",
+      "type": "string"
+     },
+     "sites": {
+      "description": "Site numbers queried.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "sites",
+     "period"
+    ],
+    "type": "object"
+   },
+   "readings": {
+    "description": "Time series per site + parameter + method combination, in NWIS order (site, then parameter code, then method). A method block NWIS returned empty is omitted when another method of the same site and parameter carries values. At most 100: past that, series are kept round-robin across sites \u2014 every site's first series, then every site's second \u2014 with a site's series carrying values ahead of its empty ones, a series whose every record is no data counting as empty.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Time series result for one site + parameter + method combination.",
+     "properties": {
+      "methodDescription": {
+       "description": "NWIS description of the method, e.g. \"From multiparameter sonde\", \"[(2)]\", or \"7.1 ft from riverbed (top), [Discontinued]\". Null when NWIS leaves it blank, as it does for the default series at most single-sensor sites.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "methodId": {
+       "description": "NWIS method ID of this series. A site can measure one parameter with several sensors or at several locations \u2014 each is its own method and its own entry in readings. Null only when NWIS returned the series with no method block.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "parameterCd": {
+       "description": "5-digit parameter code (e.g. \"00060\" for discharge).",
+       "type": "string"
+      },
+      "parameterName": {
+       "description": "Human-readable parameter name with units (e.g. \"Streamflow, ft\u00b3/s\").",
+       "type": "string"
+      },
+      "siteName": {
+       "description": "Human-readable USGS site name (e.g. \"POTOMAC RIVER AT LITTLE FALLS, MD\").",
+       "type": "string"
+      },
+      "siteNumber": {
+       "description": "USGS site number (8\u201315 digits, e.g. \"01646500\").",
+       "type": "string"
+      },
+      "totalValues": {
+       "description": "Number of value records NWIS returned for this site and parameter over the requested period, before the 10-record cap. Equals values.length when nothing was capped.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "unitCode": {
+       "description": "Unit of measure for the values in this series (e.g. \"ft3/s\", \"ft\", \"\u00b0C\").",
+       "type": "string"
+      },
+      "values": {
+       "description": "Time-ordered value records for this site and parameter, capped at the most recent 10. Compare with totalValues to see whether the period held more; use water_get_series for the full series.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A single instantaneous reading for this site and parameter.",
+        "properties": {
+         "dateTime": {
+          "description": "ISO 8601 date-time of this observation.",
+          "type": "string"
+         },
+         "qualifiers": {
+          "description": "Data qualifier codes for this value.",
+          "items": {
+           "description": "A USGS data qualifier code (e.g. \"P\" = provisional, \"A\" = approved).",
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "value": {
+          "description": "Measured value as a string. Empty string when NWIS reported no value for that interval \u2014 qualifiers then give the reason (e.g. \"Ssn\" seasonal, \"Dis\" discontinued, \"Dry\", \"Eqp\" equipment malfunction).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "dateTime",
+         "value",
+         "qualifiers"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "siteNumber",
+      "siteName",
+      "parameterCd",
+      "parameterName",
+      "unitCode",
+      "methodId",
+      "methodDescription",
+      "values",
+      "totalValues"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "total": {
+    "description": "Number of site + parameter + method time series returned in readings (at most 100).",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "totalSeries": {
+    "description": "Number of site + parameter + method time series before the 100-series cap \u2014 an empty method block omitted as described under readings is not counted. Greater than total exactly when the cap dropped series; narrow with parameterCd or split the sites across calls to get the rest.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "truncated": {
+    "description": "True when either cap applied. The series cap: totalSeries > total \u2014 pass parameterCd or split the sites across calls. The 10-record cap: some readings[].totalValues > values.length \u2014 use water_get_series for the full series.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Water Get Readings"
+}

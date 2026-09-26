@@ -1,0 +1,121 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Ask a plain-language question and get a written answer grounded in the user's own meeting transcripts, with the meeting id cited after each claim. Prefer this over meetings_search when the user wants an ANSWER ('what did we decide about pricing?', 'who owned the migration?') rather than a list of excerpts to read themselves. Pass the question as the user asked it -- this is NOT FTS5 syntax, and the terms actually searched come back as `terms` so you can check the retrieval. IMPORTANT: a 'no_matches' status means no answer was generated, and 'searched_meetings': 0 means every meeting is private and NOTHING was read -- neither is evidence the topic was never discussed, and you must not report it as such. Meetings imported as private are encrypted and can never contribute to an answer; `private_meetings_skipped` says how many were left out. A 'truncated' meeting in `consulted` had only part of its transcript read, so its silence on a point is not evidence either. Costs $0.050 in USDC on Base, paid via the x402 protocol, or from a credit token \u2014 call credits_trial for free credit if you have neither.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "credit_token": {
+    "description": "Optional. A credit token from credits_trial or /credits/buy. Supplying it pays for this call from that balance, so no x402 payment or wallet is needed.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Max meetings to consult, 1-8 (default 5)",
+    "type": "integer"
+   },
+   "namespace": {
+    "description": "Isolation scope holding your meetings",
+    "type": "string"
+   },
+   "namespace_token": {
+    "description": "One-time token issued by the first call that claimed this namespace. Required for every later call.",
+    "type": "string"
+   },
+   "question": {
+    "description": "The question in plain language, as the user asked it. Not a search expression.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "namespace",
+   "namespace_token",
+   "question"
+  ],
+  "type": "object"
+ },
+ "name": "meetings_summarize",
+ "outputSchema": {
+  "properties": {
+   "ai_generated": {
+    "description": "True: `answer` was written by an AI model",
+    "type": "boolean"
+   },
+   "answer": {
+    "description": "The grounded answer with [meeting_id] citations, or null when nothing was summarised.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "consulted": {
+    "description": "The meetings the answer was actually built from",
+    "items": {
+     "properties": {
+      "chars_used": {
+       "description": "Characters of this transcript given to the model",
+       "type": "number"
+      },
+      "meeting_id": {
+       "description": "Pass to meetings_get to read the full transcript",
+       "type": "string"
+      },
+      "occurred_at": {
+       "description": "ISO-8601 time the meeting happened, if known",
+       "type": "string"
+      },
+      "title": {
+       "description": "Meeting title",
+       "type": "string"
+      },
+      "truncated": {
+       "description": "True when only part of the transcript was read, so its silence on a point is not evidence",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "meeting_id",
+      "chars_used",
+      "truncated"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "model": {
+    "description": "The model that produced the answer",
+    "type": "string"
+   },
+   "private_meetings_skipped": {
+    "description": "Encrypted meetings that could not contribute to the answer",
+    "type": "number"
+   },
+   "question": {
+    "description": "The question as asked",
+    "type": "string"
+   },
+   "searched_meetings": {
+    "description": "Queryable meetings available to search. 0 means nothing was read.",
+    "type": "number"
+   },
+   "status": {
+    "description": "'ok' when an answer was generated. 'no_matches', 'unusable_question' and 'content_missing' all mean NO answer was produced and must not be read as the topic being absent.",
+    "type": "string"
+   },
+   "terms": {
+    "description": "The search terms derived from the question",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "status"
+  ],
+  "type": "object"
+ },
+ "title": "Answer a question from your meetings"
+}

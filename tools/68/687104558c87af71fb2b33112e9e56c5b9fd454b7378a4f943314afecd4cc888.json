@@ -1,0 +1,172 @@
+{
+ "description": "LOCALLY verify a TollWarden scan's Ed25519 attestation before trusting an allow-verdict: checks the signature against the pinned server key (fetched from /.well-known/tollwarden-verdict-key unless trusted_key_hex is supplied), recomputes the payment commitment from the payment YOU are about to settle (rejects attestations issued for a different payment \u2014 replay defense), and enforces expiry. Also verifies the attestation's signed evidence record when present and returns pin_evidence: how long the merchant pin had held at scan time (age 0 = first sighting) and which named out-of-band sources corroborated it (e.g. cdp_bazaar) \u2014 weigh a young or uncorroborated pin against the payment size; that decision boundary is yours. Runs no network calls except the one-time key fetch; the verdict itself is never sent anywhere.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "payment": {
+    "additionalProperties": false,
+    "description": "The payment you are about to settle \u2014 commitment is recomputed from this",
+    "properties": {
+     "amount": {
+      "description": "Atomic units, e.g. '10000' = $0.01 USDC",
+      "type": "string"
+     },
+     "amount_usd": {
+      "type": "number"
+     },
+     "asset": {
+      "type": "string"
+     },
+     "asset_decimals": {
+      "type": "number"
+     },
+     "description": {
+      "type": "string"
+     },
+     "metadata": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "network": {
+      "description": "CAIP-2, e.g. eip155:8453",
+      "type": "string"
+     },
+     "nonce": {
+      "type": "string"
+     },
+     "pay_to": {
+      "type": "string"
+     },
+     "payer": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "resource_url": {
+      "type": "string"
+     },
+     "scheme": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "scan": {
+    "additionalProperties": false,
+    "properties": {
+     "attestation": {
+      "additionalProperties": false,
+      "properties": {
+       "evidence": {
+        "additionalProperties": false,
+        "properties": {
+         "message": {
+          "type": "string"
+         },
+         "pin": {
+          "anyOf": [
+           {
+            "additionalProperties": true,
+            "properties": {
+             "age_seconds": {
+              "type": "number"
+             },
+             "corroboration": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array"
+             },
+             "domain": {
+              "type": "string"
+             }
+            },
+            "required": [
+             "domain",
+             "age_seconds",
+             "corroboration"
+            ],
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "signature_hex": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "message",
+         "signature_hex"
+        ],
+        "type": "object"
+       },
+       "expires_at": {
+        "type": "string"
+       },
+       "message": {
+        "type": "string"
+       },
+       "payment_commitment": {
+        "type": "string"
+       },
+       "signature_hex": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "message",
+       "signature_hex",
+       "payment_commitment",
+       "expires_at"
+      ],
+      "type": "object"
+     },
+     "direction": {
+      "type": "string"
+     },
+     "risk_score": {
+      "type": "number"
+     },
+     "scan_id": {
+      "type": "string"
+     },
+     "scanned_at": {
+      "type": "string"
+     },
+     "verdict": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "scan_id",
+     "direction",
+     "verdict",
+     "risk_score",
+     "scanned_at",
+     "attestation"
+    ],
+    "type": "object"
+   },
+   "trusted_key_hex": {
+    "description": "Pin the server verdict key (SPKI DER hex); fetched once when omitted",
+    "type": "string"
+   }
+  },
+  "required": [
+   "scan",
+   "payment"
+  ],
+  "type": "object"
+ },
+ "name": "verify_verdict_attestation"
+}

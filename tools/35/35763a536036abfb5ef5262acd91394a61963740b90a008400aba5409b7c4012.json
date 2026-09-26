@@ -1,0 +1,35 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Observe which PAdES baseline level (ETSI EN 319 142) the structure of each signature matches.\n\n**This is an observation, not a conformance verdict.** ETSI EN 319 142 is not in this family's spec corpus, and unlike PDF/A there is no third-party validator to delegate to \u2014 so the result says \"the structure matches B-LT\", never \"conforms to PAdES B-LT\". Every report carries normativeBasis: \"T3\" to make that explicit.\n\nDetection is structural: B-B (CAdES signature), B-T (+ RFC 3161 signature timestamp), B-LT (+ DSS with validation data), B-LTA (+ document timestamp). Legacy adbe.pkcs7.detached signatures are reported as non-PAdES.\n\nArgs:\n  - file_path (string): Absolute path to a local PDF file\n  - response_format ('markdown' | 'json'): Output format (default: 'markdown')\n\nReturns:\n  An object of the form { scope, levels: [...] }. The top level changed from an array to an object in v0.21.0 - read .levels for the list.\n\n  Size (v0.29.0): at most 32 signatures are listed; levelsTruncated = { returned, total } says when the list was cut. JSON is never cut by length.\n\n  Every report begins with a \"scope\" object - how far the reading got, not a verdict: whether the cross-reference chain could be walked to the end (chainStop), whether this tool had to rebuild the cross-reference table itself (reconstructed - when true, the table is this tool's reconstruction and not the one the file carries), how many objects and sections were read, and whether an encrypted document could be opened. Read it before the verdict: \"no violations\" over a rebuilt table is not the same statement as \"no violations\" over the file's own table.\n\n  Per-signature level with evidence (signature timestamp, DSS, VRI, document timestamp presence).\n\nNote: B-LT / B-LTA additionally require that the DSS revocation data actually covers the signer certificate (content-level LTV validation); otherwise the level is capped at B-T.\n\nExamples:\n  - Check if a signature is long-term validation (LTV) enabled\n  - Audit whether archived contracts meet B-LTA requirements",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "file_path": {
+    "description": "Absolute path to a local PDF file (e.g., \"/path/to/document.pdf\")",
+    "minLength": 1,
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: \"markdown\" for human-readable, \"json\" for structured data",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "file_path"
+  ],
+  "type": "object"
+ },
+ "name": "detect_pades_level",
+ "title": "Detect PAdES Baseline Level"
+}

@@ -1,0 +1,125 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Run a read-only SQL SELECT against occurrence result sets staged on a DataCanvas by paleobiology_search_occurrences. This is how you analyze a large fossil set without re-fetching it: count occurrences by early_interval, group by formation, country (cc), or accepted_name, or filter by a paleo/modern coordinate range. The classification column is JSON \u2014 roll up by rank with json_extract_string(classification, '$.family') (also $.phylum, $.class, $.order, $.genus). Staged rows are occurrences, so collection-only fields such as lithology are not present. Reference tables by the table_name that search_occurrences returned \u2014 call paleobiology_dataframe_describe first if you do not know the table or column names. SELECT only; writes and file-reading functions are rejected.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Canvas id returned by paleobiology_search_occurrences when its result spilled.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   },
+   "sql": {
+    "description": "A read-only SQL SELECT. Reference tables by the names paleobiology_search_occurrences / _describe returned.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "canvas_id",
+   "sql"
+  ],
+  "type": "object"
+ },
+ "name": "paleobiology_dataframe_query",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "rows",
+     "row_count"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `canvas_disabled`: DataCanvas is not enabled on this deployment (CANVAS_PROVIDER_TYPE is not duckdb). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "canvas_disabled"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "row_count": {
+    "description": "Number of rows in the full result before any row cap.",
+    "type": "number"
+   },
+   "rows": {
+    "description": "Result rows (capped at the canvas row limit). Keys are the selected column names.",
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "truncated": {
+    "description": "True when the result exceeded the canvas row cap and rows were trimmed.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "paleobiology-mcp-server: query staged occurrences with SQL"
+}

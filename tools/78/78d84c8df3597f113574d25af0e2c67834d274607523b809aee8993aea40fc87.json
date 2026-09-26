@@ -1,0 +1,95 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "CREATE a Robinhood Chain coordination alert rule (POST \u2014 this writes and consumes quota). Fires when min_kols+ distinct tracked KOLs buy the same RHC token within window_minutes and the cluster scores at least min_score. SCORING CAVEAT: the shared v1 scorer is used so the number is comparable to Solana, but on RHC the `earliness` component is DEFAULTED to 50 (RHC has no early-entry equivalent) while `quality` is real (KOL 7d win-rate); every fired signal records which components were real in score_inputs. Delivered on the rhc:kol:coordination WS channel and/or an HMAC-signed webhook; webhook_secret is returned EXACTLY ONCE. Rule quota is PER CHAIN (PRO 5, ULTRA 20, BUSINESS 100); exceeding it returns 409. Tier: PRO+.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "cooldown_min": {
+    "description": "Silence per (rule, token) in minutes (1-1440, default 30)",
+    "maximum": 1440,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "delivery_mode": {
+    "description": "Where fires are delivered (default 'websocket')",
+    "enum": [
+     "websocket",
+     "webhook",
+     "both"
+    ],
+    "type": "string"
+   },
+   "max_mc_usd": {
+    "anyOf": [
+     {
+      "maximum": 1000000000000,
+      "minimum": 0,
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Maximum token market cap \u2014 must be >= min_mc_usd"
+   },
+   "min_kols": {
+    "description": "Minimum distinct KOL buyers to fire (2-50, default 3)",
+    "maximum": 50,
+    "minimum": 2,
+    "type": "integer"
+   },
+   "min_mc_usd": {
+    "anyOf": [
+     {
+      "maximum": 1000000000000,
+      "minimum": 0,
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Minimum token market cap, or null for no floor"
+   },
+   "min_score": {
+    "description": "Minimum composite score 0-100 (default 0)",
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "name": {
+    "description": "Optional human label (max 64 chars)",
+    "maxLength": 64,
+    "minLength": 1,
+    "type": "string"
+   },
+   "score_jump_break": {
+    "description": "Re-fire inside the cooldown when the score jumps this many points (0-100, default 20)",
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "webhook_url": {
+    "description": "HTTPS URL \u2014 REQUIRED unless delivery_mode is 'websocket'",
+    "format": "uri",
+    "type": "string"
+   },
+   "window_minutes": {
+    "description": "Rolling cluster window in minutes (1-60, default 15)",
+    "maximum": 60,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "rhc_coordination_alerts_create"
+}

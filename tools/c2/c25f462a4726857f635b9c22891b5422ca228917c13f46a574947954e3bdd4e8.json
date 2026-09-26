@@ -1,0 +1,223 @@
+{
+ "annotations": {
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "SECONDARY KNOWN-URL CONTENT EXTRACTION TOOL. Use only when the exact public URL is already known and no new web discovery is required. If sources still need to be found, use search or search_parallel with extract_mode instead. For semantic reading of a public PDF or GitHub repository, use this tool before local download or parsing. Local PDF tools are for local files, forms, OCR recovery, or visual layout inspection; general repository tools are for editing, building, testing, or full Git history. Fetch one public URL and return clean content. With research enabled, one local broker lets multiple MCP sessions query the same knowledge base concurrently and orders writes safely. For GitHub repository URLs, metadata reads the README; abstract and full use the same bounded download gate and differ only in indexed source depth. HTML via Mozilla Readability; academic PDFs (arxiv/biorxiv/Nature/OpenReview/NeurIPS/JMLR/PMLR/Springer/PubMed-via-PMC) auto-detected via Content-Type, %PDF magic, citation_pdf_url meta, and per-domain URL rules. Tiered depth: `mode=\"metadata\"` returns document metadata without body text, `mode=\"abstract\"` returns about 1500 chars for relevance checks, and `mode=\"full\"` reads the full bounded source. response_content controls whether the response contains a 1500-character summary or up to 50000 characters. PDF and landing-page metadata are merged when available. With research enabled, abstract and full PDF reads are stored as searchable evidence with bibliographic metadata and provenance. Best-effort: failures return an errorInfo instead of throwing.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "max_chars": {
+    "description": "Maximum returned characters when response_content=full. Defaults to 1500 for abstract and 50000 for full.",
+    "maximum": 50000,
+    "minimum": 200,
+    "type": "integer"
+   },
+   "memory_handle": {
+    "description": "Reuse the handle returned by a prior project-aware call.",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "mode": {
+    "default": "full",
+    "description": "Extraction depth. `full` = whole article body (default; uses Playwright if needed). `abstract` = cheap survey: PDF page 1 OR HTML meta description (~1500 chars); use to triage relevance before paying for full text. `metadata` = document metadata without body text: title, authors, publication details, dates, DOI, keywords, canonical URL, and PDF properties when available. Academic PDFs (arxiv/biorxiv/Nature/OpenReview/NeurIPS/JMLR/PMLR/Springer/PubMed-via-PMC) are auto-detected; abstract mode skips Playwright for them.",
+    "enum": [
+     "full",
+     "abstract",
+     "metadata"
+    ],
+    "type": "string"
+   },
+   "project_id": {
+    "description": "Project memory id.",
+    "maxLength": 64,
+    "minLength": 1,
+    "type": "string"
+   },
+   "response_content": {
+    "default": "full",
+    "description": "Controls only the returned body. full returns up to max_chars; summary returns a 1500-character evidence excerpt. Research storage keeps the full captured text in deterministic chunks.",
+    "enum": [
+     "summary",
+     "full"
+    ],
+    "type": "string"
+   },
+   "session_id": {
+    "description": "Stable host task id. Reuses the same project session after restart.",
+    "maxLength": 200,
+    "minLength": 1,
+    "type": "string"
+   },
+   "session_intent": {
+    "description": "Current durable task intent. A changed value creates an immutable revision.",
+    "maxLength": 2000,
+    "minLength": 1,
+    "type": "string"
+   },
+   "url": {
+    "description": "Public http(s) URL. Loopback/private IPs blocked unless SURF_ALLOW_PRIVATE=true.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "url"
+  ],
+  "type": "object"
+ },
+ "name": "extract",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "authors": {
+    "type": "string"
+   },
+   "canonical_url": {
+    "type": "string"
+   },
+   "content": {
+    "type": "string"
+   },
+   "created_at": {
+    "type": "string"
+   },
+   "creator": {
+    "type": "string"
+   },
+   "description": {
+    "type": "string"
+   },
+   "doi": {
+    "type": "string"
+   },
+   "elapsed_ms": {
+    "type": "number"
+   },
+   "error": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "cancel_reason": {
+        "type": "string"
+       },
+       "code": {
+        "type": "string"
+       },
+       "message": {
+        "type": "string"
+       },
+       "phase": {
+        "type": "string"
+       },
+       "request_id": {
+        "type": "string"
+       },
+       "retry_after_ms": {
+        "type": "number"
+       },
+       "retryable": {
+        "type": "boolean"
+       },
+       "user_action": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "code",
+       "message",
+       "retryable"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "excerpt": {
+    "type": "string"
+   },
+   "extraction_quality": {
+    "enum": [
+     "full_text",
+     "abstract",
+     "meta_abstract",
+     "metadata_only"
+    ],
+    "type": "string"
+   },
+   "is_pdf": {
+    "type": "boolean"
+   },
+   "keywords": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "language": {
+    "type": "string"
+   },
+   "length": {
+    "type": "number"
+   },
+   "memory": {
+    "type": "string"
+   },
+   "memory_handle": {
+    "type": "string"
+   },
+   "meta": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "modified_at": {
+    "type": "string"
+   },
+   "page_count": {
+    "type": "number"
+   },
+   "producer": {
+    "type": "string"
+   },
+   "publication": {
+    "type": "string"
+   },
+   "published_at": {
+    "type": "string"
+   },
+   "source_length": {
+    "type": "number"
+   },
+   "subject": {
+    "type": "string"
+   },
+   "title": {
+    "type": "string"
+   },
+   "truncated": {
+    "type": "boolean"
+   },
+   "url": {
+    "type": "string"
+   },
+   "year": {
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Known URL Extract"
+}

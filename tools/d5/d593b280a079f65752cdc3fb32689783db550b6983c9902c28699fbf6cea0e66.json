@@ -1,0 +1,198 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Publish to a LinkedIn company Page"
+ },
+ "description": "Publish a post to one of the user\u2019s LinkedIn COMPANY PAGES \u2014 text, plus optionally an image, a video, a 2\u201320 image CAROUSEL (LinkedIn calls it a MultiImage post; pass the slides in order as imageUrls[]), or a LINK POST with a real preview card (linkUrl). USE linkUrl WHENEVER THE POINT OF THE POST IS A LINK: LinkedIn disables URL scraping for API partners, so a url sitting in the text renders as plain text with no card, and the card\u2019s title, description and image only exist if you pass linkTitle / linkDescription / linkThumbnailUrl \u2014 read them off the page and supply them. The media need not be a Hermoso render \u2014 it must be Hermoso-HOSTED because we upload the bytes to LinkedIn ourselves, and upload_file turns ANY file the user already has into such a URL. ORGANIC CAROUSELS ARE COMPANY-PAGE ONLY \u2014 a personal profile cannot publish one and is refused by name, so send a deck here rather than to post_to_linkedin. This is a DIFFERENT thing from post_to_linkedin, which publishes to the person\u2019s own profile: pick the one the user actually asked for and never substitute. organizationId comes from list_linkedin_pages; omit it only when the account administers exactly one Page. This PUBLISHES immediately and PUBLICLY \u2014 ALWAYS show the user the exact text and get an explicit yes BEFORE calling. A VIDEO POST CAN CARRY CAPTIONS AND ITS OWN COVER, and both are attached only during the upload: pass captionsSrt (SubRip content \u2014 LinkedIn is watched with the sound off) and videoThumbnailUrl (otherwise LinkedIn picks a frame for you). LinkedIn does NOT allow the image, video, captions or thumbnail of a published post to be swapped afterwards, so get all of that right first (the copy can still be edited with manage_linkedin_post).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "allowDuplicate": {
+    "description": "post it even though an identical post was just made or attempted. Only pass this when the user genuinely wants the same thing posted twice, or when you have LOOKED at the account and confirmed a timed-out attempt did not land.",
+    "type": "boolean"
+   },
+   "altText": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    ],
+    "description": "accessibility alt text (max 4086 characters, ~120 recommended). A STRING describes every image; an ARRAY describes each slide of a multi-image post separately, in slide order \u2014 LinkedIn stores altText per image, and their own sample request carries a different one on each. Not available on a PERSONAL-profile post: LinkedIn\u2019s member posting API has no alt-text field at all."
+   },
+   "brand": {
+    "description": "WHICH BRAND this post belongs to \u2014 id or exact name from list_brands (a shared workspace: its profile id). Beats the connection's pin for THIS CALL ONLY; a name that matches no brand, or two, is REFUSED and nothing is posted.",
+    "type": "string"
+   },
+   "captionsSrt": {
+    "description": "CLOSED CAPTIONS for a videoUrl post \u2014 the SubRip (.srt) CONTENT itself, cue numbers and `00:00:00,000 --> 00:00:02,000` timing lines included, NOT a URL and NOT the plain script (a file with no timings is refused, because LinkedIn would accept it and then silently never show it). Most of LinkedIn is watched with the sound off, so an uncaptioned video is one most of the feed never hears. LinkedIn allows ONE caption file per video and ENGLISH ONLY; it can be attached only WHILE the video is uploaded, never added to a published post; and it is processed asynchronously, so the reply confirms it was UPLOADED and never that it is visible yet. Requires videoUrl \u2014 passing it on an image, carousel or link post is refused by name.",
+    "type": "string"
+   },
+   "coverAtMs": {
+    "description": "THE VIDEO COVER of a videoUrl post, as ONE frame: milliseconds from the start (7000 = the frame at 7s). That frame is uploaded as LinkedIn\u2019s video thumbnail (only possible while the video uploads). videoThumbnailUrl wins.",
+    "type": "number"
+   },
+   "hook": {
+    "description": "WHAT ANGLE this post is built on, recorded only at publish time. post_performance ranks hooks on it (a winner needs 5 posts sharing ONE hook), so pass a list_hooks id (e.g. \"direct_callout\", \"before_after\") or reuse your own wording EXACTLY across a campaign. Omit it and this post never votes on which hook works.",
+    "type": "string"
+   },
+   "ideaId": {
+    "description": "short id of the content-plan idea this post came from",
+    "type": "string"
+   },
+   "idempotencyKey": {
+    "description": "SAFE RETRIES \u2014 any stable string: a repeat of the SAME publish within 24h returns the ORIGINAL post id instead of posting again (an identical publish is also auto-recognised for 10 minutes). On a timeout or an ambiguous error, CALL AGAIN WITH THE SAME KEY: it reports the original post or publishes it once. It never posts twice.",
+    "type": "string"
+   },
+   "imageUrl": {
+    "description": "a Hermoso-hosted image URL \u2014 a render (list_library), or ANY image of the user\u2019s own passed through upload_file first. An arbitrary external host is refused.",
+    "type": "string"
+   },
+   "imageUrls": {
+    "description": "CAROUSEL \u2014 an ORDERED list of image (and, where the channel allows, video) URLs published as ONE post the viewer swipes through. THIS IS NOT \u201cpost several\u201d \u2014 it is a single post with several slides, which is what a multi-slide creative (a listicle, a \u201c1/6 \u00b7 SWIPE\u201d deck) actually needs; publishing only its first slide tells the viewer to swipe at something that cannot. The ORDER is the product. Limits per channel: Instagram 2\u201310 (images, videos or a mix), Threads 2\u201320 (mix allowed), Facebook 2+ (Meta publishes no documented maximum; Hermoso caps the upload fan-out at 30 and says so), LinkedIn company Pages 2\u201320 (images only), Pinterest 2\u20135 (images only), TikTok up to 35. One url here is simply an ordinary single post. Anything a channel cannot do is REFUSED with the real reason \u2014 nothing is ever quietly downgraded to one slide.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "linkDescription": {
+    "description": "the sub-line on the preview card. Same rule as linkTitle: absent means blank, because LinkedIn will not fetch it.",
+    "type": "string"
+   },
+   "linkThumbnailUrl": {
+    "description": "a Hermoso-hosted image used as the card\u2019s picture (uploaded to LinkedIn for you). Without it the card has no image.",
+    "type": "string"
+   },
+   "linkTitle": {
+    "description": "the headline ON the preview card. LINKEDIN NEVER SCRAPES THE PAGE \u2014 their Posts API disables URL scraping for API partners outright \u2014 so if you do not pass this the card renders UNLABELLED. Fetch the page\u2019s own title and pass it.",
+    "type": "string"
+   },
+   "linkUrl": {
+    "description": "publish a LINK POST \u2014 LinkedIn renders a real preview card for this URL instead of leaving a bare link in the text. Mutually exclusive with imageUrl / videoUrl / imageUrls: LinkedIn\u2019s content field is a union, so combining them is refused by name rather than one being dropped.",
+    "type": "string"
+   },
+   "organizationId": {
+    "description": "numeric Page id from list_linkedin_pages",
+    "type": "string"
+   },
+   "platformCover": {
+    "description": "VIDEO COVER. Omit it (the default) and Hermoso sets the video\u2019s best frame \u2014 the same frame as its Library thumbnail \u2014 as the cover (LinkedIn\u2019s video thumbnail upload). true = send no cover and let the platform pick (usually the first frame). A cover you pass yourself always wins.",
+    "type": "boolean"
+   },
+   "recipe": {
+    "description": "the post's FORMAT id, e.g. \"slideshow\" or \"imessage_chat\" \u2014 post_performance groups by it, so reuse one id per format",
+    "type": "string"
+   },
+   "subject": {
+    "description": "WHAT THIS POST IS ABOUT \u2014 product, feature, offer or theme (e.g. \"winter coat\", \"free trial\"). post_performance's second grouping axis: reuse the exact wording, as with hook.",
+    "type": "string"
+   },
+   "targetAudience": {
+    "description": "LINKEDIN COMPANY PAGE POST ONLY \u2014 show the post only to Page followers matching these facets (URNs or bare numeric ids; search_linkedin_ads_targeting finds them). LinkedIn requires the matching audience to be over 300 followers and refuses a smaller one. Personal-profile posts cannot be targeted.",
+    "properties": {
+     "degrees": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "fieldsOfStudy": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "geoLocations": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "industries": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "jobFunctions": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "organizations": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "seniorities": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "staffCountRanges": {
+      "items": {
+       "enum": [
+        "SIZE_1",
+        "SIZE_2_TO_10",
+        "SIZE_11_TO_50",
+        "SIZE_51_TO_200",
+        "SIZE_201_TO_500",
+        "SIZE_501_TO_1000",
+        "SIZE_1001_TO_5000",
+        "SIZE_5001_TO_10000",
+        "SIZE_10001_OR_MORE"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "text": {
+    "description": "the post text",
+    "type": "string"
+   },
+   "title": {
+    "description": "video title",
+    "type": "string"
+   },
+   "videoThumbnailUrl": {
+    "description": "the COVER IMAGE for a videoUrl post \u2014 a Hermoso-hosted image (a render, or any picture of the user\u2019s via upload_file). Without it LinkedIn adds a system-generated thumbnail, which on an ad is usually whatever the first frame happens to be. Like captions this can only be set WHILE the video is uploaded, never afterwards. Requires videoUrl. This is NOT linkThumbnailUrl, which is the picture on a link-preview card.",
+    "type": "string"
+   },
+   "videoUrl": {
+    "description": "a Hermoso-hosted video URL \u2014 a render, or the user\u2019s own footage via upload_file. LinkedIn processes it before publishing, which takes a minute.",
+    "type": "string"
+   },
+   "visibility": {
+    "description": "default PUBLIC",
+    "enum": [
+     "PUBLIC",
+     "CONNECTIONS"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "text"
+  ],
+  "type": "object"
+ },
+ "name": "post_to_linkedin_page",
+ "title": "Publish to a LinkedIn company Page"
+}

@@ -1,0 +1,282 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Search Jobs"
+ },
+ "description": "Search HireJack's database of live tech job postings. Filter by keyword, role family, seniority, skill, location, salary, remote policy, or visa sponsorship, and sort by newest or highest pay. Returns a slim list of jobs with title, company, location, salary range, posted date, and key skills. Use this for queries like 'remote senior backend roles paying $200K+', 'highest paying Rust jobs' (sort='salary'), 'data engineer jobs at fintech companies', 'who is hiring Rust developers in NYC'. Not for a single known posting (`get_job`), company-level questions (`get_company_profile`), personalized ranking (`recommendations`), or aggregate market stats (`get_market_pulse`).",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "company": {
+    "description": "Company domain to filter by, e.g. 'stripe.com'",
+    "type": "string"
+   },
+   "cursor": {
+    "description": "Opaque pagination cursor from a previous search_jobs call's `meta.next_cursor`. Pass it back with the SAME filters AND the same `sort` to fetch the next page of results.",
+    "type": "string"
+   },
+   "education": {
+    "description": "Minimum degree the job requires (AI-extracted). E.g. 'bachelor' returns jobs whose stated requirement is exactly a bachelor's.",
+    "enum": [
+     "none",
+     "associate",
+     "bachelor",
+     "master",
+     "phd"
+    ],
+    "type": "string"
+   },
+   "experience": {
+    "description": "Years-of-experience bucket the job asks for (AI-extracted yearsMin). E.g. '0-2' for entry-level-friendly roles, '10+' for very senior ones.",
+    "enum": [
+     "0-2",
+     "3-5",
+     "5-10",
+     "10+"
+    ],
+    "type": "string"
+   },
+   "family": {
+    "description": "Role family (software_engineering, machine_learning, etc.). Omit to search all families.",
+    "enum": [
+     "software_engineering",
+     "data_engineering",
+     "machine_learning",
+     "security",
+     "product",
+     "design",
+     "operations",
+     "marketing",
+     "sales",
+     "finance",
+     "people",
+     "services",
+     "legal",
+     "other"
+    ],
+    "type": "string"
+   },
+   "has_salary": {
+    "description": "Set true to only include jobs with a disclosed salary range; omit to include jobs without pay data.",
+    "type": "boolean"
+   },
+   "limit": {
+    "description": "Max results to return (default 25, max 100)",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "location": {
+    "description": "Location substring filter, e.g. 'San Francisco' or 'New York'",
+    "type": "string"
+   },
+   "posted_since": {
+    "description": "Only include jobs posted on or after this date (YYYY-MM-DD). E.g. for 'jobs posted this week', pass the date 7 days ago.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "q": {
+    "description": "Free-text keyword search (case-insensitive substring) across raw and standardized title, company name, company domain, and location. Tip: use the `skill` parameter for skill matches \u2014 `q` does NOT search job descriptions or the skill list.",
+    "type": "string"
+   },
+   "remote": {
+    "description": "Remote policy filter; 'remote+hybrid' matches either mode. Omit to include onsite jobs too.",
+    "enum": [
+     "remote",
+     "hybrid",
+     "remote+hybrid"
+    ],
+    "type": "string"
+   },
+   "salary_max": {
+    "description": "Maximum salary ceiling (annual USD). Matches jobs whose floor is at or below this (i.e. salaryMin <= X).",
+    "type": "integer"
+   },
+   "salary_min": {
+    "description": "Minimum salary floor (annual USD). Matches jobs whose disclosed salary range *could pay at least* this much (i.e. salaryMax >= X). A job with range $150K\u2013$250K matches salary_min=200000.",
+    "type": "integer"
+   },
+   "seniority": {
+    "description": "Seniority level on the intern \u2192 vp ladder. Omit to include all levels.",
+    "enum": [
+     "intern",
+     "junior",
+     "mid",
+     "senior",
+     "staff",
+     "principal",
+     "manager",
+     "director",
+     "vp"
+    ],
+    "type": "string"
+   },
+   "skill": {
+    "description": "Single skill name to require (case-insensitive substring match), e.g. 'Rust' or 'Kubernetes'",
+    "type": "string"
+   },
+   "sort": {
+    "description": "Result ordering. 'newest' (default) returns the most recently posted first. 'salary' ranks by the TOP of each disclosed USD range, highest first \u2014 use it for 'highest paying' / 'best paid' queries. Jobs with no disclosed pay or a non-USD range sink to the end in newest-first order, so combine with has_salary=true for a clean pay ranking.",
+    "enum": [
+     "newest",
+     "salary"
+    ],
+    "type": "string"
+   },
+   "visa": {
+    "description": "Visa sponsorship (AI-extracted): 'yes' returns jobs whose posting indicates sponsorship, 'no' those that rule it out. Omit to include jobs where the posting doesn't say.",
+    "enum": [
+     "yes",
+     "no"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "search_jobs",
+ "outputSchema": {
+  "additionalProperties": true,
+  "properties": {
+   "citation_url": {
+    "description": "hirejack.com URL to cite when surfacing this result",
+    "type": "string"
+   },
+   "data": {
+    "additionalProperties": true,
+    "description": "Search results page; meta.next_cursor is present when more pages exist",
+    "properties": {
+     "count": {
+      "description": "Jobs in this page (not the corpus total)",
+      "type": "number"
+     },
+     "jobs": {
+      "description": "Matching jobs, ordered by the requested `sort` (newest first by default, highest disclosed pay first when sort='salary')",
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "ai_summary": {
+         "description": "2-3 sentence AI summary when available (get_job only)",
+         "type": "string"
+        },
+        "apply_url": {
+         "description": "Direct ATS application URL",
+         "type": "string"
+        },
+        "company": {
+         "type": "string"
+        },
+        "company_domain": {
+         "description": "e.g. 'stripe.com' \u2014 pass to get_company_profile or company_fit",
+         "type": "string"
+        },
+        "detail_url": {
+         "description": "hirejack.com job page for citation",
+         "type": "string"
+        },
+        "education": {
+         "description": "Stated degree requirement, e.g. 'bachelor', or null",
+         "nullable": true,
+         "type": "string"
+        },
+        "family": {
+         "description": "Role family, e.g. 'software_engineering'",
+         "type": "string"
+        },
+        "id": {
+         "description": "Raw canonical job id \u2014 pass back to get_job, match_job, save_job, or track_application",
+         "type": "string"
+        },
+        "location": {
+         "description": "Normalized location, e.g. 'San Francisco, CA' or 'Remote (US)'",
+         "type": "string"
+        },
+        "posted_at": {
+         "description": "YYYY-MM-DD",
+         "type": "string"
+        },
+        "remote_policy": {
+         "description": "'remote' | 'hybrid' | 'onsite' | null \u2014 AI-extracted",
+         "nullable": true,
+         "type": "string"
+        },
+        "salary": {
+         "additionalProperties": true,
+         "description": "Disclosed pay range, or null when the posting lists none",
+         "nullable": true,
+         "properties": {
+          "currency": {
+           "description": "Currency code, e.g. 'USD'",
+           "type": "string"
+          },
+          "max": {
+           "description": "Top of the disclosed range (annual)",
+           "type": "number"
+          },
+          "min": {
+           "description": "Bottom of the disclosed range (annual)",
+           "type": "number"
+          },
+          "period": {
+           "description": "Pay period, normally 'year'",
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "seniority": {
+         "description": "intern|junior|mid|senior|staff|principal|manager|director|vp",
+         "type": "string"
+        },
+        "skills": {
+         "description": "Extracted skill names (capped)",
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "title": {
+         "description": "Standardized title when available, else the raw posting title",
+         "type": "string"
+        },
+        "track": {
+         "description": "ic|tech_leadership|hybrid|management (get_job only)",
+         "type": "string"
+        },
+        "visa_sponsorship": {
+         "description": "'yes' | 'no' | null \u2014 AI-extracted from the posting",
+         "nullable": true,
+         "type": "string"
+        },
+        "years_min": {
+         "description": "Minimum years of experience the posting asks for, or null",
+         "nullable": true,
+         "type": "number"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "jobs",
+     "count"
+    ],
+    "type": "object"
+   },
+   "meta": {
+    "additionalProperties": true,
+    "description": "Request/response metadata (pagination cursors, snapshot timestamps, applied filters)",
+    "properties": {},
+    "type": "object"
+   }
+  },
+  "required": [
+   "data"
+  ],
+  "type": "object"
+ },
+ "title": "Search Jobs"
+}

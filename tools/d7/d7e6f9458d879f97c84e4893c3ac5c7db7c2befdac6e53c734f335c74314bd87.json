@@ -1,0 +1,199 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Look up the geologic time scale \u2014 eons, eras, periods, epochs, and ages with their absolute-age boundaries in millions of years (Ma) and nesting. This is the reference that grounds every temporal filter on the other tools and translates a named interval like \"Late Cretaceous\" to its 100.5\u201366.0 Ma boundaries (and back). Filter by a name substring, a Ma range (overlap match), and/or a level; call with no filters to browse the full scale. Browsing and every name on the bundled ICS international-scale snapshot are answered offline. A name the snapshot does not carry \u2014 the sub-stage and regional names that occurrence and collection rows report, such as \"Late Maastrichtian\" or \"Lancian\" \u2014 costs one PBDB lookup across its other time scales; the response names which source answered and which scale the interval belongs to.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "level": {
+    "description": "Restrict to one rank of the international scale: eon, era, period, epoch, or age (finest). Browsing is bounded to that scale, so the sub-stage and regional ranks are not selectable here.",
+    "enum": [
+     "eon",
+     "era",
+     "period",
+     "epoch",
+     "age"
+    ],
+    "type": "string"
+   },
+   "max_ma": {
+    "description": "Older bound of an age window (Ma); intervals overlapping [min_ma, max_ma] match.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "min_ma": {
+    "description": "Younger bound of an age window (Ma); intervals overlapping [min_ma, max_ma] match.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "name": {
+    "description": "Case-insensitive substring of the interval name, e.g. \"cretaceous\" or \"Jurassic\". A name the bundled international scale does not carry is matched exactly against PBDB's other time scales.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "paleobiology_list_intervals",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "intervals",
+     "source",
+     "snapshot_version",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `interval_not_found`: A named interval filter matched nothing \u2014 neither the bundled international scale (after any level or Ma filters) nor a PBDB lookup across its other time scales. `interval_lookup_unavailable`: The name is outside the bundled international scale and the PBDB lookup that covers the other time scales could not be reached. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "interval_not_found",
+         "interval_lookup_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "intervals": {
+    "description": "Matching geologic intervals, sorted oldest-first.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A geologic time interval with its rank, Ma boundaries, and parent.",
+     "properties": {
+      "abbrev": {
+       "description": "Standard abbreviation (e.g. \"K\" for Cretaceous), when defined.",
+       "type": "string"
+      },
+      "color": {
+       "description": "ICS chart hex color for this interval, when defined.",
+       "type": "string"
+      },
+      "interval_no": {
+       "description": "PBDB interval id for this geologic interval.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "level": {
+       "description": "Rank of the interval in its time scale. The international scale uses eon > era > period > epoch > age (finest); other PBDB scales also use subepoch, subage, zone, subzone, chron, subchron, and bin.",
+       "type": "string"
+      },
+      "max_ma": {
+       "description": "Older (bottom) boundary in millions of years ago.",
+       "type": "number"
+      },
+      "min_ma": {
+       "description": "Younger (top) boundary in millions of years ago.",
+       "type": "number"
+      },
+      "name": {
+       "description": "Interval name, e.g. \"Maastrichtian\" or \"Late Maastrichtian\".",
+       "type": "string"
+      },
+      "parent_no": {
+       "description": "PBDB id of the containing interval (epoch\u2192period\u2192era\u2192eon). Omitted at the top.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "scale": {
+       "description": "The PBDB time scale carrying this interval, e.g. \"Mesozoic Subages\" or \"North American Land Mammal Ages\". Present only on an interval resolved upstream \u2014 every bundled interval is on the international scale, which snapshot_version names.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "interval_no",
+      "name",
+      "level",
+      "max_ma",
+      "min_ma"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance when no interval matched the filters.",
+    "type": "string"
+   },
+   "snapshot_version": {
+    "description": "ICS chart version and generation date of the bundled time scale, for citation.",
+    "type": "string"
+   },
+   "source": {
+    "description": "Which source answered: \"bundled_ics\" for the offline international-scale snapshot, \"pbdb_upstream\" for a name resolved live against PBDB's other time scales.",
+    "enum": [
+     "bundled_ics",
+     "pbdb_upstream"
+    ],
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Number of intervals matched by the filters.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "paleobiology-mcp-server: list geologic intervals"
+}

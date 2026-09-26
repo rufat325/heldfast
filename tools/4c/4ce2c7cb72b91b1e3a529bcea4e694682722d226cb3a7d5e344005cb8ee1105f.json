@@ -1,0 +1,43 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Cross-venue spread between Kalshi and Polymarket for the same resolving question. The two venues sometimes price the same outcome 2-25pp apart because their participant pools differ \u2014 when the bet shapes are equivalent that delta is a real signal, when they aren't the tool says so. TWO MODES: (1) `topic` \u2014 11 pre-mapped macro subjects (\"fed\", \"btc\", \"eth\", \"cpi\", \"gdp\", \"sp500\", \"recession\", \"next_pope\", \"next_uk_pm\", \"next_israel_pm\", \"2028_president\") auto-fetch the matching event on each venue. You do NOT have to use those exact keys: the topic is resolved through aliases and keywords, so \"bitcoin\", \"fed rate decision\", \"inflation\", \"s&p 500\" and \"next pope\" all land on the right subject, and `resolution.topic_matched_by` tells you whether it was an exact key, a known alias, a phrase found inside a longer question, or a single-keyword guess \u2014 treat \"phrase\" and \"token\" as a GUESS at what you meant. An unresolvable topic returns error:\"mapping_failed\" with mapping_stage:\"topic_unrecognized\" and known_topics[]; it never silently falls back to a default subject. (2) explicit `kalshi_event_ticker` + `polymarket_event_slug` for custom pairings \u2014 BOTH modes run the identical token-overlap matcher, so the same disclosures apply to both. `resolution` is returned in BOTH modes and says how each side's identifier was picked (which Kalshi series was queried, how many events came back, whether the chosen one had quoted markets; which Polymarket search query ran and why that event won). Fleet #2064: when two Polymarket candidates tie on resolution time `polymarket_selected_by` now SAYS so, names every tied slug, names the tie-break that actually decided it (the candidate whose metric_type matches the Kalshi series, else lexicographic slug order), and states whether the winner's metric matches the Kalshi series \u2014 it used to assert \"picked the soonest-resolving\" byte-identically on calls that returned DIFFERENT events, because the tie was settled by upstream fetch arrival order. RESPONSE: each venue's leg-by-leg prices (raw probability 0-1) plus matched spread[].top_spreads_pp (Kalshi \u2212 Polymarket) where the same outcome shows up on both sides. SAFETY FIELDS: compatibility_warning is a sentence and compatibility_codes[] the machine-readable form; BOTH can be non-empty on returned pairs, so read them even when matched_pairs>0. Codes: event_subject_mismatch (the two event titles share no subject words \u2014 probably not the same question), temporal_mismatch (the two events are about different SUBJECT months \u2014 e.g. Kalshi \"CPI in October\" vs Polymarket \"September Inflation\"), temporal_alignment_unknown (the subject month could not be parsed on one or both sides \u2014 NOT the same as confirmed-aligned; check each event yourself), non_equivalent_bet_shapes, no_candidate_pairs, unclassified_legs_excluded, pairing_unverified (set in EITHER mode whenever pairs are returned: the legs were matched by keyword and word overlap, not a shared resolution source). Each entry in top_spreads_pp carries its own flags[] (temporal_mismatch, temporal_alignment_unknown, event_subject_mismatch, low_token_overlap). A leg whose metric_type or match_subtype is \"unknown\" is NEVER paired \u2014 those comparisons land in spread.skipped_unclassified and, when the wording lined up, in spread.low_confidence_pairs[] for inspection only. temporal_alignment{polymarket_month,kalshi_month,aligned} tells you whether the two events are about the same SUBJECT calendar period, in EITHER mode \u2014 this is the period the question is ABOUT (e.g. \"September\" for a CPI release that settles in October), not necessarily when either side settles; null means it could not be computed (see temporal_alignment_unknown), not that the two sides align. Fleet #2062: this used to compare Polymarket's settlement date against Kalshi's subject month and call a match \u2014 fixed to compare subject month to subject month on both sides. FEES: every top_spreads_pp and low_confidence_pairs[] row carries edge_pp_gross (== |spread_pp|), fees_pp, edge_pp_net, net_positive, and BOTH venues' taker fees itemised as kalshi_fee_pp and polymarket_fee_pp (plus polymarket_fee_rate, polymarket_fee_category, polymarket_fee_basis). Kalshi leg: fee = ceil(0.07 * contracts * P * (1-P) * 100) / 100 dollars per order, verified against kalshi.com/docs and corroborating explainers as of 2026-09-12. Polymarket leg: fee = shares \u00d7 rate \u00d7 p \u00d7 (1-p) with rate by category (crypto 0.07, sports/economics/culture/weather/other 0.05, finance/politics/mentions/tech 0.04, geopolitics and world events fee-free), verified against Polymarket's own docs as of 2026-09-13 and read off each market's published fee parameters rather than inferred. Both amortized at a 100-contract reference size. Before fleet #1927 the Polymarket leg carried modeled gas only, which made every edge_pp_net here optimistic by up to ~1.75pp; spreads that no longer clear are the correction. Spread-crossing cost is still NOT modeled on the Polymarket leg (no live order book is fetched by this tool). spread.fees_note carries the same disclosure. RESOLUTION EQUIVALENCE (fleet #1909): every top_spreads_pp and low_confidence_pairs[] row now also carries resolution_equivalent (\"true\"|\"false\"|\"unclear\") and, when not \"true\", resolution_warning naming what differs \u2014 computed ONCE per event pair (not per leg) via resolution_audit/resolution_diff off one representative leg from each side, since the settlement mechanism is normally shared across every leg in one event. A non-equivalent or unclear pair is NEVER suppressed, only labelled \u2014 read resolution_warning before treating spread_pp as a real cross-venue disagreement rather than a difference in contract. spread.resolution_audit carries the full underlying audit (source/timestamp/timezone/precision/evidence_standard/void_handling for both sides) and spread.resolution_source_note is the standing disclosure explaining the methodology and its \"unclear\" caveat. Call resolution_audit/resolution_diff directly for a specific pair of legs if you need a non-representative-sample breakdown. skipped_cross_type / skipped_cross_subtype counters expose how many leg-pair comparisons were dropped (cross-type = metric_type mismatch like MoM vs YoY; cross-subtype = inequality mismatch like cum_ge vs cum_le). Real cross-venue spreads are rarer than the macro-shortcut list suggests \u2014 most pre-mapped topics return compatibility_warning today; pre-mapped \u2260 tradeable.",
+ "inputSchema": {
+  "examples": [
+   {
+    "topic": "fed"
+   },
+   {
+    "topic": "btc"
+   },
+   {
+    "topic": "bitcoin"
+   },
+   {
+    "topic": "fed rate decision"
+   }
+  ],
+  "properties": {
+   "kalshi_event_ticker": {
+    "description": "Explicit Kalshi event ticker, e.g. \"KXFED-26OCT\". Overrides the topic-mapped Kalshi side.",
+    "type": "string"
+   },
+   "polymarket_event_slug": {
+    "description": "Explicit Polymarket event slug, e.g. \"fed-decision-in-june-825\". Overrides the topic-mapped Polymarket side.",
+    "type": "string"
+   },
+   "topic": {
+    "description": "Subject to compare. Canonical keys: fed | btc | eth | cpi | gdp | sp500 | recession | next_pope | next_uk_pm | next_israel_pm | 2028_president \u2014 but aliases and keywords resolve too (\"bitcoin\", \"fed rate decision\", \"ethereum\", \"inflation\", \"s&p 500\", \"us recession\", \"next pope\", \"2028 election\"). Check resolution.topic_matched_by in the response: \"exact\"/\"alias\" is a curated pairing, \"phrase\"/\"token\" is a keyword guess.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "polymarket_kalshi_spread",
+ "title": "Polymarket\u2013Kalshi Spread",
+ "version": "v1.99c5374e"
+}

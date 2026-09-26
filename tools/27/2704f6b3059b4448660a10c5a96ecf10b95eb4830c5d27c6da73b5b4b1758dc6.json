@@ -1,0 +1,31 @@
+{
+ "description": "[Merchant] Get status of an ACTIVE transaction by ID (for completed/expired transactions use transaction history tool).\n\n**Endpoint:** GET /transactions/{transactionId}\n**Use Case:** Check status of ACTIVE transactions only. This endpoint only returns transactions with ACTIVE status.\n**Note:** For transactions with final statuses (CONFIRMED, DECLINED, FAILED, EXPIRED, CANCELLED), use 'payware_transactions_get_history' instead.\n\n\ud83d\udecd\ufe0f **Product-originated transactions carry a nested `product` object.** Since 2026-07-22 the\npresentation fields are grouped under `product` rather than sitting flat on the response - the old\ntop-level `imageUrl` is gone. Discriminate a product-originated transaction by the **presence of the\nobject**, not by probing individual fields:\n\n```json\n{ \"transactionId\": \"pw7e4rCToG\", \"amount\": \"57.60\", \"currency\": \"EUR\",\n  \"product\": { \"productId\": \"pr7e4rCToG\", \"type\": \"ITEM\", \"name\": \"Cotton T-shirt, black\",\n               \"shortDescription\": \"...\", \"longDescription\": \"...\",\n               \"imageUrl\": \"https://...\", \"imageDigest\": \"9f86d081...\", \"imageContentType\": \"image/png\",\n               \"imageBytes\": 20480, \"termsUrl\": \"https://...\", \"termsText\": \"...\",\n               \"regularPrice\": \"63.36\", \"shippable\": false, \"quickPay\": true, \"shopName\": \"My shop\" } }\n```\n\nThree things about that object:\n\n- **`imageDigest` is an obligation, not decoration.** It is the SHA-256 payware pinned for the image\n  at `imageUrl`. Fetch the image, verify its bytes against this digest before rendering it to a\n  payer, and fall back to a neutral placeholder on mismatch. Present only when `imageUrl` is the\n  product's own image.\n- **`regularPrice` is display-only, and appears only when there is a genuine saving** - i.e. when it\n  is higher than the transaction `amount`. The top-level `amount` and `currency` are authoritative\n  and are what the payer pays; the object does not repeat them.\n- **Availability follows the merchant's plan.** `imageUrl` and `termsUrl` are Standard and above;\n  `termsText` and the descriptions are universal. A missing field is a plan boundary, not an error.\n\nFor a `pr`/`ps` product identifier the values are resolved live; for the resulting `pw` transaction\nthey are the snapshot frozen at creation, so the response always reflects what the payer could have\nbeen shown at scan time.\n\n\ud83d\udcb0 **Amounts follow the currency, not a fixed two decimals.** `amount`, `fee`, `payerAmount` and\n`payeeAmount` are decimal strings at the smallest unit their own currency can be paid in - none for\nJPY, two for EUR, eight for BTC. Parse them with a decimal type; never compare them as strings, and\nnever assume two places. `feeRate` carries up to six decimals and `feeFixed` full stored precision:\nboth are informational, and recomputing the fee from them and submitting that at finalize is rejected\nwith ERR_FEE_MISMATCH. Echo `fee` back unchanged instead.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "partnerId": {
+    "default": "heldfast-churn-placeholder",
+    "description": "Partner ID from payware dashboard. Can use PAYWARE_PARTNER_ID env var as default.",
+    "type": "string"
+   },
+   "privateKey": {
+    "description": "RSA private key for JWT token creation. Can use PAYWARE_PRIVATE_KEY_PATH env var as default.",
+    "type": "string"
+   },
+   "transactionId": {
+    "description": "Transaction ID to check status for",
+    "type": "string"
+   },
+   "useSandbox": {
+    "default": true,
+    "description": "Use sandbox environment for testing",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "transactionId"
+  ],
+  "type": "object"
+ },
+ "name": "payware_operations_get_transaction_status"
+}

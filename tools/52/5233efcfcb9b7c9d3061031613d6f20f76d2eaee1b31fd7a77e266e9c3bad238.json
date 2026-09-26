@@ -1,0 +1,190 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Search Census variables by keyword across variable labels and concept groups. Returns variable codes with human-readable labels \u2014 use this to go from a concept like \"median household income\" to the variable code B19013_001E needed for data queries. On ACS datasets it returns both estimate (E suffix) and margin-of-error (M suffix) codes so you can request both; the ACS comparison profiles (acs/acs5/cprofile, acs/acs1/cprofile) and the other dataset families publish no margins of error. Also use it to find the predicate codes a dataset filters on, such as NAICS2017 in cbp. Adding a word narrows the results, since every word must match; when totalMatches exceeds the limit, a more specific query reaches the rest.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "dataset": {
+    "description": "Dataset to search within (default: \"acs/acs5\"). Use census_list_datasets to discover options. Case is ignored, and a two-part code can be given by its last part alone \u2014 \"acs5\" is acs/acs5, \"pl\" is dec/pl. Three-part codes such as acs/acs5/profile must be given in full. The response echoes the resolved code, and the default year is that dataset's latest.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Maximum results to return (default: 20, max: 100). Increase if totalMatches greatly exceeds the limit.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Keywords to search (e.g., \"median household income\", \"poverty\", \"bachelor's degree\"). Each word must match a whole word of the label or of the concept, ignoring case and punctuation, so \"rate\" does not match \"separated\". A column shared across tables, such as GEO_ID, is matched on its label only, and a margin of error on its estimate's label. When no variable contains every word, the results are the variables containing the most words, and the notice says how many that was.",
+    "type": "string"
+   },
+   "year": {
+    "description": "Vintage year to search (default: latest available for the dataset).",
+    "type": "number"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "census_search_variables",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "variables",
+     "effectiveQuery",
+     "dataset",
+     "year",
+     "totalMatches"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit that was applied.",
+    "type": "number"
+   },
+   "dataset": {
+    "description": "Dataset that was searched.",
+    "type": "string"
+   },
+   "effectiveQuery": {
+    "description": "Query as the server parsed it.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `dataset_not_found`: Dataset code is not recognized, even after case and shorthand resolution. `year_not_available`: The dataset does not serve the requested vintage year. `variables_unavailable`: Variable metadata could not be fetched or parsed from the Census API. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "dataset_not_found",
+         "year_not_available",
+         "variables_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when no variables matched, when no variable contained every query word and the results hold only some of them, or when results were truncated \u2014 suggests other keywords, a narrower query, or a higher limit.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of variables returned after the limit.",
+    "type": "number"
+   },
+   "totalMatches": {
+    "description": "Variables that contain every query word, before the limit was applied \u2014 or, when none does, the variables that contain the most words.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when totalMatches exceeded the limit and results were cut off.",
+    "type": "boolean"
+   },
+   "variables": {
+    "description": "Matching variables, best first: a variable whose label's last !!-separated segment or whose whole concept equals the query, then the query as a phrase in both label and concept, in the label only, in the concept only, then every word present but not as a phrase; ties go to fewer !! segments in the label, then a shorter concept, then the code, which puts an E estimate before its M margin of error. On ACS datasets, codes ending in E are estimates and M are their margins of error, except on the comparison profiles, which publish no M codes; on other datasets the suffix carries no such meaning.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single matching Census variable entry.",
+     "properties": {
+      "concept": {
+       "description": "Concept of the table the variable belongs to (e.g., \"Median Household Income in the Past 12 Months\"). Absent for a column shared across tables, such as GEO_ID, whose concept joins every table it appears in, and for a column the dataset publishes no concept for, such as STATE.",
+       "type": "string"
+      },
+      "estimate_code": {
+       "description": "Corresponding estimate variable code when this is a margin-of-error variable. ACS datasets only, apart from the comparison profiles \u2014 no other dataset publishes margins of error.",
+       "type": "string"
+      },
+      "label": {
+       "description": "Human-readable variable label from the Census data dictionary.",
+       "type": "string"
+      },
+      "moe_code": {
+       "description": "Corresponding margin-of-error variable code when this is an estimate variable. Request both estimate and MOE in census_query_data for complete data. ACS datasets only, apart from the comparison profiles (acs/acs5/cprofile, acs/acs1/cprofile) \u2014 there and on other families an E-final code has no margin-of-error sibling, so the field is absent.",
+       "type": "string"
+      },
+      "predicate_type": {
+       "description": "Data type of the variable (e.g., \"int\", \"string\", \"float\").",
+       "type": "string"
+      },
+      "variable_code": {
+       "description": "Variable code to pass to census_query_data (e.g., \"B19013_001E\").",
+       "type": "string"
+      }
+     },
+     "required": [
+      "variable_code",
+      "label",
+      "predicate_type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "year": {
+    "description": "Vintage year that was searched.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search Census Variables"
+}

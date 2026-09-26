@@ -1,0 +1,156 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Hatch a new site"
+ },
+ "description": "Create a NEW site (a 'roost') and return its public URL in one call. Returns `{ hatchId, slug, url, apex, uploads? }` \u2014 show `url` to the user and remember `hatchId`. NEVER call hatch twice for the same site \u2014 use `convert` to rename or change tier, and `upload`/`deploy` for content updates.\n\nPick `apex` from the user's intent (homes / estate / land / wedding / events / agency / site / omit for theroost.dev). Do NOT invent other apexes.\n\nWays to call it:\n\u2022 `html` (PREFERRED for n8n / a single review page) \u2192 one self-contained HTML string published at /. Do not also pass site/manifest/script.\n\u2022 Omit `html`, `manifest`, `site`, and `script` \u2192 a placeholder page is published instantly.\n\u2022 Pass `manifest` (file list with sizes) \u2192 returns presigned `uploads[]`; you PUT each file's bytes directly to its URL. PREFER this for any project with images, fonts, video, or more than a few KB of HTML.\n\u2022 Pass `site` (inline files map) \u2192 small text-only sites only. File keys must be paths like `index.html` (n8n may send `index`; that is accepted as `index.html`).\n\u2022 Pass `script` \u2192 advanced: full server-side code as one ES module (1.5 MiB max, text only \u2014 NEVER base64-embed binaries here).\n\nDo not send empty strings for optional fields (hatchId, preferredSlug, apex, html, site). Omit them.",
+ "inputSchema": {
+  "properties": {
+   "apex": {
+    "description": "Specialty hostname apex for the live URL (`https://{slug}.{apex}`). Choose from user intent: theroost.homes (residential listing), theroost.estate (commercial/luxury), theroost.land (land/parcels), theroost.wedding (wedding RSVP), theroost.events (conference/meetup), theroost.agency (pitch/portfolio), theroost.site (generic short-lived niche). Omit for theroost.dev. Never pass theroost.rentals (reserved).",
+    "enum": [
+     "theroost.dev",
+     "theroost.homes",
+     "theroost.estate",
+     "theroost.land",
+     "theroost.wedding",
+     "theroost.events",
+     "theroost.agency",
+     "theroost.site"
+    ],
+    "type": "string"
+   },
+   "hatchId": {
+    "description": "Optional id to reuse. Omit entirely to auto-generate. Do not send an empty string (n8n: leave this field unmapped). Lowercase letters, numbers, and hyphens only; 1\u201350 chars; must start and end alphanumeric.",
+    "type": "string"
+   },
+   "hitlTitle": {
+    "description": "Modal title for auto-opened HITL.",
+    "type": "string"
+   },
+   "html": {
+    "description": "Self-contained HTML document (inline CSS) published at /. Preferred for n8n and other AI tools that cannot pass nested site.files maps. Mutually exclusive with site, manifest, and script.",
+    "type": "string"
+   },
+   "kind": {
+    "description": "Artifact kind. Use `run-report` for agent observability / compliance run reports; default `site` for consumer sites.",
+    "enum": [
+     "site",
+     "run-report"
+    ],
+    "type": "string"
+   },
+   "manifest": {
+    "description": "PREFERRED for sites with assets. List every file you want served, with its byte size and optional MIME type. The response includes one presigned PUT URL per file; upload bytes directly via HTTP (e.g. `curl -T file.png -H 'Content-Type: image/png' \"$url\"`).",
+    "properties": {
+     "entry": {
+      "description": "Document served at /. Default index.html",
+      "type": "string"
+     },
+     "files": {
+      "additionalProperties": {
+       "properties": {
+        "contentType": {
+         "type": "string"
+        },
+        "size": {
+         "minimum": 0,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "size"
+       ],
+       "type": "object"
+      },
+      "description": "Relative path \u2192 { size in bytes, optional contentType }.",
+      "type": "object"
+     }
+    },
+    "required": [
+     "files"
+    ],
+    "type": "object"
+   },
+   "policy": {
+    "description": "HITL policy override for workspace-paired hatches. `required` forks sibling `{slug}-vN` roosts when review is outstanding or approved; `good_effort` overwrites in place and supersedes open HITL. Inherits workspace default when omitted.",
+    "enum": [
+     "required",
+     "good_effort"
+    ],
+    "type": "string"
+   },
+   "preferredSlug": {
+    "description": "Hostname label. Omit for a friendly auto-name (e.g. swift-falcon-7a).",
+    "type": "string"
+   },
+   "script": {
+    "description": "Advanced: full server-side code as one ES module. Text only, 1.5 MiB hard limit. NEVER embed images/fonts/binaries here \u2014 use `manifest` instead.",
+    "type": "string"
+   },
+   "scriptMetadata": {
+    "additionalProperties": true,
+    "type": "object"
+   },
+   "site": {
+    "description": "Inline file map. Suitable ONLY for small text-only sites (a handful of HTML/CSS files). For anything with images or binaries, use `manifest` instead.",
+    "properties": {
+     "entry": {
+      "description": "Document served at /. Default index.html",
+      "type": "string"
+     },
+     "files": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "Relative path \u2192 contents. Text (UTF-8) for .html/.css/.js/.json/.svg; base64 (optionally prefixed `base64:`) for binary.",
+      "type": "object"
+     }
+    },
+    "required": [
+     "files"
+    ],
+    "type": "object"
+   },
+   "tenantId": {
+    "description": "Legacy alias for `hatchId`.",
+    "type": "string"
+   },
+   "tier": {
+    "description": "`free` auto-expires (default 48h; override with `ttlSeconds`). In a paid Roost workspace, hatch stores `workspace` (still expires; not carousel-listed) even if you pass `free`. `forever` is a Pin (subscription slot or paid 1-year keep) \u2014 on this connector, hatch `free` then `checkout` with grant `publish`, or convert while subscription Pins remain.",
+    "enum": [
+     "free",
+     "forever"
+    ],
+    "type": "string"
+   },
+   "tosAcceptedAt": {
+    "description": "ISO-8601 timestamp",
+    "type": "string"
+   },
+   "ttlSeconds": {
+    "description": "Free-tier TTL in seconds (1h\u20137d). Default 172800 (48h). Ignored for `forever`.",
+    "maximum": 604800,
+    "minimum": 3600,
+    "type": "integer"
+   },
+   "webhookUrl": {
+    "description": "Webhook for auto-opened HITL under workspace policy (see PARTNER-WEBHOOKS.md).",
+    "type": "string"
+   },
+   "workspaceId": {
+    "description": "Workspace to hatch into (B2B). Omit when this connector is already paired to a workspace \u2014 the session supplies it. Do not hatch twice for a site that already exists in the workspace; call `list` first.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "tier"
+  ],
+  "type": "object"
+ },
+ "name": "hatch",
+ "title": "Hatch a new site"
+}

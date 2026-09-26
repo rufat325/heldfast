@@ -1,0 +1,178 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Fetch the full text of an arXiv paper. Tries arxiv.org/html first, falls back to ar5iv.labs.arxiv.org, and falls back again to text extracted from the PDF when neither has an HTML render \u2014 check the source field to know which one answered. Page through long papers with start and max_characters, or pass max_characters null to get the entire body in one call.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "max_characters": {
+    "anyOf": [
+     {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": 100000,
+    "description": "Maximum characters of paper body to return, counted after boilerplate stripping. Defaults to 100,000; pass null to return the entire body in one call. Whole-paper reads can exceed a client tool-result size cap \u2014 math-heavy bodies run 300KB-1MB+ \u2014 so prefer the default plus start-based paging unless the full text is needed. When truncated, a notice and the total character count are included."
+   },
+   "paper_id": {
+    "description": "arXiv paper ID (e.g., \"2401.12345\" or \"2401.12345v2\").",
+    "minLength": 1,
+    "type": "string"
+   },
+   "start": {
+    "default": 0,
+    "description": "Character offset into the cleaned body to begin reading from. Defaults to 0. Use with max_characters to page through long papers \u2014 e.g., start=100000 with max_characters=100000 returns chars 100,000\u2013199,999. The total length is reported as body_characters in the response.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "paper_id"
+  ],
+  "type": "object"
+ },
+ "name": "arxiv_read_paper",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "paper_id",
+     "title",
+     "content",
+     "source",
+     "truncated",
+     "start",
+     "total_characters",
+     "body_characters",
+     "pdf_url",
+     "abstract_url"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "abstract_url": {
+    "description": "arXiv abstract page URL for attribution.",
+    "type": "string"
+   },
+   "body_characters": {
+    "description": "Character count of the full cleaned body. Use with start and max_characters to page. Typically 3-4\u00d7 smaller than total_characters for math-heavy HTML papers.",
+    "type": "number"
+   },
+   "content": {
+    "description": "Paper body for the requested slice \u2014 cleaned HTML when source is arxiv_html or ar5iv, plain text when source is pdf_text. Empty when start is past body_characters.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_match`: Paper ID is not present in the arXiv index. `content_unavailable`: Paper exists but neither arxiv.org/html nor ar5iv has an HTML rendering and arXiv served no PDF either. `pdf_extraction_failed`: Paper has no HTML rendering and its PDF carries no text layer \u2014 an image-only or scanned submission. `version_unavailable`: A version-pinned paper_id was requested, arXiv is unreachable, and the local mirror holds only a different version \u2014 per-version reads require the live API. `rate_limited`: arXiv has throttled requests (HTTP 429 or \"Rate exceeded.\" body). `invalid_request`: arXiv rejected the metadata lookup (HTTP 4xx other than 429), e.g. malformed ID syntax. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_match",
+         "content_unavailable",
+         "pdf_extraction_failed",
+         "version_unavailable",
+         "rate_limited",
+         "invalid_request"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "paper_id": {
+    "description": "arXiv paper ID.",
+    "type": "string"
+   },
+   "pdf_url": {
+    "description": "Direct PDF download URL.",
+    "type": "string"
+   },
+   "source": {
+    "description": "Which upstream artifact the body was read from. arxiv_html and ar5iv are HTML renders; pdf_text is text extracted from the PDF, where prose is reliable but math, tables, and heading structure are flattened.",
+    "enum": [
+     "arxiv_html",
+     "ar5iv",
+     "pdf_text"
+    ],
+    "type": "string"
+   },
+   "start": {
+    "description": "Character offset of the first character in content within the cleaned body.",
+    "type": "number"
+   },
+   "title": {
+    "description": "Paper title (from metadata, not parsed from HTML).",
+    "type": "string"
+   },
+   "total_characters": {
+    "description": "Character count of the body before cleaning \u2014 the unprocessed HTML body for arxiv_html and ar5iv, and equal to body_characters for pdf_text, which needs no cleaning.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when more body content exists past this slice (start + content.length < body_characters).",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Arxiv Read Paper"
+}

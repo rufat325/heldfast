@@ -1,0 +1,70 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Cryptographically verify the digital signatures in a PDF document.\n\nFor each signature this tool: recomputes the ByteRange digest and compares it with the CMS messageDigest attribute, verifies the CMS/PKCS#7 signature value against the signer certificate, verifies any RFC 3161 signature timestamp, evaluates the certificate chain against trust anchors, and checks revocation status.\n\nArgs:\n  - file_path (string): Absolute path to a local PDF file\n  - response_format ('markdown' | 'json'): Output format (default: 'markdown')\n  - trust_anchors (string[], optional): Paths to trust anchor certificates (PEM/DER). Also reads the PDF_VERIFY_TRUST_ANCHORS env var (directory).\n  - check_revocation ('none' | 'embedded' | 'online'): Revocation mode (default: 'embedded'; 'online' queries OCSP/CRL endpoints over HTTP)\n  - revocation_freshness (integer seconds, default 86400): How long before the validation time a CRL / OCSP response may have been issued and still count as \"good\"\n  - trusted_ocsp_responders (string[], optional): Certificates of locally trusted OCSP responders (RFC 6960 \u00a74.2.2.2)\n  - password (string, optional): Password for an encrypted PDF (permission-encrypted PDFs are decrypted automatically with the empty user password)\n\nReturns:\n  An object of the form { scope, signatures: [...] }. The top level changed from an array to an object in v0.21.0 - read .signatures for the list.\n\n  Size (v0.29.0): a JSON response is never cut by length. At most 32 signature fields are verified (file order); when the file has more, signaturesTruncated = { returned, total } is set and the remaining fields are NOT verified \u2014 evaluate_policy verifies every field. A markdown response is cut at 50,000 characters with a visible marker.\n\n  Every report begins with a \"scope\" object - how far the reading got, not a verdict: whether the cross-reference chain could be walked to the end (chainStop), whether this tool had to rebuild the cross-reference table itself (reconstructed - when true, the table is this tool's reconstruction and not the one the file carries), how many objects and sections were read, and whether an encrypted document could be opened. Read it before the verdict: \"no violations\" over a rebuilt table is not the same statement as \"no violations\" over the file's own table. For this tool it matters most: when scope.reconstructed is true, a signature the rebuild did not reach is absent from the list, so a short or empty list is not proof that the file carries no other signatures.\n\n  Per-signature verdict ('valid' / 'invalid' / 'indeterminate'), trust status ('trusted' / 'untrusted' / 'not_evaluated' with certificate path), revocation status ('good' / 'revoked' / 'revoked_after_validation_time' / 'unknown' / 'not_checked'; 'not_checked' when check_revocation is 'none') with source, origin ('dss' / 'cms_signed_data' / 'cms_revocation_info_archival'), revocationTime, thisUpdate and nextUpdate, per-intermediate-CA results in trust.chainRevocation, validationTime ({ time, source: 'signature_timestamp' | 'document_timestamp' | 'current_time' }), and signature timestamp verification.\n\n  Validation time: a verified timestamp (the signature's own, else the earliest document timestamp covering it) or, without one, the current time. The CMS signingTime attribute is written by the signer and is never used. A revoked signer certificate makes the verdict 'indeterminate' unless a timestamp proves the signature predates the revocation (then the status is 'revoked_after_validation_time' and the verdict is unchanged). CRLs and OCSP responses whose signatures cannot be verified, that expired before the validation time, or that were issued more than revocation_freshness seconds before it give 'unknown'.\n\nNote: without trust_anchors (or the env var), trust is reported as not_evaluated \u2014 a 'valid' verdict then means cryptographic integrity, not signer identity assurance.\n\nComplements pdf-reader-mcp's inspect_signatures, which inspects structure only.\n\nExamples:\n  - Verify a signed contract has not been altered since signing\n  - Validate a signature against your organization's CA (trust_anchors)\n  - Check whether the signer certificate has been revoked (check_revocation: \"online\")",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "check_revocation": {
+    "default": "embedded",
+    "description": "Revocation checking: \"none\", \"embedded\" (OCSP/CRL data inside the PDF/CMS, default), or \"online\" (additionally query OCSP responders and CRL distribution points over HTTP).",
+    "enum": [
+     "none",
+     "embedded",
+     "online"
+    ],
+    "type": "string"
+   },
+   "file_path": {
+    "description": "Absolute path to a local PDF file (e.g., \"/path/to/document.pdf\")",
+    "minLength": 1,
+    "type": "string"
+   },
+   "password": {
+    "description": "Password for an encrypted PDF. Omit for permission-encrypted PDFs (an empty user password is tried automatically).",
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: \"markdown\" for human-readable, \"json\" for structured data",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "revocation_freshness": {
+    "default": 86400,
+    "description": "Seconds before the validation time that a CRL / OCSP response may have been issued (thisUpdate) and still support \"good\". Default 86400 (24 h); 0 accepts only data issued at or after the validation time. Older data gives \"unknown\".",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "trust_anchors": {
+    "description": "Absolute paths to trust anchor certificates (PEM or DER). Merged with the PDF_VERIFY_TRUST_ANCHORS environment variable (a directory of *.pem/*.crt/*.cer/*.der files). When omitted and the env var is unset, trust is reported as not_evaluated.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "trusted_ocsp_responders": {
+    "description": "Absolute paths to certificates (PEM or DER) of locally trusted OCSP responders (RFC 6960 \u00a74.2.2.2). A response signed by one of them is accepted even when the responder is not the issuing CA or its delegate.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "file_path"
+  ],
+  "type": "object"
+ },
+ "name": "verify_signatures",
+ "title": "Verify PDF Digital Signatures (cryptographic)"
+}

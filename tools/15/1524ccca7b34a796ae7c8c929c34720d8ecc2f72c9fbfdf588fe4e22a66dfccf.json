@@ -1,0 +1,268 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch 13F-HR quarterly institutional holdings by parsing the SEC EDGAR information table XML. company is the institutional filer \u2014 its 10-digit CIK (e.g. 0000102909), a ticker, or an entity name (names outside EDGAR's ticker file resolve through EDGAR entity search) \u2014 and the tool returns what that institution holds. A name that matches several EDGAR filers (some legal names are shared across entities) returns those candidates so you can retry with the exact CIK, rather than guessing. For the reverse direction \u2014 which institutions hold a given portfolio company \u2014 use secedgar_find_holders, whose filer_cik results feed straight back into this tool. The 13F information table lists each position: issuer name, CUSIP, shares held, market value (in whole USD), and put/call designation for options. Sub-lines for the same security are consolidated into distinct positions sorted by value by default (set consolidate=false for raw filing rows). The inline holdings list is one page of limit rows starting at offset \u2014 pass the returned next_offset to walk further down a large information table. The full parsed holdings set is also materialized as df_<id> when a canvas is available \u2014 inspect it with secedgar_dataframe_describe, then query it with secedgar_dataframe_query to aggregate the whole filing or self-join across quarters on cusip + reporting_period. Institutions with less than $100M in 13(f) securities are exempt and may not file. Use secedgar_search_filings with forms=[\"13F-HR\"] for broader search.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "company": {
+    "description": "The institutional filer whose 13F to fetch \u2014 a 10-digit CIK (e.g. \"0000102909\" for VANGUARD GROUP INC, the most reliable form), a ticker, or an entity name. A name is matched against the registrants in EDGAR's ticker file first (current and former names) and, when none match, resolved through EDGAR entity search, which covers institutional managers absent from that file; a name matching several filers (some legal names are shared across entities) returns those candidates so you can retry with the exact CIK. This is NOT the portfolio company \u2014 passing an issuer ticker like \"AAPL\" finds that operating company's own filings (it files no 13F), not who holds it; use secedgar_find_holders for that direction.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "consolidate": {
+    "default": true,
+    "description": "When true (default), info-table sub-lines for the same security (CUSIP + class + put/call) are summed into one position and results are sorted by market value descending, so `limit` returns the largest distinct holdings. Set false to return raw information-table rows in filing order (one per investment-discretion/manager sub-line), preserving investment_discretion.",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Maximum number of holdings rows to return. 13F filings from large institutions can contain thousands of positions. Default 20.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Row to start the page at, 0-based, over the ordered position list. Pass the next_offset from the previous response to read the next page \u2014 the filing is parsed whole and sliced, so paging is stable and gap-free. An offset at or past the position count returns an empty page.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "quarter": {
+    "description": "Reporting quarter to target, in \"YYYY-QN\" format (e.g., \"2025-Q4\"), matched exactly against each 13F-HR's period of report. When omitted, returns the most recent 13F-HR in the submissions feed's recent window (the last year or 1,000 filings, whichever holds more). Quarters map to the filing window: Q4 2025 = filings submitted roughly Jan\u2013Mar 2026. A quarter older than the recent window is looked up in the archive, reading forward from the quarter end up to 10 archive pages. A quarter the manager covered with a 13F-NT notice (holdings reported by other managers) fails naming that notice.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "company"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_get_institutional_holdings",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "filer_name",
+     "filer_cik",
+     "filing_date",
+     "accession_number",
+     "total_holdings_in_filing",
+     "offset",
+     "holdings"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "accession_number": {
+    "description": "Accession number for this 13F-HR filing \u2014 pass to secedgar_get_filing for the full document.",
+    "type": "string"
+   },
+   "cap": {
+    "description": "The limit cap applied.",
+    "type": "number"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe holding every parsed position from this 13F filing (the inline holdings[] is a preview capped at limit). Each row carries the filer metadata (filer_cik, filer_name, reporting_period, filing_date, accession_number) plus the position fields, so it self-joins across quarters/filers on cusip + reporting_period. Reflects the consolidate setting (consolidated positions when true, raw info-table sub-lines with investment_discretion when false). Query with secedgar_dataframe_query. Absent when canvas is unavailable or the filing had no holdings.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `company_not_found`: The company input does not resolve to a known company or institution. `ambiguous_entity`: The name resolves to multiple EDGAR entities (e.g. several filers sharing a legal name). `no_filings_found`: No 13F-HR matches \u2014 the entity files none, none exists for the requested quarter in the recent submissions window or the archive pages searched, or the manager filed a 13F-NT notice instead (for the requested quarter, or as its only recent 13F filing when no quarter is given). `no_info_table`: The 13F-HR filing was found but the information table XML document could not be located. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "company_not_found",
+         "ambiguous_entity",
+         "no_filings_found",
+         "no_info_table",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "filer_cik": {
+    "description": "CIK of the 13F filer, zero-padded to 10 digits.",
+    "type": "string"
+   },
+   "filer_name": {
+    "description": "Name of the institutional filer (the 13F submitter).",
+    "type": "string"
+   },
+   "filing_date": {
+    "description": "Date the 13F was submitted (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "holdings": {
+    "description": "One page of holdings, `limit` rows starting at `offset` \u2014 consolidated positions sorted by market value when consolidate=true, else raw information-table rows in filing order.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One row from the 13F information table.",
+     "properties": {
+      "cusip": {
+       "description": "9-digit CUSIP identifier. Absent when omitted by the filer.",
+       "type": "string"
+      },
+      "investment_discretion": {
+       "description": "SOLE = sole investment discretion, DFND = defined (shared/advised), OTR = other. Absent when not reported.",
+       "enum": [
+        "SOLE",
+        "DFND",
+        "OTR"
+       ],
+       "type": "string"
+      },
+      "issuer_name": {
+       "description": "Name of the issuer whose securities are held.",
+       "type": "string"
+      },
+      "market_value_usd": {
+       "description": "Market value of the position in whole USD at the reporting date. SEC Form 13F has reported whole dollars since the 2023 amendments; values from filings before 2023-01-03 (originally thousands) are normalized to whole USD. Absent when not reported.",
+       "type": "number"
+      },
+      "put_call": {
+       "description": "Options designation. Present only when the row represents a put or call option position.",
+       "enum": [
+        "Put",
+        "Call"
+       ],
+       "type": "string"
+      },
+      "shares_or_principal_amount": {
+       "description": "Number of shares (for equities) or principal amount (for debt securities). Absent when not reported.",
+       "type": "number"
+      },
+      "shares_or_principal_type": {
+       "description": "SH = share position, PRN = principal amount (bonds, notes). Absent when not reported.",
+       "enum": [
+        "SH",
+        "PRN"
+       ],
+       "type": "string"
+      },
+      "title_of_class": {
+       "description": "Security class (e.g., \"COM\", \"CL A\", \"ETF\"). Absent when not reported.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "issuer_name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "next_offset": {
+    "description": "Offset to pass on the next call to continue through the positions. Absent on the last page (no rows remain past this one).",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when no filings were found or the result set is empty \u2014 suggests alternatives.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Row the returned page starts at, 0-based \u2014 the effective offset applied.",
+    "type": "number"
+   },
+   "reporting_period": {
+    "description": "The calendar-quarter end date this 13F covers (YYYY-MM-DD), from the filing cover page. Absent if not surfaced in the filing.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of holdings shown inline.",
+    "type": "number"
+   },
+   "total_holdings_in_filing": {
+    "description": "Total number of raw information-table rows in this filing, before consolidation and the limit.",
+    "type": "number"
+   },
+   "total_positions": {
+    "description": "Number of distinct positions after consolidating info-table sub-lines, before the limit. Present only when consolidate=true.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the inline holdings[] was capped by limit.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Institutional Holdings"
+}

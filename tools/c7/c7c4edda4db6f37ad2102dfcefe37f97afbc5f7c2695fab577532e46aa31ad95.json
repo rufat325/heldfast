@@ -1,0 +1,53 @@
+{
+ "description": "Execute a SQL script containing multiple statements in one call and return a result per statement. Statements are split with a database-dialect-aware parser, so semicolons inside strings, comments and stored procedures are handled. Stops at the first failing statement unless continue_on_error is true. Pass session_id (from dbx_open_session) when statements must share one connection (e.g. temporary tables, USE/SET). Pass cell_char_offset/cell_char_limit to expand long string cells in every statement's result, exactly like dbx_execute_query. When use_transaction is true and the script has multiple statements, the whole script runs in one transaction and the call returns a single merged result instead of one result per statement (single-statement scripts run normally and return that one result); use_transaction cannot be combined with session_id or continue_on_error, and is rejected when the backend cannot provide a rollbackable transaction or for MySQL-family DDL scripts (DDL implicitly commits and cannot be rolled back).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "cell_char_limit": {
+    "description": "Maximum characters returned per string cell (default 200, max 4000). Increase only for an explicit long-value expansion.",
+    "format": "uint64",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "cell_char_offset": {
+    "description": "Start character offset for every string cell (default 0, max 1000000). Use the next offset reported by a truncated result to slide through a long value; narrow the query to the target row and column first.",
+    "format": "uint64",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "connection_id": {
+    "description": "Unique ID of the DBX connection",
+    "type": "string"
+   },
+   "connection_name": {
+    "description": "Name of the DBX connection",
+    "type": "string"
+   },
+   "continue_on_error": {
+    "description": "When true, execution continues after a statement error instead of stopping at the first failure. Connection-level failures always stop the batch. Default false (stop at first failure).",
+    "type": "boolean"
+   },
+   "database": {
+    "description": "Database name",
+    "type": "string"
+   },
+   "session_id": {
+    "description": "Session ID from dbx_open_session. When set, every statement runs on the session's pinned connection, preserving USE/SET, temporary tables and other session state across statements in the script and across calls.",
+    "type": "string"
+   },
+   "sql": {
+    "description": "SQL script containing one or more statements. Statements are split using the database-dialect-aware splitter, so semicolons inside strings, comments, and stored procedures are handled.",
+    "type": "string"
+   },
+   "use_transaction": {
+    "description": "When true and the script has more than one statement, all statements run inside one transaction (BEGIN \u2026 COMMIT) so the whole batch succeeds or rolls back, and the call returns a single merged result. For a single-statement script the option is ignored and the statement runs as normal auto-commit. Backends that cannot provide a rollbackable transaction reject this option. Cannot be combined with session_id or continue_on_error. Rejected for MySQL-family DDL scripts because DDL implicitly commits and cannot be rolled back. Default is auto-commit for each statement.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "sql"
+  ],
+  "type": "object"
+ },
+ "name": "dbx_execute_batch"
+}

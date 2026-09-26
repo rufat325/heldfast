@@ -1,0 +1,129 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Pro/Teams: N-shot CONSENSUS doctrine review of agentic code. ON CLIENT TIMEOUT: DO NOT RETRY THIS TOOL. Long-running (~80-120s for N=3 parallel LLM calls); MCP clients often close the call before the server returns. Retrying re-runs N \u00d7 60-180s LLM calls from scratch and burns N\u00d7 compute. RECOVERY: same heartbeat pattern as architect.validate, the run_id is emitted in the FIRST progress event at t=0s (before LLM children fire); on timeout, call `me.validation_history(run_id='<that-id>')` to fetch the persisted consensus envelope. Runs N parallel `architect.validate` calls with private_session=True, then aggregates them to a per-principle MODE verdict + median severity + per-principle stability + score range/stdev. Returns one ConsensusValidationResponse with the headline median score, the honest variance band, and a representative full ValidationResponse (the child whose score is closest to the median). WHEN TO CALL: the user wants an HONEST first-pass score on agentic code, with the architect's variance surfaced. The single-shot `architect.validate` re-asserts the prior persisted run's verdict via baseline-anchor injection: same code can score 60/C anchored vs 98/A unanchored. Consensus mode is the unanchored honest read. WHEN NOT TO CALL: when you NEED the iteration delta against a prior run (regressions/improvements panel), for that, call `architect.validate` which keeps baseline injection on. CHAIN RESUME: each child runs with `private_session=True` (no anchor) on purpose, but the CONSOLIDATED outer row IS persisted with `lifecycle_status='completed'`, the next single-shot `architect.validate` on the same repository auto-resolves it as prior_run_baseline. Consensus checkpoint becomes the new anchor. See the `architect-validation-orchestration` skill in the agent-asset pack for the full validate \u2192 consensus \u2192 certify sequence. BEHAVIOR: N (default 3, max 5) parallel LLM calls run concurrently; wallclock ~80-120s for N=3 (max child latency, not sum). Cost = N \u00d7 LLM bill. Each child runs with private_session=True so the doctrine prompt's prior-run baseline injection is suppressed (no anchor bias). One CONSOLIDATED `UserValidationRun` row is written carrying the consensus envelope; the N children themselves do NOT persist (private_session contract). AUTH: sign-in required, with an active Pro, Pro Plus, Teams, Enterprise, beta, or trial plan. Same paid-plan gate as architect.validate. INPUTS: same shape as architect.validate. `n` is the only extra arg (range 2..5). `private_session` is implicit (always true for children); the OUTER consolidated row IS persisted unless the tool itself is called inside another private context: but no such wrapper exists today. OUTPUT: response carries `score_consensus_median` (headline), `score_stdev` (honest uncertainty), `score_range` (min, max), `mode_stability_min_pct` (the cert-eligibility gate's input, \u2265 80% means the consensus is stable), `per_principle` (mode + distribution + severity median per principle), and `representative_response` (the closest-to-median child's full ValidationResponse so existing UI components render unchanged). TYPED FAILURES: same as architect.validate (timed_out, rate_limited, dependency_unavailable). Plus consensus-specific: `consensus_quorum_failed` when fewer than 2 child runs succeeded (\u2265 2 required to compute a meaningful median).",
+ "inputSchema": {
+  "properties": {
+   "example_limit": {
+    "default": 3,
+    "description": "Max curated examples per child run.",
+    "minimum": 1,
+    "title": "Example Limit",
+    "type": "integer"
+   },
+   "files": {
+    "anyOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "List of file paths relevant to the implementation.",
+    "title": "Files"
+   },
+   "focus_area": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Optional: narrow the review to a principle cluster or slug.",
+    "title": "Focus Area"
+   },
+   "goals": {
+    "anyOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Specific safety or quality goals to evaluate against.",
+    "title": "Goals"
+   },
+   "implementation_context": {
+    "description": "The artifact under review. SEND FULL FILE CONTENTS VERBATIM: same constraint as architect.validate. Truncation produces hallucinated findings on code that isn't there.",
+    "title": "Implementation Context",
+    "type": "string"
+   },
+   "language": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Programming language of the code (e.g. 'python').",
+    "title": "Language"
+   },
+   "n": {
+    "default": 3,
+    "description": "Number of parallel child runs. Default 3 (the variance signal is visible at N=3; cost = 3\u00d7 LLM bill). Capped server-side by Settings.consensus_n_max (default 5).",
+    "maximum": 10,
+    "minimum": 2,
+    "title": "N",
+    "type": "integer"
+   },
+   "repository": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Iteration key. Consensus children all run unanchored (`private_session=True`), but the consolidated row IS persisted under this key: discoverable as prior baseline for the next single-shot `architect.validate`. Same value across calls keeps the iteration arc inspectable.",
+    "title": "Repository"
+   },
+   "task": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "What the agent or workflow is trying to accomplish.",
+    "title": "Task"
+   }
+  },
+  "required": [
+   "implementation_context"
+  ],
+  "title": "validate_consensus_agent_architectureArguments",
+  "type": "object"
+ },
+ "name": "architect.validate_consensus",
+ "outputSchema": {
+  "additionalProperties": true,
+  "title": "validate_consensus_agent_architectureDictOutput",
+  "type": "object"
+ },
+ "title": "Validate Agent Architecture (Consensus Mode)"
+}

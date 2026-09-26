@@ -1,0 +1,143 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Get the text forecast for a public NWS forecast zone. Returns named forecast periods (e.g., \"Today\", \"Tonight\", \"Monday\") with detailed narrative text \u2014 the human-readable, zone-level forecast written by local forecasters. Completes the alert-to-forecast chain: nws_search_alerts returns each affected zone in \"affectedZones\" as a code plus a type, and nws_find_stations returns codes in the \"forecastZone\" column. Only affectedZones entries with type \"forecast\" work here; entries typed \"county\" or \"fire\" have no text forecast upstream and will not resolve, and neither do marine forecast zones (e.g., \"PZZ251\", \"GMZ056\"). Zone codes follow the pattern XXZ### (e.g., \"WAZ315\" for Western Washington lowlands).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "zone_id": {
+    "description": "NWS public forecast zone code (e.g., \"WAZ315\" for the Western Washington lowlands including Seattle). Returned as \"forecastZone\" by nws_get_forecast and nws_find_stations, or as the \"code\" of an \"affectedZones\" entry with type \"forecast\" in nws_search_alerts. Format: two-letter state + \"Z\" + three-digit number.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "zone_id"
+  ],
+  "type": "object"
+ },
+ "name": "nws_get_zone_forecast",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "zoneId",
+     "updated",
+     "periods",
+     "periodCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `zone_not_found`: Zone code is not a valid public forecast zone. `zone_forecast_unavailable`: Zone is a valid public forecast zone, but NWS has no text forecast for it. `marine_forecast_unsupported`: Zone is a marine forecast zone, for which NWS publishes no text forecast. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "zone_not_found",
+         "zone_forecast_unavailable",
+         "marine_forecast_unsupported"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "periodCount": {
+    "description": "Number of forecast periods returned.",
+    "type": "number"
+   },
+   "periods": {
+    "description": "Forecast periods in chronological order, typically covering 7 days.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Single forecast period with name and narrative",
+     "properties": {
+      "detailedForecast": {
+       "description": "Full narrative forecast for this period, written by local forecasters (e.g., \"Partly cloudy. Highs in the upper 60s. Southwest winds 10 to 15 mph.\").",
+       "type": "string"
+      },
+      "name": {
+       "description": "Period name (e.g., \"Today\", \"Tonight\", \"Monday\").",
+       "type": "string"
+      },
+      "number": {
+       "description": "Period sequence number, starting at 1.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "number",
+      "name",
+      "detailedForecast"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "updated": {
+    "description": "When the zone forecast was last updated (ISO 8601 with timezone offset).",
+    "type": "string"
+   },
+   "zoneId": {
+    "description": "Zone ID as provided (e.g., \"WAZ315\").",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Nws Get Zone Forecast"
+}

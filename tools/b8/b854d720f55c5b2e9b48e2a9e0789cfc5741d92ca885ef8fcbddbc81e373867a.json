@@ -1,0 +1,1222 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get one unranked fresh candidate with direct_route_summary and continuation_v3. The adapter verifies the canonical full-quote hash, route-summary hash, fingerprint claim, wallet/signer requirements, path, bounds, modes, and TTL. It never auto-selects or treats caller_approved:true as human proof. Example: quote solana USDC to Base USDC at USD 1000. Read-only; never authenticates, prepares, signs, or submits.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "amount_usd": {
+    "description": "Requested input value in USD, minimum 1. USD 1 is reachability/schema smoke only. A USD 50 competitive bucket was observed only for dated 2026-09-23 Solana USDC to Base USDC evidence and must not be generalized to another corridor. USD 1,000 is the primary representative amount. SOL input includes a swap. Always quote the actual intended amount.",
+    "minimum": 1,
+    "type": "number"
+   },
+   "from_chain": {
+    "description": "Source chain for the v2 route. Polygon and Optimism are source-only and cannot be used as to_chain.",
+    "enum": [
+     "solana",
+     "base",
+     "arbitrum",
+     "robinhood",
+     "polygon",
+     "optimism"
+    ],
+    "type": "string"
+   },
+   "from_token": {
+    "description": "Input token symbol on from_chain. The chain-token pair must appear in current v2 capabilities.",
+    "enum": [
+     "SOL",
+     "ETH",
+     "USDC",
+     "USDG"
+    ],
+    "type": "string"
+   },
+   "to_chain": {
+    "description": "Destination chain for the v2 route: Solana, Base, Arbitrum, or Robinhood Chain. Polygon and Optimism are not destinations.",
+    "enum": [
+     "solana",
+     "base",
+     "arbitrum",
+     "robinhood"
+    ],
+    "type": "string"
+   },
+   "to_token": {
+    "description": "Output token symbol on to_chain. The chain-token pair must appear in current v2 capabilities.",
+    "enum": [
+     "SOL",
+     "ETH",
+     "USDC",
+     "USDG"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "from_chain",
+   "from_token",
+   "to_chain",
+   "to_token",
+   "amount_usd"
+  ],
+  "type": "object"
+ },
+ "name": "assetfare_v2_quote",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "as_of": {
+    "maxLength": 64,
+    "minLength": 1,
+    "type": "string"
+   },
+   "caller_action_plan_handoff": {
+    "additionalProperties": true,
+    "properties": {},
+    "type": "object"
+   },
+   "continuation_v3": {
+    "additionalProperties": false,
+    "properties": {
+     "allowed_modes": {
+      "items": {
+       "enum": [
+        "one_shot",
+        "session"
+       ],
+       "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 1,
+      "type": "array"
+     },
+     "approval_v3_required_fields": {
+      "items": [
+       {
+        "const": "direct_route_summary_sha256",
+        "type": "string"
+       },
+       {
+        "const": "idempotency_key",
+        "type": "string"
+       },
+       {
+        "const": "maximum_input_base",
+        "type": "string"
+       },
+       {
+        "const": "minimum_output_base",
+        "type": "string"
+       },
+       {
+        "const": "quote_fingerprint",
+        "type": "string"
+       },
+       {
+        "const": "quote_id",
+        "type": "string"
+       },
+       {
+        "const": "selected_mode",
+        "type": "string"
+       },
+       {
+        "const": "selection_status",
+        "type": "string"
+       },
+       {
+        "const": "version",
+        "type": "string"
+       }
+      ],
+      "maxItems": 9,
+      "minItems": 9,
+      "type": "array"
+     },
+     "automatic_selection_forbidden": {
+      "const": true,
+      "type": "boolean"
+     },
+     "caller_approved_boolean_is_not_human_proof": {
+      "const": true,
+      "type": "boolean"
+     },
+     "direct_route_summary_sha256": {
+      "$ref": "#/properties/continuation_v3/properties/quote_fingerprint"
+     },
+     "enforcement": {
+      "const": "server_enforced_quote_binding",
+      "type": "string"
+     },
+     "event_signer_public_required": {
+      "type": "boolean"
+     },
+     "expires_at": {
+      "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/issued_at"
+     },
+     "idempotency": {
+      "additionalProperties": false,
+      "properties": {
+       "field": {
+        "const": "idempotency_key",
+        "type": "string"
+       },
+       "pattern": {
+        "const": "^[A-Za-z0-9._:-]{8,128}$",
+        "type": "string"
+       },
+       "required": {
+        "const": true,
+        "type": "boolean"
+       },
+       "scope": {
+        "const": "quote_and_selected_mode",
+        "type": "string"
+       }
+      },
+      "required": [
+       "required",
+       "field",
+       "pattern",
+       "scope"
+      ],
+      "type": "object"
+     },
+     "input_base_bounds": {
+      "additionalProperties": false,
+      "properties": {
+       "maximum": {
+        "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/ttl_seconds"
+       },
+       "minimum": {
+        "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/ttl_seconds"
+       }
+      },
+      "required": [
+       "minimum",
+       "maximum"
+      ],
+      "type": "object"
+     },
+     "intent": {
+      "additionalProperties": true,
+      "properties": {
+       "amount_usd": {
+        "type": "number"
+       },
+       "estimated_input_base": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "from": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "to": {
+        "minLength": 1,
+        "type": "string"
+       }
+      },
+      "required": [
+       "from",
+       "to",
+       "amount_usd",
+       "estimated_input_base"
+      ],
+      "type": "object"
+     },
+     "issued_at": {
+      "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/issued_at"
+     },
+     "legacy_handoff_enforcement": {
+      "const": "legacy_advisory",
+      "type": "string"
+     },
+     "minimum_output_base": {
+      "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/ttl_seconds"
+     },
+     "quote_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+     },
+     "quote_fingerprint_claim": {
+      "additionalProperties": false,
+      "properties": {
+       "allowed_modes": {
+        "items": {
+         "enum": [
+          "one_shot",
+          "session"
+         ],
+         "type": "string"
+        },
+        "maxItems": 2,
+        "minItems": 1,
+        "type": "array"
+       },
+       "direct_route_summary_sha256": {
+        "$ref": "#/properties/continuation_v3/properties/quote_fingerprint"
+       },
+       "event_signer_public_required": {
+        "type": "boolean"
+       },
+       "expires_at": {
+        "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/issued_at"
+       },
+       "input_base_bounds": {
+        "additionalProperties": false,
+        "properties": {
+         "maximum": {
+          "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/ttl_seconds"
+         },
+         "minimum": {
+          "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/ttl_seconds"
+         }
+        },
+        "required": [
+         "minimum",
+         "maximum"
+        ],
+        "type": "object"
+       },
+       "intent": {
+        "additionalProperties": false,
+        "properties": {
+         "amount_usd_decimal": {
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "type": "string"
+         },
+         "estimated_input_base": {
+          "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/ttl_seconds"
+         },
+         "from": {
+          "minLength": 1,
+          "type": "string"
+         },
+         "to": {
+          "minLength": 1,
+          "type": "string"
+         }
+        },
+        "required": [
+         "from",
+         "to",
+         "amount_usd_decimal",
+         "estimated_input_base"
+        ],
+        "type": "object"
+       },
+       "issued_at": {
+        "format": "date-time",
+        "type": "string"
+       },
+       "minimum_output_base": {
+        "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/ttl_seconds"
+       },
+       "quote_id": {
+        "$ref": "#/properties/continuation_v3/properties/quote_id"
+       },
+       "quote_payload_sha256": {
+        "$ref": "#/properties/continuation_v3/properties/quote_fingerprint"
+       },
+       "quote_payload_sha256_spec": {
+        "const": "sha256(AssetFare typed-canonical-v1 bytes of the quote without continuation_v3 after exact base-unit substitution: n=null; t/f=boolean; d=<IEEE-754 binary64 big-endian 16 lowercase hex> for each finite JSON number; s=<UTF-8 byte length>:<Unicode scalar text with lone surrogates forbidden>; a=<count>:[items]; o=<count>:{UTF-8-byte-sorted string-key/value pairs}; every non-substituted integral JSON number must be within +/-9007199254740991; substituted paths are intent.estimated_input_base, route.input_base, route.expected_output_base, route.minimum_output_base, and every route.steps[i].expected_input_base/floor_input_base/expected_output_base/minimum_output_base from direct_route_summary exact decimal strings)",
+        "type": "string"
+       },
+       "required_wallet_chains": {
+        "items": {
+         "enum": [
+          "arbitrum",
+          "base",
+          "optimism",
+          "polygon",
+          "robinhood",
+          "solana"
+         ],
+         "type": "string"
+        },
+        "maxItems": 6,
+        "minItems": 1,
+        "type": "array"
+       },
+       "server_signing": {
+        "const": false,
+        "type": "boolean"
+       },
+       "server_submission": {
+        "const": false,
+        "type": "boolean"
+       },
+       "step_count": {
+        "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/ttl_seconds"
+       },
+       "ttl_seconds": {
+        "pattern": "^[1-9][0-9]*$",
+        "type": "string"
+       },
+       "version": {
+        "const": "assetfare-quote-bound-continuation-v3",
+        "type": "string"
+       }
+      },
+      "required": [
+       "version",
+       "quote_id",
+       "issued_at",
+       "expires_at",
+       "ttl_seconds",
+       "intent",
+       "direct_route_summary_sha256",
+       "quote_payload_sha256",
+       "quote_payload_sha256_spec",
+       "input_base_bounds",
+       "minimum_output_base",
+       "required_wallet_chains",
+       "event_signer_public_required",
+       "step_count",
+       "allowed_modes",
+       "server_signing",
+       "server_submission"
+      ],
+      "type": "object"
+     },
+     "quote_fingerprint_spec": {
+      "const": "sha256(UTF-8 sorted-key compact JSON of quote_fingerprint_claim; every numeric claim is a non-exponent decimal string)",
+      "type": "string"
+     },
+     "quote_id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "quote_payload_sha256": {
+      "$ref": "#/properties/continuation_v3/properties/quote_fingerprint"
+     },
+     "quote_payload_sha256_spec": {
+      "const": "sha256(AssetFare typed-canonical-v1 bytes of the quote without continuation_v3 after exact base-unit substitution: n=null; t/f=boolean; d=<IEEE-754 binary64 big-endian 16 lowercase hex> for each finite JSON number; s=<UTF-8 byte length>:<Unicode scalar text with lone surrogates forbidden>; a=<count>:[items]; o=<count>:{UTF-8-byte-sorted string-key/value pairs}; every non-substituted integral JSON number must be within +/-9007199254740991; substituted paths are intent.estimated_input_base, route.input_base, route.expected_output_base, route.minimum_output_base, and every route.steps[i].expected_input_base/floor_input_base/expected_output_base/minimum_output_base from direct_route_summary exact decimal strings)",
+      "type": "string"
+     },
+     "recommended_mode": {
+      "enum": [
+       "session",
+       "one_shot_or_session"
+      ],
+      "type": "string"
+     },
+     "required_wallet_chains": {
+      "items": {
+       "$ref": "#/properties/continuation_v3/properties/quote_fingerprint_claim/properties/required_wallet_chains/items"
+      },
+      "maxItems": 6,
+      "minItems": 1,
+      "type": "array"
+     },
+     "selection_status": {
+      "const": "unranked_candidate",
+      "type": "string"
+     },
+     "server_signing": {
+      "const": false,
+      "type": "boolean"
+     },
+     "server_submission": {
+      "const": false,
+      "type": "boolean"
+     },
+     "session_header": {
+      "additionalProperties": false,
+      "properties": {
+       "caller_generated": {
+        "const": true,
+        "type": "boolean"
+       },
+       "minimum_entropy_bits": {
+        "const": 256,
+        "type": "number"
+       },
+       "name": {
+        "const": "X-AssetFare-Session-Token",
+        "type": "string"
+       },
+       "required_for": {
+        "const": "session",
+        "type": "string"
+       },
+       "server_returns_raw_value": {
+        "const": false,
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "name",
+       "required_for",
+       "caller_generated",
+       "minimum_entropy_bits",
+       "server_returns_raw_value"
+      ],
+      "type": "object"
+     },
+     "step_count": {
+      "maximum": 8,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "ttl_seconds": {
+      "maximum": 60,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "version": {
+      "const": "assetfare-quote-bound-continuation-v3",
+      "type": "string"
+     }
+    },
+    "required": [
+     "version",
+     "enforcement",
+     "selection_status",
+     "automatic_selection_forbidden",
+     "caller_approved_boolean_is_not_human_proof",
+     "quote_id",
+     "quote_fingerprint",
+     "quote_fingerprint_spec",
+     "quote_fingerprint_claim",
+     "issued_at",
+     "expires_at",
+     "ttl_seconds",
+     "intent",
+     "direct_route_summary_sha256",
+     "quote_payload_sha256",
+     "quote_payload_sha256_spec",
+     "input_base_bounds",
+     "minimum_output_base",
+     "required_wallet_chains",
+     "event_signer_public_required",
+     "step_count",
+     "recommended_mode",
+     "allowed_modes",
+     "session_header",
+     "idempotency",
+     "approval_v3_required_fields",
+     "legacy_handoff_enforcement",
+     "server_signing",
+     "server_submission"
+    ],
+    "type": "object"
+   },
+   "cost_summary": {
+    "additionalProperties": false,
+    "properties": {
+     "assetfare_service_fee": {
+      "additionalProperties": false,
+      "properties": {
+       "bps": {
+        "const": 1,
+        "type": "number"
+       },
+       "estimated_usd": {
+        "minimum": 0,
+        "type": "number"
+       },
+       "included_in_receive_amount": {
+        "const": true,
+        "type": "boolean"
+       },
+       "note": {
+        "minLength": 1,
+        "type": "string"
+       }
+      },
+      "required": [
+       "bps",
+       "estimated_usd",
+       "included_in_receive_amount",
+       "note"
+      ],
+      "type": "object"
+     },
+     "expected_receive_value_usd": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "expected_total_cost_percent": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "expected_total_cost_usd": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "input_value_usd": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "maximum_total_cost_percent": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "maximum_total_cost_usd": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "minimum_receive_value_usd": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "provider_fee_components": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "expected_usd": {
+         "minimum": 0,
+         "type": "number"
+        },
+        "included_in_receive_amount": {
+         "const": true,
+         "type": "boolean"
+        },
+        "kind": {
+         "minLength": 1,
+         "type": "string"
+        },
+        "maximum_usd": {
+         "minimum": 0,
+         "type": "number"
+        },
+        "provider": {
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "provider",
+        "kind",
+        "expected_usd",
+        "maximum_usd",
+        "included_in_receive_amount"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "rankable_all_in": {
+      "const": false,
+      "type": "boolean"
+     },
+     "scope": {
+      "const": "token_path_only_network_gas_excluded",
+      "type": "string"
+     },
+     "small_amount_warning": {
+      "type": "boolean"
+     },
+     "unpriced_costs": {
+      "items": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+     },
+     "warning": {
+      "anyOf": [
+       {
+        "minLength": 1,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "scope",
+     "input_value_usd",
+     "expected_receive_value_usd",
+     "minimum_receive_value_usd",
+     "expected_total_cost_usd",
+     "maximum_total_cost_usd",
+     "expected_total_cost_percent",
+     "maximum_total_cost_percent",
+     "assetfare_service_fee",
+     "provider_fee_components",
+     "unpriced_costs",
+     "rankable_all_in",
+     "small_amount_warning",
+     "warning"
+    ],
+    "type": "object"
+   },
+   "direct_route_summary": {
+    "additionalProperties": false,
+    "properties": {
+     "assetfare_fee_bps": {
+      "const": 1,
+      "type": "number"
+     },
+     "classification": {
+      "enum": [
+       "direct_protocol_only",
+       "external_intent"
+      ],
+      "type": "string"
+     },
+     "external_intent_protocol_used": {
+      "type": "boolean"
+     },
+     "fee_collection_step_index": {
+      "maximum": 7,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "from": {
+      "enum": [
+       "solana:SOL",
+       "solana:USDC",
+       "solana:USDG",
+       "base:ETH",
+       "base:USDC",
+       "arbitrum:ETH",
+       "arbitrum:USDC",
+       "robinhood:ETH",
+       "robinhood:USDG",
+       "polygon:USDC",
+       "optimism:USDC"
+      ],
+      "type": "string"
+     },
+     "mode": {
+      "enum": [
+       "cctp_direct_composition",
+       "optimism_source_cctp",
+       "polygon_source_cctp",
+       "robinhood_across_ingress_composition",
+       "robinhood_paxos_egress_composition",
+       "same_chain_direct",
+       "same_chain_direct_composition"
+      ],
+      "type": "string"
+     },
+     "provider_internal_dex_aggregation_possible": {
+      "type": "boolean"
+     },
+     "route": {
+      "enum": [
+       "solana:SOL->solana:USDC",
+       "solana:SOL->solana:USDG",
+       "solana:SOL->base:ETH",
+       "solana:SOL->base:USDC",
+       "solana:SOL->arbitrum:ETH",
+       "solana:SOL->arbitrum:USDC",
+       "solana:SOL->robinhood:ETH",
+       "solana:SOL->robinhood:USDG",
+       "solana:USDC->solana:SOL",
+       "solana:USDC->solana:USDG",
+       "solana:USDC->base:ETH",
+       "solana:USDC->base:USDC",
+       "solana:USDC->arbitrum:ETH",
+       "solana:USDC->arbitrum:USDC",
+       "solana:USDC->robinhood:ETH",
+       "solana:USDC->robinhood:USDG",
+       "solana:USDG->solana:SOL",
+       "solana:USDG->solana:USDC",
+       "solana:USDG->base:ETH",
+       "solana:USDG->base:USDC",
+       "solana:USDG->arbitrum:ETH",
+       "solana:USDG->arbitrum:USDC",
+       "solana:USDG->robinhood:ETH",
+       "solana:USDG->robinhood:USDG",
+       "base:ETH->solana:SOL",
+       "base:ETH->solana:USDC",
+       "base:ETH->solana:USDG",
+       "base:ETH->base:USDC",
+       "base:ETH->arbitrum:ETH",
+       "base:ETH->arbitrum:USDC",
+       "base:ETH->robinhood:ETH",
+       "base:ETH->robinhood:USDG",
+       "base:USDC->solana:SOL",
+       "base:USDC->solana:USDC",
+       "base:USDC->solana:USDG",
+       "base:USDC->base:ETH",
+       "base:USDC->arbitrum:ETH",
+       "base:USDC->arbitrum:USDC",
+       "base:USDC->robinhood:ETH",
+       "base:USDC->robinhood:USDG",
+       "arbitrum:ETH->solana:SOL",
+       "arbitrum:ETH->solana:USDC",
+       "arbitrum:ETH->solana:USDG",
+       "arbitrum:ETH->base:ETH",
+       "arbitrum:ETH->base:USDC",
+       "arbitrum:ETH->arbitrum:USDC",
+       "arbitrum:ETH->robinhood:ETH",
+       "arbitrum:ETH->robinhood:USDG",
+       "arbitrum:USDC->solana:SOL",
+       "arbitrum:USDC->solana:USDC",
+       "arbitrum:USDC->solana:USDG",
+       "arbitrum:USDC->base:ETH",
+       "arbitrum:USDC->base:USDC",
+       "arbitrum:USDC->arbitrum:ETH",
+       "arbitrum:USDC->robinhood:ETH",
+       "arbitrum:USDC->robinhood:USDG",
+       "robinhood:ETH->solana:SOL",
+       "robinhood:ETH->solana:USDC",
+       "robinhood:ETH->solana:USDG",
+       "robinhood:ETH->base:ETH",
+       "robinhood:ETH->base:USDC",
+       "robinhood:ETH->arbitrum:ETH",
+       "robinhood:ETH->arbitrum:USDC",
+       "robinhood:ETH->robinhood:USDG",
+       "robinhood:USDG->solana:SOL",
+       "robinhood:USDG->solana:USDC",
+       "robinhood:USDG->solana:USDG",
+       "robinhood:USDG->base:ETH",
+       "robinhood:USDG->base:USDC",
+       "robinhood:USDG->arbitrum:ETH",
+       "robinhood:USDG->arbitrum:USDC",
+       "robinhood:USDG->robinhood:ETH",
+       "polygon:USDC->base:USDC",
+       "polygon:USDC->arbitrum:USDC",
+       "optimism:USDC->base:USDC",
+       "optimism:USDC->arbitrum:USDC"
+      ],
+      "type": "string"
+     },
+     "route_aggregator_used": {
+      "const": false,
+      "type": "boolean"
+     },
+     "server_signing": {
+      "const": false,
+      "type": "boolean"
+     },
+     "server_submission": {
+      "const": false,
+      "type": "boolean"
+     },
+     "step_count": {
+      "maximum": 8,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "steps": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "enum": [
+          "swap",
+          "bridge",
+          "receive"
+         ],
+         "type": "string"
+        },
+        "aggregator_api_used": {
+         "const": false,
+         "type": "boolean"
+        },
+        "assetfare_fee_bps": {
+         "enum": [
+          0,
+          1
+         ],
+         "type": "number"
+        },
+        "direct_protocol": {
+         "type": "boolean"
+        },
+        "expected_input_base": {
+         "pattern": "^[1-9][0-9]*$",
+         "type": "string"
+        },
+        "expected_output_base": {
+         "pattern": "^[1-9][0-9]*$",
+         "type": "string"
+        },
+        "external_intent_protocol": {
+         "type": "boolean"
+        },
+        "from": {
+         "enum": [
+          "solana:SOL",
+          "solana:USDC",
+          "solana:USDG",
+          "base:ETH",
+          "base:USDC",
+          "arbitrum:ETH",
+          "arbitrum:USDC",
+          "robinhood:ETH",
+          "robinhood:USDG",
+          "polygon:USDC",
+          "optimism:USDC"
+         ],
+         "type": "string"
+        },
+        "index": {
+         "maximum": 7,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "minimum_input_base": {
+         "pattern": "^[1-9][0-9]*$",
+         "type": "string"
+        },
+        "minimum_output_base": {
+         "pattern": "^[1-9][0-9]*$",
+         "type": "string"
+        },
+        "provider": {
+         "enum": [
+          "raydium_clmm",
+          "orca_whirlpool",
+          "uniswap_v3",
+          "circle_cctp",
+          "circle_cctp_receive",
+          "paxos_usdg_layerzero_oft",
+          "across_intent_bridge"
+         ],
+         "type": "string"
+        },
+        "to": {
+         "enum": [
+          "solana:SOL",
+          "solana:USDC",
+          "solana:USDG",
+          "base:ETH",
+          "base:USDC",
+          "arbitrum:ETH",
+          "arbitrum:USDC",
+          "robinhood:ETH",
+          "robinhood:USDG"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "index",
+        "action",
+        "provider",
+        "from",
+        "to",
+        "expected_input_base",
+        "minimum_input_base",
+        "expected_output_base",
+        "minimum_output_base",
+        "assetfare_fee_bps",
+        "direct_protocol",
+        "external_intent_protocol",
+        "aggregator_api_used"
+       ],
+       "type": "object"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "type": "array"
+     },
+     "to": {
+      "enum": [
+       "solana:SOL",
+       "solana:USDC",
+       "solana:USDG",
+       "base:ETH",
+       "base:USDC",
+       "arbitrum:ETH",
+       "arbitrum:USDC",
+       "robinhood:ETH",
+       "robinhood:USDG"
+      ],
+      "type": "string"
+     },
+     "version": {
+      "const": "assetfare-direct-route-summary-v1",
+      "type": "string"
+     }
+    },
+    "required": [
+     "version",
+     "route",
+     "from",
+     "to",
+     "classification",
+     "mode",
+     "route_aggregator_used",
+     "external_intent_protocol_used",
+     "provider_internal_dex_aggregation_possible",
+     "assetfare_fee_bps",
+     "fee_collection_step_index",
+     "server_signing",
+     "server_submission",
+     "step_count",
+     "steps"
+    ],
+    "type": "object"
+   },
+   "eta": {
+    "additionalProperties": false,
+    "properties": {
+     "complete_route_estimate": {
+      "type": "boolean"
+     },
+     "estimated_time_range_seconds": {
+      "anyOf": [
+       {
+        "items": [
+         {
+          "minimum": 0,
+          "type": "integer"
+         },
+         {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+         }
+        ],
+        "maxItems": 2,
+        "minItems": 2,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "estimated_time_seconds": {
+      "anyOf": [
+       {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "note": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "sources": {
+      "items": {
+       "format": "uri",
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "estimated_time_seconds",
+     "estimated_time_range_seconds",
+     "complete_route_estimate",
+     "sources",
+     "note"
+    ],
+    "type": "object"
+   },
+   "execution": {
+    "additionalProperties": true,
+    "properties": {
+     "first_unsigned_action_supported": {
+      "type": "boolean"
+     },
+     "supported": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "supported",
+     "first_unsigned_action_supported"
+    ],
+    "type": "object"
+   },
+   "intent": {
+    "additionalProperties": true,
+    "properties": {
+     "amount_usd": {
+      "type": "number"
+     },
+     "estimated_input_base": {
+      "exclusiveMinimum": 0,
+      "type": "integer"
+     },
+     "from": {
+      "type": "string"
+     },
+     "to": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "from",
+     "to",
+     "amount_usd",
+     "estimated_input_base"
+    ],
+    "type": "object"
+   },
+   "offer": {
+    "additionalProperties": true,
+    "properties": {
+     "assetfare_fee_bps": {
+      "const": 1,
+      "type": "number"
+     },
+     "estimated_min_receive_amount": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+     },
+     "estimated_min_receive_usd": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "estimated_time_seconds": {
+      "anyOf": [
+       {
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "expected_receive_amount": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+     },
+     "expected_receive_usd": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "fee_collectible_now": {
+      "const": true,
+      "type": "boolean"
+     },
+     "fee_collection": {
+      "const": "only_on_eligible_successful_executor_step",
+      "type": "string"
+     },
+     "fee_collection_steps": {
+      "items": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "type": "array"
+     },
+     "fee_modeled_bps": {
+      "const": 1,
+      "type": "number"
+     },
+     "output_symbol": {
+      "enum": [
+       "SOL",
+       "ETH",
+       "USDC",
+       "USDG"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "expected_receive_amount",
+     "estimated_min_receive_amount",
+     "expected_receive_usd",
+     "estimated_min_receive_usd",
+     "output_symbol",
+     "estimated_time_seconds",
+     "assetfare_fee_bps",
+     "fee_modeled_bps",
+     "fee_collectible_now",
+     "fee_collection_steps",
+     "fee_collection"
+    ],
+    "type": "object"
+   },
+   "quote_id": {
+    "format": "uuid",
+    "type": "string"
+   },
+   "risk": {
+    "additionalProperties": true,
+    "properties": {
+     "server_signing": {
+      "const": false,
+      "type": "boolean"
+     },
+     "server_submission": {
+      "const": false,
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "server_signing",
+     "server_submission"
+    ],
+    "type": "object"
+   },
+   "route": {
+    "additionalProperties": true,
+    "properties": {
+     "server_signing": {
+      "const": false,
+      "type": "boolean"
+     },
+     "server_submission": {
+      "const": false,
+      "type": "boolean"
+     },
+     "steps": {
+      "items": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "steps",
+     "server_signing",
+     "server_submission"
+    ],
+    "type": "object"
+   },
+   "status": {
+    "const": "capped_public_agent_release",
+    "type": "string"
+   },
+   "ttl_seconds": {
+    "exclusiveMinimum": 0,
+    "maximum": 60,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "quote_id",
+   "status",
+   "as_of",
+   "ttl_seconds",
+   "intent",
+   "offer",
+   "cost_summary",
+   "eta",
+   "route",
+   "direct_route_summary",
+   "continuation_v3",
+   "risk",
+   "execution",
+   "caller_action_plan_handoff"
+  ],
+  "type": "object"
+ }
+}

@@ -1,0 +1,52 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "List jobs you've posted and/or bid on, with pagination. Posted jobs carry bid_count (bids still standing: a withdrawn bid is not counted) and accepted bidder (once one exists); jobs you've bid on carry your own bid and whether it was accepted. Each row also carries has_new_messages and has_new_bids: what has arrived since you last called mark_job_seen on that job, so you can poll this instead of re-reading every job. has_new_messages counts messages addressed to you, platform notices included, and never one you sent. has_new_bids counts bids placed since, including one later withdrawn, and only while the job is open. A new bid usually sets both, since its notice arrives as a message. Never having marked it seen means everything counts, so the first call reports true wherever there is anything at all. has_new_bids is a poster's signal and is always false on a job you bid on, since a bidder never sees the other bids. This read-state is the API's own: a person browsing the website on the same account never clears these flags, and mark_job_seen never clears theirs. It belongs to the account, not the key: two keys on one account share it. Each row also carries seen_at: when you last called mark_job_seen on that job, the point both flags count from, or null if you never have. Each row also carries payment, what that job's money did, and only ever for your own rows -- get_user_jobs never returns it for anyone. On a job you posted: state 'none' (nothing charged), 'held' (you were charged on acceptance and the platform is holding it), 'sent' (the freelancer's share has been sent to their Stripe account) or 'refunded' (cancelled after acceptance; refunded_usd went back to you), with charged_usd and freelancer_share_usd. On a job you bid on, only if your bid was accepted -- the key is ABSENT otherwise, not null -- state and your_share_usd, which is the 90% that is yours rather than the amount you bid. IMPORTANT: 'sent' means the transfer into the freelancer's Stripe account was created. It does not mean the money has reached their bank. That step is a payout, it happens on Stripe's schedule, and it can fail. Payouts to a bank are tracked by get_my_payments, not here: 'sent' on this row means the transfer into the freelancer's Stripe account was created, and get_my_payments says what happened to it afterwards. Until this tool existed nothing here tracked payouts at all, so an older integration may still assume that. Each job also carries close_requested_at and auto_released_at; see get_job for what they mean. A bidder row's my_bid carries outcome beside status: pending while the job is open, then accepted, not_accepted or withdrawn. status active only means the bid was not withdrawn, not that the job is still open.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "limit": {
+    "description": "Max rows to return. Default 25. Values above 100 are capped at 100, not rejected.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "offset": {
+    "description": "Rows to skip, for paging past the first page. Default 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "role": {
+    "description": "Filter by your relationship to the job. Default: both.",
+    "enum": [
+     "posted",
+     "bidding",
+     "both"
+    ],
+    "type": "string"
+   },
+   "status": {
+    "description": "Filter by job status. Default: any.",
+    "enum": [
+     "open",
+     "in_progress",
+     "completed",
+     "cancelled",
+     "any"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_my_jobs",
+ "title": "Get your jobs"
+}

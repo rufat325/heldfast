@@ -1,0 +1,217 @@
+{
+ "_meta": {
+  "openai/toolInvocation/invoked": "Matchups ready",
+  "openai/toolInvocation/invoking": "Fetching matchups\u2026",
+  "securitySchemes": [
+   {
+    "scopes": [
+     "mcp:read"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get matchups/scoreboard for a specific week or the current week. Some category leagues (Yahoo, and ESPN baseball) additionally return per-category rows and a categoryScore of wins/losses/ties per side; where they do, the side total is a category count or null rather than fantasy points. A null categoryScore, value, or result means the provider did not report it; never infer one. To request compact player scores for one selected matchup, use detail: \"players\" with an explicit week and team_id; this is currently ESPN football only and only for season_year 2018 or later. Any other platform, sport, or earlier season returns MATCHUP_DETAIL_UNSUPPORTED. Use established session context (call get_user_session only if needed), then get_league_info for the specified league if this chat has not already loaded it, so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. For multi-league comparisons, call once per league. Read-only. Current date is 2026-09-26.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "detail": {
+    "const": "players",
+    "description": "Opt-in compact player detail for one selected ESPN football matchup, season_year 2018 or later only; requires week and team_id.",
+    "type": "string"
+   },
+   "league_id": {
+    "description": "League ID (get from get_user_session)",
+    "type": "string"
+   },
+   "platform": {
+    "description": "Fantasy platform (e.g., \"espn\", \"yahoo\", \"sleeper\")",
+    "enum": [
+     "espn",
+     "yahoo",
+     "sleeper"
+    ],
+    "type": "string"
+   },
+   "season_year": {
+    "description": "Season start year \u2014 use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season. Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).",
+    "type": "number"
+   },
+   "sport": {
+    "description": "Sport type (e.g., \"football\", \"baseball\")",
+    "enum": [
+     "football",
+     "baseball",
+     "basketball",
+     "hockey"
+    ],
+    "type": "string"
+   },
+   "team_id": {
+    "description": "Required with detail: \"players\" to select one matchup; do not provide for summary mode.",
+    "type": "string"
+   },
+   "week": {
+    "description": "Week number (optional, must be \u2265 1, defaults to current week)",
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "platform",
+   "sport",
+   "league_id",
+   "season_year"
+  ],
+  "type": "object"
+ },
+ "name": "get_matchups",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "data": {
+    "additionalProperties": true,
+    "description": "Platform envelope. Field availability varies by platform (ESPN, Yahoo, Sleeper); absent fields are not provided by that platform.",
+    "properties": {
+     "currentScoringPeriod": {
+      "type": "number"
+     },
+     "currentWeek": {
+      "type": [
+       "number",
+       "string"
+      ]
+     },
+     "leagueId": {
+      "type": "string"
+     },
+     "leagueKey": {
+      "type": "string"
+     },
+     "leagueName": {
+      "type": "string"
+     },
+     "matchupPeriod": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "matchupWeek": {
+      "type": [
+       "number",
+       "string"
+      ]
+     },
+     "matchups": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "away": {
+         "anyOf": [
+          {
+           "$ref": "#/properties/data/properties/matchups/items/properties/home/anyOf/0"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "home": {
+         "anyOf": [
+          {
+           "additionalProperties": true,
+           "properties": {
+            "players": {
+             "items": {
+              "additionalProperties": true,
+              "properties": {
+               "lineupSlot": {
+                "type": "string"
+               },
+               "name": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "playerId": {
+                "type": "string"
+               },
+               "points": {
+                "type": [
+                 "number",
+                 "null"
+                ]
+               },
+               "started": {
+                "type": [
+                 "boolean",
+                 "null"
+                ]
+               }
+              },
+              "required": [
+               "playerId",
+               "name",
+               "lineupSlot",
+               "started",
+               "points"
+              ],
+              "type": "object"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "seasonYear": {
+      "type": "number"
+     },
+     "week": {
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "success": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "success",
+   "data"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "mcp:read"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "League Matchups"
+}

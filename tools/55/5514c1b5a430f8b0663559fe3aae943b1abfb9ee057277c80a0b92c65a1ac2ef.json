@@ -1,0 +1,635 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "YNAB: Create Split Transaction from Receipt"
+ },
+ "description": "Create a split transaction from itemized receipt data with proportional tax allocation.\n\nArgs:\n  - budget_id (string, optional): Budget UUID. Omit to use the default budget.\n  - account_id (string, required): Account UUID.\n  - payee_name (string, required): Store/payee name.\n  - receipt_total (number, required): Total amount in dollars (positive).\n  - receipt_tax (number, required): Tax amount in dollars (0 if none).\n  - categories (array, required): Category groups with items. Each item needs name, amount.\n  - date (string, optional): ISO date. Default: today.\n  - memo (string, optional): Memo applied to the parent transaction.\n  - receipt_subtotal (number, optional): Pre-tax subtotal for validation.\n  - cleared (string, optional): \"cleared\", \"uncleared\", or \"reconciled\". Default: \"uncleared\".\n  - approved (boolean, optional): Mark as approved. Default: false.\n  - flag_color (string, optional): Transaction flag color (\"red\", \"orange\", \"yellow\", \"green\", \"blue\", \"purple\").\n  - dry_run (boolean, optional): Preview subtransactions without saving. Default: false.\n\nUse this helper when you have receipt line items and want tax allocated across categories automatically. For generic manual split transactions without receipt/tax logic, use \"ynab_create_transaction\" with \"subtransactions\".\n\nReturns: transaction with subtransactions and receipt_summary.\n\nWrite safety: call without confirmation_token to preview. Execute the identical validated request with the short-lived confirmation_token returned by that preview.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "account_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "approved": {
+    "type": "boolean"
+   },
+   "budget_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "categories": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "category_id": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "category_name": {
+       "type": "string"
+      },
+      "items": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "amount": {
+          "type": "number"
+         },
+         "memo": {
+          "type": "string"
+         },
+         "name": {
+          "minLength": 1,
+          "type": "string"
+         },
+         "quantity": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+         }
+        },
+        "required": [
+         "name",
+         "amount"
+        ],
+        "type": "object"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     },
+     "required": [
+      "category_id",
+      "items"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "cleared": {
+    "enum": [
+     "cleared",
+     "uncleared",
+     "reconciled"
+    ],
+    "type": "string"
+   },
+   "confirmation_token": {
+    "description": "Short-lived, single-use token returned by the immediately preceding preview of this exact validated request.",
+    "minLength": 16,
+    "type": "string"
+   },
+   "date": {
+    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+    "type": "string"
+   },
+   "dry_run": {
+    "type": "boolean"
+   },
+   "flag_color": {
+    "enum": [
+     "red",
+     "orange",
+     "yellow",
+     "green",
+     "blue",
+     "purple"
+    ],
+    "type": "string"
+   },
+   "memo": {
+    "type": "string"
+   },
+   "payee_name": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "receipt_subtotal": {
+    "type": "number"
+   },
+   "receipt_tax": {
+    "type": "number"
+   },
+   "receipt_total": {
+    "type": "number"
+   }
+  },
+  "required": [
+   "account_id",
+   "payee_name",
+   "receipt_tax",
+   "receipt_total",
+   "categories"
+  ],
+  "type": "object"
+ },
+ "name": "ynab_create_receipt_split_transaction",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+   {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "const": "ynab_create_receipt_split_transaction",
+      "type": "string"
+     },
+     "dry_run": {
+      "const": true,
+      "type": "boolean"
+     },
+     "receipt_summary": {
+      "additionalProperties": false,
+      "properties": {
+       "categories": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "category_id": {
+           "type": "string"
+          },
+          "category_name": {
+           "type": "string"
+          },
+          "items": {
+           "items": {
+            "additionalProperties": false,
+            "properties": {
+             "amount": {
+              "type": "number"
+             },
+             "memo": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             },
+             "quantity": {
+              "type": "number"
+             }
+            },
+            "required": [
+             "name",
+             "amount"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "subtotal": {
+           "type": "number"
+          },
+          "tax": {
+           "type": "number"
+          },
+          "total": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "category_id",
+          "items",
+          "subtotal",
+          "tax",
+          "total"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "subtotal": {
+        "type": "number"
+       },
+       "tax": {
+        "type": "number"
+       },
+       "total": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "subtotal",
+       "tax",
+       "total",
+       "categories"
+      ],
+      "type": "object"
+     },
+     "subtransactions": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "amount": {
+         "type": "number"
+        },
+        "category_id": {
+         "type": "string"
+        },
+        "category_name": {
+         "type": "string"
+        },
+        "memo": {
+         "type": "string"
+        },
+        "payee_id": {
+         "type": "string"
+        },
+        "payee_name": {
+         "type": "string"
+        },
+        "transfer_account_id": {
+         "type": "string"
+        },
+        "transfer_transaction_id": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "amount"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "transaction_preview": {
+      "additionalProperties": false,
+      "properties": {
+       "account_id": {
+        "type": "string"
+       },
+       "amount": {
+        "type": "number"
+       },
+       "approved": {
+        "type": "boolean"
+       },
+       "category_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "cleared": {
+        "enum": [
+         "cleared",
+         "uncleared",
+         "reconciled"
+        ],
+        "type": "string"
+       },
+       "date": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+        "type": "string"
+       },
+       "flag_color": {
+        "anyOf": [
+         {
+          "enum": [
+           "red",
+           "orange",
+           "yellow",
+           "green",
+           "blue",
+           "purple"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "import_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "memo": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "payee_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "payee_name": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "required": [
+       "account_id",
+       "date",
+       "amount"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "dry_run",
+     "action",
+     "transaction_preview",
+     "receipt_summary",
+     "subtransactions"
+    ],
+    "type": "object"
+   },
+   {
+    "additionalProperties": false,
+    "properties": {
+     "receipt_summary": {
+      "additionalProperties": false,
+      "properties": {
+       "categories": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "category_id": {
+           "type": "string"
+          },
+          "category_name": {
+           "type": "string"
+          },
+          "items": {
+           "items": {
+            "additionalProperties": false,
+            "properties": {
+             "amount": {
+              "type": "number"
+             },
+             "memo": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             },
+             "quantity": {
+              "type": "number"
+             }
+            },
+            "required": [
+             "name",
+             "amount"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "subtotal": {
+           "type": "number"
+          },
+          "tax": {
+           "type": "number"
+          },
+          "total": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "category_id",
+          "items",
+          "subtotal",
+          "tax",
+          "total"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "subtotal": {
+        "type": "number"
+       },
+       "tax": {
+        "type": "number"
+       },
+       "total": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "subtotal",
+       "tax",
+       "total",
+       "categories"
+      ],
+      "type": "object"
+     },
+     "transaction": {
+      "additionalProperties": false,
+      "properties": {
+       "account_balance": {
+        "type": "number"
+       },
+       "account_cleared_balance": {
+        "type": "number"
+       },
+       "account_id": {
+        "description": "Account ID",
+        "type": "string"
+       },
+       "account_name": {
+        "description": "Account name",
+        "type": "string"
+       },
+       "amount": {
+        "description": "Transaction amount in dollars",
+        "type": "number"
+       },
+       "approved": {
+        "description": "Approved flag",
+        "type": "boolean"
+       },
+       "category_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Category ID"
+       },
+       "category_name": {
+        "description": "Category name",
+        "type": "string"
+       },
+       "cleared": {
+        "description": "Cleared status",
+        "type": "string"
+       },
+       "date": {
+        "description": "Transaction date",
+        "type": "string"
+       },
+       "deleted": {
+        "description": "Deleted flag",
+        "type": "boolean"
+       },
+       "flag_color": {
+        "description": "Flag color",
+        "type": "string"
+       },
+       "id": {
+        "description": "Transaction ID",
+        "type": "string"
+       },
+       "import_id": {
+        "description": "Import ID",
+        "type": "string"
+       },
+       "matched_transaction_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Matched transaction ID"
+       },
+       "memo": {
+        "description": "Transaction memo",
+        "type": "string"
+       },
+       "payee_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Payee ID"
+       },
+       "payee_name": {
+        "description": "Payee name",
+        "type": "string"
+       },
+       "subtransactions": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "amount": {
+           "type": "number"
+          },
+          "category_id": {
+           "type": "string"
+          },
+          "category_name": {
+           "type": "string"
+          },
+          "deleted": {
+           "type": "boolean"
+          },
+          "id": {
+           "type": "string"
+          },
+          "memo": {
+           "type": "string"
+          },
+          "payee_id": {
+           "type": "string"
+          },
+          "payee_name": {
+           "type": "string"
+          },
+          "transaction_id": {
+           "type": "string"
+          },
+          "transfer_account_id": {
+           "type": "string"
+          },
+          "transfer_transaction_id": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "id",
+          "transaction_id",
+          "amount",
+          "deleted"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "transfer_account_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Transfer account ID"
+       },
+       "transfer_transaction_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Transfer transaction ID"
+       }
+      },
+      "required": [
+       "id",
+       "date",
+       "amount",
+       "cleared",
+       "approved",
+       "account_id",
+       "deleted"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "transaction",
+     "receipt_summary"
+    ],
+    "type": "object"
+   }
+  ],
+  "type": "object"
+ }
+}

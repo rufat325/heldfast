@@ -1,0 +1,73 @@
+{
+ "annotations": {
+  "cost": {
+   "all": 1
+  },
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "AUTHORITATIVE odds from Kalshi \u2014 the only CFTC-regulated US prediction-market exchange (US persons CAN legally trade here, unlike Polymarket). Returns one event with ALL its child markets nested: event title + each market's ticker, subtitle, price, volume. Use when you need the full partition for an outright bet (\"Fed funds in June 2026: each rate level is one market\"). Pass include_orderbook=true to fetch live top-of-book for each market (slower but populates yes_ask_cents/yes_bid_cents/no_ask_cents + implied_yes_prob \u2014 required for most macro events since the nested response leaves prices null on the public unauth API). Every price ships TWO ways: `*_cents` rounded to the nearest cent (Kalshi's display convention) and `*_dollars` at full fixed-point precision \u2014 a genuine sub-cent quote like 0.335 shows as 34 in `yes_ask_cents` and exactly 0.335 in `yes_ask_dollars`; use the dollars field for anything sizing a trade on a thin spread. `implied_yes_prob` is computed from the dollars value, not the rounded cents, so it carries the same precision. `yes_bid_size`/`no_bid_size` report top-of-book contract size for the two real resting sides when include_orderbook populated them from the orderbook ladder \u2014 there is no separate size for yes_ask/no_ask because those are derived prices (1 \u2212 the opposite side's best bid), not an independent order. For cross-venue spreads vs Polymarket, see polymarket_kalshi_spread.",
+ "inputSchema": {
+  "examples": [
+   {
+    "event_ticker": "KXFED-26OCT"
+   }
+  ],
+  "properties": {
+   "event_ticker": {
+    "description": "Kalshi event ticker, e.g. \"KXFED-26OCT\"",
+    "type": "string"
+   },
+   "include_orderbook": {
+    "description": "Default false. When true, fetches per-market orderbook in parallel and patches in best bid/ask + recomputed implied_yes_prob. Adds ~1s for events with ~10 markets. Required when the nested response returns null prices (common for macro events on the unauth API).",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "event_ticker"
+  ],
+  "type": "object"
+ },
+ "name": "kalshi_event",
+ "outputSchema": {
+  "description": "A Kalshi event with its markets. The ticker is nested at event.event_ticker \u2014 there is no top-level event_ticker.",
+  "properties": {
+   "event": {
+    "description": "The event record; absent when found is false",
+    "properties": {
+     "category": {
+      "type": "string"
+     },
+     "event_ticker": {
+      "type": "string"
+     },
+     "series_ticker": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "found": {
+    "type": "boolean"
+   },
+   "markets": {
+    "description": "Markets belonging to the event",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "found"
+  ],
+  "type": "object"
+ },
+ "title": "Kalshi Event",
+ "version": "v1.e40ed37c"
+}

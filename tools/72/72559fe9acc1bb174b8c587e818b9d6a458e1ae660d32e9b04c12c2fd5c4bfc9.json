@@ -1,0 +1,388 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Search active weather alerts (watches, warnings, advisories) across the US. Filter by state, coordinates, zone, land/marine region, event type, severity, urgency, or certainty. area, point, zone, region_type, and region are mutually exclusive \u2014 provide at most one. Omit all filters for a national search.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "area": {
+    "description": "US state/territory code (e.g., \"WA\", \"OK\", \"PR\") or marine area code (e.g., \"GM\"). Mutually exclusive with point and zone.",
+    "type": "string"
+   },
+   "certainty": {
+    "description": "Filter by certainty level.",
+    "items": {
+     "enum": [
+      "Observed",
+      "Likely",
+      "Possible",
+      "Unlikely",
+      "Unknown"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "cursor": {
+    "description": "Opaque continuation token from a previous response's nextCursor. Omit for the first page. The token carries its own page size, so limit applies to the first page only. Every call re-fetches the active-alert feed, so alerts are contiguous within one response but not across calls \u2014 the active set changes continuously as alerts are issued and expire, so a continued page covers the collection as it stands at that moment.",
+    "type": "string"
+   },
+   "event": {
+    "description": "Filter to specific event types (e.g., [\"Tornado Warning\"]). Matches are case-insensitive and partial, so \"tornado\" matches both \"Tornado Warning\" and \"Tornado Watch\". Use nws_list_alert_types to discover valid names.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "limit": {
+    "default": 25,
+    "description": "Maximum number of alerts to include in this page (1-25, default 25). totalCount still reports the full number of distinct matches, so a small limit returns a digest of broad or national searches without dropping the total; pass the returned nextCursor as cursor to reach the rest.",
+    "maximum": 25,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "point": {
+    "description": "Coordinates as \"lat,lon\" (e.g., \"47.6,-122.3\"). Returns alerts whose geometry contains this point. Mutually exclusive with area and zone.",
+    "type": "string"
+   },
+   "region": {
+    "description": "Restrict to NWS marine region groups: \"AL\" (Alaska waters), \"AT\" (Atlantic Ocean), \"GL\" (Great Lakes), \"GM\" (Gulf of Mexico), \"PA\" (Eastern Pacific and US West Coast), \"PI\" (Central and Western Pacific). Marine alerts only \u2014 a land alert never matches. Mutually exclusive with area, point, zone, and region_type.",
+    "items": {
+     "enum": [
+      "AL",
+      "AT",
+      "GL",
+      "GM",
+      "PA",
+      "PI"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "region_type": {
+    "description": "Restrict to land-based or marine alerts. Mutually exclusive with area, point, zone, and region.",
+    "enum": [
+     "Land",
+     "Marine"
+    ],
+    "type": "string"
+   },
+   "severity": {
+    "description": "Filter by severity level.",
+    "items": {
+     "enum": [
+      "Extreme",
+      "Severe",
+      "Moderate",
+      "Minor",
+      "Unknown"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "status": {
+    "default": "Actual",
+    "description": "Alert status filter. Default \"Actual\". Use a different value only when you specifically need non-live alerts.",
+    "enum": [
+     "Actual",
+     "Exercise",
+     "System",
+     "Test",
+     "Draft"
+    ],
+    "type": "string"
+   },
+   "urgency": {
+    "description": "Filter by urgency level.",
+    "items": {
+     "enum": [
+      "Immediate",
+      "Expected",
+      "Future",
+      "Past"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "zone": {
+    "description": "NWS forecast zone (e.g., \"WAZ558\") or county zone (e.g., \"WAC033\"). Mutually exclusive with area and point.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "nws_search_alerts",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "alerts",
+     "totalCount",
+     "shown",
+     "appliedFilters"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "alerts": {
+    "description": "Matching alerts for this page (at most the requested limit, max 25)",
+    "items": {
+     "additionalProperties": false,
+     "description": "Single active alert with event, severity, area, and timing",
+     "properties": {
+      "affectedZones": {
+       "description": "Affected zones, each with the zone type that decides where it can chain",
+       "items": {
+        "additionalProperties": false,
+        "description": "Affected zone with its NWS zone type",
+        "properties": {
+         "code": {
+          "description": "Zone code, e.g. \"WAZ558\" (forecast) or \"WAC033\" (county)",
+          "type": "string"
+         },
+         "type": {
+          "description": "NWS zone type: \"forecast\", \"county\", or \"fire\" (\"unknown\" when upstream reports a shape this server cannot type). Only \"forecast\" codes have a zone text forecast \u2014 pass those to nws_get_zone_forecast. All types are valid values for this tool's own zone filter.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "code",
+         "type"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "areaDesc": {
+       "description": "Affected area description",
+       "type": "string"
+      },
+      "certainty": {
+       "description": "Certainty level",
+       "type": "string"
+      },
+      "description": {
+       "description": "Full alert description; null when NWS publishes the alert without one",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "effective": {
+       "description": "Message effective time (ISO 8601) \u2014 when this version of the CAP message takes effect. A property of the message, not of the hazard: distinct from onset (when the hazard begins) and from expires (when a superseding message is due). Usually equals sent.",
+       "type": "string"
+      },
+      "ends": {
+       "description": "Hazard end (ISO 8601) \u2014 when the hazard is expected to end; null when open-ended (\"until further notice\"). Distinct from expires, which is the message-refresh time.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "event": {
+       "description": "Event type (e.g., \"Tornado Warning\")",
+       "type": "string"
+      },
+      "expires": {
+       "description": "Message expiration (ISO 8601) \u2014 when NWS will issue a superseding statement. NOT when the hazard ends; the hazard window is described in the headline.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "headline": {
+       "description": "Alert headline",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "id": {
+       "description": "Alert ID",
+       "type": "string"
+      },
+      "instruction": {
+       "description": "Recommended actions",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "messageType": {
+       "description": "CAP message type: \"Alert\" for an original issuance, \"Update\" for a revision of an earlier message, \"Cancel\" for a cancellation.",
+       "type": "string"
+      },
+      "onset": {
+       "description": "Expected hazard onset (ISO 8601). When the hazard is expected to begin.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "references": {
+       "description": "Prior alert messages this one supersedes, newest first. Empty for an original issuance \u2014 never inferred when NWS reports none.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One prior message this alert supersedes",
+        "properties": {
+         "identifier": {
+          "description": "CAP identifier of the superseded message",
+          "type": "string"
+         },
+         "sent": {
+          "description": "When the superseded message was issued (ISO 8601)",
+          "type": "string"
+         }
+        },
+        "required": [
+         "identifier",
+         "sent"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "senderName": {
+       "description": "Issuing office",
+       "type": "string"
+      },
+      "sent": {
+       "description": "Message issuance time (ISO 8601) \u2014 when the office transmitted this CAP message. Describes the message, not the hazard: use it to judge how stale the report is.",
+       "type": "string"
+      },
+      "severity": {
+       "description": "Severity level",
+       "type": "string"
+      },
+      "status": {
+       "description": "This alert's own CAP status as reported by NWS (\"Actual\", \"Exercise\", \"System\", \"Test\", \"Draft\"). Distinct from the status input filter, which selects which alerts are searched \u2014 with the default filter every returned alert reads \"Actual\".",
+       "type": "string"
+      },
+      "urgency": {
+       "description": "Urgency level",
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "event",
+      "headline",
+      "description",
+      "instruction",
+      "severity",
+      "urgency",
+      "certainty",
+      "areaDesc",
+      "sent",
+      "effective",
+      "onset",
+      "ends",
+      "expires",
+      "status",
+      "messageType",
+      "references",
+      "senderName",
+      "affectedZones"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "appliedFilters": {
+    "description": "Summary of applied search filters",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `mutually_exclusive_filters`: More than one of area, point, zone, region_type, or region provided. `invalid_area_code`: Area code is not a recognized US state, territory, or marine area. `invalid_point`: Point coordinates are malformed or outside valid bounds. `invalid_zone`: Zone code does not match the NWS zone-code shape. `blank_location_filter`: An area, point, or zone filter was provided with a blank value. `empty_filter_array`: An event, severity, urgency, certainty, or region filter was provided with no usable entries. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "mutually_exclusive_filters",
+         "invalid_area_code",
+         "invalid_point",
+         "invalid_zone",
+         "blank_location_filter",
+         "empty_filter_array"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextCursor": {
+    "description": "Opaque token for the next page of matches \u2014 pass it back as `cursor`. Omitted when this is the last page.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when no alerts matched (echoes applied filters and suggests how to broaden), when matches remain beyond this page, or when the supplied cursor points past the end of the match set.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of alerts included in this response",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Total distinct alerts matching the filters in this fetch, before the page window is applied. NWS repeats some alerts verbatim within one response; the copies are collapsed on id, so this counts each alert once. Compare against shown to tell whether matches were withheld from this page.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Nws Search Alerts"
+}

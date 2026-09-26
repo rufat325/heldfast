@@ -1,0 +1,338 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Store one agent execution (input, output, tool calls, spans, cost, tokens) and get the trace_id later calls key on.\n\nWhat it does. Writes one immutable trace to local storage; nothing is deduplicated. Only agent_name is required; store tool_calls, tools, cost and input/output so the rules can judge them. evaluate: true (with output) also scores it in this call, exactly as evaluate_output would. Full detail: iris://capabilities.\n\nWhen not to use it. To score a stored trace (evaluate_output with its trace_id). To change one (delete_trace, then log again).\n\nReturns. JSON: trace_id, status, evaluation.\n\nErrors. IRIS_STORAGE_ERROR; IRIS_INVALID_ARGUMENT when evaluate is true without output. Unknown or malformed arguments are refused, naming the valid keys. Failures return {\"error\":{code,message,recovery}} with isError; follow recovery.\n\nSiblings. evaluate_output \u2014 score the stored output; get_traces \u2014 query what was logged; delete_trace \u2014 remove one trace.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "agent_name": {
+    "description": "Agent name \u2014 used for filtering in get_traces (e.g., \"customer-support-bot\")",
+    "type": "string"
+   },
+   "case_key": {
+    "description": "What makes this the same question across runs (a fixture or test id); pairs traces. Derived from input when omitted",
+    "type": "string"
+   },
+   "cost_usd": {
+    "description": "Total cost in USD \u2014 overrides per-span aggregation when provided (treated as authoritative)",
+    "type": "number"
+   },
+   "eval_type": {
+    "description": "With evaluate: true, the bundle to run (default: every bundle, noted in the response)",
+    "enum": [
+     "completeness",
+     "relevance",
+     "safety",
+     "cost",
+     "custom",
+     "all"
+    ],
+    "type": "string"
+   },
+   "evaluate": {
+    "default": false,
+    "description": "Also score the stored trace in this call, exactly as evaluate_output would; requires output",
+    "type": "boolean"
+   },
+   "framework": {
+    "description": "Agent framework identifier (e.g., langchain, autogen, custom)",
+    "type": "string"
+   },
+   "input": {
+    "description": "Agent input text \u2014 the user prompt or upstream input that produced this output",
+    "type": "string"
+   },
+   "latency_ms": {
+    "description": "Total execution time in milliseconds (end-to-end agent latency)",
+    "type": "number"
+   },
+   "metadata": {
+    "additionalProperties": {},
+    "description": "Opaque key-value tags (e.g. {requestId, userId, env}) \u2014 queryable in dashboard, not via get_traces filters",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "output": {
+    "description": "Agent output text \u2014 what the agent produced (pass to evaluate_output for scoring)",
+    "type": "string"
+   },
+   "run": {
+    "description": "The batch this execution belongs to (a CI job id, a sweep); compare_runs compares two runs",
+    "type": "string"
+   },
+   "session_id": {
+    "description": "The conversation this turn belongs to; groups its turns. Read from SEP-414 baggage when omitted",
+    "maxLength": 200,
+    "minLength": 1,
+    "type": "string"
+   },
+   "spans": {
+    "description": "Detailed execution spans (hierarchical span tree with timings, attributes, events); a span without start_time takes the trace timestamp",
+    "items": {
+     "properties": {
+      "attributes": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "end_time": {
+       "type": "string"
+      },
+      "events": {
+       "items": {
+        "properties": {
+         "attributes": {
+          "additionalProperties": {},
+          "propertyNames": {
+           "type": "string"
+          },
+          "type": "object"
+         },
+         "name": {
+          "type": "string"
+         },
+         "timestamp": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "timestamp"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "kind": {
+       "default": "INTERNAL",
+       "enum": [
+        "INTERNAL",
+        "SERVER",
+        "CLIENT",
+        "PRODUCER",
+        "CONSUMER",
+        "LLM",
+        "TOOL"
+       ],
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "parent_span_id": {
+       "type": "string"
+      },
+      "span_id": {
+       "type": "string"
+      },
+      "start_time": {
+       "type": "string"
+      },
+      "status_code": {
+       "default": "UNSET",
+       "enum": [
+        "UNSET",
+        "OK",
+        "ERROR"
+       ],
+       "type": "string"
+      },
+      "status_message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "start_time"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "timestamp": {
+    "description": "Trace timestamp (ISO 8601); defaults to now() when omitted",
+    "type": "string"
+   },
+   "token_usage": {
+    "description": "Token usage breakdown (prompt/completion/total \u2014 used for cost analysis)",
+    "properties": {
+     "completion_tokens": {
+      "type": "number"
+     },
+     "prompt_tokens": {
+      "type": "number"
+     },
+     "total_tokens": {
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "tool_calls": {
+    "description": "Tool calls made, in order, each { tool_name, input?, output?, latency_ms?, error? }; the trajectory rules judge them",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "call_id": {
+       "type": "string"
+      },
+      "cost_usd": {
+       "type": "number"
+      },
+      "error": {
+       "type": "string"
+      },
+      "input": {},
+      "latency_ms": {
+       "type": "number"
+      },
+      "output": {},
+      "token_usage": {
+       "properties": {
+        "completion_tokens": {
+         "type": "number"
+        },
+        "prompt_tokens": {
+         "type": "number"
+        },
+        "total_tokens": {
+         "type": "number"
+        }
+       },
+       "type": "object"
+      },
+      "tool_name": {
+       "type": "string"
+      },
+      "truncated": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "tool_name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "tools": {
+    "description": "Your MCP tools/list result, verbatim; lets the rules check call arguments later",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "_meta": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "annotations": {
+       "additionalProperties": {},
+       "properties": {
+        "destructiveHint": {
+         "type": "boolean"
+        },
+        "idempotentHint": {
+         "type": "boolean"
+        },
+        "openWorldHint": {
+         "type": "boolean"
+        },
+        "readOnlyHint": {
+         "type": "boolean"
+        },
+        "title": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "description": {
+       "maxLength": 4096,
+       "type": "string"
+      },
+      "execution": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "inputSchema": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "name": {
+       "maxLength": 128,
+       "minLength": 1,
+       "type": "string"
+      },
+      "outputSchema": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "title": {
+       "maxLength": 512,
+       "type": "string"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "type": "object"
+    },
+    "maxItems": 200,
+    "type": "array"
+   }
+  },
+  "required": [
+   "agent_name"
+  ],
+  "type": "object"
+ },
+ "name": "log_trace",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {},
+  "description": "Nested evaluation fields: https://iris-eval.com/response-schema-v1.json",
+  "properties": {
+   "evaluation": {
+    "additionalProperties": {},
+    "properties": {},
+    "type": "object"
+   },
+   "status": {
+    "const": "stored",
+    "type": "string"
+   },
+   "trace_id": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "trace_id",
+   "status"
+  ],
+  "type": "object"
+ },
+ "title": "Log Trace"
+}

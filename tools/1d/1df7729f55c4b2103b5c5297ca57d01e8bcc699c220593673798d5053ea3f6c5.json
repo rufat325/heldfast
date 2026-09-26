@@ -1,0 +1,202 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Begin a handoff from the agent to either a human operator (SMS/email via lead_routing_json) or another agent (signed continuation URL). In human mode the notification body is composed by the server from the contact and reason fields \u2014 callers supply those fields, not the message text. Idempotent: re-using the same idempotency_key returns the original handoff.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "agent_id": {
+    "description": "Optional agent identifier",
+    "type": "string"
+   },
+   "contact_email": {
+    "description": "End-user's email",
+    "format": "email",
+    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+    "type": "string"
+   },
+   "contact_name": {
+    "description": "End-user's name",
+    "maxLength": 120,
+    "type": "string"
+   },
+   "contact_phone": {
+    "description": "End-user's phone",
+    "maxLength": 40,
+    "type": "string"
+   },
+   "idempotency_key": {
+    "description": "Unique key for idempotent handoff",
+    "minLength": 1,
+    "type": "string"
+   },
+   "message": {
+    "description": "Deprecated alias for `reason`. The notification body is composed by the server from the fields above; this value is delivered as the reason line, not as the message itself. Supplying both is an error.",
+    "maxLength": 800,
+    "minLength": 1,
+    "type": "string"
+   },
+   "mode": {
+    "description": "Handoff mode: human (SMS/email) or agent (continuation URL)",
+    "enum": [
+     "human",
+     "agent"
+    ],
+    "type": "string"
+   },
+   "purpose": {
+    "description": "Purpose description for agent-mode continuation",
+    "minLength": 1,
+    "type": "string"
+   },
+   "reason": {
+    "description": "Why the user wants to reach a human",
+    "maxLength": 800,
+    "type": "string"
+   },
+   "reservation_id": {
+    "description": "Optional link to a prior reservation",
+    "type": "string"
+   },
+   "slug": {
+    "description": "Business slug identifier",
+    "minLength": 1,
+    "type": "string"
+   },
+   "urgency": {
+    "description": "How time-sensitive (default: normal)",
+    "enum": [
+     "low",
+     "normal",
+     "high",
+     "emergency"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "slug",
+   "mode",
+   "idempotency_key"
+  ],
+  "type": "object"
+ },
+ "name": "initiate_handoff",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "channel": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "human mode, skipped before sending: the channel that would have been used ('sms' or 'email'), or 'form' when the business only takes leads through a web form"
+   },
+   "continuation_expired": {
+    "description": "agent mode replay: true when the stored continuation has already expired; it is never re-minted \u2014 start a new handoff",
+    "type": "boolean"
+   },
+   "continuation_url": {
+    "description": "agent mode: signed URL the next agent redeems exactly once at /a2a/continue",
+    "type": "string"
+   },
+   "delivered": {
+    "description": "human mode: present only as false, when nothing was sent \u2014 see reason",
+    "type": "boolean"
+   },
+   "delivered_via": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "human mode: 'sms' or 'email' \u2014 the channel the notification went to"
+   },
+   "expires_at": {
+    "description": "agent mode: Unix seconds when continuation_url stops working (one hour)",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "form_url": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "human mode, channel 'form': the business's own contact form for the user to complete"
+   },
+   "handoff_id": {
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "handshake_token": {
+    "description": "agent mode: the bare token carried inside continuation_url",
+    "type": "string"
+   },
+   "idempotent_replay": {
+    "description": "Present and true when this idempotency_key already had a handoff; nothing was re-sent and no token was re-minted",
+    "type": "boolean"
+   },
+   "mode": {
+    "description": "The handoff's mode, and which of the fields below are present. Normally the mode you asked for \u2014 but an idempotent replay returns the STORED handoff's mode, which differs when an idempotency_key is reused with a different mode than the call that created it.",
+    "enum": [
+     "human",
+     "agent"
+    ],
+    "type": "string"
+   },
+   "reason": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "human mode, not delivered: 'form_routing_configured', 'no_recipient_configured', 'sms_consent_missing', a shape-mismatch skip, a spend-cap denial, or a provider failure code"
+   },
+   "status": {
+    "description": "human mode replay while the original send is still in flight: 'pending'",
+    "type": "string"
+   },
+   "ticket_id": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "human mode, delivered: the provider's message id, or the handoff_id when the provider issues none"
+   }
+  },
+  "required": [
+   "mode",
+   "handoff_id"
+  ],
+  "type": "object"
+ },
+ "title": "Initiate Handoff"
+}

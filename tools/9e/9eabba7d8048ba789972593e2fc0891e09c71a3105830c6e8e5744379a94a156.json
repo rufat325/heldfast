@@ -1,0 +1,51 @@
+{
+ "description": "Walk a local repo, extract symbols + call/import/reference edges via Tree-sitter (TypeScript, JavaScript, Python, Go, Java, Rust), and upload them to Tentra as a new immutable snapshot. This is what turns a raw checkout into a queryable code graph.\n\nWRITE PATH, LONG-RUNNING (seconds on small repos, a few minutes on 10k+ file monorepos). It iterates: walk files \u2192 parse with Tree-sitter locally \u2192 POST files \u2192 POST symbols \u2192 POST edges in batches \u2192 create a job row. For tier=tier2/both, also returns a first batch of files for the agent to enrich via record_semantic_node; call index_code_continue in a loop until done. For tier=tier1, returns immediately once static extraction finishes (no semantic enrichment).\n\nUse once per repo, then re-run after large refactors (or pass force_reindex=true). The read-path tools (query_symbols, find_references, get_symbol_neighbors, list_god_nodes, get_quality_hotspots, explain_code_path, get_service_code_graph, diff_snapshots) all require at least one successful index_code first and need the returned snapshot_id. Unlike analyze_codebase (which produces a high-level services diagram from manifests), index_code produces a symbol-level graph \u2014 run both for complete coverage.\n\nPrerequisites: Tentra API auth + local filesystem read access to repo_path (not available over SSE \u2014 use stdio). Ignores node_modules, .git, dist, build, vendor, coverage, .worktrees, etc. Response: { job_id, snapshot_id, file_count, tier } for tier1, plus { first_batch, remaining } for tier2.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "batch_size": {
+    "description": "Number of files per tier-2 agent batch. Default 20. Smaller batches = more index_code_continue round-trips but less memory per step; larger batches = fewer round-trips. Capped at 50.",
+    "exclusiveMinimum": 0,
+    "maximum": 50,
+    "type": "integer"
+   },
+   "force_reindex": {
+    "description": "If true, creates a fresh snapshot even when prior snapshots exist. Defaults to false (tool still creates a new snapshot row but this flag is reserved for future no-op dedup). Pass true after large refactors to avoid incremental-extraction edge cases.",
+    "type": "boolean"
+   },
+   "repo_id": {
+    "description": "Stable identifier for the repo across sessions \u2014 reuse the same value each time you index this codebase so snapshots accumulate under one repo. Conventionally \"repo_<org>_<name>\" or the git remote slug (e.g. \"acme/api\"). Required.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "repo_path": {
+    "description": "Absolute or relative path to the repository root on the local filesystem, e.g. \"/Users/alex/code/acme-monorepo\" or \".\". Tentra will walk this directory recursively, skipping node_modules/.git/dist/build/vendor/etc. Required \u2014 the tool reads source files from here with Tree-sitter.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "service_id": {
+    "description": "Optional Tentra canvas service_id to pre-assign every indexed file to (shorthand for calling set_service_mapping on every path afterwards). Use only if the entire repo maps 1:1 to one service on your architecture diagram. Omit for polyrepos or monorepos with multiple services.",
+    "type": "string"
+   },
+   "tier": {
+    "description": "tier1 = Tree-sitter static extraction only, returns immediately when files+symbols+edges are uploaded. tier2 = also run the agent-in-the-loop semantic enrichment (record_semantic_node per file). \"both\" (default) = tier1 + return the first tier2 batch so the agent can start enriching. Choose tier1 for fast indexing with no semantic purpose text.",
+    "enum": [
+     "tier1",
+     "tier2",
+     "both"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "repo_path",
+   "repo_id"
+  ],
+  "type": "object"
+ },
+ "name": "index_code"
+}

@@ -1,0 +1,147 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Apply hash-verified partial edits to one file. Batch ALL hunks for the same file into ONE call via the `edits` array -- separate sequential edit_file calls on one file go stale and conflict (the most common edit failure). Carry base_revision only for a genuinely later follow-up after the file changed. Anchors accept tag.N, a bare line number, or unique line content (auto-resolved); range_checksum accepts \"auto\" to compute it for the current range. Preserves existing line endings and trailing-newline shape; conservative conflicts return retry helpers. boundary_mode=inclusive deletes the anchor lines themselves; new_text must close any delimiter whose opening falls inside the replaced range.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "allow_external": {
+    "description": "Allow editing a path outside the current project root. Use only when you intentionally target a temp or external file.",
+    "type": "boolean"
+   },
+   "base_revision": {
+    "description": "Prior revision from read_file/edit_file. Enables conservative auto-rebase for same-file follow-up edits.",
+    "type": "string"
+   },
+   "conflict_policy": {
+    "description": "Conflict handling (default: \"conservative\"). \"conservative\" returns structured CONFLICT output with recovery_ranges, retry_edit/retry_edits, suggested_read_call, and retry_plan when available.",
+    "enum": [
+     "strict",
+     "conservative"
+    ],
+    "type": "string"
+   },
+   "dry_run": {
+    "description": "Preview changes without writing",
+    "type": "boolean"
+   },
+   "edits": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "items": {},
+      "type": "array"
+     }
+    ],
+    "description": "JSON array of canonical edits.\n[{\"set_line\":{\"anchor\":\"ab.12\",\"new_text\":\"x\"}}]\n[{\"replace_lines\":{\"start_anchor\":\"ab.10\",\"end_anchor\":\"cd.15\",\"new_text\":\"x\",\"range_checksum\":\"10-15:a1b2\"}}]\n[{\"insert_after\":{\"anchor\":\"ab.20\",\"text\":\"x\"}}]\n[{\"replace_between\":{\"start_anchor\":\"ab.10\",\"end_anchor\":\"cd.40\",\"new_text\":\"x\",\"boundary_mode\":\"inclusive\",\"range_checksum\":\"10-40:a1b2\"}}]\nPrefer replace_lines with range_checksum when either anchor is a lone delimiter (}, ), ]) \u2014 replace_between anchors use short line-content hashes and may fuzzy-match a sibling delimiter. Anchors also accept a bare line number or exact line content (auto-resolved to tag.N); range_checksum accepts \"auto\" to compute it for the current anchor range."
+   },
+   "file_path": {
+    "description": "File to edit",
+    "type": "string"
+   },
+   "restore_indent": {
+    "description": "Auto-fix indentation to match anchor (default: false)",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "file_path",
+   "edits"
+  ],
+  "type": "object"
+ },
+ "name": "edit_file",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "code": {
+    "type": "string"
+   },
+   "content": {
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": false,
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     },
+     "recovery": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message",
+     "recovery"
+    ],
+    "type": "object"
+   },
+   "failure_class": {
+    "type": "string"
+   },
+   "file_path": {
+    "type": "string"
+   },
+   "next_action": {
+    "type": "string"
+   },
+   "reason": {
+    "type": "string"
+   },
+   "recovery": {
+    "type": "string"
+   },
+   "status": {
+    "enum": [
+     "OK",
+     "ERROR",
+     "AUTO_REBASED",
+     "CONFLICT",
+     "STALE",
+     "INVALID",
+     "NO_CHANGES",
+     "CHANGED",
+     "UNSUPPORTED"
+    ],
+    "type": "string"
+   },
+   "summary": {
+    "type": "string"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": {},
+     "properties": {
+      "code": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "status"
+  ],
+  "type": "object"
+ },
+ "title": "Edit File"
+}

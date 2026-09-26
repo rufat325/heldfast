@@ -1,0 +1,374 @@
+{
+ "description": "Create a token and sign it in one call \u2014 collapses printr_create_token + printr_sign_and_submit_evm/svm or printr_open_web_signer into a single round-trip. Supply image (base64) or image_path (auto-compressed). If neither is provided and OPENROUTER_API_KEY is set, an image is auto-generated. With private_key: token is created and submitted on-chain immediately. Without private_key: token is created and a browser signing URL is returned. After submission, present the trade page URL: https://app.printr.money/trade/{token_id}.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "chains": {
+    "description": "Chains to deploy on",
+    "items": {
+     "description": "CAIP-2 chain ID (e.g. 'eip155:8453' for Base, 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' for Solana)",
+     "type": "string"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "creator_accounts": {
+    "description": "One creator address per chain being deployed to. Omit to infer from the signing wallet.",
+    "items": {
+     "description": "CAIP-10 address (e.g. 'eip155:8453:0x742d...')",
+     "type": "string"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "custom_fees": {
+    "description": "Custom fee configuration. Omit to use platform defaults.",
+    "properties": {
+     "amm_dev_fee_bps": {
+      "description": "Custom fee on AMM trades post-graduation in basis points (max 80 bps / 0.8%).",
+      "maximum": 80,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "bonding_curve_dev_fee_bps": {
+      "description": "Custom fee on bonding curve trades in basis points (max 150 bps / 1.5%).",
+      "maximum": 150,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "description": {
+    "description": "Token description",
+    "maxLength": 500,
+    "type": "string"
+   },
+   "external_links": {
+    "description": "Optional external links for the token",
+    "properties": {
+     "github": {
+      "format": "uri",
+      "type": "string"
+     },
+     "telegram": {
+      "format": "uri",
+      "type": "string"
+     },
+     "website": {
+      "format": "uri",
+      "type": "string"
+     },
+     "x": {
+      "format": "uri",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "fee_sink": {
+    "description": "Where creator fees are directed. 'dev': creator wallet receives fees (default). 'stake_pool': fees flow to Proof of Belief staking pool, rewarding token holders who stake. 'buyback': fees used to buy back and burn tokens (Solana only). 'liquidity_pool': fees compound into LP, deepening liquidity (Solana only, post-graduation).",
+    "enum": [
+     "dev",
+     "stake_pool",
+     "buyback",
+     "liquidity_pool"
+    ],
+    "type": "string"
+   },
+   "graduation_threshold_per_chain_usd": {
+    "anyOf": [
+     {
+      "const": 69000,
+      "type": "number"
+     },
+     {
+      "const": 250000,
+      "type": "number"
+     }
+    ],
+    "description": "Graduation threshold in USD (default: 69000)"
+   },
+   "image": {
+    "description": "Base64-encoded image data (max 500KB). JPEG or PNG. Mutually exclusive with image_path.",
+    "type": "string"
+   },
+   "image_path": {
+    "description": "Absolute path to a local image file. Auto-compressed if needed. Mutually exclusive with image. If neither is provided and OPENROUTER_API_KEY is set, an image is generated automatically.",
+    "type": "string"
+   },
+   "initial_buy": {
+    "properties": {
+     "spend_native": {
+      "description": "Spend a native token amount (atomic units, '0' for no buy)",
+      "type": "string"
+     },
+     "spend_usd": {
+      "description": "Spend a fixed USD amount (0 for no buy)",
+      "minimum": 0,
+      "type": "number"
+     },
+     "supply_percent": {
+      "description": "Buy a percentage of total supply (0.01\u201369%)",
+      "maximum": 69,
+      "minimum": 0.01,
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "name": {
+    "description": "Token name",
+    "maxLength": 32,
+    "minLength": 1,
+    "type": "string"
+   },
+   "private_key": {
+    "description": "Private key to sign immediately after token creation. EVM: hex (with or without 0x prefix). SVM: base58 64-byte keypair. WARNING: handle with care \u2014 never share or commit this value. If omitted, a browser signing session is started instead.",
+    "type": "string"
+   },
+   "rpc_url": {
+    "description": "RPC endpoint override. Falls back to RPC_URLS config or chain defaults.",
+    "type": "string"
+   },
+   "symbol": {
+    "description": "Token ticker symbol",
+    "maxLength": 10,
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "name",
+   "symbol",
+   "description",
+   "chains",
+   "initial_buy"
+  ],
+  "type": "object"
+ },
+ "name": "printr_launch_token",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_port": {
+    "description": "Port of the local session API",
+    "type": "number"
+   },
+   "block_number": {
+    "description": "Block number (as string)",
+    "type": "string"
+   },
+   "confirmation_status": {
+    "description": "Solana confirmation level",
+    "enum": [
+     "finalized",
+     "confirmed",
+     "processed"
+    ],
+    "type": "string"
+   },
+   "drain_error": {
+    "description": "Drain failure reason. Present when drain_status is failed.",
+    "type": "string"
+   },
+   "drain_status": {
+    "description": "ok: funds returned to treasury. failed: drain attempted but failed \u2014 use drain_wallet_id to recover manually. skipped: no tracked deployment wallet was active (key supplied directly).",
+    "enum": [
+     "ok",
+     "failed",
+     "skipped"
+    ],
+    "type": "string"
+   },
+   "drain_wallet_id": {
+    "description": "Keystore wallet ID that was drained. Present when drain_status is ok or failed.",
+    "type": "string"
+   },
+   "expires_at": {
+    "description": "Session expiry timestamp (epoch ms)",
+    "type": "number"
+   },
+   "quote": {
+    "additionalProperties": false,
+    "description": "Full cost breakdown",
+    "properties": {
+     "assets": {
+      "description": "Involved assets",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "decimals": {
+         "description": "Decimal precision",
+         "type": "number"
+        },
+        "id": {
+         "description": "CAIP-10 asset identifier",
+         "type": "string"
+        },
+        "name": {
+         "description": "Display name",
+         "type": "string"
+        },
+        "price_usd": {
+         "description": "USD price estimate",
+         "type": "number"
+        },
+        "symbol": {
+         "description": "Ticker symbol",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "symbol",
+        "decimals",
+        "price_usd"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "costs": {
+      "description": "Itemized cost breakdown",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "asset_id": {
+         "description": "CAIP-10 reference asset",
+         "type": "string"
+        },
+        "cost_asset_atomic": {
+         "description": "Cost in atomic units of the reference asset",
+         "type": "string"
+        },
+        "cost_usd": {
+         "description": "Cost in USD",
+         "type": "number"
+        },
+        "description": {
+         "description": "Cost label (e.g. 'Gas', 'X-Chain Fee')",
+         "type": "string"
+        },
+        "limit": {
+         "description": "Upper bound spending limit",
+         "type": "number"
+        }
+       },
+       "required": [
+        "asset_id",
+        "cost_usd",
+        "cost_asset_atomic"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "id": {
+      "description": "Quote identifier",
+      "type": "string"
+     },
+     "initial_buy_amount": {
+      "description": "Token amount from initial buy",
+      "type": "string"
+     },
+     "router": {
+      "description": "Routing provider type",
+      "type": "string"
+     },
+     "total": {
+      "additionalProperties": false,
+      "description": "Aggregated total cost",
+      "properties": {
+       "asset_id": {
+        "description": "CAIP-10 reference asset",
+        "type": "string"
+       },
+       "cost_asset_atomic": {
+        "description": "Cost in atomic units of the reference asset",
+        "type": "string"
+       },
+       "cost_usd": {
+        "description": "Cost in USD",
+        "type": "number"
+       },
+       "description": {
+        "description": "Cost label (e.g. 'Gas', 'X-Chain Fee')",
+        "type": "string"
+       },
+       "limit": {
+        "description": "Upper bound spending limit",
+        "type": "number"
+       }
+      },
+      "required": [
+       "asset_id",
+       "cost_usd",
+       "cost_asset_atomic"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "id",
+     "router",
+     "assets",
+     "costs",
+     "total"
+    ],
+    "type": "object"
+   },
+   "session_token": {
+    "description": "Ephemeral session token",
+    "type": "string"
+   },
+   "signature": {
+    "description": "Solana transaction signature (base58)",
+    "type": "string"
+   },
+   "slot": {
+    "description": "Slot the transaction was confirmed in",
+    "type": "number"
+   },
+   "status": {
+    "description": "awaiting_signature: open the returned URL to sign. submitted: tx confirmed on-chain.",
+    "enum": [
+     "awaiting_signature",
+     "submitted"
+    ],
+    "type": "string"
+   },
+   "token_id": {
+    "description": "Cross-chain telecoin ID (hex)",
+    "type": "string"
+   },
+   "tx_hash": {
+    "description": "EVM transaction hash",
+    "type": "string"
+   },
+   "tx_status": {
+    "description": "EVM transaction status",
+    "enum": [
+     "success",
+     "reverted"
+    ],
+    "type": "string"
+   },
+   "url": {
+    "description": "Deep link to the Printr web app signing page",
+    "type": "string"
+   }
+  },
+  "required": [
+   "status",
+   "token_id",
+   "quote"
+  ],
+  "type": "object"
+ }
+}

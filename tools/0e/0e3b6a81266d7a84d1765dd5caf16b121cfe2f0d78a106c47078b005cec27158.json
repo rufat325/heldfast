@@ -1,0 +1,291 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "ICS2 Stop-Words Checker"
+ },
+ "description": "Check a goods description against the official EU ICS2 stop-words list \u2014 terms the European Commission deems too vague or generic for an entry summary declaration (ENS) goods-description field (data element 18 05 000 000).\n\nPass description=<goods description>. Behavior: deterministic term matching against the in-force EU list; each flagged term carries a note (a standalone stop-word means automatic rejection, an embedded one means make the description more specific); clean=true means no listed term matched \u2014 it does NOT guarantee acceptance, and no binary accepted/rejected verdict is given. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: the description echo, flagged[] (term + note), clean, caveat and disclaimer under result, plus a _source citing the EU list and legal basis, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: STRICTLY a reference check \u2014 not an ENS filing, not a customs-compliance determination, not legal advice; the EU list is non-exhaustive and updated periodically.\n\nRelated: hs_code_lookup (commodity codes \u2014 a different field of the ENS), uk_duty_calculator (duty/VAT, unrelated to ENS screening). Use BEFORE filing an ENS \u2014 for customs/documentation teams, brokers and agents building filing pipelines.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "description": {
+    "description": "The goods description to check. Example: \"gifts\" (flagged) vs \"wooden toys for retail\" (specific).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "description"
+  ],
+  "type": "object"
+ },
+ "name": "ics2_check",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "caveat": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "clean": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "description": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "disclaimer": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "flagged": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": true,
+           "properties": {
+            "note": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "term": {
+             "type": [
+              "string",
+              "null"
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

@@ -1,0 +1,294 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Retrieve a PAST CodeRifts decision by exactly one identifier\n(case_id | decision_id | fingerprint): full report, breaking changes, scores,\nand linked receipt metadata if stored.\n\nUse this when:\n- You have a decision_id (or fingerprint) from a previous preflight, PR\n  comment, or CI log and need to inspect or explain that past decision.\n- You are auditing why a prior ALLOW/WARN/BLOCK was issued.\n- You are NOT requesting a new analysis of current before/after specs.\n\nDo not use when:\n- You need a decision for the CURRENT uncommitted or PR head change set \u2014\n  call coderifts.preflight_change_set with the current artifacts.\n- You hold a receipt token and only need cryptographic/lifecycle verification \u2014\n  use coderifts.verify_receipt.\n- You have no identifier \u2014 run preflight first to create one.\n\nInputs: exactly one of case_id, decision_id, or fingerprint. {} \u2192 INVALID_INPUT;\ntwo identifiers \u2192 LOOKUP_IDENTIFIER_CONFLICT; case_id \u2192 CASE_NOT_FOUND\n(lookup never opens a case). Returns the stored document or not_found.\n\nScoping \u2014 fingerprint lookup returns only YOUR OWN decisions. A fingerprint is\nderived from content, not from an account, so two callers who preflight\nbyte-identical specs derive the same one; the lookup is therefore constrained\nto the decisions your credential can prove it owns.\n\nA decision that exists but is not yours returns the SAME not_found as one that\nwas never issued. This is deliberate: a distinguishable \"exists but forbidden\"\nwould confirm to any caller that a given content hash had been decided on by\nsomeone, which is the fact the scoping exists to withhold. Do not read\nnot_found as proof that no such decision exists anywhere.\n\nDecisions persisted without context.repository cannot currently be attributed\nto an account, and are not retrievable by fingerprint at all \u2014 not by their\nowner either. Retrieve those by decision_id, which is unchanged and unscoped.\nThis is a limitation of what older stored rows carry, not a property of the\nlookup: rows written from now on record the account directly, so the gap\nnarrows as older rows age out. If a fingerprint you expect returns not_found,\nuse the decision_id before concluding the decision is missing.\n\nWhen the stored envelope carries control fields, control_envelope.next_agent_step\nis structured remediation guidance the agent MAY follow for non-CONTINUE\nexecution_action values (null on CONTINUE*). Still branch on execution_action;\nnext_agent_step is a suggestion, not permission.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "description": "Closed exclusive identifier union: exactly one of case_id | decision_id | fingerprint. Encoded as minProperties=1 + maxProperties=1 + additionalProperties=false, NOT as a top-level oneOf/anyOf/allOf \u2014 Anthropic (and other strict tool APIs) reject those combinators at the root of input_schema and then refuse the entire tools array (measured: test/mcp-input-oneof-honesty.test.js, mcp-streamable.js comment). The server enforces the same mutex with named codes: empty {} \u2192 INVALID_INPUT; two or more identifiers \u2192 LOOKUP_IDENTIFIER_CONFLICT; case_id alone \u2192 CASE_NOT_FOUND (no case store yet; lookup never opens a case).",
+  "maxProperties": 1,
+  "minProperties": 1,
+  "properties": {
+   "case_id": {
+    "description": "A case identifier. Lookup never opens a case. Until the case store exists this returns CASE_NOT_FOUND.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "decision_id": {
+    "description": "The decision_id from a prior decision_result envelope. Provide exactly one identifier.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "fingerprint": {
+    "description": "A verdict fingerprint (sha256:...); returns the latest matching decision you own. Provide exactly one identifier.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_decision_details",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "A stored CodeRifts decision: the original decision_result.v1 envelope + lookup meta. Retrieval-path control fields (safe_for_agent/execution_action/verdict_fingerprint/control_envelope) mirror the fresh preflight response and are present only when the stored envelope carries their source field. additionalProperties true: additive fields may appear and are not permission. Compatibility rule (single source): https://coderifts.com/schemas/decision-result.v1.consumer.json schema description.",
+  "properties": {
+   "breaking_changes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "chain_receipt": {
+    "type": "string"
+   },
+   "coderifts_version": {
+    "type": "string"
+   },
+   "control_envelope": {
+    "description": "Control envelope (control/1.0) derived from the stored decision_result. Includes next_agent_step (structured remediation SUGGESTION for non-CONTINUE execution_action; null on CONTINUE*; not permission \u2014 still branch on execution_action).",
+    "type": "object"
+   },
+   "decision": {
+    "enum": [
+     "ALLOW",
+     "WARN",
+     "REQUIRE_APPROVAL",
+     "BLOCK"
+    ],
+    "type": "string"
+   },
+   "decision_result": {
+    "additionalProperties": true,
+    "description": "decision-result.v1 envelope (control enums closed). Additive fields may appear and are not permission. Full schema: https://coderifts.com/schemas/decision-result.v1.consumer.json (producer: https://coderifts.com/schemas/decision-result.v1.producer.json).",
+    "properties": {
+     "audience": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "authority": {
+      "description": "Additive. { audience, tenant_scope: bound|unbound, binding_proven_at? }. Informational \u2014 not permission, not a verify-receipt gate, not an ACL.",
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "base": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "blast_radius": {
+      "description": "Additive COUNTS (not a score). Not permission.",
+      "properties": {
+       "consumers_declared": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "consumers_observed": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "endpoints": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "fields": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "graph_source": {
+        "type": "string"
+       },
+       "params": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "type": "object"
+     },
+     "decision": {
+      "enum": [
+       "ALLOW",
+       "WARN",
+       "REQUIRE_APPROVAL",
+       "BLOCK"
+      ],
+      "type": "string"
+     },
+     "decision_body_hash": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "decision_id": {
+      "type": "string"
+     },
+     "derivation": {
+      "description": "Additive. Present only when derivation:\"server\" produced this envelope. { source, platform?, base_sha, head_sha }. Covered by body_hash; not fingerprint.",
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "environment": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "execution_action": {
+      "enum": [
+       "CONTINUE",
+       "CONTINUE_WITH_MONITORING",
+       "REQUEST_APPROVAL",
+       "STOP"
+      ],
+      "type": "string"
+     },
+     "expires_at": {
+      "type": "string"
+     },
+     "fingerprint": {
+      "type": "string"
+     },
+     "head": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "input_fingerprint": {
+      "type": "string"
+     },
+     "operation": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "receipt": {
+      "type": "object"
+     },
+     "repository": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "safe_for_agent": {
+      "type": "boolean"
+     },
+     "spec_version": {
+      "pattern": "^decision-result\\.v1(\\.[0-9]+)?$",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "decision_semantic_hash": {
+    "type": "string"
+   },
+   "decision_spec_version": {
+    "type": "string"
+   },
+   "evidence": {
+    "type": [
+     "object",
+     "array",
+     "null"
+    ]
+   },
+   "evidence_quality": {
+    "type": "string"
+   },
+   "execution_action": {
+    "enum": [
+     "CONTINUE",
+     "CONTINUE_WITH_MONITORING",
+     "REQUEST_APPROVAL",
+     "STOP"
+    ],
+    "type": "string"
+   },
+   "meta": {
+    "additionalProperties": true,
+    "properties": {
+     "created_at": {
+      "type": "string"
+     },
+     "decision_id": {
+      "type": "string"
+     },
+     "omitted_sections": {
+      "type": "array"
+     },
+     "retrieval_mode": {
+      "enum": [
+       "stored"
+      ],
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "operation": {
+    "type": "string"
+   },
+   "pattern_sources": {
+    "type": "array"
+   },
+   "patterns": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "preflight_mode": {
+    "enum": [
+     "analyze",
+     "authorize"
+    ],
+    "type": "string"
+   },
+   "receipt_kind": {
+    "enum": [
+     "NONE",
+     "operation_authorization"
+    ],
+    "type": "string"
+   },
+   "required_action_core": {
+    "description": "Branchable required-action core { type, reason_code, recheck_required } when present on the envelope.",
+    "type": "object"
+   },
+   "requires_migration": {
+    "type": "boolean"
+   },
+   "risk_score": {
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "safe_for_agent": {
+    "type": "boolean"
+   },
+   "timestamp": {
+    "type": "string"
+   },
+   "verdict_fingerprint": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "decision_result",
+   "meta"
+  ],
+  "type": "object"
+ }
+}

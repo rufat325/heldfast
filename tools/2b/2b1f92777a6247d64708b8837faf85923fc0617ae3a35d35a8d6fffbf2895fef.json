@@ -1,0 +1,214 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Execute a SoQL query against any dataset on any Socrata portal. Use the search parameter for quick full-text lookup, or combine select/where/group/having/order for full analytical control. Returns rows plus the assembled SoQL string so you can learn the pattern. Columns are referenced by API field name (field_name from socrata_get_dataset, e.g. cuisine_description), never the display label. All SODA 2.1 row values are strings even for numeric columns \u2014 check data_type from socrata_get_dataset to determine correct WHERE quoting: Number columns use bare literals (year=2023), Text columns use single-quoted strings (year='2023'). To enumerate distinct values, use select=\"col, count(*) as n\" with group=\"col\" and order=\"n DESC\". When CANVAS_PROVIDER_TYPE=duckdb and rows fill limit, up to 50,000 matching rows spill to a DataCanvas table whatever the limit: list its columns with socrata_dataframe_describe, then run SQL with socrata_dataframe_query.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Optional 10-char DataCanvas token from a prior socrata_query_dataset or socrata_dataframe_describe call. Omit on first call when CANVAS_PROVIDER_TYPE=duckdb to mint a fresh canvas. Large result sets spill here automatically.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   },
+   "dataset_id": {
+    "description": "Four-by-four dataset ID (e.g. kzjm-xkqj). IDs are portal-scoped: take it from socrata_find_datasets together with that result\u2019s domain.",
+    "type": "string"
+   },
+   "domain": {
+    "description": "Portal the dataset lives on, as a bare hostname (e.g. data.cityofnewyork.us); URL forms like https://data.cityofnewyork.us/ are accepted and reduced to the host. Pass the domain from the same socrata_find_datasets result as dataset_id. Defaults to SOCRATA_DEFAULT_DOMAIN or data.seattle.gov, which is wrong for another portal\u2019s ID.",
+    "type": "string"
+   },
+   "group": {
+    "description": "SoQL GROUP BY clause over API field names (field_name from socrata_get_dataset). Requires an aggregate function in select.",
+    "type": "string"
+   },
+   "having": {
+    "description": "SoQL HAVING clause. Filters on aggregated results, e.g. count > 100.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 100,
+    "description": "Max rows to return (1\u20135000). Default 100. Use with offset for pagination. When the canvas is enabled and the page fills limit, up to 50,000 matching rows are staged on it whatever the limit \u2014 pass a small limit (e.g. 10) to stage a large match without a large inline page.",
+    "maximum": 5000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Row offset for pagination. Default 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "order": {
+    "description": "SoQL ORDER BY clause over API field names or select aliases, e.g. \"total_deaths DESC\" or \"date ASC\".",
+    "type": "string"
+   },
+   "search": {
+    "description": "Full-text search across all text columns ($q). For field-specific filtering, use where instead.",
+    "type": "string"
+   },
+   "select": {
+    "description": "SoQL SELECT clause \u2014 API field names (field_name from socrata_get_dataset, not display labels), aliases, aggregates: \"state, sum(deaths) as total_deaths\". Omit for all columns.",
+    "type": "string"
+   },
+   "where": {
+    "description": "SoQL WHERE clause over API field names (field_name from socrata_get_dataset). Check column data_type there first \u2014 Number columns: year=2023, Text columns: year='2023'; an unquoted text value is read as a column name. Operators: =, !=, >, <, LIKE, IN(...), BETWEEN, IS NULL, starts_with(), contains(), AND, OR, NOT.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "dataset_id"
+  ],
+  "type": "object"
+ },
+ "name": "socrata_query_dataset",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "rows",
+     "row_count",
+     "assembled_query",
+     "domain",
+     "dataset_id"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "assembled_query": {
+    "description": "SoQL clauses assembled for this request \u2014 useful for learning the syntax.",
+    "type": "string"
+   },
+   "canvas_id": {
+    "description": "DataCanvas token when results spilled (requires CANVAS_PROVIDER_TYPE=duckdb). Pass to socrata_dataframe_query to run SQL over the staged rows in table_name \u2014 a bounded copy of the matching set (up to 50,000 rows, reported in canvas_row_count), not the full set when total_count exceeds that cap. Page with offset to reach rows beyond it.",
+    "type": "string"
+   },
+   "canvas_row_count": {
+    "description": "Rows staged onto the DataCanvas \u2014 a bounded copy of the matching result set (capped at 50,000). Fewer than total_count when the match exceeds the cap. Present only when canvas_id is.",
+    "type": "number"
+   },
+   "cap": {
+    "description": "The row limit that was applied when capped.",
+    "type": "number"
+   },
+   "dataset_id": {
+    "description": "Dataset ID queried.",
+    "type": "string"
+   },
+   "domain": {
+    "description": "Portal hostname queried, normalized from the domain input.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_id`: Dataset ID does not match the four-by-four pattern. `not_found`: The dataset does not exist on the domain queried \u2014 including a gateway HTTP 403 for an ID the portal does not serve. `unknown_domain`: The domain does not serve the Socrata API to this server: its hostname does not resolve (DNS ENOTFOUND), its API answered HTTP 404 without a Socrata error body, it redirected the request to another host that did not answer with Socrata data, or a gateway refused a dataset the Discovery catalog lists there. `invalid_domain`: The domain is not a hostname, even after dropping a URL scheme, path, or query. `soql_error`: SoQL syntax error, unknown column, or literal/column type mismatch. data.socrataCode carries the upstream code and data.column the offending token when upstream names one. `rate_limited`: SODA endpoint returned 429. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_id",
+         "not_found",
+         "unknown_domain",
+         "invalid_domain",
+         "soql_error",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when the query returned zero rows (review the SoQL or broaden the filter), or when rows filled the limit (how to page, and the staged table to query when the result spilled). Absent otherwise.",
+    "type": "string"
+   },
+   "row_count": {
+    "description": "Rows returned in this response.",
+    "type": "number"
+   },
+   "rows": {
+    "description": "Result rows. Scalar values are strings (SODA 2.1); geo/location columns return nested objects. Use column schema from socrata_get_dataset for type context.",
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Rows returned in this response when capped.",
+    "type": "number"
+   },
+   "table_name": {
+    "description": "Canvas table holding the staged rows; present when canvas_id is. Use it as the FROM target in socrata_dataframe_query SQL; list its columns with socrata_dataframe_describe.",
+    "type": "string"
+   },
+   "total_count": {
+    "description": "Total matching source rows when a plain row query is truncated (row_count < total_count). Absent when the full result fits and for grouped/aggregate queries (group set), where a source-row count would not describe the returned groups.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when rows filled the limit \u2014 more rows may match (see total_count when present). Spills to canvas when enabled; table_name names the staged table.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Query Dataset"
+}

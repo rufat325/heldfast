@@ -1,0 +1,501 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Decode the vocabulary the other CISA tools take as input. Topics cover the BOD 26-04 remediation timeline table and what each tier means, the KEV record fields and their value domains, the SSVC decision points CISA publishes, the critical-infrastructure sector names as the advisory corpus spells them, advisory ID formats, CVSS severity bands, and the freshness of the data this server currently holds. Call this before constructing filters for cisa_search_kev or cisa_search_ics_advisories, and whenever another tool's recovery hint points here.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "topic": {
+    "description": "Which reference block to return: directives (BOD 26-04 Table 1 and its definitions), kev_fields, ssvc_values, sectors, advisory_id_formats, severity_bands, or sources (what this server currently holds).",
+    "enum": [
+     "directives",
+     "kev_fields",
+     "ssvc_values",
+     "sectors",
+     "advisory_id_formats",
+     "severity_bands",
+     "sources"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "topic"
+  ],
+  "type": "object"
+ },
+ "name": "cisa_list_reference",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "topic",
+     "title",
+     "summary",
+     "entries"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "definitions": {
+    "description": "Topic directives only \u2014 supporting definitions from the directive text.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One supporting definition from the directive text.",
+     "properties": {
+      "definition": {
+       "description": "The directive's own definition of the term.",
+       "type": "string"
+      },
+      "term": {
+       "description": "The defined term.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "term",
+      "definition"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "entries": {
+    "description": "The decoded terms for this topic.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One decoded term within the topic.",
+     "properties": {
+      "description": {
+       "description": "What the term means and how it affects a query.",
+       "type": "string"
+      },
+      "key": {
+       "description": "Stable identifier for the term.",
+       "type": "string"
+      },
+      "label": {
+       "description": "Human-readable name for the term.",
+       "type": "string"
+      },
+      "values": {
+       "description": "The value domain, when the term has a closed or enumerated one.",
+       "items": {
+        "description": "One accepted value.",
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "key",
+      "label",
+      "description"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode.",
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "sources": {
+    "additionalProperties": false,
+    "description": "Topic sources only \u2014 what this server currently holds, read from in-process state.",
+    "properties": {
+     "csafMirror": {
+      "additionalProperties": false,
+      "description": "The local ICS advisory index.",
+      "properties": {
+       "checkpoint": {
+        "description": "Durable high-water mark \u2014 the newest current_release_date ingested.",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "documentCount": {
+        "anyOf": [
+         {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Advisories held in the index; null before the first sync completes."
+       },
+       "lastCompletedAt": {
+        "description": "When a full sync last completed, ISO 8601; null if never.",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "ready": {
+        "description": "True once a full sync has ever completed; stays true during a refresh.",
+        "type": "boolean"
+       },
+       "syncStatus": {
+        "description": "Lifecycle state: pending, in_progress, complete, error, or unavailable.",
+        "type": "string"
+       },
+       "unavailableReason": {
+        "description": "Present only when the index cannot be opened: its location is not writable, is read-only, has a missing directory, runs through a file, or holds a file that is not a SQLite database. Fixed by CISA_CSAF_MIRROR_PATH, not by waiting.",
+        "enum": [
+         "not_writable",
+         "read_only",
+         "missing_directory",
+         "not_a_directory",
+         "not_a_database"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "ready",
+       "documentCount",
+       "checkpoint",
+       "syncStatus",
+       "lastCompletedAt"
+      ],
+      "type": "object"
+     },
+     "feeds": {
+      "additionalProperties": false,
+      "description": "The RSS feed tier.",
+      "properties": {
+       "cached": {
+        "description": "Feed windows currently held in memory; empty before any feed is read.",
+        "items": {
+         "additionalProperties": false,
+         "description": "One cached feed window.",
+         "properties": {
+          "feed": {
+           "description": "Which feed this cached window belongs to.",
+           "enum": [
+            "advisories",
+            "alerts",
+            "ics"
+           ],
+           "type": "string"
+          },
+          "fetchedAt": {
+           "description": "When this window was fetched, ISO 8601.",
+           "type": "string"
+          },
+          "newest": {
+           "description": "Publication date of the newest item in the cached window.",
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "oldest": {
+           "description": "Publication date of the oldest item in the cached window.",
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "feed",
+          "oldest",
+          "newest",
+          "fetchedAt"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "windowItems": {
+        "description": "Items each feed serves \u2014 a fixed upstream ceiling, not a server choice.",
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "windowItems",
+       "cached"
+      ],
+      "type": "object"
+     },
+     "kev": {
+      "additionalProperties": false,
+      "description": "The in-memory KEV catalog snapshot.",
+      "properties": {
+       "catalogVersion": {
+        "description": "Catalog version of the loaded snapshot; null before the first load lands.",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "count": {
+        "anyOf": [
+         {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Entry count the loaded snapshot carries; null before the first load."
+       },
+       "dateReleased": {
+        "description": "Release timestamp the loaded snapshot carries; null before the first load.",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "lastCheckedAt": {
+        "description": "When the refresh poll last reached the origin, ISO 8601; null if never.",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "lastModified": {
+        "description": "Upstream Last-Modified of the loaded snapshot, used for the conditional poll.",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "refreshCron": {
+        "description": "Cron expression the refresh poll runs on, or off when it is disabled.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "catalogVersion",
+       "dateReleased",
+       "count",
+       "lastCheckedAt",
+       "lastModified",
+       "refreshCron"
+      ],
+      "type": "object"
+     },
+     "vulnrichment": {
+      "additionalProperties": false,
+      "description": "The per-CVE SSVC enrichment tier.",
+      "properties": {
+       "cacheTtlSeconds": {
+        "description": "TTL for a cached record; negative results use one sixth of it.",
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       },
+       "mode": {
+        "const": "on_demand",
+        "description": "Access mode \u2014 fetched per CVE on demand; the repository is not mirrored.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "mode",
+       "cacheTtlSeconds"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "kev",
+     "csafMirror",
+     "vulnrichment",
+     "feeds"
+    ],
+    "type": "object"
+   },
+   "summary": {
+    "description": "What this topic covers and when to reach for it.",
+    "type": "string"
+   },
+   "supersedes": {
+    "description": "Topic directives only \u2014 the directives BOD 26-04 supersedes and revokes.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One directive that BOD 26-04 supersedes and revokes.",
+     "properties": {
+      "directive": {
+       "description": "The superseded directive identifier.",
+       "type": "string"
+      },
+      "issued": {
+       "description": "Issue date, YYYY-MM-DD.",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "note": {
+       "description": "What the superseded directive covered.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "directive",
+      "issued",
+      "note"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "timelineTable": {
+    "description": "Topic directives only \u2014 all sixteen rows of BOD 26-04 Appendix A, Table 1.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One row of BOD 26-04 Appendix A, Table 1.",
+     "properties": {
+      "automatable": {
+       "description": "The SSVC Automatable decision point for this row.",
+       "type": "boolean"
+      },
+      "forensicTriageRequired": {
+       "description": "Whether the row additionally requires a forensic triage of the asset.",
+       "type": "boolean"
+      },
+      "inKev": {
+       "description": "Whether the CVE is in the CISA KEV catalog.",
+       "type": "boolean"
+      },
+      "publiclyExposed": {
+       "description": "Whether the asset is reachable by unauthenticated or untrusted entities.",
+       "type": "boolean"
+      },
+      "remediationTimelineDays": {
+       "anyOf": [
+        {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Calendar days allowed, or null for the \"Fix on system upgrade\" rows."
+      },
+      "row": {
+       "description": "Table 1 row number, 1 through 16.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "technicalImpact": {
+       "description": "The SSVC Technical Impact decision point for this row.",
+       "enum": [
+        "partial",
+        "total"
+       ],
+       "type": "string"
+      },
+      "timelineLabel": {
+       "description": "The agency timeline in the directive's own wording.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "row",
+      "publiclyExposed",
+      "inKev",
+      "automatable",
+      "technicalImpact",
+      "timelineLabel",
+      "remediationTimelineDays",
+      "forensicTriageRequired"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "title": {
+    "description": "Human-readable title for the topic.",
+    "type": "string"
+   },
+   "topic": {
+    "description": "The topic that was decoded.",
+    "enum": [
+     "directives",
+     "kev_fields",
+     "ssvc_values",
+     "sectors",
+     "advisory_id_formats",
+     "severity_bands",
+     "sources"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "cisa_list_reference"
+}

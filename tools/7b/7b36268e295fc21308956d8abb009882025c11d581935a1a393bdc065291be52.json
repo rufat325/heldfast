@@ -1,0 +1,288 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get infrastructure intelligence for a single IP (open ports, service banners, software versions, hostnames, ASN, geo) via Shodan's free host endpoint, or run a faceted internet-wide search (mode: \"search\") that consumes paid Shodan query credits. Requires SHODAN_API_KEY; without it this tool returns a typed source_unavailable error while the rest of the server keeps working. Shodan data reflects Shodan's last scan, not a live port state. Use only on assets you own or are authorized to assess.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "facets": {
+    "description": "Facet fields for mode \"search\" (e.g. [\"port\", \"org\", \"country\"]).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "mode": {
+    "default": "host",
+    "description": "\"host\" = free single-IP lookup; \"search\" = faceted query (consumes paid credits).",
+    "enum": [
+     "host",
+     "search"
+    ],
+    "type": "string"
+   },
+   "target": {
+    "description": "For mode \"host\": an IP address. For mode \"search\": a Shodan search query (e.g. \"org:\\\"Example Inc\\\" port:443\").",
+    "type": "string"
+   }
+  },
+  "required": [
+   "target"
+  ],
+  "type": "object"
+ },
+ "name": "attacksurface_lookup_host",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "mode"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `source_unavailable`: SHODAN_API_KEY is not configured. `no_data`: Shodan has no information for the target IP. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "source_unavailable",
+         "no_data"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "host": {
+    "additionalProperties": false,
+    "description": "Single-host result (present for mode \"host\").",
+    "properties": {
+     "asn": {
+      "description": "Autonomous system number, when reported.",
+      "type": "string"
+     },
+     "country": {
+      "description": "Two-letter country code, when reported.",
+      "type": "string"
+     },
+     "hostnames": {
+      "description": "Hostnames Shodan associates with the IP.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "ip": {
+      "description": "IP looked up.",
+      "type": "string"
+     },
+     "lastUpdate": {
+      "description": "ISO 8601 timestamp of Shodan's most recent scan.",
+      "type": "string"
+     },
+     "org": {
+      "description": "ISP/organization, when reported.",
+      "type": "string"
+     },
+     "ports": {
+      "description": "Open ports observed.",
+      "items": {
+       "type": "number"
+      },
+      "type": "array"
+     },
+     "services": {
+      "description": "Per-service banners.",
+      "items": {
+       "additionalProperties": false,
+       "description": "A service/banner observed by Shodan on the host.",
+       "properties": {
+        "banner": {
+         "description": "Banner excerpt (truncated), when reported.",
+         "type": "string"
+        },
+        "observedAt": {
+         "description": "ISO 8601 timestamp of Shodan's last observation.",
+         "type": "string"
+        },
+        "port": {
+         "description": "Open port observed by Shodan.",
+         "type": "number"
+        },
+        "product": {
+         "description": "Detected product/software, when reported.",
+         "type": "string"
+        },
+        "transport": {
+         "description": "Transport (tcp/udp), when reported.",
+         "type": "string"
+        },
+        "version": {
+         "description": "Software version, when reported.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "port"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "ip",
+     "hostnames",
+     "ports",
+     "services"
+    ],
+    "type": "object"
+   },
+   "mode": {
+    "description": "The mode that was executed.",
+    "enum": [
+     "host",
+     "search"
+    ],
+    "type": "string"
+   },
+   "search": {
+    "additionalProperties": false,
+    "description": "Faceted-search result (present for mode \"search\").",
+    "properties": {
+     "facets": {
+      "additionalProperties": {
+       "items": {
+        "additionalProperties": false,
+        "description": "A facet aggregation bucket (value and its count).",
+        "properties": {
+         "count": {
+          "description": "Number of Shodan results carrying this value.",
+          "type": "number"
+         },
+         "value": {
+          "description": "The aggregated value (e.g. a country code, port number, or org name).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "value",
+         "count"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "description": "Facet aggregations: facet name \u2192 value/count buckets.",
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "matches": {
+      "description": "Returned matches (first page).",
+      "items": {
+       "additionalProperties": false,
+       "description": "A single host/port match in a faceted search.",
+       "properties": {
+        "country": {
+         "description": "Country code, when reported.",
+         "type": "string"
+        },
+        "ip": {
+         "description": "IP of the match.",
+         "type": "string"
+        },
+        "org": {
+         "description": "Org/ISP, when reported.",
+         "type": "string"
+        },
+        "port": {
+         "description": "Port of the match.",
+         "type": "number"
+        },
+        "product": {
+         "description": "Detected product, when reported.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "ip",
+        "port"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "total": {
+      "description": "Total matches reported by Shodan.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "total",
+     "matches",
+     "facets"
+    ],
+    "type": "object"
+   }
+  },
+  "type": "object"
+ },
+ "title": "attacksurface_lookup_host"
+}

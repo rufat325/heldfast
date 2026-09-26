@@ -1,0 +1,80 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "CREATE a Robinhood Chain copy-trade rule (POST \u2014 this writes and consumes quota; do not call it to explore). source_wallets must be TRACKED KOL wallets (the set behind /rhc/kol/wallets): any 0x address is accepted, but the engine only evaluates trades of tracked wallets, so read source_wallets_untracked + warnings (code untracked_source_wallets) on the response and tell the user which wallets can never fire. Amounts are ETH, not SOL. IMPORTANT: RHC copy-trade has NO market-cap band (no min_mc_usd/max_mc_usd) \u2014 unlike the Solana engine \u2014 because the RHC KOL trade event carries no market cap, so the filter would either need a per-event DB lookup on a ~3.3M-trades/day chain or silently never match. Returns webhook_secret EXACTLY ONCE when delivery_mode includes 'webhook' \u2014 store it, payloads are HMAC-SHA256 over `<timestamp>.<body>` in X-MadeOnSol-Signature. Rule/wallet caps are PER CHAIN (PRO 3 rules / 5 wallets, ULTRA 20 / 50, BUSINESS 100 / 250); exceeding the rule cap returns 409. Tier: PRO+.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "delivery_mode": {
+    "description": "Where signals are delivered (default 'webhook')",
+    "enum": [
+     "webhook",
+     "websocket",
+     "both"
+    ],
+    "type": "string"
+   },
+   "min_trade_eth": {
+    "description": "Minimum source-wallet trade size in ETH to fire (default 0)",
+    "minimum": 0,
+    "type": "number"
+   },
+   "name": {
+    "description": "Optional human label (max 64 chars)",
+    "maxLength": 64,
+    "minLength": 1,
+    "type": "string"
+   },
+   "only_action": {
+    "description": "Which side to mirror (default 'buy')",
+    "enum": [
+     "buy",
+     "sell",
+     "both"
+    ],
+    "type": "string"
+   },
+   "sizing_amount": {
+    "description": "Amount in ETH, interpreted by sizing_mode. Required",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "sizing_mode": {
+    "description": "How sizing_amount is interpreted (default 'fixed')",
+    "enum": [
+     "fixed",
+     "proportional",
+     "percent_source"
+    ],
+    "type": "string"
+   },
+   "source_wallets": {
+    "description": "1-250 source EVM wallets to mirror (0x, 40 hex). Lowercased on write. Capped by tier: PRO 5, ULTRA 50, BUSINESS 250",
+    "items": {
+     "type": "string"
+    },
+    "maxItems": 250,
+    "minItems": 1,
+    "type": "array"
+   },
+   "webhook_url": {
+    "description": "HTTPS URL \u2014 REQUIRED unless delivery_mode is 'websocket'",
+    "format": "uri",
+    "type": "string"
+   }
+  },
+  "required": [
+   "source_wallets",
+   "sizing_amount"
+  ],
+  "type": "object"
+ },
+ "name": "rhc_copytrade_create"
+}

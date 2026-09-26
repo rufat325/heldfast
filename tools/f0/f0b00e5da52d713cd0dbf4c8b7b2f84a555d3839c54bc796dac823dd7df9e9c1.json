@@ -1,0 +1,166 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "algorithm": "aes256",
+     "ownerPassword": "owner-secret",
+     "pdfBase64": "<base64>",
+     "userPassword": "open-me"
+    },
+    "title": "Encrypt with AES-256 (owner + user password)"
+   },
+   {
+    "input": {
+     "ownerPassword": "owner-secret",
+     "pdfBase64": "<base64>",
+     "permissions": {
+      "print": false
+     }
+    },
+    "title": "Owner-locked, no-print (empty user password)"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Encrypt an existing PDF with the Standard Security Handler: AES-128 (default) or AES-256; RC4 is never emitted. ownerPassword required; optional userPassword (open password), permissions { print, copy, modify, extractText }. Rotate the password of an already-encrypted source by passing its current `password`. CAVEAT: the page tree is rebuilt \u2014 signatures and AcroForm are DROPPED, only URI links kept; encrypt BEFORE signing. Never cached.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "algorithm": {
+    "default": "aes128",
+    "description": "aes128 (V4/R4, widest compatibility) or aes256 (V5/R6).",
+    "enum": [
+     "aes128",
+     "aes256"
+    ],
+    "type": "string"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default) returns the PDF inline; 'file' writes it inside the PDFNATIVE_MCP_OUTPUT_DIR sandbox (SECURITY_VIOLATION when the sandbox is not configured).",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Required when outputMode='file'. Relative path inside the sandbox; must end with .pdf.",
+    "type": "string"
+   },
+   "ownerPassword": {
+    "description": "Owner password (full access).",
+    "maxLength": 4096,
+    "minLength": 1,
+    "type": "string"
+   },
+   "password": {
+    "description": "Current password of an already-encrypted source (enables password rotation). Omit for an unencrypted source.",
+    "maxLength": 4096,
+    "minLength": 1,
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded source PDF to encrypt. NOTE: existing signatures and AcroForm are dropped (page-tree rebuild).",
+    "minLength": 4,
+    "type": "string"
+   },
+   "permissions": {
+    "additionalProperties": false,
+    "description": "Permission flags; each defaults to allowed.",
+    "properties": {
+     "copy": {
+      "type": "boolean"
+     },
+     "extractText": {
+      "type": "boolean"
+     },
+     "modify": {
+      "type": "boolean"
+     },
+     "print": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "userPassword": {
+    "description": "Open password; omitted/empty = opens without a prompt.",
+    "maxLength": 4096,
+    "type": "string"
+   }
+  },
+  "required": [
+   "pdfBase64",
+   "ownerPassword"
+  ],
+  "type": "object"
+ },
+ "name": "encrypt_pdf",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Result of a PDF-producing tool. base64 mode: the PDF arrives as an embedded `resource` content block (not duplicated here); file mode: `filePath`.",
+  "properties": {
+   "diagnostics": {
+    "description": "Engine diagnostics (when includeDiagnostics=true).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "severity"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "filePath": {
+    "description": "Sandboxed absolute path (file mode).",
+    "type": "string"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "sizeBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "summary": {
+    "additionalProperties": true,
+    "description": "Tool-specific summary, when produced.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "sizeBytes"
+  ],
+  "type": "object"
+ },
+ "title": "Encrypt / re-secure a PDF"
+}

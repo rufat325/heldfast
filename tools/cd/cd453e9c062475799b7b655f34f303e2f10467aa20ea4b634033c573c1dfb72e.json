@@ -1,0 +1,232 @@
+{
+ "description": "Admin-only tool for managing MIND users and the Featured Minds Portal. Requires an admin API key. Full CRUD over featured minds (create / list / get_full / update / update_owner_profile / reorder / delete), plus user provisioning and tier/credit management. The Featured Minds Portal at /admin/featuredmindsportal uses these same endpoints \u2014 get_featured_mind_full + update_featured_mind_owner_profile let you edit the linked user's LLM model, public chat prompt, temperature, reasoning effort, brand fields, and avatar/banner from any MCP client.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "action": {
+    "description": "Admin action. Featured Minds Portal actions: create_featured_mind, list_featured_minds, get_featured_mind_full (bundled view + owner profile + model catalog), update_featured_mind (catalog fields: title/description/tags/featured/display_order/is_public/avatar_url/banner_url/subtitle/price), update_featured_mind_owner_profile (write-through to linked user_profiles: preferred_llm_model, public_mind_prompt, chat_temperature, chat_reasoning_effort, public_mind_enabled, public_mind_tagline/greeting/persona, bio, avatar_url, banner_url), reorder_featured_minds (bulk display_order via ordered_mind_ids list), delete_featured_mind. User actions: create_user, list_users, update_user_tier, adjust_user_credits.",
+    "enum": [
+     "create_user",
+     "create_featured_mind",
+     "list_featured_minds",
+     "get_featured_mind_full",
+     "update_featured_mind",
+     "update_featured_mind_owner_profile",
+     "reorder_featured_minds",
+     "delete_featured_mind",
+     "list_users",
+     "update_user_tier",
+     "adjust_user_credits"
+    ],
+    "type": "string"
+   },
+   "agent_posting_enabled": {
+    "description": "Influencer Factory: gate that lets autonomous agents post on this persona's behalf. Dark by default.",
+    "type": "boolean"
+   },
+   "api_key_name": {
+    "description": "Name for the generated API key (defaults to '{source} integration')",
+    "type": "string"
+   },
+   "archetype_id": {
+    "description": "Influencer Factory: archetype persona id (e.g. an Astra archetype template). Pass null to clear.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "avatar_url": {
+    "description": "Avatar image URL (S3-hosted). Writes-through to user_profiles when used with update_featured_mind_owner_profile.",
+    "type": "string"
+   },
+   "banner_url": {
+    "description": "Banner image URL (S3-hosted). Writes-through to user_profiles when used with update_featured_mind_owner_profile.",
+    "type": "string"
+   },
+   "bio": {
+    "description": "Owner bio (shown across MIND profile surfaces, \u2264500 chars)",
+    "maxLength": 500,
+    "type": "string"
+   },
+   "chat_reasoning_effort": {
+    "anyOf": [
+     {
+      "enum": [
+       "minimal",
+       "low",
+       "medium",
+       "high"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Per-MIND reasoning_effort override. Only honored for thinking-capable models (supports_reasoning_effort=true)."
+   },
+   "chat_temperature": {
+    "anyOf": [
+     {
+      "maximum": 2,
+      "minimum": 0,
+      "type": "number"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Per-MIND temperature override (0.0\u20132.0). Null clears to provider default."
+   },
+   "credits": {
+    "description": "Credits to add (positive) or deduct (negative)",
+    "type": "number"
+   },
+   "description": {
+    "description": "Long-form description shown on the public profile",
+    "type": "string"
+   },
+   "display_order": {
+    "description": "Sort order in featured list (lower = earlier)",
+    "type": "number"
+   },
+   "email": {
+    "description": "Email for new user",
+    "type": "string"
+   },
+   "featured": {
+    "description": "Whether to show in the featured grid on /discover",
+    "type": "boolean"
+   },
+   "generate_api_key": {
+    "description": "If true, also generate a developer API key (mind_...) for the new user",
+    "type": "boolean"
+   },
+   "is_public": {
+    "description": "If true, anyone can query this mind at normal credit rate (marketplace public)",
+    "type": "boolean"
+   },
+   "kg_scope_template_id": {
+    "description": "Influencer Factory: KG-scope template id that bounds what this persona knows/talks about. Pass null to clear.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "mind_id": {
+    "description": "Featured mind ID \u2014 required for get_featured_mind_full / update_featured_mind / update_featured_mind_owner_profile / delete_featured_mind",
+    "type": "string"
+   },
+   "niche_tags": {
+    "description": "Influencer Factory: niche/topic tags for this persona (e.g. ['fitness', 'wellness']). Separate from catalog `tags`.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "ordered_mind_ids": {
+    "description": "For reorder_featured_minds: full list of mind_ids in the order you want. Index in the list becomes display_order.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "page": {
+    "description": "Page number for paginated results",
+    "type": "number"
+   },
+   "password": {
+    "description": "Password for new user (min 8 chars)",
+    "type": "string"
+   },
+   "preferred_llm_model": {
+    "description": "LLM model id (e.g. 'deepseek/deepseek-v4-flash', 'anthropic/claude-sonnet-4.6'). Used by the public chat at /m/{username}. Pass null to clear and fall back to platform default. Use mind_admin with action=list_featured_minds then get_featured_mind_full to see available_models.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "price": {
+    "description": "Subscription price (0 = free)",
+    "type": "number"
+   },
+   "public_mind_enabled": {
+    "description": "Whether anonymous visitors can chat with this MIND at /m/{username}",
+    "type": "boolean"
+   },
+   "public_mind_greeting": {
+    "description": "Public landing greeting message (\u2264500 chars)",
+    "maxLength": 500,
+    "type": "string"
+   },
+   "public_mind_persona": {
+    "description": "Persona description used inside the auto-built default prompt (\u2264800 chars)",
+    "maxLength": 800,
+    "type": "string"
+   },
+   "public_mind_prompt": {
+    "description": "System prompt used by the public chat (\u22643000 chars). Empty string clears it and the auto-built default is used.",
+    "maxLength": 3000,
+    "type": "string"
+   },
+   "public_mind_tagline": {
+    "description": "Public landing tagline (\u2264160 chars)",
+    "maxLength": 160,
+    "type": "string"
+   },
+   "query": {
+    "description": "Search query for list_users",
+    "type": "string"
+   },
+   "seed_image_url": {
+    "description": "Influencer Factory: anchor seed image URL (the reference photo every image-to-image variant pins to \u2014 do not chain). Pass null to clear.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "source": {
+    "description": "Source app/partner that created this user (e.g. 'myapp')",
+    "type": "string"
+   },
+   "subtitle": {
+    "description": "One-line hook shown under the title on portal cards (\u2264140 chars)",
+    "type": "string"
+   },
+   "tags": {
+    "description": "Tags for the featured mind",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "tier": {
+    "description": "Subscription tier: free, pro, enterprise",
+    "type": "string"
+   },
+   "title": {
+    "description": "Display title for the featured mind",
+    "type": "string"
+   },
+   "username": {
+    "description": "Username for new user (3-30 chars, letters/numbers/underscores)",
+    "type": "string"
+   },
+   "voice_id": {
+    "description": "Influencer Factory: ElevenLabs voice id used by this persona. Pass null to clear.",
+    "type": [
+     "string",
+     "null"
+    ]
+   }
+  },
+  "required": [
+   "action"
+  ],
+  "type": "object"
+ },
+ "name": "mind_admin"
+}

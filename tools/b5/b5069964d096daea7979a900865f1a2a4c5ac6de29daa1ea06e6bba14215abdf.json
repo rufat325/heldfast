@@ -1,0 +1,151 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Batch Search Contracts"
+ },
+ "description": "DEPRECATED ALIAS \u2014 prefer search_procurement with a queries[] array, which now runs the identical batch fan-out. Kept for backward compatibility; behavior is unchanged. Search federal contracts (SAM.gov) comprehensively. Returns 10 results by default (~4KB). Use detail_level and max_results to control response size. Response includes total available count so you can request more if needed. When sam_filters.pop_state (alias: place_of_performance_state) is set, the response includes a placeOfPerformance field summed across every sub-query (matched, unknownServed with unknowns excluded instead when user_context.location_strict is true, and otherStateExcluded). Counts toward your monthly searches. A batch counts as 1 call.",
+ "inputSchema": {
+  "properties": {
+   "detail_level": {
+    "default": "compact",
+    "description": "Controls response verbosity. minimal (~120 bytes/result): id, title, org, deadline, url, qualityScore - best for scanning 50+ results. compact (~400 bytes/result, DEFAULT): adds snippet, category, status, deadlineType, daysUntilDeadline, deadlineLabel, and lastRoundClosedAt - good for recommendations. full (~1.5KB/result): everything including eligibility, amounts - only use with max_results <= 10.",
+    "enum": [
+     "minimal",
+     "compact",
+     "full"
+    ],
+    "type": "string"
+   },
+   "max_response_tokens": {
+    "default": 4000,
+    "description": "Token budget for response (default: 4000 \u2248 16KB). Server auto-caps results to fit. Increase to 8000-16000 for more results per call, decrease to 2000 for lightweight scanning.",
+    "minimum": 500,
+    "type": "number"
+   },
+   "max_results": {
+    "default": 10,
+    "description": "Maximum opportunities to return (default: 10, max: 100). Token cost guide: 10 results ~4KB, 25 results ~10KB, 50 results ~20KB, 100 results ~40KB.",
+    "minimum": 1,
+    "type": "number"
+   },
+   "new_within_days": {
+    "description": "Backwards-compatible alias for posted_within_days. Only opportunities ingested (added by us) in the last N days -- for recurring/delta checks (\"what is new since my last check\"). Applied per sub-query before dedupe; response includes deduped newSince.newCount and the newest/oldest ingest timestamp in the window.",
+    "type": "number"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Number of results to skip for pagination (default: 0). Use with max_results to page through large result sets. Example: offset=100 with max_results=100 returns results 101-200.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "posted_within_days": {
+    "description": "Preferred alias for new_within_days: only opportunities ingested (added by us) in the last N days. Applied per sub-query before dedupe; the response includes a deduped newSince summary. If both posted_within_days and new_within_days are supplied, posted_within_days wins.",
+    "type": "number"
+   },
+   "queries": {
+    "description": "Array of 2-5 search queries to run in parallel. Example for IT services: [\"IT services contract\", \"software development federal\", \"technology consulting government\", \"computer services procurement\"]",
+    "items": {
+     "type": "string"
+    },
+    "maxItems": 5,
+    "minItems": 1,
+    "type": "array"
+   },
+   "sam_filters": {
+    "description": "SAM.gov specific filters",
+    "properties": {
+     "department": {
+      "description": "Federal department (e.g., \"Department of Defense\")",
+      "type": "string"
+     },
+     "office": {
+      "description": "Contracting office",
+      "type": "string"
+     },
+     "place_of_performance_state": {
+      "description": "Preferred alias for pop_state; wins if both are set.",
+      "type": "string"
+     },
+     "pop_city": {
+      "description": "Place of performance city",
+      "type": "string"
+     },
+     "pop_country": {
+      "description": "Place of performance country (default: USA)",
+      "type": "string"
+     },
+     "pop_state": {
+      "description": "Place of performance state code. Alias: place_of_performance_state, which wins if both are set.",
+      "type": "string"
+     },
+     "pop_zip": {
+      "description": "Place of performance ZIP",
+      "type": "string"
+     },
+     "set_aside": {
+      "description": "Set-aside type. Supported: SDVOSB, VOSB, WOSB, EDWOSB, 8a/8(a), HUBZone, SBA/\"Small Business\" (each expands to all matching SAM codes and CSV labels). Actually filters results.",
+      "type": "string"
+     },
+     "set_aside_code": {
+      "description": "Exact SAM set-aside code (e.g., \"SBA\", \"8A\", \"SDVOSBC\"). Prefer set_aside for common terms.",
+      "type": "string"
+     },
+     "sub_tier": {
+      "description": "Sub-tier agency",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "since": {
+    "description": "Stateless alternative to posted_within_days/new_within_days: ISO 8601 instant. Only opportunities ingested at/after this instant.",
+    "type": "string"
+   },
+   "source": {
+    "description": "Filter every batch sub-query to a specific source/domain, e.g. \"sam.gov\".",
+    "type": "string"
+   },
+   "user_context": {
+    "properties": {
+     "location": {
+      "description": "State code or \"nationwide\"",
+      "type": "string"
+     },
+     "location_strict": {
+      "description": "With a recognized location, requests geographic filtering; nationwide or unspecified records and explicitly broader fallbacks may remain. Check geographyFilterOutcome and warnings. With sam_filters.place_of_performance_state (or pop_state in batch), true additionally excludes records without a confirmed performance location; false demotes and caveats them.",
+      "type": "boolean"
+     },
+     "naics_codes": {
+      "description": "NAICS codes for filtering (e.g., [\"541512\", \"541511\"])",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "organization_type": {
+      "description": "Common natural-language phrasing (e.g. \"501(c)(3) nonprofit\") is also parsed; unparseable values are ignored with an explicit note in the response.",
+      "enum": [
+       "small_business",
+       "startup",
+       "nonprofit",
+       "university",
+       "government",
+       "individual"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "queries"
+  ],
+  "type": "object"
+ },
+ "name": "batch_search_procurement",
+ "title": "Batch Search Contracts"
+}

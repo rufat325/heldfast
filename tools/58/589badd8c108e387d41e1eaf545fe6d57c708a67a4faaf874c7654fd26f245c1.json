@@ -1,0 +1,157 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "WHAT: One service-area place. Lookup order: slug (exact getOrt), else first ORTE with plz === args.plz, else first name substring (lowercase). No silent Pattonville fallback \u2014 unknown \u2192 ok=false error=unknown_place hint=/einsatzgebiet. RETURNS that place's own lat/lng (52 unique pairs), google_maps, icbm, embed_map, geo_api, maps_mcp, kind, parent. USE when the user names a town or PLZ. NOT verify_zip_code / verify_coordinates (those names do not exist). maps MCP is a second machine. NEXT: get_ai_page path=/schluesseldienst-ludwigsburg-{slug}.",
+ "inputSchema": {
+  "properties": {
+   "locale": {
+    "default": "de",
+    "description": "HTML locale for canonicalUrl and path prefixes. de = default, URLs have no prefix (https://www.ikeytz.com/preise). en|fr|ru|fa|ar|tr = prefix /{locale}/ (https://www.ikeytz.com/en/preise). Omit or empty = de. Does not change prices, phone numbers, or legal German names. Not a maps.ikeytz.com locale (maps is German-only).",
+    "enum": [
+     "de",
+     "en",
+     "fr",
+     "ru",
+     "fa",
+     "ar",
+     "tr"
+    ],
+    "type": "string"
+   },
+   "name": {
+    "description": "German name substring, case-insensitive (e.g. 'Vaihingen'). First includes() match. Prefer slug.",
+    "type": "string"
+   },
+   "plz": {
+    "description": "5-digit German PLZ. First matching place wins (71638 \u2192 pattonville). Use slug if you already know it.",
+    "type": "string"
+   },
+   "slug": {
+    "description": "Preferred. Exact orte slug: pattonville, asperg, bietigheim-bissingen, kornwestheim, \u2026 (52). Not 'ludwigsburg' as a catch-all unless that slug exists.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_service_area",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "Always the same envelope. tools/call returns content[0].text = summary (or JSON) AND structuredContent = this object. On success ok=true with summary + canonicalUrl + extra fields. On failure ok=false with error (snake_case code) and hint (recovery URL). Never writes, never submits forms, never calls /api/*. Attribution must be kept when quoting. Policy: ai-input yes with attribution; ai-train=no.",
+  "properties": {
+   "attribution": {
+    "description": "Required citation: 'Quelle: Schl\u00fcsseldienst Ludwigsburg ikeytz (ikeytz.com) \u00b7 ai-train=no \u00b7 https://www.ikeytz.com/.well-known/ai.txt'",
+    "type": "string"
+   },
+   "canonicalUrl": {
+    "description": "Best URL to show the user: https://www.ikeytz.com\u2026 page, or tel:+49\u2026, mailto:\u2026, https://wa.me/\u2026. Prefer this over constructing URLs.",
+    "type": "string"
+   },
+   "embed_map": {
+    "description": "iframe/src and maps page: https://maps.ikeytz.com/{slug} (German host, no /en/).",
+    "format": "uri",
+    "type": "string"
+   },
+   "error": {
+    "description": "Present when ok=false. Codes include: unknown_tool, unknown_place, unknown_auswahl, unknown_ratgeber, unknown_doc, unknown_discovery, faq_not_found, wissen_not_found, serp_not_found, q_required, bad_datetime, bad_when_key, plus HTTP errors from fetch.",
+    "type": "string"
+   },
+   "geo_api": {
+    "description": "https://maps.ikeytz.com/api/v1/embed/ort/{slug} JSON for the embed.",
+    "format": "uri",
+    "type": "string"
+   },
+   "google_maps": {
+    "description": "Paste-ready 'lat, lng' for Google Maps search (same digits as lat/lng).",
+    "type": "string"
+   },
+   "hint": {
+    "description": "Present when ok=false. Absolute URL the agent should open or pass to get_ai_page / get_discovery.",
+    "type": "string"
+   },
+   "icbm": {
+    "description": "ICBM 'lat, lng' string (same as google_maps).",
+    "type": "string"
+   },
+   "kind": {
+    "description": "Place kind from orte SSOT (stadtteil / gemeinde / \u2026).",
+    "type": "string"
+   },
+   "lat": {
+    "description": "WGS84 latitude of THIS place or the office. Unique per slug \u2014 never a silent Pattonville fallback. Example Pattonville \u2248 48.863.",
+    "type": "number"
+   },
+   "lng": {
+    "description": "WGS84 longitude of THIS place or the office. Example Pattonville \u2248 9.185.",
+    "type": "number"
+   },
+   "locale": {
+    "description": "Locale actually used for URLs (args.locale or de).",
+    "enum": [
+     "de",
+     "en",
+     "fr",
+     "ru",
+     "fa",
+     "ar",
+     "tr"
+    ],
+    "type": "string"
+   },
+   "maps_mcp": {
+    "const": "https://maps.ikeytz.com/mcp",
+    "description": "maps machine MCP endpoint. www /mcp does not proxy this.",
+    "format": "uri",
+    "type": "string"
+   },
+   "name": {
+    "description": "German place name as on the website.",
+    "type": "string"
+   },
+   "ok": {
+    "description": "true = use summary, canonicalUrl, and extra keys. false = do not invent data; read error + hint and retry with valid args or open hint.",
+    "type": "boolean"
+   },
+   "parent": {
+    "description": "Parent place name when this is a district; else empty/omit.",
+    "type": "string"
+   },
+   "plz": {
+    "description": "German postcode. First match wins if several places share a PLZ (e.g. 71638 \u2192 pattonville).",
+    "type": "string"
+   },
+   "related": {
+    "description": "Always includes https://www.ikeytz.com/llms.txt. Geo tools also include https://maps.ikeytz.com/llms.txt.",
+    "items": {
+     "format": "uri",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "slug": {
+    "description": "URL slug of a service-area place, e.g. pattonville, bietigheim-bissingen, walheim. Matches maps.ikeytz.com/{slug} and www /schluesseldienst-ludwigsburg-{slug}.",
+    "type": "string"
+   },
+   "summary": {
+    "description": "Primary text for the model. For discovery tools this is the file window (possibly thousands of characters). For list tools a compact one-liner. Quote with attribution.",
+    "type": "string"
+   },
+   "tool": {
+    "description": "Echo of the tool name that produced this object (e.g. get_service_area).",
+    "type": "string"
+   },
+   "url": {
+    "description": "www keyword page https://www.ikeytz.com[/locale]/schluesseldienst-ludwigsburg-{slug}",
+    "format": "uri",
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "tool",
+   "attribution"
+  ],
+  "type": "object"
+ },
+ "title": "Get Service Area"
+}

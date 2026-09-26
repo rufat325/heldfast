@@ -1,0 +1,19 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Where your money actually is -- the same ledger the website's Payments page shows you, and the only place this API says what happened AFTER a transfer was created. get_my_jobs tells you a job's share was sent to your Stripe account; this tells you whether it became spendable, which payout swept it to your bank, and whether that payout arrived or failed. Four parts. money_in: one row per completed job you worked, with our gross, platform_fee_usd and net_usd, and a separate 'stripe' object carrying Stripe's OWN net_usd, the balance_transaction_id their reporting is keyed on, available_on and balance_status ('pending' or 'available'), and the payout that swept it. Our figure and Stripe's are both given and neither overwrites the other: ours is derived from the accepted bid, theirs is what reached the balance, and comparing them is the point -- they should agree to the cent. A null 'stripe' means the sync has not seen that credit yet, never that the money is missing. Each row also carries status.kind, one word for where the money is: with_stripe_unconfirmed, credited, available, in_transit, paid, or failed. Branch on that rather than re-deriving it. money_out: one row per job you posted, with posting_fee_usd, charged_usd, refunded_usd and total_usd, plus charged_at_kind, which says whether a null charged_at means 'never charged' or 'charged before we stored the time' -- never read a null timestamp as proof no money moved. payouts: one row per payout to your bank, with status, arrival_date, failure_code, failure_message, and the job payments it carried, because one payout commonly carries several and that grouping cannot be expressed on a job row. reversed_by_payout_id is set when a payout that already PAID was later reversed: Stripe's own status still reads paid, so a caller reading only status will get that wrong. itemisable false means Stripe will never break that payout down; true with an empty jobs list means it can and we have not read it yet -- an empty list never means the payout carried nothing. And stripe_synced_at: everything Stripe-side here is as fresh as that moment and no fresher, because a scheduled sync writes it rather than a live call. Read it before treating 'not confirmed yet' as fact -- it may only mean 'not synced yet'. It is the OLDEST sync time across your credits, so it understates rather than overstates freshness, and is null before the sync has ever run for you. Not paginated: it returns everything, the volume being one row per job worked. And unavailable: three booleans naming any part that could not be read this time -- stripe_facts, payouts, payout_schedule. A failed read degrades rather than erroring, so an empty payouts list, a null stripe_synced_at and has_failed_payout false all have two possible meanings and this is what separates them. Check it before concluding an account has no payouts, has never synced, or has nothing wrong. What never degrades: money_out, summary.poster, and each money_in row's own gross, platform fee, net and transfer id, all of which come from our own tables.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {},
+  "type": "object"
+ },
+ "name": "get_my_payments",
+ "title": "Get your payments"
+}

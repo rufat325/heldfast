@@ -1,0 +1,253 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Scores free-text case notes against 5 weighted gap-analysis signals (no prior SMI order, high-relevance case type, known online presence, date of loss, social media mentioned) and returns a RECOMMEND/REVIEW/NO ACTION verdict, a confidence rating, which signals were/were not detected, a suggested product, and a best-effort orderData prefill (subject, matter id, case type, date of loss, handles/urls, suggested scope) for smi_create_deep_report. Runs entirely locally; makes no network calls.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "notes": {
+    "description": "Free-text case notes to score against the 5-signal gap-analysis rubric.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "thresholds": {
+    "description": "Optional override of the RECOMMEND/REVIEW verdict thresholds.",
+    "properties": {
+     "recommend": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+     },
+     "review": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "recommend",
+     "review"
+    ],
+    "type": "object"
+   },
+   "weights": {
+    "description": "Optional override of all 5 signal weights; normalized to sum 100.",
+    "properties": {
+     "caseType": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+     },
+     "dateOfLoss": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+     },
+     "noPriorOrder": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+     },
+     "onlinePresence": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+     },
+     "socialMedia": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "noPriorOrder",
+     "caseType",
+     "onlinePresence",
+     "dateOfLoss",
+     "socialMedia"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "notes"
+  ],
+  "type": "object"
+ },
+ "name": "smi_analyze",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "confidence": {
+    "description": "Confidence in the verdict, derived from how many of the 5 signals were detected.",
+    "enum": [
+     "HIGH",
+     "MED",
+     "LOW"
+    ],
+    "type": "string"
+   },
+   "orderData": {
+    "additionalProperties": false,
+    "description": "Best-effort prefill for smi_create_deep_report; fields absent when undetectable.",
+    "properties": {
+     "caseType": {
+      "type": "string"
+     },
+     "dateOfLoss": {
+      "type": "string"
+     },
+     "matterId": {
+      "type": "string"
+     },
+     "productId": {
+      "anyOf": [
+       {
+        "const": 1,
+        "type": "number"
+       },
+       {
+        "const": 2,
+        "type": "number"
+       }
+      ]
+     },
+     "socialHandles": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "subject": {
+      "additionalProperties": false,
+      "properties": {
+       "firstName": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "lastName": {
+        "minLength": 1,
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "suggestedScope": {
+      "type": "string"
+     },
+     "urls": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "signals": {
+    "description": "Per-signal scoring breakdown.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "fraction": {
+       "type": "number"
+      },
+      "id": {
+       "enum": [
+        "noPriorOrder",
+        "caseType",
+        "onlinePresence",
+        "dateOfLoss",
+        "socialMedia"
+       ],
+       "type": "string"
+      },
+      "label": {
+       "type": "string"
+      },
+      "points": {
+       "type": "number"
+      },
+      "weight": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "id",
+      "label",
+      "fraction",
+      "weight",
+      "points"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "signalsDetected": {
+    "description": "Signal ids whose fraction is 1 (fully detected).",
+    "items": {
+     "enum": [
+      "noPriorOrder",
+      "caseType",
+      "onlinePresence",
+      "dateOfLoss",
+      "socialMedia"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "signalsNotDetected": {
+    "description": "Signal ids whose fraction is below 1 (not detected).",
+    "items": {
+     "enum": [
+      "noPriorOrder",
+      "caseType",
+      "onlinePresence",
+      "dateOfLoss",
+      "socialMedia"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "suggestedProduct": {
+    "description": "Recommended SMI product based on the detected subject kind.",
+    "enum": [
+     "DEEP_REPORT",
+     "EXPORT",
+     "RESEARCH_BUNDLE"
+    ],
+    "type": "string"
+   },
+   "total": {
+    "description": "Weighted total score, 0-100.",
+    "type": "number"
+   },
+   "verdict": {
+    "description": "Overall gap-analysis verdict.",
+    "enum": [
+     "RECOMMEND",
+     "REVIEW",
+     "NO ACTION"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "signals",
+   "total",
+   "verdict",
+   "confidence",
+   "signalsDetected",
+   "signalsNotDetected",
+   "suggestedProduct",
+   "orderData"
+  ],
+  "type": "object"
+ },
+ "title": "Analyze Case Notes"
+}

@@ -1,0 +1,26 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Scan validation shadow cells and return every cell whose validation formula currently evaluates FALSE. Validation is advisory \u2014 the cell still holds its value, but the host UI renders a warning marker and you should treat it as \"something the user/AI got wrong\".\n\nA field's rule is what its DECLARATION implies \u2014 `required`, `unique`, enum membership, reference existence \u2014 ANDed with whatever rule its author wrote. `rule` in the output names the declaration rather than quoting the generated formula, because the generated one is not something anyone typed. So a field with no rule text of its own can still appear here, which is the point: before the engine derived these, a required-but-empty cell raised nothing at all.\n\nAlso returns `duplicate_keys`: blocks where two records carry the same row key. That is not an advisory rule but a broken address \u2014 BLOCKREF resolves a key to the FIRST matching record, so the others are unreachable and every aggregate over the block double-counts, silently and without an error anywhere. The engine refuses to create a duplicate, so anything reported here came in with the file. Fix it by giving one of the records a distinct key before trusting any total over that block.\n\nAlso returns `pivots_needing_attention`. A pivot fails in a way no validation rule can see: `stale` means its numbers are each correct while whole groups are MISSING, and `broken` means its recipe stopped resolving so every cell reads 0 rather than erroring. Neither shows up as a red cell anywhere. Treat a broken pivot's numbers as unusable and fix the recipe; refresh a stale one before quoting any total from it.\n\nUse this when answering 'why is something red?', 'what's broken after my last edit?', or before quoting any number you did not just compute yourself. It is the one call that answers 'is anything here untrustworthy' \u2014 the alternative is describe_block on every block, which is easy to skip and easy to forget.\n\nFilters compose: omit both `block` and `sheet` to scan the whole workbook; pass either to narrow.\n\nPull-based on purpose: the LLM is turn-based, polling at decision points is cheaper than maintaining a live subscription. The host UI has its own per-cell push subscription for canvas warning markers.",
+ "inputSchema": {
+  "properties": {
+   "block": {
+    "description": "Block ref name. Omit to scan all blocks.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "sheet": {
+    "description": "Sheet name. Omit to scan all sheets.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "list_violations"
+}

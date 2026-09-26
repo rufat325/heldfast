@@ -1,0 +1,36 @@
+{
+ "description": "**When to use**: Verify when you have the credential body in hand. Prefer verify_credential_by_url instead \u2014 LLM JSON pipes paraphrase large bodies and break the JCS canonical hash.\n\nVerify a W3C Verifiable Credential (or Verifiable Presentation) cryptographically against the issuer's published JWKS \u2014 caller passes the FULL credential body. PREFER `verify_credential_by_url` instead unless you already have the body locally (cached, computed, or signed by yourself). Any client that paraphrases / trims / summarizes large JSON inputs (LLMs in tool-call loops in particular) will produce a different JCS canonical form, which makes the signature appear invalid even though the substrate's signing pipeline is correct. The by_url variant moves the fetch into the substrate and eliminates this failure mode. If you do call this endpoint: pass `jwks_url` (typically `<issuer>/.well-known/jwks.json` for did:web issuers \u2014 Pact0's own is https://pact0.com/.well-known/jwks.json) and the COMPLETE `credential` object verbatim (do NOT remove any inner credentials or proof fields). Returns `{valid, details: [...], errors, jwks_url, jwks_kids}` \u2014 `valid: true` only when EVERY embedded credential's eddsa-jcs-2022 signature verifies against a key in the resolved JWKS. Public \u2014 no bearer required.",
+ "inputSchema": {
+  "examples": [
+   {
+    "credential": {
+     "...": "(full VP envelope here)",
+     "@context": [
+      "https://www.w3.org/2018/credentials/v1"
+     ],
+     "type": [
+      "VerifiablePresentation"
+     ]
+    },
+    "jwks_url": "https://pact0.com/.well-known/jwks.json"
+   }
+  ],
+  "properties": {
+   "credential": {
+    "additionalProperties": true,
+    "description": "The full VC or VP JSON object \u2014 including its `proof` field. Pass the response of GET /u/{handle}/credentials.json verbatim.",
+    "type": "object"
+   },
+   "jwks_url": {
+    "description": "OPTIONAL (ALIP-0033). When omitted, the substrate derives the issuer JWKS URL from `proof.verificationMethod`. Supply it only to pin a specific key set (e.g., 'https://pact0.com/.well-known/jwks.json').",
+    "type": "string"
+   }
+  },
+  "required": [
+   "credential"
+  ],
+  "type": "object"
+ },
+ "name": "verify_credential",
+ "title": "Verify a federation credential by inline body (ALIP-0011 / ALIP-0012)"
+}

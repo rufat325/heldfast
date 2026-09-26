@@ -1,0 +1,188 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Local inference (prism-coder)"
+ },
+ "description": "Run an inference on a local prism-coder model (Ollama) to save cloud tokens. Owns model selection across 27B / 9B / 4B / 2B using an explicit `model_ceiling` or the caller's `task_complexity`, then validates loaded memory size, model context, entitlements, installed models, and free RAM at call time. Falls through to the Synalux portal Gemini 3.6 Flash cloud fallback only when local is unviable or refused and the plan allows cloud; `cloud_fallback: false` forbids it. When `project` is provided, loads the dashboard-configured quick/standard/deep handoff and bounded history as untrusted historical context for a memory-aware local worker. Use this for code generation, summarisation, classification, or any synth task you would otherwise hand to the cloud model \u2014 it costs $0 when the local hit succeeds. For a FOLLOW-UP to an earlier prism_infer answer, pass the accepted prior turns as `messages` (paid plans): without them the worker answers the follow-up from nothing and fabricates. Every entitlement-resolved result reports `multi_turn` (your plan's caps) and `history_turns` (what was sent); the crisis intercept reports only `history_turns`. A behaviour-plan request also reports `clinical_sections` \u2014 how many required sections were found and which were not. That is a structural census, never a clinical endorsement: a section can be present and still be wrong, and a credentialed BCBA decides whether a plan is adequate. History over the plan's caps is refused (history_over_plan_cap), never trimmed; a free plan or a host with no portal is refused (multi_turn_not_in_plan). Hosts that compact large schemas may drop parameter text, so the contract lives here.",
+ "inputSchema": {
+  "properties": {
+   "allowed_tools": {
+    "description": "Tool names advertised to the route model; well-formed calls outside this list are suppressed in route mode. Default: Prism's seven trained routing tools.",
+    "items": {
+     "type": "string"
+    },
+    "maxItems": 64,
+    "type": "array"
+   },
+   "cloud_fallback": {
+    "description": "Synalux portal cascade when local is unviable or refused. Omitted: the plan decides; false forbids it.",
+    "type": "boolean"
+   },
+   "context_depth": {
+    "description": "Project-memory depth; defaults to the dashboard setting when `project` is given.",
+    "enum": [
+     "quick",
+     "standard",
+     "deep"
+    ],
+    "type": "string"
+   },
+   "conversation_id": {
+    "description": "Conversation id from session_bootstrap (telemetry, continuity).",
+    "type": "string"
+   },
+   "escalation": {
+    "default": "serve",
+    "description": "'serve' (default): safety refusals throw, gate-failed output may be served. 'report': every terminal path returns a structured gate_outcome; refused results come back as {status:'refused', output:''} and degraded (served gate-failed) output is flagged.",
+    "enum": [
+     "serve",
+     "report"
+    ],
+    "type": "string"
+   },
+   "evidence": {
+    "description": "Snippets the output must be grounded in. With `verify: true`, every assertive claim (numbers, names, dates, codes, $ amounts) must be ENTAILED by a snippet or the draft is refused.",
+    "items": {
+     "properties": {
+      "content": {
+       "description": "The snippet text.",
+       "type": "string"
+      },
+      "source": {
+       "description": "Snippet label, e.g. 'tool:knowledge_search#3'.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "source",
+      "content"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "images": {
+    "description": "Screenshots or frames: absolute file paths or raw base64. Needs a vision-capable tier; tiers without vision are skipped, never shown the prompt without the image.",
+    "items": {
+     "type": "string"
+    },
+    "maxItems": 8,
+    "type": "array"
+   },
+   "max_tokens": {
+    "default": 1024,
+    "description": "Max output tokens (default 1024, hard cap 8192).",
+    "type": "number"
+   },
+   "messages": {
+    "description": "Prior turns of THIS conversation, oldest first; `prompt` stays the current turn. Send only accepted turns, as a brief, not a transcript; text only. A paid Synalux plan feature: the plan sets turn and character caps; free plan or no portal is refused (multi_turn_not_in_plan); over-cap or malformed history is refused with the caps named, never trimmed. Turns are safety-screened, counted against the tier's context, forwarded to the cloud on escalation (32 KB cap), never stored.",
+    "items": {
+     "properties": {
+      "content": {
+       "type": "string"
+      },
+      "role": {
+       "enum": [
+        "user",
+        "assistant"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "role",
+      "content"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "mode": {
+    "default": "route",
+    "description": "'route' (default): MCP tool routing, fast, no thinking. 'chat': conversation, thinking on, cloud escalation on failure. 'code': code generation, thinking on, larger context. chat/code prefer the 27B tier.",
+    "enum": [
+     "route",
+     "chat",
+     "code"
+    ],
+    "type": "string"
+   },
+   "model_ceiling": {
+    "description": "Largest tier the picker may select; '9b' forbids 27B even if RAM allows.",
+    "enum": [
+     "27b",
+     "9b",
+     "4b",
+     "2b"
+    ],
+    "type": "string"
+   },
+   "project": {
+    "description": "Prism project whose dashboard-depth handoff and recent session memory go to the local worker as historical data.",
+    "type": "string"
+   },
+   "prompt": {
+    "description": "The user prompt.",
+    "type": "string"
+   },
+   "route_guard": {
+    "default": "auto",
+    "description": "'auto' (default): local advertised-tool contract plus, on paid plans, the private Synalux deterministic route correction. 'local': skips that correction only.",
+    "enum": [
+     "auto",
+     "local"
+    ],
+    "type": "string"
+   },
+   "strict_entitlements": {
+    "default": false,
+    "description": "Fail loud instead of running with ASSUMED free-tier limits: when entitlements fell back to free because the portal was unreachable (source='fallback_free'), throw instead of silently applying free clamps. Portal-confirmed free plans and unconfigured machines are unaffected.",
+    "type": "boolean"
+   },
+   "system": {
+    "description": "System instruction prepended to the prompt.",
+    "type": "string"
+   },
+   "task_complexity": {
+    "description": "1-10 workload hint prism_infer (not the task router) uses to pick the initial local tier and thinking mode; explicit model_ceiling/think win.",
+    "maximum": 10,
+    "minimum": 1,
+    "type": "number"
+   },
+   "temperature": {
+    "default": 0,
+    "description": "Sampling temperature; default 0 = deterministic.",
+    "type": "number"
+   },
+   "think": {
+    "description": "<think> reasoning. Default true for chat/code, false for route; better on complex tasks, adds ~2-5s.",
+    "type": "boolean"
+   },
+   "timeout_ms": {
+    "description": "Per-call timeout override. Default by tier: 27B 120s, 9B 60s, 4B 20s, 2B 15s.",
+    "type": "number"
+   },
+   "verifier_model": {
+    "description": "Verifier model override. Default qwen3.5:4b.",
+    "type": "string"
+   },
+   "verifier_timeout_ms": {
+    "default": 2000,
+    "description": "Verifier hard timeout override. Default 2000 ms.",
+    "type": "number"
+   },
+   "verify": {
+    "description": "L3 grounding verifier; default true when `evidence` is given. A second model (qwen3.5:4b by default) checks the draft against `evidence`; NEUTRAL or CONTRADICTED claims are refused.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "prompt"
+  ],
+  "type": "object"
+ },
+ "name": "prism_infer"
+}

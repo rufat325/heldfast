@@ -1,0 +1,85 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Import leads from a CSV/XLSX file"
+ },
+ "description": "Upsert leads from an uploaded CSV or XLSX file into this account. WRITES TO THE DATABASE \u2014 SENDS NOTHING on any channel, ever; this only stores contacts. Deduplicates by phone/email (dedupe_by, default both) against both the file itself and every lead already in this account. Re-importing a lead that is opted-out, suppressed, or do-not-contact NEVER clears those flags and NEVER moves the lead \u2014 only genuinely new contacts are created. Returns an import_id: pass it to clone_campaign_draft's import_ids to attach this audience to a campaign. idempotency_key is required \u2014 retrying the same key returns the same result rather than importing twice; reusing it with different arguments is rejected as idempotency_conflict.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "column_mapping": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Optional override of auto-detected columns: {target_field: 'exact column name in the file'}. Target fields: first_name, last_name, full_name, phone, mobile_phone, email, address, property_address, city, state, zip, company_name. Anything not given here falls back to auto-detection.",
+    "type": "object"
+   },
+   "dedupe_by": {
+    "description": "Which normalized fields count as a duplicate match. Default: [\"phone\", \"email\"] (either matching is a duplicate).",
+    "items": {
+     "enum": [
+      "phone",
+      "email"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "file": {
+    "additionalProperties": false,
+    "description": "The uploaded lead file, inline. filename + content_base64 (raw file bytes, base64-encoded) \u2014 this server's transport is stateless JSON-RPC with no separate attachment channel, so the file rides in the tool call itself. .csv and .xlsx only; 15MB decoded max.",
+    "properties": {
+     "content_base64": {
+      "description": "The raw file bytes, base64-encoded.",
+      "type": "string"
+     },
+     "filename": {
+      "description": "Original filename, e.g. 'alameda_investors.xlsx'. Determines .csv vs .xlsx parsing.",
+      "maxLength": 255,
+      "type": "string"
+     }
+    },
+    "required": [
+     "filename",
+     "content_base64"
+    ],
+    "type": "object"
+   },
+   "idempotency_key": {
+    "description": "Required. Repeat a retried call safely \u2014 the same key returns the same import result instead of importing twice.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "mode": {
+    "description": "Import mode. Only 'upsert' (create new, update existing) is currently supported.",
+    "enum": [
+     "upsert"
+    ],
+    "type": "string"
+   },
+   "source": {
+    "description": "Where this list came from, e.g. 'PropStream export'. Stored as provenance and never overwritten on re-import.",
+    "maxLength": 100,
+    "type": "string"
+   },
+   "tags": {
+    "description": "Optional labels applied to every imported/updated lead.",
+    "items": {
+     "type": "string"
+    },
+    "maxItems": 25,
+    "type": "array"
+   }
+  },
+  "required": [
+   "file",
+   "idempotency_key"
+  ],
+  "type": "object"
+ },
+ "name": "import_leads_from_file",
+ "title": "Import leads from a CSV/XLSX file"
+}

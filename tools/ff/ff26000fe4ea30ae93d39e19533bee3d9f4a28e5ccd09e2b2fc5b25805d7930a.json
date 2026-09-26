@@ -1,0 +1,210 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "[ESP HW | STM HW] Flash firmware. Danger tier: it always runs a preflight first, always returns that preflight (refusal included), and needs a confirmation before writing anything.\nPreflight reports: the device's USB mode, which role the target port plays (the STM32 bridge console is refused as a flash target), the binary's own version string, whether it is older than the newest file under main/ or components/, and whether the build's board revision matches the device's \u2014 a mismatch is a blocker, because the revisions differ in pinout and the wrong image looks like dead hardware.\ntarget='esp': transport='ota' streams over USB CDC with the device running (no bootloader mode); transport='uart' runs idf.py flash and needs download mode. wait_boot=true then opens the console and returns a BootResult.\ntarget='stm': method='swd' (ST-Link) or 'dfu' (system bootloader, hold pad 1 at boot).\nThe flash runs as a job: wait_seconds=0 (default) returns a task handle for crosspad_task; wait_seconds>0 inlines the final status. dry_run=true stops after the preflight. force=true overrides every blocker except the port-role refusal.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "boot_timeout_s": {
+    "description": "wait_boot: how long to wait for a complete boot (default 45, the firmware's own boot budget).",
+    "maximum": 180,
+    "minimum": 5,
+    "type": "number"
+   },
+   "build_dir": {
+    "description": "ESP only. Build directory holding the binary and its sdkconfig (default: '<idf-root>/build_<rev>' of the board being flashed, from tools/crosspad_board.py; per-revision dirs are build_v1 / build_v2).",
+    "minLength": 1,
+    "type": "string"
+   },
+   "build_type": {
+    "description": "STM only. Picks the build/<preset> dir for the default binary. Default Debug.",
+    "enum": [
+     "Debug",
+     "Release",
+     "RelWithDebInfo"
+    ],
+    "type": "string"
+   },
+   "confirm_token": {
+    "description": "Token from a previous confirmation_required result. Re-issue the identical call with it to proceed.",
+    "type": "string"
+   },
+   "delta_base": {
+    "description": "ESP OTA only. Previously flashed binary to diff against \u2014 sends a delta instead of the whole image.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "device": {
+    "description": "ESP only. Device id (dev_xxxx) or one of its port paths; omit when exactly one CrossPad is connected.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "dry_run": {
+    "description": "Run the preflight and stop: no confirmation token is minted and nothing is written.",
+    "type": "boolean"
+   },
+   "firmware_path": {
+    "description": "Custom binary. ESP default '<build_dir>/CrossPad.bin'; STM default '<stm-root>/build/<preset>/CrossPad_STM32_r20.bin'.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "force": {
+    "description": "Proceed despite preflight blockers (stale build, board-revision mismatch, missing device). The port-role and no-board refusals are never overridden.",
+    "type": "boolean"
+   },
+   "method": {
+    "description": "STM only. 'swd' = ST-Link; 'dfu' = the STM32 system bootloader (hold pad 1 at boot).",
+    "enum": [
+     "swd",
+     "dfu"
+    ],
+    "type": "string"
+   },
+   "port": {
+    "description": "ESP only. Serial port to flash. Omit to let the daemon choose. The STM32 bridge console port is refused \u2014 it carries logs, not the flash.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "target": {
+    "default": "esp",
+    "description": "'esp' = ESP32-S3 application firmware (transport uart|ota); 'stm' = STM32G0 bridge firmware via STM32_Programmer_CLI (method swd|dfu).",
+    "enum": [
+     "esp",
+     "stm"
+    ],
+    "type": "string"
+   },
+   "transport": {
+    "description": "ESP only. 'ota' streams the binary over USB CDC with the device running (no bootloader mode); 'uart' runs idf.py flash and needs download mode.",
+    "enum": [
+     "uart",
+     "ota"
+    ],
+    "type": "string"
+   },
+   "wait_boot": {
+    "description": "ESP only. After flashing, open the console and wait for the boot markers; the job result carries a BootResult {complete, missing, fatal, errors, bootloops, seconds}. Default false.",
+    "type": "boolean"
+   },
+   "wait_seconds": {
+    "description": "0 (default) returns the task handle immediately \u2014 poll it with crosspad_task. >0 waits that long and inlines the task status; a timeout is not an error, the job keeps running.",
+    "maximum": 900,
+    "minimum": 0,
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "name": "crosspad_flash",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "confirmation": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "details": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "device": {
+    "type": "string"
+   },
+   "dry_run": {
+    "type": "boolean"
+   },
+   "error": {
+    "additionalProperties": {},
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "details": {
+      "additionalProperties": {},
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "hint": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "message": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "firmware_path": {
+    "type": "string"
+   },
+   "hint": {
+    "type": "string"
+   },
+   "preflight": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "resultType": {
+    "type": "string"
+   },
+   "status": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "success": {
+    "type": "boolean"
+   },
+   "target": {
+    "enum": [
+     "esp",
+     "stm"
+    ],
+    "type": "string"
+   },
+   "task": {
+    "type": "string"
+   },
+   "tool": {
+    "type": "string"
+   },
+   "transport": {
+    "type": "string"
+   },
+   "ts": {
+    "type": "number"
+   }
+  },
+  "required": [
+   "success"
+  ],
+  "type": "object"
+ }
+}

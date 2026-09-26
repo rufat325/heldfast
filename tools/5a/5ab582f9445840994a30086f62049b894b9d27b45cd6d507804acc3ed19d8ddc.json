@@ -1,0 +1,71 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Verify up to 50 contractor licenses in a single call. Items are dispatched concurrently against their respective state/city portals; one item failing does not abort the others. USE WHEN: the user mentions verifying multiple licenses \u2014 phrases like 'I have 12 license numbers', 'verify these 5 contractors', 'bulk-check', 'verify them all', a list of subcontractors on a project, periodic compliance sweeps, COI/insurance review batches. **If the user has stated they want to verify N>1 licenses, this is the tool \u2014 don't fall back to list_supported_states first; the user already knows what they want to verify.** Even if the user hasn't pasted the list yet, batch_verify is the right next step (you can ask for the list, then call this). Cheaper in conversation turns than calling verify_license N times. DO NOT USE FOR: a single license (use verify_license \u2014 clearer output); >50 licenses in one call (split into multiple batches); searches by name (use search_by_name); discovering what states are supported (use list_supported_states). RETURNS: {summary: {total, succeeded, failed}, results: [{result, error}]} where each result is the same shape as verify_license, and `error` is non-null on per-item failures. Inspect individual `error` strings to retry just the failed items. EXAMPLE: licenses=[{state:'TX', license_number:'TACLA00000103C', trade:'hvac'}, {state:'CA', license_number:'1234567', trade:'general'}] \u2192 {summary:{total:2, succeeded:2, failed:0}, results:[...]}. ERRORS: per-item errors are reported in `results[i].error` rather than aborting the whole batch. Top-level 400 only fires on schema violations (e.g. >50 items, empty array).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "licenses": {
+    "description": "Array of licenses to verify (1-50 items per call). Each item can independently target a state or a state+city.",
+    "items": {
+     "properties": {
+      "city": {
+       "description": "Optional city slug for municipal contractor licensing. Use this when the contractor holds a city-issued license (some cities issue licenses in addition to or instead of state licenses). Lowercase, no spaces \u2014 e.g. 'chicago', 'nyc', 'philadelphia', 'detroit', 'atlanta', 'dallas', 'lasvegas', 'nashville'. Call list_supported_states to see registered cities under each state.",
+       "maxLength": 64,
+       "minLength": 1,
+       "type": "string"
+      },
+      "license_number": {
+       "description": "License number.",
+       "maxLength": 50,
+       "minLength": 1,
+       "type": "string"
+      },
+      "state": {
+       "description": "Two-letter US state code (e.g. 'CA', 'TX'). Call list_supported_states to see what's available \u2014 every US state is supported.",
+       "maxLength": 2,
+       "minLength": 2,
+       "type": "string"
+      },
+      "trade": {
+       "default": "general",
+       "description": "Trade type \u2014 e.g. 'general', 'electrical', 'plumbing', 'hvac', 'mechanical', 'roofing'. Defaults to 'general' if omitted. Valid values vary by state; check list_supported_states.supported_trades for the jurisdiction.",
+       "maxLength": 50,
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "state",
+      "license_number"
+     ],
+     "type": "object"
+    },
+    "maxItems": 50,
+    "minItems": 1,
+    "type": "array"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Response format.",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "licenses"
+  ],
+  "type": "object"
+ },
+ "name": "batch_verify",
+ "title": "Verify Multiple Contractor Licenses"
+}

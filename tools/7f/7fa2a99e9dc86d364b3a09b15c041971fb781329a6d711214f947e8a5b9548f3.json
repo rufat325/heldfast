@@ -1,0 +1,219 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Discover subdomains passively from Certificate Transparency logs, then resolve each candidate via DNS to mark which are live. crt.sh is the primary source, Certspotter the fallback (crt.sh is frequently overloaded), and the apex domain's own TLS certificate SAN list a third always-available source. Every discovered name carries its source provenance. No DNS brute-forcing \u2014 this reads public logs, it does not probe the target's resolvers. Use only on domains you own or are authorized to assess.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "domain": {
+    "description": "Apex domain to enumerate (e.g. \"example.com\").",
+    "type": "string"
+   },
+   "includeUnresolved": {
+    "default": true,
+    "description": "When true, include names that did not resolve. When false, return only live hosts.",
+    "type": "boolean"
+   },
+   "sources": {
+    "description": "CT sources to query. Omit for all of crt.sh, certspotter, tls-san.",
+    "items": {
+     "enum": [
+      "crt.sh",
+      "certspotter",
+      "tls-san"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "domain"
+  ],
+  "type": "object"
+ },
+ "name": "attacksurface_enumerate_subdomains",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "domain",
+     "subdomains",
+     "sourceStatuses"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "domain": {
+    "description": "Apex domain queried (normalized).",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_domain`: The supplied domain is not a syntactically valid registrable domain. `all_sources_failed`: Every requested CT source failed (e.g. crt.sh overloaded and Certspotter rate-limited). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_domain",
+         "all_sources_failed"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "liveCount": {
+    "description": "Count of names that resolved to an address.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when no source answered or nothing was found.",
+    "type": "string"
+   },
+   "sourceStatuses": {
+    "description": "Per-source outcome (which answered, counts, errors).",
+    "items": {
+     "additionalProperties": false,
+     "description": "Per-source outcome for the enumeration.",
+     "properties": {
+      "count": {
+       "description": "Distinct names this source contributed.",
+       "type": "number"
+      },
+      "ok": {
+       "description": "Whether the source answered successfully.",
+       "type": "boolean"
+      },
+      "source": {
+       "description": "CT source.",
+       "enum": [
+        "crt.sh",
+        "certspotter",
+        "tls-san"
+       ],
+       "type": "string"
+      },
+      "sourceError": {
+       "description": "Source error, or null on success.",
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "source",
+      "ok",
+      "count",
+      "sourceError"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "subdomains": {
+    "description": "Discovered subdomains with provenance and liveness.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A discovered subdomain with provenance and liveness.",
+     "properties": {
+      "addresses": {
+       "description": "Resolved IP addresses (empty when unresolved).",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "name": {
+       "description": "Discovered subdomain (wildcard prefix stripped).",
+       "type": "string"
+      },
+      "resolved": {
+       "description": "True when the name resolved to at least one A/AAAA address.",
+       "type": "boolean"
+      },
+      "sources": {
+       "description": "CT source(s) that surfaced this name.",
+       "items": {
+        "enum": [
+         "crt.sh",
+         "certspotter",
+         "tls-san"
+        ],
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "name",
+      "sources",
+      "resolved",
+      "addresses"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalCount": {
+    "description": "Total distinct names discovered before any liveness filter.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "attacksurface_enumerate_subdomains"
+}

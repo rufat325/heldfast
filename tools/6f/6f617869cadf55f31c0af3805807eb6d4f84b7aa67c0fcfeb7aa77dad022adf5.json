@@ -1,0 +1,308 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch Form 4 insider transactions (purchases, sales, grants, exercises) for a company by parsing SEC EDGAR ownership XML. Returns the reporting person, their relationship to the issuer, transaction date, type, shares traded (absolute magnitude), direction (acquire/dispose), price per share, and shares owned after the transaction. Covers nonDerivative transactions (open-market buys/sells, gifts) and derivative transactions (option exercises, RSU vests). Without a date window it reads the newest Form 4 filings; filed_after / filed_before read any period since mid-2003, reaching past the recent submissions window into the archive (e.g. insider trades in the quarter before an earnings miss). When a canvas is available, the full set of transactions parsed from the scanned filings is materialized as df_<id> (the inline list is a preview capped at limit) \u2014 inspect it with secedgar_dataframe_describe, then query it with secedgar_dataframe_query to aggregate net buy/sell by insider: SUM(CASE WHEN direction='dispose' THEN -shares_traded ELSE shares_traded END). Use secedgar_search_filings with forms=[\"4\"] to search Form 4 filings across all companies.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "company": {
+    "description": "The issuer whose Form 4 filings to read \u2014 the company, not the reporting person. A ticker symbol (e.g., \"AAPL\"), a CIK with or without zero-padding (e.g., \"320193\" or \"0000320193\"), or a company name (current or former). A name matching several companies resolves to the top-ranked one \u2014 exact name first, then prefix, then substring \u2014 so pass a ticker or CIK when the issuer must be exact.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "filed_after": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Only read Form 4 filings filed on or after this date (YYYY-MM-DD). A date window reaches filings older than the recent submissions window by paging into the archive, and with a canvas every Form 4 filed inside it is parsed, up to 100. Structured Form 4 XML begins in mid-2003, so an earlier window finds nothing."
+   },
+   "filed_before": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Only read Form 4 filings filed on or before this date (YYYY-MM-DD). Use alone or with filed_after. Without either bound the tool reads the newest Form 4 filings."
+   },
+   "limit": {
+    "default": 20,
+    "description": "Maximum number of transactions to return across all Form 4 filings fetched. Filings are scanned newest-first. Default 20.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "transaction_type": {
+    "default": "all",
+    "description": "Filter by direction. \"purchase\" = open-market buys (code P). \"sale\" = open-market sells (code S). \"all\" includes grants, awards, exercises, gifts, and other coded transaction types as well.",
+    "enum": [
+     "purchase",
+     "sale",
+     "all"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "company"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_get_insider_transactions",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "issuer_name",
+     "issuer_cik",
+     "transactions",
+     "filings_scanned"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit cap applied.",
+    "type": "number"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe holding the full parsed transaction set from the scanned filings (the inline transactions[] is a preview capped at limit). Each row carries the issuer (issuer_cik, issuer_ticker) plus the transaction fields, so it aggregates net buy/sell by insider and joins across issuers. Query with secedgar_dataframe_query. Absent when canvas is unavailable or no transactions were parsed.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     },
+     "truncated": {
+      "description": "True when Form 4 filings exist beyond those parsed \u2014 past the newest-filings sample, or, with a date window, inside the window beyond the 100-filing cap or past the 10 archive pages read. Narrow the window to reach the rest.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at",
+     "truncated"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `company_not_found`: The company input does not resolve to a known company. `no_filings_found`: A call without a date window finds no Form 4 filings in the recent submissions window. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "company_not_found",
+         "no_filings_found",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "filings_scanned": {
+    "description": "Number of Form 4 filings scanned to produce the result.",
+    "type": "number"
+   },
+   "history_scanned_through": {
+    "description": "Filing date of the oldest Form 4 parsed (YYYY-MM-DD). Present only when a date window was given; absent when the window held no Form 4 filing.",
+    "type": "string"
+   },
+   "issuer_cik": {
+    "description": "Issuer CIK, zero-padded to 10 digits.",
+    "type": "string"
+   },
+   "issuer_name": {
+    "description": "Issuer entity name (SEC-conformed).",
+    "type": "string"
+   },
+   "issuer_ticker": {
+    "description": "Issuer ticker symbol when available.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when results are empty after filtering \u2014 explains the filter applied and suggests alternatives.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of transactions shown inline.",
+    "type": "number"
+   },
+   "transactions": {
+    "description": "Insider transactions, newest filing first. Preview capped at `limit` \u2014 the full scanned set lives on the canvas dataframe (see `dataset`).",
+    "items": {
+     "additionalProperties": false,
+     "description": "One insider transaction parsed from a Form 4 filing.",
+     "properties": {
+      "accession_number": {
+       "description": "Form 4 accession number \u2014 pass to secedgar_get_filing for the raw XML.",
+       "type": "string"
+      },
+      "direction": {
+       "description": "Whether shares were acquired or disposed. \"acquire\" = buy, award, exercise; \"dispose\" = sale, gift, return. Absent when shares_traded is absent.",
+       "enum": [
+        "acquire",
+        "dispose"
+       ],
+       "type": "string"
+      },
+      "filing_date": {
+       "description": "Date the Form 4 was filed (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "is_derivative": {
+       "description": "True for derivative security transactions (options, RSUs, convertible notes). False for direct equity transactions.",
+       "type": "boolean"
+      },
+      "ownership_nature": {
+       "description": "Nature of indirect ownership (e.g., \"By Trust\", \"By Spouse\"). Only present when ownership_type is indirect.",
+       "type": "string"
+      },
+      "ownership_type": {
+       "description": "D = direct ownership, I = indirect (through a trust, family member, etc.). Absent when not reported.",
+       "enum": [
+        "direct",
+        "indirect"
+       ],
+       "type": "string"
+      },
+      "period_of_report": {
+       "description": "Transaction date per the filing period (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "price_per_share": {
+       "description": "Price per share in USD. 0 for gifts and RSU awards (no cash consideration). Absent when not reported.",
+       "type": "number"
+      },
+      "relationship": {
+       "description": "Relationship to issuer (e.g., \"Director\", \"Officer (CEO)\", \"10% Owner\").",
+       "type": "string"
+      },
+      "reporting_person": {
+       "description": "Name of the insider who filed the Form 4.",
+       "type": "string"
+      },
+      "security_title": {
+       "description": "Security type (e.g., \"Common Stock\").",
+       "type": "string"
+      },
+      "shares_owned_after": {
+       "description": "Total shares owned after this transaction, as reported. Absent when omitted by the filer.",
+       "type": "number"
+      },
+      "shares_traded": {
+       "description": "Absolute number of shares involved (always positive). Absent when the filing omits this field. Use `direction` to distinguish acquisitions from disposals.",
+       "type": "number"
+      },
+      "transaction_code": {
+       "description": "Single-letter SEC transaction code: P = purchase, S = sale, M = exercise, A = award, G = gift, F = tax withholding, C = conversion, others exist.",
+       "type": "string"
+      },
+      "transaction_date": {
+       "description": "Date the transaction occurred (YYYY-MM-DD). Absent on some filings.",
+       "type": "string"
+      },
+      "transaction_type": {
+       "description": "Human-readable description of the transaction code (e.g., \"purchase\", \"sale\", \"conversion_of_derivative\").",
+       "type": "string"
+      }
+     },
+     "required": [
+      "filing_date",
+      "accession_number",
+      "reporting_person",
+      "relationship",
+      "security_title",
+      "transaction_code",
+      "transaction_type",
+      "is_derivative"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "truncated": {
+    "description": "True when the inline transactions[] was capped by limit.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Insider Transactions"
+}

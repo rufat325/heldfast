@@ -1,0 +1,61 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Pro/Teams: append a TYPED TEAM EVENT to a Governed Session's timeline (GEP-M6). This is how the user's own harness makes trio work inspectable: handoffs between role lenses, pushbacks, plan previews, gates, and acks land as structured events next to the validation runs, so the session reads as a system, not a transcript. CHANNEL PROVENANCE: this MCP channel posts the AGENT-SIDE vocabulary only. `steer` events and actor `human` are AIDB Studio-originated by contract (the owner posts them from the AIDB Studio session surface) and are REFUSED here, so a timeline entry can never impersonate the human side of the loop. Every event posted here is durably stamped with its channel. REQUIRES team mode: the session must have team_agents enabled (toggled in the web app on the session page); posting to a standalone session is refused so non-team sessions stay byte-identical. Owner-scoped: foreign session ids read as not found. event_type: handoff | pushback | plan_preview | gate | ack. actor: pm | engineer | designer | system. Read events back via me.sessions(session_id=...). WHEN TO CALL: at every role handoff (who -> who, what was passed), when a role pushes back on another's output, when the PM's plan is previewed for the co-planning gate, and when a hard gate blocks on an irreversible side-effect. ack: the IDE agent confirms it STARTED working on a steer. Post it FIRST on receiving a steer (summary like 'Started: <steer gist>'), then execute, then post handoff with the result. WHEN NOT TO CALL: not a chat log: post decisions and transitions, not every message; never to record a steer (steers arrive FROM the AIDB Studio via me.await_steer). REJECTION CODES (invalid_request): 'Session not found.' (not yours, or no such id); 'Team mode is off for this session.' (owner enables it on the session page); 'This session has reached its event limit (500).' (the shared volume brake: start a new session for further team events); 'summary must not be blank.' (empty summaries are refused); steer/human posts are refused with a pointer to AIDB Studio. Auth: sign-in required, with an active Pro, Pro Plus, Teams, Enterprise, beta, or trial plan.",
+ "inputSchema": {
+  "properties": {
+   "actor": {
+    "description": "Who acted: pm | engineer | designer | system (`human` is reserved for AIDB Studio)",
+    "enum": [
+     "pm",
+     "engineer",
+     "designer",
+     "system"
+    ],
+    "title": "Actor",
+    "type": "string"
+   },
+   "event_type": {
+    "description": "handoff | pushback | plan_preview | gate | ack (ack = started working on a steer; `steer` itself is AIDB Studio-only and refused on this channel)",
+    "enum": [
+     "handoff",
+     "pushback",
+     "plan_preview",
+     "gate",
+     "ack"
+    ],
+    "title": "Event Type",
+    "type": "string"
+   },
+   "session_id": {
+    "description": "The Governed Session to post to. Must be YOURS and have team_agents enabled; list sessions via me.sessions.",
+    "title": "Session Id",
+    "type": "integer"
+   },
+   "summary": {
+    "description": "One-to-two sentence event summary (truncated to 500 chars): a decision or transition, not a chat message.",
+    "title": "Summary",
+    "type": "string"
+   }
+  },
+  "required": [
+   "session_id",
+   "event_type",
+   "actor",
+   "summary"
+  ],
+  "title": "post_session_team_eventArguments",
+  "type": "object"
+ },
+ "name": "me.session_event",
+ "outputSchema": {
+  "additionalProperties": true,
+  "title": "post_session_team_eventDictOutput",
+  "type": "object"
+ },
+ "title": "Post a Team Event to a Governed Session"
+}

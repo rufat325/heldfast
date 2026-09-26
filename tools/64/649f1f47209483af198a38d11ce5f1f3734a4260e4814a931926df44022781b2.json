@@ -1,0 +1,276 @@
+{
+ "description": "Turns a web page into decision-ready state: dates as ISO fields, numbers with units as facts, text in token-budgeted chunks with anchors back to the page, and the token bill (raw vs state). Start with mode=summary; fetch chunk text with sieve_chunk or mode=full only when needed.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "html": {
+    "description": "Raw HTML to process instead of fetching. Pair with url for anchors.",
+    "type": "string"
+   },
+   "maxChars": {
+    "description": "Chunk budget in characters.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "maxTokens": {
+    "description": "Chunk budget in tokens.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "mode": {
+    "default": "summary",
+    "description": "summary: state without chunk text (cheap, default). full: with chunk text. markdown: readable text instead of state.",
+    "enum": [
+     "summary",
+     "full",
+     "markdown"
+    ],
+    "type": "string"
+   },
+   "task": {
+    "description": "What you intend to decide; enables relevance selection when a selector is configured.",
+    "type": "string"
+   },
+   "trace": {
+    "default": false,
+    "description": "Include what was discarded and where the date came from.",
+    "type": "boolean"
+   },
+   "url": {
+    "description": "Page to fetch. Either url or html is required.",
+    "format": "uri",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "sieve_page",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "markdown": {
+    "type": "string"
+   },
+   "source": {
+    "additionalProperties": false,
+    "properties": {
+     "fetchedAt": {
+      "type": "string"
+     },
+     "status": {
+      "type": "number"
+     },
+     "url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "url",
+     "fetchedAt",
+     "status"
+    ],
+    "type": "object"
+   },
+   "state": {
+    "additionalProperties": false,
+    "properties": {
+     "chunks": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "anchor": {
+         "type": "string"
+        },
+        "blocks": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "chars": {
+         "type": "number"
+        },
+        "headings": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "id": {
+         "type": "string"
+        },
+        "text": {
+         "type": "string"
+        },
+        "tokens": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "id",
+        "tokens",
+        "chars",
+        "blocks"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "facts": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "type": "string"
+        },
+        "from": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        },
+        "unit": {
+         "type": "string"
+        },
+        "value": {
+         "type": [
+          "number",
+          "string",
+          "boolean"
+         ]
+        }
+       },
+       "required": [
+        "label",
+        "value"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "language": {
+      "type": "string"
+     },
+     "publishedAt": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "updatedAt": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "facts",
+     "chunks"
+    ],
+    "type": "object"
+   },
+   "trace": {
+    "additionalProperties": false,
+    "properties": {
+     "dateSource": {
+      "type": "string"
+     },
+     "dropped": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "reason": {
+         "type": "string"
+        },
+        "selector": {
+         "type": "string"
+        },
+        "step": {
+         "type": "string"
+        },
+        "text": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "step",
+        "text"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "dropped"
+    ],
+    "type": "object"
+   },
+   "usage": {
+    "additionalProperties": false,
+    "properties": {
+     "chunks": {
+      "type": "number"
+     },
+     "ms": {
+      "type": "number"
+     },
+     "rawTokens": {
+      "type": "number"
+     },
+     "rawTokensEstimated": {
+      "type": "boolean"
+     },
+     "stateChars": {
+      "type": "number"
+     },
+     "stateTokens": {
+      "type": "number"
+     },
+     "visibleChars": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "rawTokens",
+     "stateTokens",
+     "visibleChars",
+     "stateChars",
+     "chunks",
+     "ms"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "detail": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "source",
+   "state",
+   "usage",
+   "warnings"
+  ],
+  "type": "object"
+ },
+ "title": "Prepare a page for decisions"
+}

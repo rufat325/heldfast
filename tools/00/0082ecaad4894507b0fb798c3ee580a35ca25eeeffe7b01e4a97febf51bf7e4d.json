@@ -1,0 +1,807 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "YNAB: Reconcile Account"
+ },
+ "description": "Guided account reconciliation: match bank CSV transactions to YNAB, detect discrepancies, and optionally execute bulk create/update/unclear operations.\n\nArgs:\n  - budget_id (string, optional): Budget UUID. Omit to use the default budget.\n  - account_id (string, required): Account UUID to reconcile.\n  - csv_file_path or csv_data (string, required): Bank export file path or inline CSV text.\n  - statement_balance (number, required): Ending balance from the bank statement (dollars).\n      For credit cards and other liability accounts, pass a negative value (e.g. -6143.27 means you owe $6,143.27).\n  - statement_end_date (string, optional): Statement closing date (YYYY-MM-DD). Filters CSV and triggers balance verification. Auto-detected from CSV if omitted.\n  - match_strictness (string, optional): Matching sensitivity \u2014 \"loose\" (more matches), \"normal\" (default), or \"strict\" (fewer false positives).\n  - sign_convention (string, optional): How to treat CSV amount signs \u2014 \"auto\" (default, detects from data), \"invert\" (negate all amounts), \"as_is\" (use amounts unchanged). Useful when auto-detection fails for liability accounts.\n  - dry_run (boolean, optional): Preview actions without executing. Default: true.\n  - auto_create_transactions (boolean, optional): Auto-create missing transactions. Default: false.\n  - auto_update_cleared_status (boolean, optional): Auto-mark matched transactions as cleared. Default: false.\n  - auto_unclear_missing (boolean, optional): Auto-mark statement-missing cleared transactions as uncleared when reconciliation remains unbalanced. Default: false.\n  - max_suggestions_in_output (number, optional): Limit unmatched items and suggestions shown in the human report. Default: 20.\n\nReturns: human-readable reconciliation narrative + structured JSON (unmatched_bank, unmatched_ynab, suggestions, execution_summary when actions are performed).\n\nExamples:\n  - Preview reconciliation: set dry_run=true (default)\n  - Execute: set dry_run=false and explicitly enable the write flags you want, e.g. auto_update_cleared_status=true\n\nWrite safety: call without confirmation_token to preview. Execute the identical validated request with the short-lived confirmation_token returned by that preview.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "account_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "auto_adjust_dates": {
+    "default": false,
+    "type": "boolean"
+   },
+   "auto_create_transactions": {
+    "default": false,
+    "type": "boolean"
+   },
+   "auto_unclear_missing": {
+    "default": false,
+    "type": "boolean"
+   },
+   "auto_update_cleared_status": {
+    "default": false,
+    "type": "boolean"
+   },
+   "budget_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "confirmation_token": {
+    "description": "Short-lived, single-use token returned by the immediately preceding preview of this exact validated request.",
+    "minLength": 16,
+    "type": "string"
+   },
+   "csv_data": {
+    "type": "string"
+   },
+   "csv_file_path": {
+    "type": "string"
+   },
+   "csv_format": {
+    "additionalProperties": false,
+    "properties": {
+     "amount_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "credit_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "date_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "date_format": {
+      "type": "string"
+     },
+     "debit_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "delimiter": {
+      "type": "string"
+     },
+     "description_column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "has_header": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "date_tolerance_days": {
+    "default": 7,
+    "maximum": 7,
+    "minimum": 0,
+    "type": "number"
+   },
+   "dry_run": {
+    "default": true,
+    "type": "boolean"
+   },
+   "match_strictness": {
+    "default": "normal",
+    "enum": [
+     "loose",
+     "normal",
+     "strict"
+    ],
+    "type": "string"
+   },
+   "max_suggestions_in_output": {
+    "default": 20,
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "sign_convention": {
+    "default": "auto",
+    "enum": [
+     "auto",
+     "invert",
+     "as_is"
+    ],
+    "type": "string"
+   },
+   "statement_balance": {
+    "type": "number"
+   },
+   "statement_end_date": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "account_id",
+   "statement_balance"
+  ],
+  "type": "object"
+ },
+ "name": "ynab_reconcile_account",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "human": {
+    "type": "string"
+   },
+   "structured": {
+    "additionalProperties": false,
+    "properties": {
+     "execution_summary": {
+      "additionalProperties": false,
+      "properties": {
+       "balance_status": {
+        "enum": [
+         "balanced",
+         "unbalanced",
+         "not_verified"
+        ],
+        "type": "string"
+       },
+       "dates_adjusted": {
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       },
+       "dry_run": {
+        "type": "boolean"
+       },
+       "recommendations": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "transactions_created": {
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       },
+       "transactions_updated": {
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "transactions_created",
+       "transactions_updated",
+       "dates_adjusted",
+       "dry_run"
+      ],
+      "type": "object"
+     },
+     "suggestions": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "action_hint": {
+         "type": "string"
+        },
+        "bank_transaction": {
+         "additionalProperties": false,
+         "properties": {
+          "amount": {
+           "type": "number"
+          },
+          "amount_money": {
+           "additionalProperties": false,
+           "properties": {
+            "currency": {
+             "type": "string"
+            },
+            "direction": {
+             "enum": [
+              "credit",
+              "debit",
+              "balanced"
+             ],
+             "type": "string"
+            },
+            "value": {
+             "type": "number"
+            },
+            "value_display": {
+             "type": "string"
+            },
+            "value_milliunits": {
+             "maximum": 9007199254740991,
+             "minimum": -9007199254740991,
+             "type": "integer"
+            }
+           },
+           "required": [
+            "value_milliunits",
+            "value",
+            "value_display",
+            "currency",
+            "direction"
+           ],
+           "type": "object"
+          },
+          "date": {
+           "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+           "type": "string"
+          },
+          "id": {
+           "format": "uuid",
+           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+           "type": "string"
+          },
+          "memo": {
+           "type": "string"
+          },
+          "payee": {
+           "type": "string"
+          },
+          "raw": {
+           "additionalProperties": false,
+           "properties": {
+            "amount": {
+             "type": "string"
+            },
+            "date": {
+             "type": "string"
+            },
+            "description": {
+             "type": "string"
+            }
+           },
+           "required": [
+            "date",
+            "amount",
+            "description"
+           ],
+           "type": "object"
+          },
+          "sourceRow": {
+           "maximum": 9007199254740991,
+           "minimum": -9007199254740991,
+           "type": "integer"
+          },
+          "warnings": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "required": [
+          "id",
+          "date",
+          "amount",
+          "payee",
+          "sourceRow",
+          "raw",
+          "amount_money"
+         ],
+         "type": "object"
+        },
+        "candidates": {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "confidence": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+           },
+           "explanation": {
+            "type": "string"
+           },
+           "match_reason": {
+            "type": "string"
+           },
+           "ynab_transaction": {
+            "additionalProperties": false,
+            "properties": {
+             "amount": {
+              "type": "number"
+             },
+             "amount_money": {
+              "additionalProperties": false,
+              "properties": {
+               "currency": {
+                "type": "string"
+               },
+               "direction": {
+                "enum": [
+                 "credit",
+                 "debit",
+                 "balanced"
+                ],
+                "type": "string"
+               },
+               "value": {
+                "type": "number"
+               },
+               "value_display": {
+                "type": "string"
+               },
+               "value_milliunits": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+               }
+              },
+              "required": [
+               "value_milliunits",
+               "value",
+               "value_display",
+               "currency",
+               "direction"
+              ],
+              "type": "object"
+             },
+             "approved": {
+              "type": "boolean"
+             },
+             "categoryName": {
+              "anyOf": [
+               {
+                "type": "string"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "cleared": {
+              "enum": [
+               "cleared",
+               "uncleared",
+               "reconciled"
+              ],
+              "type": "string"
+             },
+             "date": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+             },
+             "id": {
+              "type": "string"
+             },
+             "memo": {
+              "anyOf": [
+               {
+                "type": "string"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "payee": {
+              "anyOf": [
+               {
+                "type": "string"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             }
+            },
+            "required": [
+             "id",
+             "date",
+             "amount",
+             "payee",
+             "categoryName",
+             "cleared",
+             "approved",
+             "amount_money"
+            ],
+            "type": "object"
+           }
+          },
+          "required": [
+           "ynab_transaction",
+           "confidence",
+           "match_reason",
+           "explanation"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "confidence": {
+         "enum": [
+          "high",
+          "medium",
+          "low",
+          "none"
+         ],
+         "type": "string"
+        },
+        "confidence_score": {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        "match_reason": {
+         "type": "string"
+        },
+        "recommendation": {
+         "type": "string"
+        },
+        "top_confidence": {
+         "type": "number"
+        },
+        "ynab_transaction": {
+         "additionalProperties": false,
+         "properties": {
+          "amount": {
+           "type": "number"
+          },
+          "amount_money": {
+           "additionalProperties": false,
+           "properties": {
+            "currency": {
+             "type": "string"
+            },
+            "direction": {
+             "enum": [
+              "credit",
+              "debit",
+              "balanced"
+             ],
+             "type": "string"
+            },
+            "value": {
+             "type": "number"
+            },
+            "value_display": {
+             "type": "string"
+            },
+            "value_milliunits": {
+             "maximum": 9007199254740991,
+             "minimum": -9007199254740991,
+             "type": "integer"
+            }
+           },
+           "required": [
+            "value_milliunits",
+            "value",
+            "value_display",
+            "currency",
+            "direction"
+           ],
+           "type": "object"
+          },
+          "approved": {
+           "type": "boolean"
+          },
+          "categoryName": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "cleared": {
+           "enum": [
+            "cleared",
+            "uncleared",
+            "reconciled"
+           ],
+           "type": "string"
+          },
+          "date": {
+           "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+           "type": "string"
+          },
+          "id": {
+           "type": "string"
+          },
+          "memo": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "payee": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          }
+         },
+         "required": [
+          "id",
+          "date",
+          "amount",
+          "payee",
+          "categoryName",
+          "cleared",
+          "approved",
+          "amount_money"
+         ],
+         "type": "object"
+        }
+       },
+       "required": [
+        "bank_transaction",
+        "confidence",
+        "confidence_score",
+        "match_reason"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "unmatched_bank": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "amount": {
+         "type": "number"
+        },
+        "amount_money": {
+         "additionalProperties": false,
+         "properties": {
+          "currency": {
+           "type": "string"
+          },
+          "direction": {
+           "enum": [
+            "credit",
+            "debit",
+            "balanced"
+           ],
+           "type": "string"
+          },
+          "value": {
+           "type": "number"
+          },
+          "value_display": {
+           "type": "string"
+          },
+          "value_milliunits": {
+           "maximum": 9007199254740991,
+           "minimum": -9007199254740991,
+           "type": "integer"
+          }
+         },
+         "required": [
+          "value_milliunits",
+          "value",
+          "value_display",
+          "currency",
+          "direction"
+         ],
+         "type": "object"
+        },
+        "date": {
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+         "type": "string"
+        },
+        "id": {
+         "format": "uuid",
+         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+         "type": "string"
+        },
+        "memo": {
+         "type": "string"
+        },
+        "payee": {
+         "type": "string"
+        },
+        "raw": {
+         "additionalProperties": false,
+         "properties": {
+          "amount": {
+           "type": "string"
+          },
+          "date": {
+           "type": "string"
+          },
+          "description": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "date",
+          "amount",
+          "description"
+         ],
+         "type": "object"
+        },
+        "sourceRow": {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        "warnings": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        }
+       },
+       "required": [
+        "id",
+        "date",
+        "amount",
+        "payee",
+        "sourceRow",
+        "raw",
+        "amount_money"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "unmatched_ynab": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "amount": {
+         "type": "number"
+        },
+        "amount_money": {
+         "additionalProperties": false,
+         "properties": {
+          "currency": {
+           "type": "string"
+          },
+          "direction": {
+           "enum": [
+            "credit",
+            "debit",
+            "balanced"
+           ],
+           "type": "string"
+          },
+          "value": {
+           "type": "number"
+          },
+          "value_display": {
+           "type": "string"
+          },
+          "value_milliunits": {
+           "maximum": 9007199254740991,
+           "minimum": -9007199254740991,
+           "type": "integer"
+          }
+         },
+         "required": [
+          "value_milliunits",
+          "value",
+          "value_display",
+          "currency",
+          "direction"
+         ],
+         "type": "object"
+        },
+        "approved": {
+         "type": "boolean"
+        },
+        "categoryName": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "cleared": {
+         "enum": [
+          "cleared",
+          "uncleared",
+          "reconciled"
+         ],
+         "type": "string"
+        },
+        "date": {
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+         "type": "string"
+        },
+        "id": {
+         "type": "string"
+        },
+        "memo": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "payee": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "date",
+        "amount",
+        "payee",
+        "categoryName",
+        "cleared",
+        "approved",
+        "amount_money"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "unmatched_bank",
+     "unmatched_ynab",
+     "suggestions"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "human",
+   "structured"
+  ],
+  "type": "object"
+ }
+}

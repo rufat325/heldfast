@@ -1,0 +1,35 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Analyze a PDF for modifications after signing.\n\nReports: number of revisions (incremental updates), whether bytes were added after each signature's signed range, whether the last signature covers the entire file, DocMDP certification permissions and violations, and DSS presence.\n\nDocMDP is assessed against what the P value actually permits (ISO 32000-2 Table 257): P=1 permits nothing, P=2 form fill-in and signing, P=3 additionally annotation creation/deletion/modification. The later changes are classified from the object-level diff (changeClass), so adding an annotation to a P=2 document is reported as a violation while the same change to a P=3 document is not. Objects a permitted change necessarily drags along \u2014 the page whose /Annots grew, the catalog, /Info, the XMP stream \u2014 are classified as housekeeping and do not by themselves constitute a violation. Per ISO 32000-2 \u00a712.8.2.2, DSS/document-timestamp incremental updates after a P=1 certification are NOT violations (flagged as laterChangesAppearLtvOnly).\n\nviolationAssessment is three-valued: \"permitted\" / \"violated\" / \"indeterminate\". **\"indeterminate\" is not a pass** \u2014 it means the chain could not be walked or a changed object's kind could not be read, so nothing could be disproved. The boolean violatedByLaterChanges collapses indeterminate to false for backward compatibility; read violationAssessment when \"could not tell\" must not be mistaken for \"fine\".\n\nAlso reports an object-level diff of the incremental-update chain: for each revision, which objects were added, rewritten or freed, with the object's /Type and a plain-language role (annotation, form field widget, page object, content stream, \u2026), plus the shortlist of objects written after the last signed range (objectChangesAfterLastSignature). Cross-reference and object streams are flagged as bookkeeping. Where the objects sit on the page is pdf-reader-mcp's answer, not this server's.\n\nLimits of the diff \u2014 it is an observation, never a verdict:\n  - Incremental updates are legal in PDF (ISO 32000-2 \u00a77.5.6). A rewritten object says what to review, not that the file was tampered with. No verdict moves because of it.\n  - revisions: null means the cross-reference chain could not be walked (revisionChain.status: 'unwalkable') \u2014 \"not determined\", NOT \"nothing changed\".\n  - A non-null revisions list is not necessarily the whole history. revisionChain.status says which it is: 'complete' (walked from the newest cross-reference section back to the original revision), 'partial' (a list came back but revisionChain.missing names the end that is absent), or 'unwalkable' (the case above). revisionChain.missing holds 'oldest' when the chain ended before the original revision, and 'newest' when the last startxref did not point at a parseable section so an older entry point was used and the last append is not listed; both can be absent at once.\n  - **Only 'complete' makes \"no such change appears in the list\" mean \"that change was not made.\"** With a cut chain the surviving revision is reported as the original one \u2014 changeCount: 0, changes: null, objectChangesAfterLastSignature empty \u2014 so every other field reads as \"nothing was appended\". revisions are listed oldest first. Why the chain was cut (a damaged or cyclic /Prev, the revision cap, an unparseable section) stays in notes.\n  - Objects stored inside an object stream are listed with inObjectStream: true and no type.\n  - revisionCount counts \"startxref\" keywords; revisions lists the cross-reference sections the chain reached. The two differ lawfully, so revisionCountAgreement says whether the difference is explained: 'agree', 'accounted' (causes names 'linearised' and/or 'chain-incomplete'), or 'unaccounted' \u2014 the file holds a startxref the walked chain does not reach, which is the case worth looking at.\n  - Linearised files (ISO 32000-2 Annex F) carry two cross-reference sections for one save; they are merged back into one revision rather than reported as an update, so revisionCount is one higher than the number of saves.\n\nArgs:\n  - file_path (string): Absolute path to a local PDF file\n  - response_format ('markdown' | 'json'): Output format (default: 'markdown')\n\nReturns:\n  Every report begins with a \"scope\" object - how far the reading got, not a verdict: whether the cross-reference chain could be walked to the end (chainStop), whether this tool had to rebuild the cross-reference table itself (reconstructed - when true, the table is this tool's reconstruction and not the one the file carries), how many objects and sections were read, and whether an encrypted document could be opened. Read it before the verdict: \"no violations\" over a rebuilt table is not the same statement as \"no violations\" over the file's own table.\n\n  Size (v0.29.0): revisions lists at most 32 revisions (newest first) and 25 changes per revision; revisionsTruncated / changesTruncated say when a list was cut. revisionCount and revisionChain cover the whole walk. JSON is never cut by length.\n\n  Integrity report, including revisionChain: { status, missing } \u2014 read it before treating the revision list as the file's whole history \u2014 and revisionCountAgreement: { status, causes } \u2014 read it before quoting revisionCount as the number of times the file was saved. Note that incremental updates after signing are legal in PDF (adding signatures, DSS/LTV data) \u2014 findings indicate what to review, not automatically tampering.\n\nExamples:\n  - Check whether a signed document was modified after signing\n  - Verify a certified (DocMDP) document respects its declared permissions\n  - Find out which objects an incremental update touched after a signature was made",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "file_path": {
+    "description": "Absolute path to a local PDF file (e.g., \"/path/to/document.pdf\")",
+    "minLength": 1,
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: \"markdown\" for human-readable, \"json\" for structured data",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "file_path"
+  ],
+  "type": "object"
+ },
+ "name": "verify_integrity",
+ "title": "Verify PDF Integrity (tamper detection)"
+}

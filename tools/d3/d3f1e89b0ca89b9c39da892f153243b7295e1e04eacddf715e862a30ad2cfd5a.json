@@ -1,0 +1,323 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "pdfBase64": "<signed-pdf-base64>"
+    },
+    "title": "Verify a signed PDF (no chain trust)"
+   },
+   {
+    "input": {
+     "pdfBase64": "<signed-pdf-base64>",
+     "trustedRootsDerBase64": [
+      "<root-cert-der-base64>"
+     ]
+    },
+    "title": "Verify with a trusted root certificate"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Read-only verification of every signature: ByteRange digest vs CMS messageDigest (integrity), CMS signatureValue vs the embedded signer certificate (RSA-SHA256/384/512, ECDSA P-256), chain trust when trustedRootsDerBase64 is given ('self-signed' | 'unverified' | 'trusted' otherwise). /DocTimeStamp entries are verified as RFC 3161 tokens and count in allValid like any signature. Result: { allValid, signatureCount, summary, signatures:[{ valid, integrity, signerSubject, signingTime, chainTrust, errors[] }] }. `ltv:true` adds the PAdES view: per-signature profile, timestamp, revocation (read from embedded /DSS only \u2014 responder signatures are not re-verified) and ltvLevel B-B / B-T / B-LT / B-LTA with explicit caveats. Token-frugal: verbosity:'summary', fields:['allValid'].",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "fields": {
+    "description": "Optional dot-path projection applied to the structured result (e.g. ['allValid'] or ['signatures.valid']). Composes after verbosity. Unknown paths are omitted.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "ltv": {
+    "default": false,
+    "description": "Add the PAdES view: per signature profile, timestamp, revocation (embedded /DSS only), ltvLevel (B-B / B-T / B-LT / B-LTA); document-level dss, ltvLevel, caveats.",
+    "type": "boolean"
+   },
+   "password": {
+    "description": "Password (user or owner) of an encrypted source. Never logged or echoed.",
+    "maxLength": 4096,
+    "minLength": 1,
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded PDF bytes to verify.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "trustedRootsDerBase64": {
+    "description": "Optional list of base64-encoded X.509 root certificates (DER). When supplied, each signer certificate is validated against these roots; otherwise chainTrust is reported as self-signed or unverified.",
+    "items": {
+     "minLength": 4,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "verbosity": {
+    "default": "full",
+    "description": "Response verbosity. 'full' (default) returns the per-signature signatures[] array; 'summary' returns a token-frugal verdict { signatureCount, allValid, invalid, summary } (+ ltvLevel when ltv:true) and drops signatures[], dss and caveats.",
+    "enum": [
+     "summary",
+     "full"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "pdfBase64"
+  ],
+  "type": "object"
+ },
+ "name": "verify_pdf",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Structured signature verification result. Every property is optional because the result can be projected: verbosity:'summary' returns only the scalar summary fields, fields:[...] keeps a dot-path subset. Defaults return the full shape.",
+  "properties": {
+   "allValid": {
+    "description": "true when the document carries at least one signature and every entry of signatures[] \u2014 CMS signatures and /DocTimeStamp tokens alike \u2014 is valid (integrity + signature check + chain trust when trustedRootsDerBase64 is given). A tampered document timestamp fails the verdict; a sound one never does.",
+    "type": "boolean"
+   },
+   "caveats": {
+    "description": "ltv only. Fixed statements about what the LTV evaluation does not cover.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "dss": {
+    "additionalProperties": false,
+    "description": "ltv only. Document Security Store summary, or null when the catalog has no /DSS.",
+    "properties": {
+     "certs": {
+      "description": "Number of /DSS /Certs entries.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "crls": {
+      "description": "Number of /DSS /CRLs entries.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "ocsps": {
+      "description": "Number of /DSS /OCSPs entries.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "vriKeys": {
+      "description": "/VRI dictionary keys (uppercase-hex SHA-1 of each covered signature /Contents).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": [
+     "object",
+     "null"
+    ]
+   },
+   "invalid": {
+    "description": "summary only: number of invalid signatures.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "ltvLevel": {
+    "description": "ltv only. Minimum level across non-timestamp signatures ('B-B' when there are none).",
+    "enum": [
+     "B-B",
+     "B-T",
+     "B-LT",
+     "B-LTA"
+    ],
+    "type": "string"
+   },
+   "signatureCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "signatures": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "algorithm": {
+       "enum": [
+        "rsa-sha256",
+        "rsa-sha384",
+        "rsa-sha512",
+        "ecdsa-sha256",
+        null
+       ],
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "chainTrust": {
+       "enum": [
+        "trusted",
+        "self-signed",
+        "unverified",
+        "unknown"
+       ],
+       "type": "string"
+      },
+      "errors": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "fieldName": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "integrity": {
+       "type": "boolean"
+      },
+      "isDocTimestamp": {
+       "description": "Present (true) only for /DocTimeStamp entries: the RFC 3161 token imprint is checked against the ByteRange digest and the token SignerInfo against the embedded TSA certificate.",
+       "type": "boolean"
+      },
+      "location": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "ltvLevel": {
+       "description": "ltv only. PAdES baseline level reached by this signature.",
+       "enum": [
+        "B-B",
+        "B-T",
+        "B-LT",
+        "B-LTA"
+       ],
+       "type": "string"
+      },
+      "profile": {
+       "description": "ltv only. 'pades' when the CMS carries ESS signing-certificate-v2 (RFC 5035).",
+       "enum": [
+        "pkcs7",
+        "pades"
+       ],
+       "type": "string"
+      },
+      "reason": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "revocation": {
+       "additionalProperties": false,
+       "description": "ltv only. Signer revocation status read from embedded /DSS material; responder signatures are not verified.",
+       "properties": {
+        "source": {
+         "enum": [
+          "ocsp",
+          "crl",
+          "none"
+         ],
+         "type": "string"
+        },
+        "status": {
+         "enum": [
+          "good",
+          "revoked",
+          "unknown",
+          "not-evaluated"
+         ],
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "signerSubject": {
+       "description": "Signer CN (TSA CN for document timestamps).",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "signingTime": {
+       "description": "/M as stored, or the TSTInfo genTime (ISO 8601) for document timestamps.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "subFilter": {
+       "description": "/SubFilter of the signature dictionary (adbe.pkcs7.detached, ETSI.CAdES.detached, ETSI.RFC3161, \u2026).",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "timestamp": {
+       "additionalProperties": false,
+       "description": "ltv only. RFC 3161 signature timestamp (id-aa-signatureTimeStampToken) carried in the unsigned attributes.",
+       "properties": {
+        "genTime": {
+         "description": "TSTInfo genTime, ISO 8601.",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "imprintVerified": {
+         "description": "Token messageImprint equals the digest of the signature value.",
+         "type": [
+          "boolean",
+          "null"
+         ]
+        },
+        "present": {
+         "type": "boolean"
+        },
+        "tokenSignatureValid": {
+         "description": "The token's own CMS signature verifies against the TSA certificate it carries (null when it could not be evaluated). Required for B-T.",
+         "type": [
+          "boolean",
+          "null"
+         ]
+        },
+        "tsaSubject": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "type": [
+        "object",
+        "null"
+       ]
+      },
+      "valid": {
+       "type": "boolean"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "summary": {
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Verify PDF signatures"
+}

@@ -1,0 +1,70 @@
+{
+ "description": "What happened historically after the Bitcoin cycle looked like this? Conditional forward-return distribution for a named preset cycle state \u2014 over N DISTINCT historical episodes matching that state (matched_episodes), returns median/IQR/positive-share forward returns (30/90/180/365d) with per-horizon n, small-n warnings, point-in-time integrity and an `evidence` block that names which field its sample-size gate checked (gate_applies_to), against which threshold, over which data window. A distribution with its sample size. Not obtainable from web search or public market-data APIs \u2014 requires point-in-time indicator history and look-ahead-free episode matching. Presets: cycle_bottom_cluster (Cycle bottom cluster), cycle_top_cluster (Cycle top cluster), deep_fear (Deep fear), euphoria (Euphoria), quiet_volatility (Quiet volatility regime). The response opens with \"preset_definition\" (machine-readable condition set) plus current_state_matches (does the state hold TODAY?) and last_matching_date. Some presets carry a \"study_finding\" field \u2014 a state already investigated, with a NULL result where that is what the study found. EVERY preset returns \"vs_unconditional_drift\": the raw forward median contains the asset's contemporaneous drift; the drift and excess columns separate the two, and the excess can be negative while the raw median is positive. For quiet_volatility, vol_rank_threshold (fixed steps 5/10/20/50) asks the stricter \"UNUSUALLY quiet\" question the null study left open, and condition_on_direction conditions episodes on the sign of the first post-anchor move over direction_window_days (default 5) \u2014 both mark study_finding_applies=false, and horizons within direction_window_days are suppressed as circular. Also works for asset=ETH/SOL (F2 cycle history), but only price-derived presets (cycle_bottom_cluster, cycle_top_cluster) \u2014 fear-greed and volatility presets are BTC-only. Related: arena_get_volatility_history (the series behind the volatility preset), arena_get_cycle (the current state to compare against), arena_dip_scenario (composes this base rate into a tranche structure). [API Pro tier]",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "asset": {
+    "description": "Which asset\u2019s cycle history. Default BTC. ETH/SOL support only price-derived presets (cycle_bottom_cluster, cycle_top_cluster).",
+    "enum": [
+     "BTC",
+     "ETH",
+     "SOL"
+    ],
+    "type": "string"
+   },
+   "condition_on_direction": {
+    "description": "quiet_volatility only. Condition episodes on the direction of the FIRST post-anchor move (sign of the direction_window_days-day return). Horizons <= direction_window_days are suppressed as circular. Sets study_finding_applies=false.",
+    "enum": [
+     "up",
+     "down"
+    ],
+    "type": "string"
+   },
+   "direction_window_days": {
+    "description": "Classification window for condition_on_direction (default 5). Only meaningful together with condition_on_direction.",
+    "maximum": 90,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "forward_horizons": {
+    "description": "Forward-return horizons in days. Default [30, 90, 180, 365] \u2014 except for quiet_volatility, which defaults to the horizons its study actually tested ([30, 90, 180]); anything beyond that is flagged as outside the protocol.",
+    "items": {
+     "exclusiveMinimum": 0,
+     "type": "integer"
+    },
+    "type": "array"
+   },
+   "preset": {
+    "description": "Named ex-ante cycle-state condition set. One of: cycle_bottom_cluster, cycle_top_cluster, deep_fear, euphoria, quiet_volatility.",
+    "enum": [
+     "cycle_bottom_cluster",
+     "cycle_top_cluster",
+     "deep_fear",
+     "euphoria",
+     "quiet_volatility"
+    ],
+    "type": "string"
+   },
+   "vol_rank_threshold": {
+    "description": "quiet_volatility only. Reference threshold as a FIXED step: 50 (default, below trailing median \u2014 the studied definition) or 5/10/20 (unusually quiet: RV30 below its trailing Nth percentile). Any value other than 50 sets study_finding_applies=false \u2014 the null study covered only the default.",
+    "enum": [
+     5,
+     10,
+     20,
+     50
+    ],
+    "type": "number"
+   }
+  },
+  "required": [
+   "preset"
+  ],
+  "type": "object"
+ },
+ "name": "arena_get_historical_analog",
+ "title": "Historical analog \u2014 conditional forward returns"
+}

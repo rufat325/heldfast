@@ -1,0 +1,79 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Robinhood Chain deployer alert feed \u2014 new_deploy / graduated events, newest first. TWO things a consumer must know: (1) TRADABILITY IS FILTERED BY DEFAULT \u2014 alerts on tokens with liquidity_usd < $100 (including unknown liquidity) are dropped, because a $45K-MC alert on a drained $68 pool is not a signal; set include_untradeable=true for the raw tape. The active setting is echoed as tradability_filter. (2) TIER IS RESOLVED AT READ TIME from the live reputation view, so it can never advertise a reputation the deployer has since lost; the snapshot written when the alert fired is returned as tier_at_alert with tier_is_stale flagging a drift. Tiers ride runner_rate ($100K peak MC) + 24h of deployer history, not the $40K graduation rate. Each alert also carries liquidity_usd and current_mc_usd. Poll forward with since=next_event_at, page back with before=next_before. Tier: BASIC (limit capped at 50 below ULTRA).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "alert_type": {
+    "description": "Event type \u2014 RHC has no bonded/kol_buy alerts",
+    "enum": [
+     "new_deploy",
+     "graduated"
+    ],
+    "type": "string"
+   },
+   "before": {
+    "description": "Only alerts with event_at strictly older than this (ISO 8601 with offset) \u2014 pass next_before to page back",
+    "type": "string"
+   },
+   "deployer_tier": {
+    "description": "Filter on the RESOLVED (current) tier, applied after read-time resolution",
+    "enum": [
+     "elite",
+     "good",
+     "neutral",
+     "spammer"
+    ],
+    "type": "string"
+   },
+   "include_untradeable": {
+    "description": "true disables the default liquidity_usd >= $100 tradability filter and returns the raw tape",
+    "type": "boolean"
+   },
+   "launchpad": {
+    "description": "Filter by launchpad: pons, flap, clanker, hood.fun, noxa, virtuals",
+    "type": "string"
+   },
+   "limit": {
+    "default": 50,
+    "description": "Number of alerts (1-500; capped at 50 unless ULTRA)",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "number"
+   },
+   "min_mc": {
+    "description": "Minimum market cap at the time the alert fired (mc_at_alert)",
+    "minimum": 0,
+    "type": "number"
+   },
+   "offset": {
+    "description": "Pagination offset (used only when no before cursor is given)",
+    "maximum": 10000,
+    "minimum": 0,
+    "type": "number"
+   },
+   "priority": {
+    "description": "Alert priority (RHC has no 'low')",
+    "enum": [
+     "high",
+     "medium"
+    ],
+    "type": "string"
+   },
+   "since": {
+    "description": "Only alerts with event_at strictly newer than this (ISO 8601 with offset) \u2014 the incremental-polling cursor",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "rhc_deployer_alerts"
+}

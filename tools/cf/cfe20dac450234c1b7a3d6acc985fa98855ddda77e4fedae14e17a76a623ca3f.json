@@ -1,0 +1,210 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Compute a diversity / origination / extinction curve for a clade across geologic time, binned by period, epoch, or age \u2014 answers \"plot dinosaur genus diversity across the Mesozoic.\" Pass a clade-inclusive base_name (or base_id, the same clade by resolved taxon id \u2014 exactly one of the two) and bound the span by a named interval (e.g. \"Mesozoic\") or a max_ma/min_ma range; choose what to count (genera, species, or families) and the bin resolution. The full bin set returns inline \u2014 a diversity series is a bounded set of geologic intervals \u2014 so you read the curve, the turnover, and the per-bin origination/extinction directly. Counts reflect SAMPLED diversity, biased by collection effort and rock availability, not true past diversity.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "base_id": {
+    "description": "Clade-inclusive taxon to count, by PBDB taxon id \u2014 the taxon_no from paleobiology_get_taxon, or accepted_no on an occurrence row. Same semantics as base_name, but unambiguous where a name is not (homonyms, synonyms, unresolved spellings). Supply this or base_name (exactly one is required, never both).",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "base_name": {
+    "description": "Clade-inclusive taxon to count, e.g. \"Dinosauria\" or \"Ammonoidea\" \u2014 this taxon and all descendants. Supply this or base_id (exactly one is required, never both).",
+    "type": "string"
+   },
+   "count": {
+    "default": "genera",
+    "description": "What to count per bin: \"genera\" (default), \"species\", or \"families\".",
+    "enum": [
+     "genera",
+     "species",
+     "families"
+    ],
+    "type": "string"
+   },
+   "interval": {
+    "description": "Named geologic interval bounding the span, e.g. \"Mesozoic\". Alternative to max_ma/min_ma.",
+    "type": "string"
+   },
+   "max_ma": {
+    "description": "Older bound of the span in millions of years ago. Alternative to interval. When paired with min_ma it must be strictly greater \u2014 max_ma is the deeper-time end of the span.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "min_ma": {
+    "description": "Younger bound of the span in millions of years ago. Alternative to interval. When paired with max_ma it must be strictly smaller \u2014 min_ma is the nearer-to-present end of the span.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "resolution": {
+    "default": "period",
+    "description": "Bin resolution: \"period\" (default, coarse), \"epoch\", or \"age\" (finest).",
+    "enum": [
+     "period",
+     "epoch",
+     "age"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "paleobiology_get_diversity",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "bins",
+     "totalCount",
+     "attribution"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "attribution": {
+    "description": "CC-BY data attribution for the Paleobiology Database.",
+    "type": "string"
+   },
+   "bins": {
+    "description": "Per-interval diversity bins over the span, ordered oldest-first (oldest geologic interval, highest max_ma, first).",
+    "items": {
+     "additionalProperties": false,
+     "description": "One diversity bin (a single geologic interval) with turnover counts.",
+     "properties": {
+      "extinctions": {
+       "description": "Taxa whose last appearance is in this bin (LADs, including bin-only singletons).",
+       "type": "number"
+      },
+      "implied": {
+       "description": "Range-through taxa implied present in the bin but without an occurrence in it.",
+       "type": "number"
+      },
+      "interval": {
+       "description": "Geologic interval (bin) name, e.g. \"Cretaceous\".",
+       "type": "string"
+      },
+      "max_ma": {
+       "description": "Older boundary of the bin in millions of years ago.",
+       "type": "number"
+      },
+      "min_ma": {
+       "description": "Younger boundary of the bin in millions of years ago.",
+       "type": "number"
+      },
+      "n_occurrences": {
+       "description": "Total fossil occurrences counted in this bin.",
+       "type": "number"
+      },
+      "originations": {
+       "description": "Taxa whose first appearance is in this bin (new FADs, including bin-only singletons).",
+       "type": "number"
+      },
+      "range_through": {
+       "description": "Taxa whose range crosses both boundaries of this bin (present before and after).",
+       "type": "number"
+      },
+      "sampled_in_bin": {
+       "description": "Taxa with at least one occurrence inside this bin.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "interval",
+      "max_ma",
+      "min_ma",
+      "sampled_in_bin",
+      "implied",
+      "originations",
+      "extinctions",
+      "range_through",
+      "n_occurrences"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `missing_filter`: Neither base_name nor base_id was supplied \u2014 a diversity curve needs a clade to count. `conflicting_taxon_filter`: Both base_name and base_id were supplied \u2014 PBDB accepts only one clade selector. `inverted_ma_range`: min_ma was greater than or equal to max_ma \u2014 the span is inverted or empty. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "missing_filter",
+         "conflicting_taxon_filter",
+         "inverted_ma_range"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when the clade or span produced no bins, or when the taxon name could not be resolved and was ignored.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Number of geologic-interval bins returned.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "paleobiology-mcp-server: diversity through time"
+}

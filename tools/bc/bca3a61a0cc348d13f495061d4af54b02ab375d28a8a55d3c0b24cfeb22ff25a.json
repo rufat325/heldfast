@@ -1,0 +1,41 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Retrieve the raw source text of a single PlantUML or Mermaid diagram, in full or as an explicit character window.\n\nArgs:\n  - relative_path (string): Path to the diagram relative to the diagrams root, as returned by diagrams_list\n  - offset (number, optional): Zero-based character offset where the returned window starts (default: 0)\n  - max_chars (number, optional): Maximum characters to return from offset (1-100000). Omit to return the full source\n\nReturns:\n  JSON with schema:\n  {\n    \"relative_path\": string,\n    \"type\": \"plantuml\" | \"mermaid\",\n    \"content\": string,       // full source, or the requested [offset, offset+max_chars) window\n    \"is_partial\": boolean,   // true when content is a window rather than the full source\n    \"offset\": number,        // effective character offset of this window\n    \"total_chars\": number,   // full source length in characters\n    \"returned_chars\": number,// length of the returned content\n    \"has_more\": boolean      // true when source after this window remains\n  }\n\n  The text block always equals structuredContent.content. Content is never\n  silently truncated: omitting offset/max_chars returns everything, and\n  requesting a window is always reported via is_partial/has_more.\n\nExamples:\n  - Use when: \"Show me the order-flow diagram\" -> relative_path=\"system/order-flow.puml\"\n  - Use when: \"Read the first 2000 characters of the big diagram\" -> relative_path=\"...\", offset=0, max_chars=2000, then offset=2000 for the next window\n  - Don't use when: You need to list what diagrams exist first (use diagrams_list)\n\nError Handling:\n  - Returns \"Error: No diagram found at '<path>'\" if the file doesn't exist\n  - Returns \"Error: Refused to access path outside the diagrams root\" if relative_path attempts to escape the diagrams directory (e.g. via '../..')\n  - Returns \"Error: Invalid source window: ...\" if offset/max_chars are negative, non-integer, or max_chars is outside 1-100000\n  - Returns \"Error: offset <n> is out of range ...\" if offset points past the end of the source\n  - Unexpected internal failures return a generic \"Error: Unexpected internal error ...\" with isError:true and are logged to stderr without source, paths, or secrets",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "max_chars": {
+    "description": "Maximum characters to return starting at offset (1-100000). Omit to return the full source.",
+    "maximum": 100000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Zero-based character offset into the diagram source where the returned window starts (default: 0).",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "relative_path": {
+    "description": "Path to the diagram, relative to the diagrams root (e.g. 'system/order-flow.puml'). Get this from diagrams_list.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "relative_path"
+  ],
+  "type": "object"
+ },
+ "name": "diagrams_get",
+ "title": "Get Diagram Source"
+}

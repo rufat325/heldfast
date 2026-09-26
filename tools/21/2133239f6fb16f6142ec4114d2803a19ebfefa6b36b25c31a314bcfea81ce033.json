@@ -1,0 +1,270 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Query a Census dataset for one or more variables at a specific geography. Accepts FIPS codes for the target geography \u2014 use census_resolve_geography to convert place names to FIPS when needed. On ACS datasets, labeled estimates and margin-of-error values are returned together (the comparison profiles publish no margins), and the negative sentinel values the Census writes for an estimate or margin of error it cannot publish are decoded into the meanings the Census gives them rather than passed through as raw numbers. A value cbp, ecnbasic, or nonemp withheld is stored as 0 beside a flag, and is reported as withheld, with the meaning of its flag, rather than as a zero. Pass geography_fips as \"*\" for every geography at the level within the parent: rows come back in GEOID order, up to limit per call (default 50, max 500), with totalCount giving how many matched and offset reaching the rest \u2014 the order is not a ranking, so use census_compare_geographies to rank. On the business datasets (cbp, ecnbasic, nonemp), pep/charv, dec/ddhca, and acs/acs1/spp, use predicates to filter by industry, size class, or population group \u2014 a query that omits one is answered with a default the Census API picks, which is an all-categories total on some dimensions and a single category on others. Each row names the defaults that were applied in applied_filters, and census_list_predicate_values enumerates the codes a dimension accepts. One geography can also come back on more than one row: pep/charv publishes an April estimates base alongside its July estimate, and each row carries a record field saying which it is.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "county_fips": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "1 to 3 digits, zero-padded here to the 3 the Census stores, or \"*\".",
+      "pattern": "^(\\*|\\d{1,3})$",
+      "type": "string"
+     }
+    ],
+    "description": "County FIPS code when querying tracts or block groups within a specific county (e.g., \"033\" for King County within WA). Required for tract and block-group queries scoped to a county \u2014 use alongside parent_fips (state). census_resolve_geography returns this as county_fips. Pass \"*\" to span every county in the state, which is the only way a block-group query reaches a whole state. Blank is treated as omitted."
+   },
+   "dataset": {
+    "description": "Dataset to query (default: \"acs/acs5\"). Use census_list_datasets to discover valid values. Case is ignored, and a two-part code can be given by its last part alone \u2014 \"acs5\" is acs/acs5, \"pl\" is dec/pl. Three-part codes such as acs/acs5/profile must be given in full. The response echoes the resolved code.",
+    "type": "string"
+   },
+   "geography_fips": {
+    "description": "FIPS code for the target geography (e.g., \"033\" for a county, \"*\" for every geography at the level within the parent, returned up to limit rows per call and paged with offset). Use census_resolve_geography to obtain this value \u2014 it is returned as fips_summary. The Census API matches this literally and its width follows geography_level, so it is passed through unpadded: a county is 3 digits (\"051\", not \"51\") and a tract is 6. parent_fips and county_fips are zero-padded for you; this one is not.",
+    "type": "string"
+   },
+   "geography_level": {
+    "description": "Level of the target geography (e.g., \"county\", \"tract\", \"state\", \"zip code tabulation area\"). Use census_list_geographies to see valid values for the dataset.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Most rows to return (default: 50, max: 500). Rows come in GEOID order, a geography's records or categories in code order, and each one counts, so a geography returned as several records (pep/charv April and July) or as one row per category of a \"*\" predicate takes one row each. totalCount says how many rows matched.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "description": "Rows to skip before returning up to limit (default: 0). Pages run in GEOID order, so offset 50 with limit 50 returns rows 51\u2013100, and the notice names the offset of the next page. An offset at or past totalCount returns no rows.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "parent_fips": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "1 to 2 digits, zero-padded here to the 2 the Census stores, or \"*\".",
+      "pattern": "^(\\*|\\d{1,2})$",
+      "type": "string"
+     }
+    ],
+    "description": "State FIPS code when querying sub-state levels (e.g., \"53\" for Washington). Required for county, tract, and block-group queries. census_resolve_geography returns this as state_fips. Pass \"*\" to span every state. Blank is treated as omitted."
+   },
+   "predicates": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Filter values keyed by variable code, sent as extra query parameters \u2014 e.g. {\"NAICS2017\": \"5112\"} to count only software publishers in cbp. The business datasets (cbp, ecnbasic, nonemp), pep/charv, dec/ddhca, and acs/acs1/spp declare filter dimensions such as industry (NAICS2017/NAICS2022), legal form (LFO), size class (EMPSZES/RCPSZES), tax status (TAXSTAT), operation type (TYPOP), sex (SEX), age (AGE), and population group (POPGROUP). Leaving one unset is not an error: the Census API substitutes its own default, which is the all-categories total on cbp NAICS2017 but a single population group on dec/ddhca POPGROUP and a single sector on ecnbasic NAICS2022 \u2014 so an unfiltered value can read like a total without being one. Every unset dimension is named in the response notice and its applied default is echoed per row in applied_filters. Keys are matched case-insensitively, and a blank value is treated as omitted. A value of \"*\" returns one row per category of that dimension for each geography, each row labelled with its category in record (e.g. {\"NAICS2017\": \"*\"} gives King County one row per industry) \u2014 a breakdown that can run to over a thousand rows. Code names vary by dataset and vintage \u2014 cbp 2023 uses NAICS2017 while nonemp 2023 uses NAICS2022 \u2014 so read them from the notice or from census_search_variables. Call census_list_predicate_values for the codes a dimension accepts; NAICS values are standard North American Industry Classification System codes at any depth (51 information, 5112 software publishers).",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "tract_fips": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Exactly 6 digits \u2014 never padded here, and never \"*\".",
+      "pattern": "^\\d{6}$",
+      "type": "string"
+     }
+    ],
+    "description": "Census tract code scoping the query to one tract (e.g., \"007101\" for Census Tract 71.01), for the levels that sit within a tract \u2014 block group on acs/acs5, block group and block on dec/pl. census_resolve_geography returns it as tract_fips, and for a street address also returns the block_group_fips to pass as geography_fips. A tract code is unique only within its county, so it needs parent_fips and a concrete county_fips (not \"*\"). It is exactly 6 digits and is not padded, since \"7101\" and \"71\" do not name one tract. A level that does not sit within a tract rejects it. Blank is treated as omitted."
+   },
+   "variables": {
+    "description": "Variable codes to retrieve (e.g., [\"B19013_001E\", \"B19013_001M\"]). Codes are uppercased before the request, so \"b19013_001e\" reads as B19013_001E and the response is keyed by the uppercase code. At most 49 per call: the Census API accepts 50 columns per request and every query also sends NAME. On datasets where a label column is added for each filter dimension left unset, or record columns are added (cbp, ecnbasic, nonemp, pep/charv, dec/ddhca, acs/acs1/spp), the maximum is lower, and too_many_variables states the exact number for the query. Use census_search_variables to find codes. On ACS datasets only, apart from the comparison profiles (acs/acs5/cprofile, acs/acs1/cprofile), which publish none, each estimate has a margin-of-error counterpart at the same code with the E suffix swapped for M \u2014 request both to get the margin alongside the estimate. Other dataset families (pep, dec, cbp, ecnbasic, nonemp) publish no margins of error, and an E-final code there is an ordinary code with no M sibling. A code can also name a text column rather than a measure \u2014 GEO_ID, on every dataset, is the nationally unique geography identifier and comes back under value with estimate null, which is the code to request when a stable join key is what is wanted.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "year": {
+    "description": "Vintage year (default: latest available for the dataset).",
+    "type": "number"
+   }
+  },
+  "required": [
+   "variables",
+   "geography_level",
+   "geography_fips"
+  ],
+  "type": "object"
+ },
+ "name": "census_query_data",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "rows",
+     "totalRows",
+     "totalCount",
+     "truncated",
+     "dataset",
+     "year"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "dataset": {
+    "description": "Dataset queried.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `dataset_not_found`: Dataset code is not recognized, even after case and shorthand resolution. `missing_api_key`: CENSUS_API_KEY is not configured or the key is invalid. `year_not_available`: The dataset does not serve the requested vintage year. `variable_not_found`: The Census API rejected a variable code as unknown for the requested dataset and year. It names only the first unknown code in a request. `variables_unavailable`: The variable metadata endpoint returned an unparseable response for this dataset and year. `geography_not_supported`: The requested geography level does not exist in this dataset and year. `parent_required`: The geography level requires a parent FIPS code but parent_fips was not provided, a tract/block-group level requires county_fips but it was omitted, a single block group requires tract_fips, or tract_fips was set without a concrete county_fips. `parent_not_accepted`: parent_fips, county_fips, or tract_fips names a parent the geography level does not sit within. `no_data`: The query returned no rows. `too_many_variables`: The variable codes plus NAME and the label and record columns added for the dataset exceed the 50 columns the Census API accepts per request. `predicate_not_supported`: A key in predicates is not a variable in this dataset and year. `upstream_error`: Census API returned an error or was unreachable. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "dataset_not_found",
+         "missing_api_key",
+         "year_not_available",
+         "variable_not_found",
+         "variables_unavailable",
+         "geography_not_supported",
+         "parent_required",
+         "parent_not_accepted",
+         "no_data",
+         "too_many_variables",
+         "predicate_not_supported",
+         "upstream_error"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Warning that the dataset declares filter dimensions the query left unset, naming each one alongside the label of the default the Census API applied to it. That default is an all-categories total on some dimensions and one ordinary category on others, so the label is what says which. Also carries the warning that a geography came back on more than one row, naming the column that separates the records and the values it took; the range of rows returned when offset or limit left some out, with the offset of the next page; and any variable codes whose flags could not be checked because the request had no room left under the Census 50-column limit \u2014 a withheld value there reads as 0.",
+    "type": "string"
+   },
+   "rows": {
+    "description": "One row per geography, or per record or category where a geography has several. When geography_fips is \"*\", the rows from offset up to limit of every geography at the level within the parent, in GEOID order.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Data for one geography \u2014 name, FIPS, and variable values.",
+     "properties": {
+      "applied_filters": {
+       "additionalProperties": {},
+       "description": "Filter dimensions the query left unset, mapped to the label of the default the Census API applied (e.g. {\"POPGROUP\": \"European alone\"}). Present only on datasets that declare filter dimensions. The label is what tells an all-categories total apart from one ordinary category \u2014 dec/ddhca defaults POPGROUP to a single population group, so a value carrying \"European alone\" is that group's count and not the geography's population. Set the dimension in predicates to choose it yourself.",
+       "properties": {},
+       "type": "object"
+      },
+      "geography_fips": {
+       "description": "FIPS code for this geography at the queried level only, without its parents (e.g., \"033\" for King County). Pass back as the geography_fips parameter in census_query_data \u2014 alongside the same parent_fips/county_fips \u2014 for follow-up queries.",
+       "type": "string"
+      },
+      "geography_geoid": {
+       "description": "Full GEOID \u2014 the queried level concatenated with its parent levels (e.g., \"53033\" for King County, \"53033000101\" for a tract). Nationally unique, unlike geography_fips. Pass these to the geographies filter in census_compare_geographies to compare geographies across different states.",
+       "type": "string"
+      },
+      "geography_name": {
+       "description": "Human-readable geography name (e.g., \"King County, Washington\").",
+       "type": "string"
+      },
+      "record": {
+       "additionalProperties": {},
+       "description": "Which record this row is, when one geography comes back on more than one row \u2014 keyed by the column that separates them, each value carrying a code and a label (e.g. {\"MONTH\": {\"code\": \"7\", \"label\": \"July\"}}). pep/charv publishes an April estimates base and a July estimate, so one geography comes back on two rows whose numbers differ; this field is what says which is which. A dimension set to \"*\" in predicates lands here too, one row per category (e.g. {\"NAICS2017\": {\"code\": \"11\", \"label\": \"Agriculture, forestry, fishing and hunting\"}}), with the code as its label when the dimension publishes no label column. Pass the code back in predicates (e.g. {\"MONTH\": \"7\"}) to return that record alone. Absent on the datasets that return one row per geography.",
+       "properties": {},
+       "type": "object"
+      },
+      "variables": {
+       "additionalProperties": {},
+       "description": "Map of variable code to value entry. Each key is a variable code from the variables input, uppercased; each value has: estimate (number|null), moe (number|null, optional), label (string), suppressed (boolean), suppression_reason (string, optional), open_ended (true, optional), flag ({code, meaning}, optional), value (string, optional). An estimate of null means one of three things and the other fields say which: suppressed true is a number the Census withheld, a value field is a cell holding text rather than a number (GEO_ID returns \"0500000US53033\"; the older ACS profile vintages write not-applicable as \"(X)\" in a column that is a number elsewhere), and neither is a cell with nothing in it. suppression_reason carries the meaning the Census publishes for the sentinel or flag. On ACS, a margin of error the Census treats as zero (a controlled estimate) is moe 0, not a suppression. open_ended true marks an ACS median that falls in the lowest or highest interval of an open-ended distribution, so the estimate is that interval's boundary (250001 for \"250,000+\", 9999 for \"10,000-\") rather than the median itself \u2014 it appears only when the matching M code was requested, since that margin of error is the only signal, and it does not say which end. flag is the symbol a business dataset (cbp, ecnbasic, nonemp) published beside the value: a withholding flag (D, S, an employment or sales range letter) comes with suppressed true, and so does a noise or data-quality band (G/H/J, 0-9) beside a 0, which is the range a range column such as EMP_N or RCPTOT_IMP publishes in place of a number; a quality note (r revised, s high relative standard error) keeps the estimate.",
+       "properties": {},
+       "type": "object"
+      }
+     },
+     "required": [
+      "geography_name",
+      "geography_fips",
+      "geography_geoid",
+      "variables"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalCount": {
+    "description": "Number of rows the query matched, before offset and limit were applied.",
+    "type": "number"
+   },
+   "totalRows": {
+    "description": "Number of rows returned.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when rows were left out by offset or limit \u2014 totalCount exceeds the rows returned.",
+    "type": "boolean"
+   },
+   "year": {
+    "description": "Vintage year queried.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Query Census Data"
+}

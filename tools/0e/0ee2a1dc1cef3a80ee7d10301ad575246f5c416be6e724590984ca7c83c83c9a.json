@@ -1,0 +1,144 @@
+{
+ "annotations": {
+  "cost": {
+   "all": 10
+  },
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "AUTHORITATIVE historical financials for any US public company. Source: SEC XBRL filings (the official numbers companies file, not third-party scrapes). Send the company as `cik` \u2014 that argument takes a TICKER (\"AAPL\") or a CIK (\"320193\"), and `ticker` / `ticker_or_cik` are accepted as aliases for it \u2014 plus the metric as `concept` (alias `metric`), which takes a friendly name: Revenue, NetIncomeLoss, Cash, LongTermDebt, EarningsPerShareDiluted. The tool resolves the right XBRL tag for that filer (post-ASC-606 companies use RevenueFromContractWithCustomerExcludingAssessedTax instead of \"Revenues\", etc.). Returns both ANNUAL (10-K) and QUARTERLY (10-Q) values by default, each labeled with fiscal_period (FY/Q1/Q2/Q3/Q4) and form, newest first, PLUS a `latest` field holding the single freshest data point. Q4 rows are DERIVED (FY minus Q1-Q3, marked derived:true) because SEC filers never report a standalone Q4 fact \u2014 so \"revenue Q4 2024\" questions are answerable directly from `values`. For one specific period, pass `fiscal_year` and/or `fiscal_period` as ARGUMENTS and the values array comes back filtered to it (they are also the names of the fields on each returned row, which is what to match on if you ask for every period instead); do not default to `latest` for a period question. Use `latest` for point-in-time metrics like cash, runway, and debt \u2014 it is the newest 10-Q when one is more recent than the last 10-K, so a stale annual figure never masks a newer quarter. Use for \"what was AAPL's revenue in 2024\", \"NVDA's latest cash position\", \"show me long-term debt trend\", anything where you need the SEC-filed number rather than an estimate.",
+ "inputSchema": {
+  "examples": [
+   {
+    "cik": "320193",
+    "concept": "Revenue"
+   },
+   {
+    "cik": "1652044",
+    "concept": "NetIncomeLoss"
+   },
+   {
+    "cik": "DOV",
+    "concept": "NetIncomeLoss",
+    "fiscal_period": "FY",
+    "fiscal_year": "2024",
+    "period": "annual"
+   }
+  ],
+  "properties": {
+   "cik": {
+    "description": "REQUIRED (or one of its aliases `ticker` / `ticker_or_cik`). Ticker (e.g., \"AAPL\") or CIK number (e.g., \"320193\"). Tickers are auto-resolved.",
+    "type": "string"
+   },
+   "concept": {
+    "description": "REQUIRED (alias `metric`). Metric name. Common: \"Revenue\" / \"Revenues\", \"NetIncomeLoss\", \"Cash\", \"Assets\", \"Liabilities\", \"StockholdersEquity\", \"EarningsPerShareDiluted\", \"LongTermDebt\".",
+    "type": "string"
+   },
+   "fiscal_period": {
+    "description": "Optional filter: return only rows for this period within the fiscal year \u2014 \"FY\" (annual), \"Q1\", \"Q2\", \"Q3\", or \"Q4\" (derived: FY minus Q1-Q3). Combine with fiscal_year for a single figure.",
+    "enum": [
+     "FY",
+     "Q1",
+     "Q2",
+     "Q3",
+     "Q4"
+    ],
+    "type": "string"
+   },
+   "fiscal_year": {
+    "description": "Optional filter: return only rows for this fiscal year, e.g. \"2024\". This is the filer's OWN fiscal year label (NVDA's FY2024 ended Jan 2024), not a calendar year. Unmatched years are reported with the years that ARE available rather than as an empty result.",
+    "type": "string"
+   },
+   "metric": {
+    "description": "Alias for `concept` \u2014 the word this tool's own description uses for the thing you are asking about.",
+    "type": "string"
+   },
+   "period": {
+    "description": "Which reporting periods to return: \"all\" (default \u2014 annual 10-K + quarterly 10-Q), \"annual\" (10-K/20-F/40-F only), or \"quarterly\" (10-Q only). Point-in-time metrics (cash/runway/debt) usually want the default so the freshest quarter is included; use \"annual\" for clean year-over-year trends.",
+    "enum": [
+     "all",
+     "annual",
+     "quarterly"
+    ],
+    "type": "string"
+   },
+   "ticker": {
+    "description": "Alias for `cik` \u2014 same thing, a ticker or a CIK. Declared because sibling SEC tools name this argument differently (edgar_fund_holdings uses `ticker`, edgar_company_filings uses `ticker_or_cik`) and a caller filling arguments from prose reaches for whichever it read; all three spellings work here.",
+    "type": "string"
+   },
+   "ticker_or_cik": {
+    "description": "Alias for `cik` \u2014 the spelling used by edgar_company_filings, edgar_insider_transactions and edgar_product_revenue.",
+    "type": "string"
+   }
+  },
+  "required": [],
+  "type": "object"
+ },
+ "name": "edgar_company_concept",
+ "outputSchema": {
+  "properties": {
+   "annual_values": {
+    "description": "Annual values sorted by fiscal year descending",
+    "items": {
+     "properties": {
+      "filed": {
+       "description": "Date filing was submitted",
+       "type": "string"
+      },
+      "fiscal_year": {
+       "description": "Fiscal year",
+       "type": "number"
+      },
+      "period_end": {
+       "description": "Period end date in YYYY-MM-DD format",
+       "type": "string"
+      },
+      "unit": {
+       "description": "Unit of measurement (e.g., USD, shares)",
+       "type": "string"
+      },
+      "value": {
+       "description": "Reported value",
+       "type": "number"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "cik": {
+    "description": "Company CIK number",
+    "type": "string"
+   },
+   "company_name": {
+    "description": "Official company name",
+    "type": "string"
+   },
+   "concept": {
+    "description": "US-GAAP concept tag name",
+    "type": "string"
+   },
+   "description": {
+    "description": "Detailed concept description",
+    "type": "string"
+   },
+   "label": {
+    "description": "Human-readable concept label",
+    "type": "string"
+   }
+  },
+  "required": [
+   "cik",
+   "company_name",
+   "concept",
+   "label",
+   "description",
+   "annual_values"
+  ],
+  "type": "object"
+ },
+ "title": "Edgar Company Concept",
+ "version": "v1.941a40f0"
+}

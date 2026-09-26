@@ -1,0 +1,57 @@
+{
+ "description": "Persist ONE pre-computed embedding vector for a file or symbol so it becomes searchable via find_similar_code. You must produce the vector yourself (the agent embeds the source_text with whatever model it has access to) \u2014 Tentra stores vector + source_text + model identifier but does not call any embedding API on your behalf.\n\nWorks in both hosted mode (pgvector column on Postgres) and local mode (Float32Array BLOB on SQLite). Request and response shapes are identical across modes.\n\nUse in a loop after index_code to seed the vector index: for each file or symbol you care about, embed a representative snippet (function signature + doc comment, or file summary) and record it. Unlike record_semantic_node (human-readable purpose stored in CodeSemantic), record_embedding stores a dense vector for cosine search. The two are complementary, not alternatives.\n\nPrerequisites: Tentra API auth (hosted) OR TENTRA_BACKEND=local + a file_id or symbol_id from a completed index_code + a vector you already computed. Write path. Side effect: inserts into the embeddings table. Response: { id, ok: true }.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "entity_id": {
+    "description": "ID of the file or symbol being embedded",
+    "minLength": 1,
+    "type": "string"
+   },
+   "entity_type": {
+    "description": "What kind of entity this embedding represents",
+    "enum": [
+     "file",
+     "symbol"
+    ],
+    "type": "string"
+   },
+   "model": {
+    "description": "Embedding model identifier (e.g. text-embedding-3-small)",
+    "minLength": 1,
+    "type": "string"
+   },
+   "snapshot_id": {
+    "description": "Snapshot this embedding belongs to",
+    "type": "string"
+   },
+   "source_text": {
+    "description": "The text that was embedded (for audit / re-embed on model change)",
+    "minLength": 1,
+    "type": "string"
+   },
+   "vector": {
+    "description": "The embedding vector produced by the agent",
+    "items": {
+     "type": "number"
+    },
+    "maxItems": 4096,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "entity_type",
+   "entity_id",
+   "model",
+   "vector",
+   "source_text"
+  ],
+  "type": "object"
+ },
+ "name": "record_embedding"
+}

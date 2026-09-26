@@ -1,0 +1,480 @@
+{
+ "_meta": {
+  "apiVersion": "1.0.0",
+  "examples": [
+   {
+    "input": {
+     "tolerateTruncation": true,
+     "verbosity": "summary",
+     "zipBase64": "<zip-base64>"
+    },
+    "title": "Inventory of a truncated download"
+   },
+   {
+    "input": {
+     "data": "verify",
+     "zipBase64": "<zip-base64>"
+    },
+    "title": "Verify payloads of a streamed archive"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Walk LOCAL headers in stream order with bounded memory (zipnative's central-directory-less reader). The only tool that works on a truncated archive or a stream cut mid-way (it cannot skip an SFX prefix: the stream must start at a local header) \u2014 and the only one whose result is NOT authoritative: forward iteration trusts local headers ALONE, so a hostile archive can present different content here than inspect_zip / list_zip_entries report (the upload-scanner differential). Prefer those tools whenever the whole archive is available; use this one for forensics (`tolerateTruncation:true` returns the partial inventory + `error`). data 'none' skips payloads, 'verify' decompresses to check CRCs, 'include' returns them (inline caps). `stoppedAt` tells you whether a central directory was reached. Names are NOT sanitized \u2014 `sanitizedPath` shows what the extraction gate would use.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "data": {
+    "default": "none",
+    "description": "'none' (default): skip payloads (a data-descriptor entry still costs a full decompress-and-discard); 'verify': decompress every kept entry so CRC and sizes are checked; 'include': also return the content as base64 (inline caps apply).",
+    "enum": [
+     "none",
+     "verify",
+     "include"
+    ],
+    "type": "string"
+   },
+   "fields": {
+    "description": "Dot-path projection applied after verbosity (e.g. ['entryCount', 'entries.name']); array segments map over elements; unmatched paths are reported in _meta.unmatchedFields.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "filter": {
+    "additionalProperties": false,
+    "description": "Select entries by name. `names` (exact, case-sensitive), `prefix` (path prefix) and `glob` (patterns: `*` within a segment, `**` across segments, `?` one character; a pattern without `/` matches at any depth, a trailing `/` matches a whole subtree) are ANDed when several are given; `includeDirectories` (default false) keeps explicit directory entries.",
+    "properties": {
+     "glob": {
+      "description": "Glob patterns; an entry matching ANY pattern is kept (e.g. ['**/*.json', 'docs/']).",
+      "items": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+     },
+     "includeDirectories": {
+      "default": false,
+      "description": "Keep explicit directory entries (names ending in `/`).",
+      "type": "boolean"
+     },
+     "names": {
+      "description": "Exact entry names to keep (case-sensitive; every duplicate of a name is kept).",
+      "items": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 1000,
+      "type": "array"
+     },
+     "prefix": {
+      "description": "Keep entries whose name starts with this prefix (e.g. 'src/').",
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "limits": {
+    "additionalProperties": false,
+    "description": "Override zipnative's named security bounds for this call (CWE-400 / CWE-409 guards). Every key is optional; absent keys keep the engine defaults (maxEntries 100000, maxEntryUncompressedSize 1 GiB, maxTotalUncompressedSize 8 GiB, maxCompressionRatio 1024, maxNameBytes 4096, maxExtraFieldBytes 65535, maxCommentBytes 65535, maxCentralDirectoryBytes 256 MiB). Values above the operator ceilings (ZIPNATIVE_MCP_MAX_UNCOMPRESSED_BYTES, ZIPNATIVE_MCP_MAX_ENTRIES) are refused with LIMIT_CEILING_EXCEEDED. Raise a bound for trusted input only.",
+    "properties": {
+     "maxCentralDirectoryBytes": {
+      "description": "Maximum central-directory size in bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCommentBytes": {
+      "description": "Maximum comment length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCompressionRatio": {
+      "description": "Maximum declared uncompressed/compressed ratio for entries >= 1 KiB compressed (zip-bomb guard).",
+      "minimum": 1,
+      "type": "number"
+     },
+     "maxEntries": {
+      "description": "Maximum central-directory entry count.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxEntryUncompressedSize": {
+      "description": "Maximum decompressed size of one entry, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxExtraFieldBytes": {
+      "description": "Maximum extra-field block length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxNameBytes": {
+      "description": "Maximum entry-name length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxTotalUncompressedSize": {
+      "description": "Maximum total decompressed size across an extraction, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "maxEntries": {
+    "description": "Stop after this many local headers (bounded work on an unbounded stream). Default 10000, clamped to the operator ceiling ZIPNATIVE_MCP_MAX_ENTRIES; an explicit value above the ceiling is refused (LIMIT_CEILING_EXCEEDED).",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "strict": {
+    "default": false,
+    "description": "Escalate the first engine diagnostic (prepended data, duplicate name, name mismatch, \u2026) to a ZIP_STRICT_DIAGNOSTIC error instead of reporting it.",
+    "type": "boolean"
+   },
+   "tolerateTruncation": {
+    "default": false,
+    "description": "true: a truncated / corrupt stream ends the scan with `stoppedAt:\"error\"` and the partial inventory (forensics) instead of failing the call.",
+    "type": "boolean"
+   },
+   "verbosity": {
+    "default": "full",
+    "description": "'summary' returns only the scalar verdict fields (drops arrays and payloads) \u2014 the token-frugal form.",
+    "enum": [
+     "full",
+     "summary"
+    ],
+    "type": "string"
+   },
+   "zipBase64": {
+    "description": "The archive bytes as base64 (exactly once; a data: URI prefix is tolerated). Exclusive with zipPath. Decoded size \u2264 128 MiB.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "zipPath": {
+    "description": "Relative path of an archive inside the ZIPNATIVE_MCP_OUTPUT_DIR sandbox (no absolute paths, no '..'; container extensions only: .zip .jar .docx .epub \u2026). Exclusive with zipBase64. Lets a create/modify \u2192 verify/extract chain avoid re-sending the bytes.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "scan_zip_forward",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Forward-scan inventory (local headers only). Every property is optional because the result can be projected: verbosity:'summary' returns only the scalar summary fields, fields:[...] keeps a dot-path subset. Defaults return the full shape.",
+  "properties": {
+   "bytesDelivered": {
+    "description": "Bytes handed to the forward reader.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "diagnosticCount": {
+    "description": "summary only: number of distinct diagnostics.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "diagnosticCounts": {
+    "additionalProperties": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "description": "Number of diagnostics received per code (counts every occurrence, including de-duplicated ones).",
+    "type": "object"
+   },
+   "diagnostics": {
+    "description": "Non-fatal conformance concerns the engine raised while parsing or writing (de-duplicated by code + entry, at most 200). Empty for a clean archive. Codes: ZIP_PREPENDED_DATA, ZIP_MULTIPLE_EOCD, ZIP_NAME_MISMATCH, ZIP_UNICODE_PATH_CONFLICT, ZIP_INVALID_UTF8_NAME, ZIP_DUPLICATE_NAME, ZIP_EXTRA_FIELD_MALFORMED, ZIP_ZIP64_EXTRA_IGNORED, ZIP_TIMESTAMP_NOT_PINNED, ZIP_NONDETERMINISTIC_CODEC, ZIP_DEAD_BYTES_RATIO.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "entryName": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning",
+        "info"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "diagnosticsTruncated": {
+    "description": "Present (true) when more than 200 distinct diagnostics were dropped from `diagnostics`.",
+    "type": "boolean"
+   },
+   "entries": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "comment": {
+       "type": "string"
+      },
+      "commentHex": {
+       "type": "string"
+      },
+      "compressedSize": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "crc32": {
+       "description": "CRC-32 of the uncompressed data, 8 lowercase hex digits.",
+       "type": "string"
+      },
+      "data": {
+       "additionalProperties": false,
+       "properties": {
+        "bytesProduced": {
+         "minimum": 0,
+         "type": "integer"
+        },
+        "dataBase64": {
+         "type": "string"
+        },
+        "verified": {
+         "type": "boolean"
+        }
+       },
+       "type": "object"
+      },
+      "dosDate": {
+       "type": "integer"
+      },
+      "dosTime": {
+       "type": "integer"
+      },
+      "externalAttributes": {
+       "type": "integer"
+      },
+      "extraFields": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "dataBase64": {
+          "type": "string"
+         },
+         "id": {
+          "type": "integer"
+         },
+         "idHex": {
+          "type": "string"
+         },
+         "length": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "name": {
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "flags": {
+       "additionalProperties": false,
+       "properties": {
+        "dataDescriptor": {
+         "type": "boolean"
+        },
+        "encrypted": {
+         "type": "boolean"
+        },
+        "raw": {
+         "type": "integer"
+        },
+        "strongEncryption": {
+         "type": "boolean"
+        },
+        "utf8": {
+         "type": "boolean"
+        }
+       },
+       "type": "object"
+      },
+      "hostSystem": {
+       "type": "string"
+      },
+      "index": {
+       "description": "Position in the central directory (or in the forward scan).",
+       "minimum": 0,
+       "type": "integer"
+      },
+      "internalAttributes": {
+       "type": "integer"
+      },
+      "isDirectory": {
+       "type": "boolean"
+      },
+      "isEncrypted": {
+       "type": "boolean"
+      },
+      "isSymlink": {
+       "description": "Unix mode S_IFLNK; null from a forward scan.",
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "kept": {
+       "description": "false when the filter dropped it (row kept for the inventory, payload skipped).",
+       "type": "boolean"
+      },
+      "lastModified": {
+       "description": "ISO-8601 (DOS time has 2-second granularity; UT extra refines it).",
+       "type": "string"
+      },
+      "localHeaderOffset": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "method": {
+       "description": "Compression method id (0 store, 8 deflate).",
+       "type": "integer"
+      },
+      "methodName": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "nameEncoding": {
+       "enum": [
+        "utf-8",
+        "cp437"
+       ],
+       "type": "string"
+      },
+      "ratio": {
+       "description": "Percentage saved, e.g. '63%'.",
+       "type": "string"
+      },
+      "rawNameHex": {
+       "type": "string"
+      },
+      "sanitizedPath": {
+       "description": "The relative path a secure extraction would use; null when the name cannot be made safe (traversal, absolute, drive/UNC, NUL, ADS, device name).",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "uncompressedSize": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "unixMode": {
+       "description": "Octal permission bits when Unix-authored ('0644'), else null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "usesDataDescriptor": {
+       "type": "boolean"
+      },
+      "usesZip64": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "versionMadeBy": {
+       "type": "integer"
+      },
+      "versionNeeded": {
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "entryCount": {
+    "description": "Local headers seen (before the filter).",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "error": {
+    "additionalProperties": false,
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "inputBytes": {
+    "type": [
+     "integer",
+     "null"
+    ]
+   },
+   "keptCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "maxEntries": {
+    "description": "The header budget in force (after clamping to the operator ceiling).",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "names": {
+    "description": "summary only: the kept entry names.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "stoppedAt": {
+    "description": "'central-directory' is the normal end of a complete archive; 'eof' means the stream ended before any central directory (truncated or CD-less); 'max-entries' means more local headers remained.",
+    "enum": [
+     "central-directory",
+     "eof",
+     "max-entries",
+     "error"
+    ],
+    "type": "string"
+   },
+   "truncated": {
+    "description": "true when the stream ended without reaching a central directory.",
+    "type": "boolean"
+   },
+   "trust": {
+    "description": "Constant reminder: nothing here was cross-checked against a central directory.",
+    "enum": [
+     "local-headers-only"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Scan forward (truncated / unseekable streams \u2014 NOT authoritative)"
+}

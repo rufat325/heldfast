@@ -1,0 +1,363 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Resolve DNS records for one or more domains across multiple public resolvers and compare what each resolver returned. Works for any domain \u2014 no vendor registry required. Reports records found (A/AAAA/CNAME/MX/TXT/NS), resolution latency per resolver, and a typed outcome per resolver and record type so \"the domain does not exist\" (nxdomain), \"the resolver could not answer\" (servfail), and \"no record of this type\" (nodata) stay distinguishable. Resolver disagreements are reported without asserting a cause: partial_resolution (some resolvers answered, others returned nothing) points at a real propagation or resolver problem, while value_variation (every resolver answered with different values) is the normal steady state for anycast and geo-steered domains. Pair with devops_check_certs when a domain resolves but TLS to it is failing.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "domains": {
+    "description": "Domain names to query. Up to 10 per call.",
+    "items": {
+     "description": "A domain name to query (e.g., \"github.com\", \"api.example.com\").",
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 10,
+    "minItems": 1,
+    "type": "array"
+   },
+   "record_types": {
+    "default": [
+     "A",
+     "AAAA",
+     "MX",
+     "TXT"
+    ],
+    "description": "DNS record types to resolve. Defaults to A, AAAA, MX, and TXT. An empty array uses the same defaults. Add NS to check nameserver delegation. Add CNAME when investigating redirect chains.",
+    "items": {
+     "enum": [
+      "A",
+      "AAAA",
+      "CNAME",
+      "MX",
+      "TXT",
+      "NS"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "resolvers": {
+    "default": [
+     "8.8.8.8",
+     "1.1.1.1",
+     "9.9.9.9"
+    ],
+    "description": "Resolver IP addresses to query. Defaults to Google (8.8.8.8), Cloudflare (1.1.1.1), and Quad9 (9.9.9.9). An empty array uses the same defaults. Add custom resolvers to test resolver-specific behavior. Each must be an IP literal, not a hostname; resolvers in private, loopback, or cloud-metadata ranges are rejected unless DEVOPS_STATUS_ALLOW_PRIVATE_TARGETS=true.",
+    "items": {
+     "description": "A resolver IP literal \u2014 IPv4 (\"8.8.8.8\"), IPv6 (\"2001:4860:4860::8888\"), or either with a port (\"1.1.1.1:53\", \"[2001:4860:4860::8888]:53\"). A hostname is rejected.",
+     "minLength": 1,
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "timeout_ms": {
+    "default": 3000,
+    "description": "Query timeout per domain+resolver combination in milliseconds. Defaults to the DEVOPS_STATUS_DNS_TIMEOUT_MS env var (3000 when unset).",
+    "maximum": 10000,
+    "minimum": 1000,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "domains"
+  ],
+  "type": "object"
+ },
+ "name": "devops_check_dns",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_domain`: A domain string contains a protocol prefix or invalid format. `target_blocked`: A resolver is a private, loopback, or otherwise non-public address, or is not an IP literal at all. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_domain",
+         "target_blocked"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "results": {
+    "description": "Per-domain DNS resolution results.",
+    "items": {
+     "additionalProperties": false,
+     "description": "DNS resolution result for one domain.",
+     "properties": {
+      "domain": {
+       "description": "The domain that was queried.",
+       "type": "string"
+      },
+      "error": {
+       "description": "Set only when the domain could not be queried at all. Either it was rejected before any query (for example a private, loopback, or cloud-metadata target) and \"resolver_results\" is empty, or every resolver failed and none returned records, in which case each failing resolver is named with its own outcome (\"8.8.8.8: SERVFAIL on A; 1.1.1.1: NXDOMAIN on A\") so a split result stays visible. Null when at least one resolver answered; per-resolver failures are still in \"resolver_results\" and \"flags\".",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "flags": {
+       "description": "Human-readable observations that need attention: \"NXDOMAIN from 8.8.8.8, 1.1.1.1 on A, MX \u2014 the domain does not exist \u2026\", \"Partial resolution on A records \u2014 9.9.9.9 (nodata) returned nothing while 8.8.8.8 answered\", \"No MX records found\", \"CNAME detected \u2014 further records resolve via the CNAME target\". A value_variation disagreement is not flagged here \u2014 it is reported in \"propagation_discrepancies\" because it is normal for geo-steered domains. Empty for a domain rejected before any query, whose reason is in \"error\".",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "propagation_discrepancies": {
+       "description": "Record types where resolvers returned different answers, each labelled by \"kind\". Empty when all resolvers agree.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A record type where resolvers returned different answers.",
+        "properties": {
+         "kind": {
+          "description": "What the disagreement is. \"partial_resolution\" = at least one resolver returned records and at least one returned nothing; this is the signal worth investigating (in-flight propagation, a broken resolver, or a partial delegation) \u2014 read \"status_by_resolver\" for why each empty resolver was empty. \"value_variation\" = every resolver answered but with different values; this is the expected steady state for anycast and geo-steered domains such as CDN-fronted hostnames, and is also consistent with an in-flight DNS change. Neither value asserts a cause on its own.",
+          "enum": [
+           "value_variation",
+           "partial_resolution"
+          ],
+          "type": "string"
+         },
+         "record_type": {
+          "description": "The DNS record type resolvers disagreed on.",
+          "type": "string"
+         },
+         "resolvers_agree": {
+          "description": "Always false \u2014 an entry only exists when resolvers disagreed.",
+          "type": "boolean"
+         },
+         "status_by_resolver": {
+          "additionalProperties": {
+           "enum": [
+            "ok",
+            "nodata",
+            "nxdomain",
+            "servfail",
+            "refused",
+            "timeout",
+            "error"
+           ],
+           "type": "string"
+          },
+          "description": "Outcome for this record type per resolver IP address \u2014 explains an empty entry in \"values_by_resolver\" as nodata, nxdomain, servfail, timeout, refused, or error.",
+          "propertyNames": {
+           "type": "string"
+          },
+          "type": "object"
+         },
+         "values_by_resolver": {
+          "additionalProperties": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "description": "Values reported per resolver IP address. An empty array means that resolver returned no records of this type.",
+          "propertyNames": {
+           "type": "string"
+          },
+          "type": "object"
+         }
+        },
+        "required": [
+         "record_type",
+         "resolvers_agree",
+         "kind",
+         "values_by_resolver",
+         "status_by_resolver"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "records": {
+       "additionalProperties": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "description": "Resolved records from a single resolver, keyed by record type (A, AAAA, CNAME, MX, TXT, NS). Taken from the primary resolver (first in \"resolvers\"), or from the first resolver that returned records when the primary returned none. Read \"records_source\" for which resolver these came from, and \"resolver_results\" for the full per-resolver picture. This is also the reference set the per-resolver answers are reported against: a resolver that returned exactly these values for a type names it in \"records_same_as_domain\" rather than repeating them.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "records_source": {
+       "description": "Resolver IP whose answers populated \"records\", or null when no resolver was queried.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "resolver_results": {
+       "description": "Per-resolver breakdown for propagation analysis.",
+       "items": {
+        "additionalProperties": false,
+        "description": "DNS resolution result from one resolver.",
+        "properties": {
+         "error": {
+          "description": "Failure summary for this resolver in the form \"SERVFAIL on A, MX\", or null when every requested type either resolved or returned nodata. Nodata is never reported as an error \u2014 it is a valid DNS answer.",
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "latency_ms": {
+          "description": "Round-trip resolution latency in milliseconds.",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+         },
+         "records": {
+          "additionalProperties": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "description": "Records returned by this resolver, keyed by type \u2014 carrying only the types whose values differ from the domain-level \"records\" set. A type this resolver answered identically is named in \"records_same_as_domain\" instead of repeated here. A requested type in neither place returned nothing from this resolver; \"status_by_type\" says why.",
+          "propertyNames": {
+           "type": "string"
+          },
+          "type": "object"
+         },
+         "records_same_as_domain": {
+          "description": "Record types this resolver answered with exactly the domain-level \"records\" values, omitted from \"records\" above rather than duplicated. Read their values from the domain-level set. Resolvers agreeing is the common case, so this list is usually where most of the answer is.",
+          "items": {
+           "description": "A record type answered exactly as the domain-level set.",
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "resolver": {
+          "description": "Resolver IP address used.",
+          "type": "string"
+         },
+         "status": {
+          "description": "Headline outcome for this resolver: \"ok\" when any requested record type resolved, otherwise the most actionable failure across the requested types (servfail, timeout, refused, error, nxdomain, nodata \u2014 in that order). Read \"status_by_type\" for the per-record-type detail.",
+          "enum": [
+           "ok",
+           "nodata",
+           "nxdomain",
+           "servfail",
+           "refused",
+           "timeout",
+           "error"
+          ],
+          "type": "string"
+         },
+         "status_by_type": {
+          "additionalProperties": {
+           "enum": [
+            "ok",
+            "nodata",
+            "nxdomain",
+            "servfail",
+            "refused",
+            "timeout",
+            "error"
+           ],
+           "type": "string"
+          },
+          "description": "Outcome for each requested record type, keyed by type. \"ok\" = records returned; \"nodata\" = the domain exists but has no record of this type; \"nxdomain\" = the domain does not exist (check for a typo, an expired registration, or a missing delegation); \"servfail\" = the resolver could not complete the query, commonly a DNSSEC validation failure; \"refused\" = the resolver declined; \"timeout\" = no answer within timeout_ms; \"error\" = any other failure, described in \"error\".",
+          "propertyNames": {
+           "type": "string"
+          },
+          "type": "object"
+         }
+        },
+        "required": [
+         "resolver",
+         "latency_ms",
+         "records",
+         "records_same_as_domain",
+         "status",
+         "status_by_type",
+         "error"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "domain",
+      "records",
+      "records_source",
+      "resolver_results",
+      "propagation_discrepancies",
+      "flags",
+      "error"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Devops Check Dns"
+}

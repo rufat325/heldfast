@@ -1,0 +1,265 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Synthesize findings gathered so far into a prioritized defensive review plan plus pre-filled follow-up tool calls. Given live hosts, TLS/cert state, missing security headers, detected software versions, and open ports, returns markdown guidance (what to remediate first, which certs are expiring, which versions warrant a CVE check) and concrete next calls \u2014 including chaining detected software to an external NVD or OSV vulnerability server. Read-only and offline: reasons only over the state passed in, makes no external calls, and never produces an exploitation plan. For assets you own or are authorized to assess.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "findings": {
+    "description": "Findings gathered so far from prior attack-surface tool calls.",
+    "properties": {
+     "domain": {
+      "description": "Apex domain under review, when known.",
+      "type": "string"
+     },
+     "hosts": {
+      "description": "Per-host findings gathered from prior tool calls.",
+      "items": {
+       "description": "Per-host findings gathered from prior tool calls.",
+       "properties": {
+        "addresses": {
+         "description": "Resolved IPs, when known.",
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "certDaysUntilExpiry": {
+         "description": "Days until certificate expiry, when known.",
+         "type": "number"
+        },
+        "certValidationAuthorized": {
+         "description": "Whether the cert chain validated.",
+         "type": "boolean"
+        },
+        "host": {
+         "description": "Hostname this finding pertains to.",
+         "type": "string"
+        },
+        "missingSecurityHeaders": {
+         "description": "Security headers reported missing/weak.",
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "openPorts": {
+         "description": "Open ports (e.g. from Shodan), when known.",
+         "items": {
+          "type": "number"
+         },
+         "type": "array"
+        },
+        "technologies": {
+         "description": "Detected technologies with versions (drives CVE-lookup suggestions).",
+         "items": {
+          "description": "A detected technology and its version.",
+          "properties": {
+           "name": {
+            "description": "Technology name.",
+            "type": "string"
+           },
+           "version": {
+            "description": "Version when known.",
+            "type": "string"
+           }
+          },
+          "required": [
+           "name"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "tlsProtocol": {
+         "description": "Negotiated TLS protocol, when known.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "host"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "registrationExpiryDays": {
+      "description": "Days until domain registration expiry, when known.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "hosts"
+    ],
+    "type": "object"
+   },
+   "topic": {
+    "default": "triage",
+    "description": "\"triage\" = prioritize what to fix first; \"posture\" = TLS/header hardening; \"coverage\" = gaps to fill next.",
+    "enum": [
+     "triage",
+     "posture",
+     "coverage"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "findings"
+  ],
+  "type": "object"
+ },
+ "name": "attacksurface_recon_guidance",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "plan",
+     "priorities",
+     "nextToolSuggestions"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode.",
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextToolSuggestions": {
+    "description": "Pre-filled follow-up tool calls.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A pre-filled follow-up tool call suggestion.",
+     "properties": {
+      "arguments": {
+       "additionalProperties": {},
+       "description": "Pre-filled arguments for the suggested call.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "rationale": {
+       "description": "Why this follow-up advances the defensive review.",
+       "type": "string"
+      },
+      "server": {
+       "description": "Owning server when the tool is on another MCP server.",
+       "type": "string"
+      },
+      "tool": {
+       "description": "Tool to call next (this server or a sibling server).",
+       "type": "string"
+      }
+     },
+     "required": [
+      "tool",
+      "arguments",
+      "rationale"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "plan": {
+    "description": "Prioritized defensive review plan as markdown.",
+    "type": "string"
+   },
+   "priorities": {
+    "description": "Structured priority items behind the plan.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single prioritized finding and its recommended action.",
+     "properties": {
+      "action": {
+       "description": "Recommended defensive action.",
+       "type": "string"
+      },
+      "finding": {
+       "description": "What was observed.",
+       "type": "string"
+      },
+      "severity": {
+       "description": "Relative priority of the item.",
+       "enum": [
+        "high",
+        "medium",
+        "low",
+        "info"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "severity",
+      "finding",
+      "action"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "attacksurface_recon_guidance"
+}

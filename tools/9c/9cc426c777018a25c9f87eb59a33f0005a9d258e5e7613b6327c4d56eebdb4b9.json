@@ -1,0 +1,25 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Generate compliant e-invoice XML from a JSON invoice, in either EN 16931 syntax. Profiles: en16931, xrechnung-ubl, peppol-bis-3, xrechnung-cii, facturx-en16931 \u2014 the profile chooses the syntax, and xrechnung-cii and facturx-en16931 come back as CII. The invoice is validated first and generation is refused if it fails, because emitting XML for an invalid invoice produces a file that passes nothing. CREDIT NOTES GENERATE TOO, from the same object: invoiceTypeCode \"381\" emits a UBL CreditNote document under the UBL profiles and ram:TypeCode 381 under the CII ones, since CII has one document for both. XML ONLY, NEVER A PDF: Factur-X and ZUGFeRD files are CII XML inside a PDF/A-3 container, and this tool builds no container, so a facturx-en16931 result is the payload and not a Factur-X document \u2014 do not tell the user otherwise. If they need the Factur-X PDF itself, no tool here returns one; on a paid plan (Starter or Scale) the HTTP API does: POST https://api.attestwire.com/v1/generate?format=pdf with the same invoice and profile facturx-en16931 returns the PDF, with the CII XML inside as factur-x.xml. On xrechnung-cii the generator's own FIXTURE documents were run through the official KoSIT validator on release and accepted; on facturx-en16931 they were not, because that profile's BT-24 matches no XRechnung scenario for the validator to judge. Neither is a verdict on the document you just generated \u2014 nothing is sent to KoSIT at call time, so never call it \"KoSIT-validated\". REQUIRES AN API KEY and costs 1 document.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "invoice": {
+    "additionalProperties": true,
+    "description": "The invoice to generate XML for, as an InvoiceInput object. Required: profile (one of en16931, xrechnung-ubl, xrechnung-cii, facturx-en16931, peppol-bis-3), invoiceNumber, issueDate (\"YYYY-MM-DD\"), currency (ISO 4217), seller {name, address{city, postalCode, countryCode}}, buyer {name, address{...}}, and lines[] of {id, description, quantity, unitCode, unitPrice, vatCategory, vatRate}. The XRechnung profiles additionally require buyerReference (BT-10), a seller contact {name, phone, email}, and payment instructions \u2014 see BR-DE-1/2/5/6/7/15 via the explain_rule tool. A CREDIT NOTE IS THE SAME OBJECT with invoiceTypeCode (BT-3) set to \"381\": there is no separate tool and no separate shape, the same rules run, and the amounts stay POSITIVE \u2014 the type code is what conveys the direction of the money, so negative amounts on a credit note reverse it back into an invoice. Full schema: https://api.attestwire.com/openapi.json",
+    "type": "object"
+   }
+  },
+  "required": [
+   "invoice"
+  ],
+  "type": "object"
+ },
+ "name": "generate_invoice",
+ "title": "Generate compliant invoice XML"
+}

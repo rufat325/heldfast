@@ -1,0 +1,152 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List registered tables in a DataCanvas session \u2014 schema, row count, and column names. Shows what datasets are available for SQL queries via socrata_dataframe_query. Only meaningful when CANVAS_PROVIDER_TYPE=duckdb is set. Use after socrata_query_dataset spills a large result set to canvas.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Canvas ID returned by socrata_query_dataset when a large result spills to canvas. Required in practice when canvas is enabled \u2014 canvases cannot be enumerated, so omitting it fails with canvas_id_required instead of listing tables.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "socrata_dataframe_describe",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "tables"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "canvas_id": {
+    "description": "Canvas ID resolved, when canvas is enabled.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `canvas_id_required`: Canvas is enabled but canvas_id was omitted. `canvas_not_found`: Provided canvas_id does not match any registered canvas. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "canvas_id_required",
+         "canvas_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Status message when canvas is not enabled or no tables are registered. Absent when tables are present.",
+    "type": "string"
+   },
+   "tables": {
+    "description": "Tables available for SQL queries. Empty when none registered.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A registered DataCanvas table.",
+     "properties": {
+      "columns": {
+       "description": "Column names and DuckDB types. SODA number columns are staged as DOUBLE, so numeric comparisons (year > 2020) need no cast; compare timestamps with CAST(col AS TIMESTAMP).",
+       "items": {
+        "additionalProperties": false,
+        "description": "Column name and DuckDB type.",
+        "properties": {
+         "name": {
+          "description": "Column name.",
+          "type": "string"
+         },
+         "type": {
+          "description": "DuckDB column type (e.g. VARCHAR, DOUBLE, BOOLEAN, JSON). SODA number columns are DOUBLE; text and timestamp columns are VARCHAR.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "type"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "row_count": {
+       "description": "Number of rows in this table.",
+       "type": "number"
+      },
+      "table_id": {
+       "description": "Table name registered on the canvas.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "table_id",
+      "row_count",
+      "columns"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Describe DataCanvas Tables"
+}

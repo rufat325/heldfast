@@ -1,0 +1,405 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Score an agent output with the deterministic rules: a ship verdict with its basis, per-rule evidence, and what was not judged.\n\nWhat it does. Local, no key. eval_type picks a bundle or all (the default). A rule missing its input SKIPS, never passes: input is REQUIRED when eval_type=\"relevance\"; tool_calls and tools (or a trace_id), cost_usd and expected feed the rest. Full detail: iris://capabilities.\n\nWhen not to use it. For semantic judgment (evaluate_with_llm_judge). As an input firewall: the rules read the output.\n\nReturns. JSON: id, trace_id, verdict, coverage, provenance, run_id, interpretations, erased_at, eval_type, score, passed, rule_results, rules_evaluated, rules_skipped, insufficient_data, critical_failures, critical_skipped, categories, note, rules_changed.\n\nErrors. IRIS_UNKNOWN_TRACE (nothing written); IRIS_STORAGE_ERROR. Failures return {\"error\":{code,message,recovery}} with isError; follow recovery.\n\nSiblings. log_trace \u2014 record the execution first; list_rules \u2014 what each rule needs.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "cost_usd": {
+    "description": "Cost in USD, for the cost bundle and any cost_threshold rule; omitted, they skip rather than pass",
+    "type": "number"
+   },
+   "custom_rules": {
+    "description": "Up to 10 one-off rules; they fire whatever eval_type is (eval_type=\"custom\" runs only these)",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "config": {
+       "additionalProperties": {},
+       "description": "Check configuration; keys depend on type (pattern, min_length, keywords, max_cost, \u2026)",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "name": {
+       "description": "Rule name as it will appear in rule_results",
+       "minLength": 1,
+       "type": "string"
+      },
+      "severity": {
+       "description": "high or critical: a failure fails the verdict; otherwise it advises",
+       "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+       ],
+       "type": "string"
+      },
+      "type": {
+       "description": "Check type \u2014 decides which config keys the rule reads",
+       "enum": [
+        "regex_match",
+        "regex_no_match",
+        "min_length",
+        "max_length",
+        "contains_keywords",
+        "excludes_keywords",
+        "json_schema",
+        "cost_threshold",
+        "action_policy"
+       ],
+       "type": "string"
+      },
+      "weight": {
+       "description": "Weight in the weighted score (default 1; must be > 0)",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "name",
+      "type",
+      "config"
+     ],
+     "type": "object"
+    },
+    "maxItems": 10,
+    "type": "array"
+   },
+   "eval_type": {
+    "description": "Rule bundle: completeness | relevance | safety | cost | custom | all (the default, noted in the response)",
+    "enum": [
+     "completeness",
+     "relevance",
+     "safety",
+     "cost",
+     "custom",
+     "all"
+    ],
+    "type": "string"
+   },
+   "expected": {
+    "description": "Expected output for comparison \u2014 consulted only by the completeness bundle's expected_coverage rule; NOT used by relevance (the relevance rules compare the output against `input`)",
+    "type": "string"
+   },
+   "expected_trajectory": {
+    "additionalProperties": false,
+    "description": "What the agent was expected to DO: tool_calls with mode and args (tool_sequence); step_budget and tolerance (step_budget)",
+    "properties": {
+     "args": {
+      "enum": [
+       "exact",
+       "subset"
+      ],
+      "type": "string"
+     },
+     "mode": {
+      "enum": [
+       "strict",
+       "unordered",
+       "subset",
+       "superset",
+       "ordered_subset"
+      ],
+      "type": "string"
+     },
+     "step_budget": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "tolerance": {
+      "minimum": 1,
+      "type": "number"
+     },
+     "tool_calls": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "input": {},
+        "tool_name": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "tool_name"
+       ],
+       "type": "object"
+      },
+      "maxItems": 500,
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "input": {
+    "description": "The ask and any source material given \u2014 REQUIRED when eval_type=\"relevance\"; also grounds the hallucination signals",
+    "type": "string"
+   },
+   "output": {
+    "description": "The output text to evaluate (the agent's response that gets scored against rules)",
+    "type": "string"
+   },
+   "token_usage": {
+    "description": "Token usage breakdown \u2014 only consulted by the cost bundle (eval_type=\"cost\" or \"all\"; used for token-budget rules)",
+    "properties": {
+     "completion_tokens": {
+      "type": "number"
+     },
+     "prompt_tokens": {
+      "type": "number"
+     },
+     "total_tokens": {
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "tool_calls": {
+    "description": "The tool calls the agent made, in order, as log_trace records them; omitted, the trajectory rules skip. Loaded from trace_id when stored",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "call_id": {
+       "type": "string"
+      },
+      "cost_usd": {
+       "type": "number"
+      },
+      "error": {
+       "type": "string"
+      },
+      "input": {},
+      "latency_ms": {
+       "type": "number"
+      },
+      "output": {},
+      "token_usage": {
+       "properties": {
+        "completion_tokens": {
+         "type": "number"
+        },
+        "prompt_tokens": {
+         "type": "number"
+        },
+        "total_tokens": {
+         "type": "number"
+        }
+       },
+       "type": "object"
+      },
+      "tool_name": {
+       "type": "string"
+      },
+      "truncated": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "tool_name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "tools": {
+    "description": "Your MCP tools/list result, verbatim; lets the rules check call arguments. Loaded from trace_id when stored",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "_meta": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "annotations": {
+       "additionalProperties": {},
+       "properties": {
+        "destructiveHint": {
+         "type": "boolean"
+        },
+        "idempotentHint": {
+         "type": "boolean"
+        },
+        "openWorldHint": {
+         "type": "boolean"
+        },
+        "readOnlyHint": {
+         "type": "boolean"
+        },
+        "title": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "description": {
+       "maxLength": 4096,
+       "type": "string"
+      },
+      "execution": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "inputSchema": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "name": {
+       "maxLength": 128,
+       "minLength": 1,
+       "type": "string"
+      },
+      "outputSchema": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "title": {
+       "maxLength": 512,
+       "type": "string"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "type": "object"
+    },
+    "maxItems": 200,
+    "type": "array"
+   },
+   "trace_id": {
+    "description": "Link evaluation to a trace \u2014 surfaces this eval in the dashboard's trace drill-through and lets the tool reuse the trace's stored tool_calls. Must be the id of a stored trace (from log_trace / get_traces); an unknown id is rejected before anything is evaluated",
+    "type": "string"
+   }
+  },
+  "required": [
+   "output"
+  ],
+  "type": "object"
+ },
+ "name": "evaluate_output",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {},
+  "description": "Nested evaluation fields: https://iris-eval.com/response-schema-v1.json",
+  "properties": {
+   "categories": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "coverage": {
+    "additionalProperties": {},
+    "properties": {},
+    "type": "object"
+   },
+   "critical_failures": {
+    "items": {},
+    "type": "array"
+   },
+   "critical_skipped": {
+    "items": {},
+    "type": "array"
+   },
+   "erased_at": {
+    "type": "string"
+   },
+   "eval_type": {
+    "enum": [
+     "completeness",
+     "relevance",
+     "safety",
+     "cost",
+     "custom",
+     "all"
+    ],
+    "type": "string"
+   },
+   "id": {
+    "type": "string"
+   },
+   "insufficient_data": {
+    "type": "boolean"
+   },
+   "interpretations": {
+    "items": {},
+    "type": "array"
+   },
+   "note": {
+    "type": "string"
+   },
+   "passed": {
+    "type": "boolean"
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "properties": {},
+    "type": "object"
+   },
+   "rule_results": {
+    "items": {},
+    "type": "array"
+   },
+   "rules_changed": {
+    "additionalProperties": {},
+    "properties": {},
+    "type": "object"
+   },
+   "rules_evaluated": {
+    "type": "number"
+   },
+   "rules_skipped": {
+    "type": "number"
+   },
+   "run_id": {
+    "type": "string"
+   },
+   "score": {
+    "type": "number"
+   },
+   "trace_id": {
+    "type": "string"
+   },
+   "verdict": {
+    "additionalProperties": {},
+    "properties": {},
+    "type": "object"
+   }
+  },
+  "required": [
+   "id",
+   "eval_type",
+   "score",
+   "passed",
+   "rule_results",
+   "rules_evaluated",
+   "rules_skipped",
+   "insufficient_data"
+  ],
+  "type": "object"
+ },
+ "title": "Evaluate Output"
+}

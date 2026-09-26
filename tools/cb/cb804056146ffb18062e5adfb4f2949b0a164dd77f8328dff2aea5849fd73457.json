@@ -1,0 +1,424 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search the CISA Known Exploited Vulnerabilities catalog across every entry in the cached snapshot. Filter by vendor or product using CISA's own labels, by name substring, by CWE, by the date an entry was added, by due date, by overdue status, by ransomware linkage, by the three-day forensic-triage tier, or by which binding operational directive the entry cites. Results are paged and sortable by due date or date added. Vendor and product values are CISA's free-text labels, not CPE names \u2014 call cisa_list_reference for the field vocabulary before guessing one. The catalog records additions but carries no per-record modified timestamp, so dateAddedFrom answers \"what is new since D\" while a revised due date on an existing entry is not detectable from the feed.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cursor": {
+    "description": "Opaque pagination cursor from a previous call. Omit for the first page.",
+    "type": "string"
+   },
+   "cveIdPrefix": {
+    "description": "Year scope for the CVE ID, e.g. CVE-2026. Case and surrounding whitespace are normalized.",
+    "pattern": "^CVE-[0-9]{4}$",
+    "type": "string"
+   },
+   "cwe": {
+    "description": "Exact CWE identifier, e.g. CWE-362. Case and surrounding whitespace are normalized. Entries with no CWEs never match.",
+    "pattern": "^CWE-[0-9]+$",
+    "type": "string"
+   },
+   "dateAddedFrom": {
+    "description": "Earliest date added, inclusive, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "dateAddedTo": {
+    "description": "Latest date added, inclusive, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "directive": {
+    "description": "Which directive the entry cites. \"none\" selects the entries citing neither.",
+    "enum": [
+     "BOD 26-04",
+     "BOD 22-01",
+     "none"
+    ],
+    "type": "string"
+   },
+   "dueAfter": {
+    "description": "Earliest due date, inclusive, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "dueBefore": {
+    "description": "Latest due date, inclusive, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "forensicTriage": {
+    "description": "True selects the BOD 26-04 three-day forensic-triage tier.",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 25,
+    "description": "Maximum entries per page.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "nameContains": {
+    "description": "Strict token match over the vulnerability name and short description: every token must appear. Matching folds case and accents, spells letters such as \u00df, \u00e6, \u00f8, \u00fe, and \u0142 as ss, ae, o, th, and l, and keeps only the letters a-z and the digits 0-9; a word carrying any other letter or digit, such as one in another script, loses those characters and the response names it, and a value left with none of them is rejected. No fuzzy fallback.",
+    "minLength": 2,
+    "type": "string"
+   },
+   "order": {
+    "default": "desc",
+    "description": "Sort direction.",
+    "enum": [
+     "asc",
+     "desc"
+    ],
+    "type": "string"
+   },
+   "overdue": {
+    "description": "True selects entries whose due date is strictly before the echoed asOf date.",
+    "type": "boolean"
+   },
+   "product": {
+    "description": "Case-insensitive substring of CISA's own product label.",
+    "minLength": 2,
+    "type": "string"
+   },
+   "ransomware": {
+    "description": "True selects entries CISA has linked to ransomware campaigns.",
+    "type": "boolean"
+   },
+   "sortBy": {
+    "default": "dateAdded",
+    "description": "Field to sort by.",
+    "enum": [
+     "dueDate",
+     "dateAdded"
+    ],
+    "type": "string"
+   },
+   "vendorProject": {
+    "description": "Case-insensitive substring of CISA's own vendor label.",
+    "minLength": 2,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "cisa_search_kev",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results",
+     "hasMore",
+     "totalCount",
+     "catalog",
+     "asOf",
+     "appliedFilters"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "appliedFilters": {
+    "additionalProperties": {
+     "description": "The filter value as the server parsed it.",
+     "type": "string"
+    },
+    "description": "The filters the server actually applied, as it parsed them.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "asOf": {
+    "description": "The UTC date overdue and daysUntilDue were computed against, YYYY-MM-DD.",
+    "type": "string"
+   },
+   "cap": {
+    "description": "The page limit that was applied.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "catalog": {
+    "additionalProperties": false,
+    "description": "Which catalog snapshot answered this call.",
+    "properties": {
+     "catalogVersion": {
+      "description": "Version string of the loaded catalog snapshot.",
+      "type": "string"
+     },
+     "count": {
+      "description": "Entries in the loaded snapshot.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "dateReleased": {
+      "description": "Release timestamp the snapshot carries.",
+      "type": "string"
+     },
+     "fetchedAt": {
+      "description": "When this server fetched the snapshot, ISO 8601.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "catalogVersion",
+     "dateReleased",
+     "count",
+     "fetchedAt"
+    ],
+    "type": "object"
+   },
+   "cursor": {
+    "description": "Opaque cursor for the next page. Absent when this is the last page.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `catalog_unavailable`: No KEV catalog snapshot is held and the fetch from cisa.gov failed. `invalid_date_range`: A From bound is later than its matching To bound. `empty_search_text`: nameContains holds no letter a-z or digit 0-9 once case, accents, and letters such as \u00df and \u00f8 are folded and punctuation is removed, so there is nothing to search for. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "catalog_unavailable",
+         "invalid_date_range",
+         "empty_search_text"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "hasMore": {
+    "description": "Whether more matches exist beyond this page.",
+    "type": "boolean"
+   },
+   "notice": {
+    "description": "Guidance when nothing matched, when a page was capped, or when nameContains dropped characters it cannot match.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Matching KEV entries for this page.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One KEV catalog entry, or a not-in-KEV result carrying only cveId and inKev. Under cisa_check_cve_status detail \"summary\" an entry carries only cveId, inKev, the dates and deadline status, directive, vendor and product labels, and the ransomware and forensic-triage flags.",
+     "properties": {
+      "cveId": {
+       "description": "The CVE identifier that was looked up.",
+       "pattern": "^CVE-[0-9]{4}-[0-9]{4,19}$",
+       "type": "string"
+      },
+      "cwes": {
+       "description": "Associated CWEs. Empty on some entries, and a CWE filter excludes those. Absent under detail \"summary\".",
+       "items": {
+        "description": "One CWE identifier.",
+        "pattern": "^CWE-[0-9]+$",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "dateAdded": {
+       "description": "Date CISA added the entry to the catalog, YYYY-MM-DD.",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "daysUntilDue": {
+       "description": "Whole days from the echoed asOf date to the due date; negative once overdue.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "directive": {
+       "anyOf": [
+        {
+         "enum": [
+          "BOD 26-04",
+          "BOD 22-01"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "The binding operational directive the entry cites, or null when it cites neither \u2014 most entries name none, and none is never inferred from age."
+      },
+      "dueDate": {
+       "description": "Federal remediation deadline CISA assigned, YYYY-MM-DD.",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "forensicTriage": {
+       "description": "Whether the entry falls in the BOD 26-04 three-day forensic-triage tier.",
+       "enum": [
+        "Yes",
+        "No"
+       ],
+       "type": "string"
+      },
+      "inKev": {
+       "description": "Whether the CVE is in the KEV catalog. False is a normal result, not an error.",
+       "type": "boolean"
+      },
+      "kevUrl": {
+       "description": "Absolute URL of the KEV catalog page for this CVE. Absent under detail \"summary\".",
+       "type": "string"
+      },
+      "knownRansomwareCampaignUse": {
+       "description": "Whether CISA has linked the vulnerability to a ransomware campaign. Unknown means no link on record, not that none exists.",
+       "enum": [
+        "Known",
+        "Unknown"
+       ],
+       "type": "string"
+      },
+      "notesCommentary": {
+       "description": "The prose segments of the notes field, verbatim with any URLs they contain; present when the notes carry prose. Absent under detail \"summary\".",
+       "type": "string"
+      },
+      "overdue": {
+       "description": "True when the due date is strictly before the echoed asOf date.",
+       "type": "boolean"
+      },
+      "product": {
+       "description": "CISA's own product label \u2014 free text, not a CPE.",
+       "type": "string"
+      },
+      "references": {
+       "description": "Every reference URL in the notes field, in notes order, each classified by kind. Absent under detail \"summary\".",
+       "items": {
+        "additionalProperties": false,
+        "description": "One reference URL parsed from the entry notes.",
+        "properties": {
+         "kind": {
+          "description": "What the link points at: the NVD detail record, a cisa.gov page, BOD 26-04 guidance, the forensic-triage requirements, a vendor page, or an unclassifiable URL.",
+          "enum": [
+           "nvd",
+           "cisa",
+           "bod_guidance",
+           "forensic_triage",
+           "vendor",
+           "other"
+          ],
+          "type": "string"
+         },
+         "label": {
+          "description": "CISA's own label for the segment, when the notes entry carried one.",
+          "type": "string"
+         },
+         "url": {
+          "description": "Absolute reference URL, verbatim from the notes field.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "kind",
+         "url"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "requiredAction": {
+       "description": "CISA's required-action text for the entry, verbatim. Absent under detail \"summary\".",
+       "type": "string"
+      },
+      "shortDescription": {
+       "description": "CISA's one-paragraph description. Absent under detail \"summary\".",
+       "type": "string"
+      },
+      "vendorProject": {
+       "description": "CISA's own vendor label \u2014 free text, not a CPE vendor component.",
+       "type": "string"
+      },
+      "vulnerabilityName": {
+       "description": "CISA's short name for the vulnerability. Absent under detail \"summary\".",
+       "type": "string"
+      }
+     },
+     "required": [
+      "cveId",
+      "inKev"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Entries returned on this page.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "snapshotCaveat": {
+    "description": "Disclosure that additions are queryable but revisions are not detectable.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Total matches before paging.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "truncated": {
+    "description": "True when the page limit capped this result.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "cisa_search_kev"
+}

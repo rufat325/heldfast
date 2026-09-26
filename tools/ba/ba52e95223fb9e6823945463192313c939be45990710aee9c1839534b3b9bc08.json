@@ -1,0 +1,203 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List the valid values for a specific dimension in a Eurostat dataset (e.g., all unit codes for nama_10_gdp, all geo codes for a regional dataset). Use this when eurostat_get_dataset_info returns more values than the 10-item sample, or to confirm exact codes before querying. For the \"geo\" dimension, use geo_level to filter by NUTS hierarchy (country, nuts1, nuts2, nuts3). An invalid code matches nothing: eurostat_query_dataset names it in unmatchedValues, or in its no_results error when the query matched nothing at all, and Eurostat rejects it as a fault on eurostat_download_dataset; use this tool to verify codes first. At most 2,000 values come back inline \u2014 a longer list, such as the 37,069 CN8 product codes of DS-045409 or a daily time dimension, is cut there and says so. Pass canvas_id to also stage the whole list, whatever its length, as a two-column code/label table on that dataframe canvas: search it with SQL, or join it to a eurostat_download_dataset table, whose columns carry dimension codes only.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Also stage the values on this dataframe canvas as a table with two columns, code and label, holding every value the dimension lists \u2014 past the inline cap too \u2014 at the geo_level requested, country when it is omitted. Pass the canvasId a eurostat_download_dataset or eurostat_query_dataset response returned, then search the staged table with SQL or join it to a download on the dimension column (e.g., d.geo = g.code). Omit to return the values inline only: this tool never starts a canvas. Ignored on deployments without a dataframe canvas.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   },
+   "dataset_code": {
+    "description": "Dataset code (e.g., \"nama_10_gdp\", or \"DS-045409\" for a Comext collection).",
+    "minLength": 1,
+    "type": "string"
+   },
+   "dimension": {
+    "description": "Dimension code to retrieve values for (e.g., \"unit\", \"na_item\", \"geo\"). Use eurostat_get_dataset_info to see available dimensions.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "geo_level": {
+    "description": "NUTS hierarchy level filter \u2014 applies only when dimension is \"geo\"; passing it with any other dimension is rejected. Options: \"aggregate\" (EU/EA codes), \"country\" (2-letter codes, default), \"nuts1\" (3-char), \"nuts2\" (4-char), \"nuts3\" (5-char).",
+    "enum": [
+     "aggregate",
+     "country",
+     "nuts1",
+     "nuts2",
+     "nuts3"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "dataset_code",
+   "dimension"
+  ],
+  "type": "object"
+ },
+ "name": "eurostat_get_dimension_values",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "dimensionCode",
+     "dimensionLabel",
+     "values",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "canvasId": {
+    "description": "Dataframe canvas the values were staged on \u2014 the canvas_id supplied. Omitted when nothing was staged: canvas_id was omitted, this deployment runs without a dataframe canvas, or the dimension lists no values.",
+    "type": "string"
+   },
+   "cap": {
+    "description": "The inline cap applied. Present alongside truncated.",
+    "type": "number"
+   },
+   "dimensionCode": {
+    "description": "The dimension code that was queried.",
+    "type": "string"
+   },
+   "dimensionLabel": {
+    "description": "Human-readable dimension name.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `not_found`: The dataset code or dimension code does not exist. `no_results`: The dataset has no geo values at the effective geo_level. `conflicting_params`: geo_level was combined with a dimension other than \"geo\", where it has no effect. `upstream_fault`: Eurostat returned a dataset structure or content constraint this server cannot read: malformed, truncated, not XML, or missing the requested dataset's dataflow. `canvas_not_found`: A canvas_id was supplied for staging but is unknown or its lifetime has elapsed. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "not_found",
+         "no_results",
+         "conflicting_params",
+         "upstream_fault",
+         "canvas_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "geoLevel": {
+    "description": "Effective NUTS hierarchy level for the geo value set. Present only for the geo dimension; country is reported when geo_level was omitted.",
+    "enum": [
+     "aggregate",
+     "country",
+     "nuts1",
+     "nuts2",
+     "nuts3"
+    ],
+    "type": "string"
+   },
+   "notice": {
+    "description": "Where the values past the inline cap are: the staged table when canvas_id was passed, or how to stage them. Present alongside truncated.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Values returned inline. Present alongside truncated.",
+    "type": "number"
+   },
+   "stagedRowCount": {
+    "description": "Rows written to the canvas table. Equals totalCount. Omitted alongside tableName.",
+    "type": "number"
+   },
+   "tableName": {
+    "description": "Canvas table holding every value as two VARCHAR columns, code and label. Call eurostat_dataframe_describe with canvasId first to confirm it, then join it in eurostat_dataframe_query. Omitted alongside canvasId.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Number of distinct values the dimension lists, after geoLevel filtering for geo \u2014 all of them, including any past the inline cap.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the dimension lists more values than the inline cap and values holds only the first of them. Omitted when values holds every one.",
+    "type": "boolean"
+   },
+   "values": {
+    "description": "Dataset-available values for this dimension, in Eurostat's order \u2014 for geo, the subset at geoLevel. Holds every value up to 2,000; past that, the first 2,000, with truncated set and the whole list on the canvas table when canvas_id was passed.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A dimension value code and label pair.",
+     "properties": {
+      "code": {
+       "description": "Dimension value code. Use these as filter values in eurostat_query_dataset and eurostat_download_dataset.",
+       "type": "string"
+      },
+      "label": {
+       "description": "Human-readable label for this value.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "label"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Eurostat Dimension Values"
+}

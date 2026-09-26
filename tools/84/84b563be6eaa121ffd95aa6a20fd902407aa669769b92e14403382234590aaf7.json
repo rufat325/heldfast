@@ -1,0 +1,606 @@
+{
+ "_meta": {
+  "_fastmcp": {
+   "tags": []
+  },
+  "openai/outputTemplate": "ui://total-parks/result-cards.v3.html",
+  "openai/toolInvocation/invoked": "Rendered result cards.",
+  "openai/toolInvocation/invoking": "Rendering result cards...",
+  "ui": {
+   "resourceUri": "ui://total-parks/result-cards.v3.html"
+  }
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Use this exactly once after the data calls are complete and the host can display MCP Apps UI. Pass search_response for search-only cards, assess_stay_result for one assessed park, or both to render a final stay shortlist: the assessed park's room/site options first, followed by up to three compact planning-level fallback parks from the search. The assess_stay_result must be the park selected as the recommendation in the answer. When the traveller asked for parks near a place or landmark (town, ferry port, airport), recommend the same-tier candidate with the smallest geo matched_signals[].detail.distance_km. Do not recommend a farther park just because it ranks higher on vibe or quality. Optional fallback_property_refs chooses and orders alternatives. Do not call this after each intermediate search or assessment. This tool does not search again, change ranking, create a cart, hold inventory, take payment, or confirm a booking; clients without UI support can ignore it and use the plain structured output from the data tools.",
+ "inputSchema": {
+  "properties": {
+   "assess_stay_result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Prior tp_assess_stay JSON payload. Pass the previous tool result unchanged when rendering the chosen park's room/site cards."
+   },
+   "fallback_limit": {
+    "default": 3,
+    "description": "Maximum compact fallback park cards in a composite stay shortlist. Zero hides fallbacks.",
+    "examples": [
+     3
+    ],
+    "maximum": 3,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "fallback_property_refs": {
+    "anyOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Optional public property_ref values to use as compact fallback cards. Example: ['victoria/big4-aireys-inlet'].",
+    "examples": [
+     [
+      "victoria/big4-aireys-inlet"
+     ]
+    ]
+   },
+   "include_nearby": {
+    "default": false,
+    "description": "When true, include compact nearby fallback park cards in a composite stay shortlist. Default false.",
+    "examples": [
+     false
+    ],
+    "type": "boolean"
+   },
+   "preferred_stay_kind": {
+    "anyOf": [
+     {
+      "enum": [
+       "site",
+       "accommodation"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Optional stay-kind hint for composite shortlists: 'site' for caravan/camping, 'accommodation' for cabins and other roofed stays.",
+    "examples": [
+     "site"
+    ]
+   },
+   "search_response": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Prior tp_search_parks or tp_search_stays JSON payload. Pass the previous tool result unchanged when rendering cards."
+   },
+   "title": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Optional heading for the rendered card set. Example: 'Parks near Lakes Entrance'.",
+    "examples": [
+     "Parks near Lakes Entrance"
+    ]
+   }
+  },
+  "type": "object"
+ },
+ "name": "tp_render_result_cards",
+ "outputSchema": {
+  "properties": {
+   "caveats": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "contract_version": {
+    "const": "mcp_cards.v1",
+    "default": "mcp_cards.v1",
+    "type": "string"
+   },
+   "groups": {
+    "items": {
+     "properties": {
+      "cards": {
+       "items": {
+        "description": "Host-agnostic card contract for MCP Apps result widgets.",
+        "properties": {
+         "availability": {
+          "anyOf": [
+           {
+            "properties": {
+             "label": {
+              "description": "Traveller-facing availability phrase.",
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+             },
+             "tone": {
+              "description": "Presentation tone for the availability pill.",
+              "enum": [
+               "available",
+               "limited",
+               "unavailable"
+              ],
+              "type": "string"
+             }
+            },
+            "required": [
+             "label",
+             "tone"
+            ],
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null
+         },
+         "badges": {
+          "items": {
+           "properties": {
+            "code": {
+             "description": "Stable badge code for host widgets, e.g. instant_book.",
+             "maxLength": 80,
+             "minLength": 1,
+             "type": "string"
+            },
+            "label": {
+             "description": "Short traveller-facing badge label.",
+             "maxLength": 80,
+             "minLength": 1,
+             "type": "string"
+            },
+            "tone": {
+             "default": "neutral",
+             "enum": [
+              "neutral",
+              "success",
+              "warning",
+              "muted"
+             ],
+             "type": "string"
+            }
+           },
+           "required": [
+            "code",
+            "label"
+           ],
+           "type": "object"
+          },
+          "type": "array"
+         },
+         "card_id": {
+          "description": "Stable per-card key suitable for widget rendering.",
+          "minLength": 1,
+          "type": "string"
+         },
+         "caveats": {
+          "description": "Trust caveats that must remain visible near the card.",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "confidence": {
+          "anyOf": [
+           {
+            "enum": [
+             "confirmed",
+             "inferred"
+            ],
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null
+         },
+         "image_alt": {
+          "default": "Holiday park",
+          "description": "Fallback alt text for card images.",
+          "maxLength": 200,
+          "type": "string"
+         },
+         "image_urls": {
+          "description": "Approved public image URLs in display order.",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "location_label": {
+          "anyOf": [
+           {
+            "maxLength": 200,
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Compact traveller-facing location label."
+         },
+         "matched_labels": {
+          "description": "Short match labels safe to render under or beside the card.",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "price": {
+          "anyOf": [
+           {
+            "properties": {
+             "amount_text": {
+              "description": "Formatted hero price amount, e.g. '$58'.",
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+             },
+             "caveat": {
+              "anyOf": [
+               {
+                "maxLength": 500,
+                "type": "string"
+               },
+               {
+                "type": "null"
+               }
+              ],
+              "default": null,
+              "description": "Optional price recheck caveat to preserve search trust copy."
+             },
+             "qualifier": {
+              "default": "from",
+              "maxLength": 40,
+              "type": "string"
+             },
+             "stay_kind": {
+              "enum": [
+               "site",
+               "accommodation"
+              ],
+              "type": "string"
+             },
+             "suffix": {
+              "default": "/night",
+              "maxLength": 40,
+              "type": "string"
+             }
+            },
+            "required": [
+             "amount_text",
+             "stay_kind"
+            ],
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null
+         },
+         "primary_cta": {
+          "properties": {
+           "kind": {
+            "default": "primary",
+            "enum": [
+             "primary",
+             "secondary"
+            ],
+            "type": "string"
+           },
+           "label": {
+            "type": "string"
+           },
+           "tool_hint": {
+            "anyOf": [
+             {
+              "type": "string"
+             },
+             {
+              "type": "null"
+             }
+            ],
+            "default": null,
+            "description": "Optional MCP tool name that should usually precede this CTA."
+           },
+           "url": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "label",
+           "url"
+          ],
+          "type": "object"
+         },
+         "property_ref": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Public property reference accepted by MCP tools."
+         },
+         "rating": {
+          "anyOf": [
+           {
+            "properties": {
+             "label": {
+              "description": "Formatted compact rating label, e.g. '4.7 (128)'.",
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+             },
+             "review_count": {
+              "anyOf": [
+               {
+                "minimum": 0,
+                "type": "integer"
+               },
+               {
+                "type": "null"
+               }
+              ],
+              "default": null
+             },
+             "value": {
+              "description": "Star rating value.",
+              "maximum": 5,
+              "minimum": 0,
+              "type": "number"
+             }
+            },
+            "required": [
+             "value",
+             "label"
+            ],
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null
+         },
+         "room_type_ref": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Public room/site reference accepted by MCP tools."
+         },
+         "secondary_ctas": {
+          "items": {
+           "properties": {
+            "kind": {
+             "default": "primary",
+             "enum": [
+              "primary",
+              "secondary"
+             ],
+             "type": "string"
+            },
+            "label": {
+             "type": "string"
+            },
+            "tool_hint": {
+             "anyOf": [
+              {
+               "type": "string"
+              },
+              {
+               "type": "null"
+              }
+             ],
+             "default": null,
+             "description": "Optional MCP tool name that should usually precede this CTA."
+            },
+            "url": {
+             "type": "string"
+            }
+           },
+           "required": [
+            "label",
+            "url"
+           ],
+           "type": "object"
+          },
+          "type": "array"
+         },
+         "source": {
+          "description": "Source payload type used to build the card.",
+          "enum": [
+           "search_candidate",
+           "assess_stay_option"
+          ],
+          "type": "string"
+         },
+         "subtitle": {
+          "anyOf": [
+           {
+            "maxLength": 200,
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null,
+          "description": "Optional second-line card label."
+         },
+         "tier": {
+          "anyOf": [
+           {
+            "enum": [
+             "bookable",
+             "likely",
+             "discovery"
+            ],
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null
+         },
+         "tier_label": {
+          "anyOf": [
+           {
+            "maxLength": 80,
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "default": null
+         },
+         "title": {
+          "description": "Primary card title.",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+         }
+        },
+        "required": [
+         "card_id",
+         "source",
+         "title",
+         "primary_cta"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "description": {
+       "anyOf": [
+        {
+         "maxLength": 300,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null
+      },
+      "key": {
+       "maxLength": 80,
+       "minLength": 1,
+       "type": "string"
+      },
+      "label": {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      "layout": {
+       "anyOf": [
+        {
+         "enum": [
+          "carousel",
+          "grid",
+          "compact"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Optional group-specific layout. When omitted, the card list's top-level layout applies."
+      }
+     },
+     "required": [
+      "key",
+      "label"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "layout": {
+    "default": "carousel",
+    "description": "How a visual host should arrange the groups. 'carousel' peeks a horizontal scroll row (multi-park search); 'grid' wraps every card into view (single-park stay assessments) so no option is hidden.",
+    "enum": [
+     "carousel",
+     "grid"
+    ],
+    "type": "string"
+   },
+   "title": {
+    "anyOf": [
+     {
+      "maxLength": 200,
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null
+   },
+   "warnings": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Render Total Parks result cards"
+}

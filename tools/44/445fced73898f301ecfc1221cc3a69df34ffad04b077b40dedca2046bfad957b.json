@@ -1,0 +1,282 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Look up registration and ownership via RDAP (structured JSON), with a WHOIS fallback for TLDs without RDAP or when RDAP is unresponsive. For a domain it returns registrar, status codes, creation/expiry/updated events, nameservers, and DNSSEC; for an IP or CIDR it returns the netblock name, allocation CIDRs, origin ASN, and country. Registry data is frequently redacted or sparse \u2014 absent fields are reported as unknown, never inferred. Use only on assets you own or are authorized to assess.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "target": {
+    "description": "A domain (e.g. \"example.com\"), an IP (e.g. \"8.8.8.8\"), or a CIDR (e.g. \"8.8.8.0/24\").",
+    "type": "string"
+   },
+   "type": {
+    "default": "auto",
+    "description": "Force the target interpretation, or \"auto\" to detect domain vs IP/CIDR.",
+    "enum": [
+     "auto",
+     "domain",
+     "ip"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "target"
+  ],
+  "type": "object"
+ },
+ "name": "attacksurface_lookup_registration",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "source",
+     "registration",
+     "rawWhois",
+     "notes"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_target`: The target is not a valid domain, IP, or CIDR. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_target"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notes": {
+    "description": "Notes such as RDAP-timeout-then-WHOIS-fallback.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "rawWhois": {
+    "description": "Raw WHOIS text when the WHOIS fallback answered, else null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "registration": {
+    "description": "The parsed registration record (domain or IP).",
+    "oneOf": [
+     {
+      "additionalProperties": false,
+      "description": "Domain registration record (RDAP or WHOIS).",
+      "properties": {
+       "dnssecSigned": {
+        "description": "Whether DNSSEC is signed, when reported.",
+        "type": "boolean"
+       },
+       "events": {
+        "description": "Registration lifecycle events.",
+        "items": {
+         "additionalProperties": false,
+         "description": "A registration lifecycle event.",
+         "properties": {
+          "action": {
+           "description": "Event action (e.g. \"registration\", \"expiration\", \"last changed\").",
+           "type": "string"
+          },
+          "date": {
+           "description": "Event timestamp (ISO 8601 when from RDAP; raw when from WHOIS).",
+           "type": "string"
+          }
+         },
+         "required": [
+          "action",
+          "date"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "kind": {
+        "const": "domain",
+        "description": "Discriminator: domain registration record.",
+        "type": "string"
+       },
+       "nameservers": {
+        "description": "Nameserver hostnames.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "registrar": {
+        "description": "Registrar name, when disclosed.",
+        "type": "string"
+       },
+       "statuses": {
+        "description": "Registry/EPP status codes.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "target": {
+        "description": "Domain queried.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "target",
+       "statuses",
+       "events",
+       "nameservers"
+      ],
+      "type": "object"
+     },
+     {
+      "additionalProperties": false,
+      "description": "IP/netblock registration record (RDAP or WHOIS).",
+      "properties": {
+       "cidrs": {
+        "description": "Allocation CIDR(s) for the netblock.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "country": {
+        "description": "Two-letter country code, when present (often null at the registry).",
+        "type": "string"
+       },
+       "events": {
+        "description": "Network lifecycle events.",
+        "items": {
+         "additionalProperties": false,
+         "description": "A registration lifecycle event.",
+         "properties": {
+          "action": {
+           "description": "Event action (e.g. \"registration\", \"expiration\", \"last changed\").",
+           "type": "string"
+          },
+          "date": {
+           "description": "Event timestamp (ISO 8601 when from RDAP; raw when from WHOIS).",
+           "type": "string"
+          }
+         },
+         "required": [
+          "action",
+          "date"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "kind": {
+        "const": "ip",
+        "description": "Discriminator: IP/netblock registration record.",
+        "type": "string"
+       },
+       "networkName": {
+        "description": "Network/handle name, when present.",
+        "type": "string"
+       },
+       "originAsns": {
+        "description": "Origin AS number(s), when present.",
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       "statuses": {
+        "description": "Registry status codes.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "target": {
+        "description": "IP or CIDR queried.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "target",
+       "cidrs",
+       "originAsns",
+       "statuses",
+       "events"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "source": {
+    "description": "Which source answered the lookup.",
+    "enum": [
+     "rdap",
+     "whois"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "attacksurface_lookup_registration"
+}

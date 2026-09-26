@@ -1,0 +1,554 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get a user's AniList anime or manga list. Returns a compact table of one row per entry by default (`format: \"compact\"`) \u2014 entry id, media id, MAL id, status, score, progress and title, which is what a sync, comparison or pick-something-to-watch task needs; switch to `format: \"full\"` only when you actually need dates, notes, custom lists, advanced scores or the status/custom-list grouping, since that response is roughly ten times larger per entry. Filter server-side with `statuses` rather than fetching everything and discarding \u2014 asking for just CURRENT costs a fraction of a whole-list read. Works for any public/unlisted user. Accepts an exact AniList username directly \u2014 no need to call search_user first unless you only have a partial/fuzzy name. Paginated by `chunk`/`perChunk` (AniList's own mechanism for this \u2014 counted across entries of ALL statuses combined, not per status), since a large list can otherwise return thousands of entries in one response; check `hasNextChunk` and increment `chunk` to keep paging. `perChunk` itself has no cap \u2014 AniList accepts values in the thousands, so raise it to pull a whole list in one call instead of paging through it. The collection AniList exposes here is capped at its ~11,000 most recently updated unique entries \u2014 irrelevant for virtually every account, but a hard ceiling if one is ever hit (older entries beyond it aren't retrievable through this field at all, by any chunk).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "chunk": {
+    "default": 1,
+    "description": "Chunk number for pagination (AniList paginates this list by chunk, not page).",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "format": {
+    "default": "compact",
+    "description": "How much of each entry to return. `compact` (default) is a tab-separated table of entry id, media id, MAL id, status, score (0-10), progress and title, one de-duplicated row per entry \u2014 enough for syncing, comparing or choosing, at about a tenth the size. `full` returns AniList's own grouped objects with dates, notes, repeat/priority, custom lists and advanced scores; use it only when you need one of those, or when you need to know which custom list an entry is filed under (`compact` drops the grouping \u2014 every row still carries its own status).",
+    "enum": [
+     "compact",
+     "full"
+    ],
+    "type": "string"
+   },
+   "perChunk": {
+    "default": 25,
+    "description": "Entries per chunk, counted across all statuses combined. Defaults to 25 so an unattended call stays small, but nothing caps it \u2014 pass a larger value (AniList accepts values in the thousands) to pull a whole list in one call instead of paging. Each entry carries its dates, notes, custom lists and advanced scores, so a few hundred entries is already a large response.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "statuses": {
+    "description": "Only return entries with these statuses (AniList filters server-side, so this genuinely shrinks the response \u2014 prefer it over fetching the whole list and discarding). Omit for every status. Custom-list groups are still returned in `full` when their entries match.",
+    "items": {
+     "enum": [
+      "CURRENT",
+      "PLANNING",
+      "COMPLETED",
+      "DROPPED",
+      "PAUSED",
+      "REPEATING"
+     ],
+     "type": "string"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "type": {
+    "description": "Whether to get the anime or manga list.",
+    "enum": [
+     "ANIME",
+     "MANGA"
+    ],
+    "type": "string"
+   },
+   "user": {
+    "anyOf": [
+     {
+      "exclusiveMinimum": 0,
+      "maximum": 2147483647,
+      "type": "integer"
+     },
+     {
+      "minLength": 1,
+      "type": "string"
+     }
+    ],
+    "description": "AniList user ID, or username."
+   }
+  },
+  "required": [
+   "type",
+   "user"
+  ],
+  "type": "object"
+ },
+ "name": "get_user_list",
+ "outputSchema": {
+  "$defs": {
+   "__schema0": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "number"
+     },
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     },
+     {
+      "items": {
+       "$ref": "#/$defs/__schema0"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {
+       "$ref": "#/$defs/__schema0"
+      },
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     }
+    ]
+   }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "columns": {
+    "description": "`compact` only: the tab-separated column names for `rows`, in order.",
+    "type": "string"
+   },
+   "count": {
+    "description": "`compact` only: how many unique entries `rows` contains.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "format": {
+    "description": "Which shape this response is in \u2014 echoes the `format` argument.",
+    "enum": [
+     "compact",
+     "full"
+    ],
+    "type": "string"
+   },
+   "hasNextChunk": {
+    "description": "True if another `chunk` of this list is available.",
+    "type": [
+     "boolean",
+     "null"
+    ]
+   },
+   "lists": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "entries": {
+         "anyOf": [
+          {
+           "items": {
+            "additionalProperties": {},
+            "properties": {
+             "advancedScores": {
+              "anyOf": [
+               {
+                "$ref": "#/$defs/__schema0"
+               },
+               {
+                "type": "null"
+               }
+              ],
+              "description": "Per-category advanced scores as AniList actually stores them \u2014 an untyped value (the write side takes a plain {category: score} map via add_list_entry/update_list_entry's `advancedScores`, but the echoed read-back shape isn't guaranteed to match it)."
+             },
+             "completedAt": {
+              "anyOf": [
+               {
+                "additionalProperties": {},
+                "properties": {
+                 "day": {
+                  "anyOf": [
+                   {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 },
+                 "month": {
+                  "anyOf": [
+                   {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 },
+                 "year": {
+                  "anyOf": [
+                   {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 }
+                },
+                "type": "object"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "createdAt": {
+              "anyOf": [
+               {
+                "minimum": 0,
+                "type": "number"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "customLists": {
+              "anyOf": [
+               {
+                "items": {
+                 "additionalProperties": {},
+                 "properties": {
+                  "enabled": {
+                   "type": [
+                    "boolean",
+                    "null"
+                   ]
+                  },
+                  "name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  }
+                 },
+                 "type": "object"
+                },
+                "type": "array"
+               },
+               {
+                "type": "null"
+               }
+              ],
+              "description": "Every custom list configured on the account, with `enabled` showing whether THIS entry is filed under it. Naming a list here (via add_list_entry/update_list_entry) that isn't already in the account's `animeListOptions`/`mangaListOptions` `customLists` is silently a no-op on write \u2014 the list must exist first."
+             },
+             "hiddenFromStatusLists": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "id": {
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647,
+              "type": "integer"
+             },
+             "media": {
+              "anyOf": [
+               {
+                "additionalProperties": {},
+                "properties": {
+                 "chapters": {
+                  "anyOf": [
+                   {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 },
+                 "episodes": {
+                  "anyOf": [
+                   {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 },
+                 "id": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647,
+                  "type": "integer"
+                 },
+                 "idMal": {
+                  "anyOf": [
+                   {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 },
+                 "siteUrl": {
+                  "anyOf": [
+                   {
+                    "format": "uri",
+                    "type": "string"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 },
+                 "title": {
+                  "anyOf": [
+                   {
+                    "additionalProperties": false,
+                    "properties": {
+                     "english": {
+                      "type": [
+                       "string",
+                       "null"
+                      ]
+                     },
+                     "romaji": {
+                      "type": [
+                       "string",
+                       "null"
+                      ]
+                     }
+                    },
+                    "type": "object"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 }
+                },
+                "required": [
+                 "id"
+                ],
+                "type": "object"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "notes": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "priority": {
+              "anyOf": [
+               {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "private": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "progress": {
+              "anyOf": [
+               {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "progressVolumes": {
+              "anyOf": [
+               {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "repeat": {
+              "anyOf": [
+               {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "score": {
+              "anyOf": [
+               {
+                "minimum": 0,
+                "type": "number"
+               },
+               {
+                "type": "null"
+               }
+              ],
+              "description": "This user's own score for the entry, on a 0-10 scale (decimals allowed). It stays 0-10 on every account whatever the configured scoreFormat is, and matches the scale add_list_entry/update_list_entry take on write. This is NOT the 0-100 scale `averageScore`/`meanScore`/search_media's `averageScore_greater` filter use."
+             },
+             "startedAt": {
+              "anyOf": [
+               {
+                "additionalProperties": {},
+                "properties": {
+                 "day": {
+                  "anyOf": [
+                   {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 },
+                 "month": {
+                  "anyOf": [
+                   {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 },
+                 "year": {
+                  "anyOf": [
+                   {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                   },
+                   {
+                    "type": "null"
+                   }
+                  ]
+                 }
+                },
+                "type": "object"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "status": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "updatedAt": {
+              "anyOf": [
+               {
+                "minimum": 0,
+                "type": "number"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             }
+            },
+            "required": [
+             "id"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "isCustomList": {
+         "type": [
+          "boolean",
+          "null"
+         ]
+        },
+        "isSplitCompletedList": {
+         "type": [
+          "boolean",
+          "null"
+         ]
+        },
+        "name": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "status": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "`full` only: AniList's own status/custom-list groups, with full entries."
+   },
+   "rows": {
+    "description": "`compact` only: one tab-separated row per entry, newline-separated, matching `columns`. An empty cell means AniList has no value for that field (e.g. no MAL id); a score of 0 means unscored.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "format"
+  ],
+  "type": "object"
+ },
+ "title": "Get a user's anime or manga list"
+}

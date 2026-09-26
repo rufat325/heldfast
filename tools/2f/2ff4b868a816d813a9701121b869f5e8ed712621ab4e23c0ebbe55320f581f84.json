@@ -1,0 +1,323 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search EU legislation, treaties, and preparatory acts across the CELLAR corpus by document type, date range, EuroVoc subject, author institution, and in-force status. Keyword matches English titles and CELEX strings only \u2014 there is no full-text body search. Corrigenda are excluded by default so primary acts fill the page (set include_corrigenda to include them). Returns a page of CELEX numbers, work URIs, type labels, dates, and titles, newest first, each flagged with is_consolidated and is_corrigendum. At least one filter is required.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "author_institution": {
+    "description": "Author institution name (e.g. \"European Parliament\", \"Council\", \"European Commission\"), matched against the English names of EU corporate bodies.",
+    "type": "string"
+   },
+   "date_from": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Start date in ISO 8601 format (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Start of date range (YYYY-MM-DD), matched against document date. Omit for no lower bound."
+   },
+   "date_to": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "End date in ISO 8601 format (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "End of date range (YYYY-MM-DD), matched against document date. Omit for no upper bound."
+   },
+   "document_type": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Document type: REG=Regulation, DIR=Directive, DEC=Decision, TREATY=Treaty, JUDG=Judgment, OPIN_AG=AG Opinion, PROP=Proposal, REC=Recommendation.",
+      "enum": [
+       "REG",
+       "DIR",
+       "DEC",
+       "TREATY",
+       "JUDG",
+       "OPIN_AG",
+       "PROP",
+       "REC"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "Document category: REG=Regulations, DIR=Directives, DEC=Decisions, TREATY=Treaties, JUDG=Judgments, OPIN_AG=AG Opinions, PROP=Proposals, REC=Recommendations. Each category includes its explicit CELLAR authority variants (for example, delegated and implementing regulations). Omit to search all types. Consolidated texts are excluded unless include_consolidated is true."
+   },
+   "eurovoc_concept": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "EuroVoc concept URI (e.g. http://eurovoc.europa.eu/2828).",
+      "type": "string"
+     }
+    ],
+    "description": "EuroVoc concept URI to filter by subject (e.g. http://eurovoc.europa.eu/2828), obtained from eurlex_browse_subjects. Omit for no subject filter."
+   },
+   "in_force": {
+    "description": "Restrict by in-force status: true returns only acts currently in force; false returns acts not in force \u2014 repealed, expired, or not yet in force (eurlex_get_document names which, where CELLAR records one). Either way the act must carry the in-force property, which a minority of works do. Omit to return all regardless of in-force status.",
+    "type": "boolean"
+   },
+   "include_consolidated": {
+    "default": false,
+    "description": "When true and document_type is set, also match consolidated texts whose basic act belongs to that document category. No effect when document_type is omitted. Consolidated rows are always tagged is_consolidated: true.",
+    "type": "boolean"
+   },
+   "include_corrigenda": {
+    "default": false,
+    "description": "Include corrigenda \u2014 separate correction works, co-typed CORRIGENDUM alongside the base type of the act they correct, carrying a \"\u2026R(nn)\" CELEX and usually no English title. Default false: they are excluded so primary acts fill the page. Every returned row is tagged is_corrigendum.",
+    "type": "boolean"
+   },
+   "keyword": {
+    "description": "Keyword matched against English document titles via the full-text index (multi-word input is treated as a phrase), and against CELEX numbers. A keyword that is a whole CELEX (e.g. 32016R0679) matches that document, its numbered siblings (\u2026(01) to \u2026(20)), and for case law its _INF, _RES, _SUM, and _EXT records, plus its corrigenda (\u2026R(01) to \u2026R(20), and any work recorded as correcting it) when include_corrigenda is set. A partial CELEX that opens with the sector and year (02016R0679), the year and type letters (2016R0679), or type letters followed by the number (R0679, J0131) matches every CELEX that holds it at that position, consolidated versions included; one opening with letters not followed by a digit (R(01), ROU_2024) or with a year and a slash (2024/01469) tests every CELEX and can take tens of seconds; a bare year (2016) or a fragment opening mid-year or mid-number (016R0679, 0679, 0679R) matches titles only. A keyword with no digit, or with a character no CELEX holds (a space, a period), matches titles only. A keyword with no letter or digit is rejected.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Maximum number of results to return (1\u2013100). Defaults to 20.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Pagination offset \u2014 number of results to skip. Defaults to 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "eurlex_search_documents",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "documents",
+     "total",
+     "offset",
+     "has_more",
+     "query_echo"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit that was applied to this page.",
+    "type": "number"
+   },
+   "documents": {
+    "description": "Matching EU documents ordered by date descending, then by CELEX number ascending among documents sharing a date, so pages are stable across calls.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single EU legislative work with its CELEX number, type, and date.",
+     "properties": {
+      "celex_number": {
+       "description": "CELEX identifier for the work.",
+       "type": "string"
+      },
+      "date": {
+       "description": "Document date in ISO 8601 format (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "is_consolidated": {
+       "description": "True when this CELEX is a consolidated version (sector 0, e.g. 02016R0679-20160504) \u2014 a point-in-time text that incorporates amendments \u2014 rather than a base or amending act.",
+       "type": "boolean"
+      },
+      "is_corrigendum": {
+       "description": "True when this work carries the CORRIGENDUM resource-type \u2014 a correction to another act rather than a primary act. Only ever true when include_corrigenda is set, since corrigenda are excluded by default.",
+       "type": "boolean"
+      },
+      "resource_type": {
+       "description": "Human-readable document type label (e.g. \"Regulation\", \"Directive\"). Works with several resource-types (e.g. corrigenda) list all, comma-separated. Absent for some older works.",
+       "type": "string"
+      },
+      "title": {
+       "description": "English expression title where available; absent for many older works and judgments.",
+       "type": "string"
+      },
+      "work_uri": {
+       "description": "CELLAR work URI (stable resource identifier).",
+       "type": "string"
+      }
+     },
+     "required": [
+      "work_uri",
+      "celex_number",
+      "is_consolidated",
+      "is_corrigendum"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_filters`: No effective narrowing filter was supplied \u2014 an unfiltered search would scan the entire corpus. `invalid_date_range`: date_from or date_to is not a real calendar date, or date_from falls after date_to. `invalid_author_institution`: author_institution holds no letters or digits, so it can name no institution. `invalid_keyword`: keyword holds no letters or digits, so no title and no CELEX can match it. `sparql_error`: Virtuoso returned HTTP 200 with an error body \u2014 query malformed or timed out. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_filters",
+         "invalid_date_range",
+         "invalid_author_institution",
+         "invalid_keyword",
+         "sparql_error"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "has_more": {
+    "description": "True only when CELLAR returned an additional valid row beyond this page.",
+    "type": "boolean"
+   },
+   "next_offset": {
+    "description": "Offset for the next page. Present only when has_more is true.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance for the next call: on an empty first page, the filters that matched nothing and how to broaden them; on a page with more rows, the offset to continue from.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Pagination offset used for this response.",
+    "type": "number"
+   },
+   "query_echo": {
+    "additionalProperties": false,
+    "description": "Echo of filters applied to this search. Useful for diagnosing empty results.",
+    "properties": {
+     "author_institution": {
+      "description": "Author institution filter applied.",
+      "type": "string"
+     },
+     "date_from": {
+      "description": "Start date filter applied.",
+      "type": "string"
+     },
+     "date_to": {
+      "description": "End date filter applied.",
+      "type": "string"
+     },
+     "document_type": {
+      "description": "Document type filter applied.",
+      "type": "string"
+     },
+     "eurovoc_concept": {
+      "description": "EuroVoc concept URI filter applied.",
+      "type": "string"
+     },
+     "in_force": {
+      "description": "In-force filter applied.",
+      "type": "boolean"
+     },
+     "include_consolidated": {
+      "description": "Effective include_consolidated value after the false default is applied \u2014 whether consolidated texts whose basic act belongs to the document_type category were included. Always present, since the default shapes which records can appear; has effect only when document_type is set.",
+      "type": "boolean"
+     },
+     "include_corrigenda": {
+      "description": "Effective include_corrigenda value after the false default is applied \u2014 whether corrigenda were admitted alongside primary acts. Always present, since the default shapes which records can appear.",
+      "type": "boolean"
+     },
+     "keyword": {
+      "description": "Keyword filter applied.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "include_consolidated",
+     "include_corrigenda"
+    ],
+    "type": "object"
+   },
+   "shown": {
+    "description": "Number of documents returned in this page.",
+    "type": "number"
+   },
+   "total": {
+    "description": "Number of documents returned in this page (not a corpus-wide count).",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when an additional CELLAR row proves more documents exist beyond this page.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search EU Documents"
+}

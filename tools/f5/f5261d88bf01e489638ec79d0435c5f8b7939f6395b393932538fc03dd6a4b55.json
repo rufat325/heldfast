@@ -1,0 +1,203 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Record screen"
+ },
+ "description": "Create a screen-recording clip in a project. Creates blank placeholder clips, registers\njob entities, and sends the job to AVS.\n\nThe blank clips this tool creates are placeholders; they become video clips\nwhen processing completes, so removing one loses that scene. Article placeholders are also inserted\nautomatically into plainDoc.\n\nRequires the Auto-Recording add-on and per-workspace sign-in credentials for\nthe product being recorded. Workspaces without it get back the manual path\ninstead (upload_file, then add_clips(kind='video')) rather than a failure.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "article_script_mode": {
+    "description": "'exact': the article is used word for word. 'rewrite': the article may be reworded to match the recording. Overrides exact_article_script when both are set.",
+    "enum": [
+     "rewrite",
+     "exact"
+    ],
+    "type": "string"
+   },
+   "chat_id": {
+    "description": "Conversation context ID",
+    "type": "string"
+   },
+   "custom_instructions": {
+    "default": "",
+    "description": "Optional per-recording instructions (e.g. \"select project X\", \"add rectangle 200x100\"). Not related to mocking.",
+    "type": "string"
+   },
+   "edit_scene_ids": {
+    "description": "The clip id(s) this edit replaces. Only used when recording_session_id is set; scenes you do not name are not re-filmed. Set preceding_clip_id to the clip you are replacing \u2014 an edit naming a clip that is not in the guide is refused rather than appended to the end.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "exact_article_script": {
+    "default": false,
+    "description": "Legacy flag \u2014 prefer article_script_mode instead. Set to true when the article must be used exactly as written \u2014 the agent that does the recording will not reword, rephrase, or rewrite article_script at all. Default false.",
+    "type": "boolean"
+   },
+   "exact_video_script": {
+    "default": false,
+    "description": "Legacy flag \u2014 prefer video_script_mode instead. Set to true when the video narration must be used exactly as written \u2014 the agent that does the recording will not reword, rephrase, or rewrite video_script at all. Default false.",
+    "type": "boolean"
+   },
+   "guide_id": {
+    "description": "Target guide ID",
+    "type": "string"
+   },
+   "language": {
+    "default": "en",
+    "description": "Language code for the recording (default: en)",
+    "type": "string"
+   },
+   "preceding_clip_id": {
+    "description": "Clip ID after which to insert the new clip",
+    "type": "string"
+   },
+   "recording_session_id": {
+    "description": "EDIT an existing recording instead of shooting a new one. Pass the recording_session_id from the record_screen that made it, or read it off get_clip. The recorder restores that take's code, notes and click script and changes only what you ask for, which is far faster and cheaper than re-recording. Omit for a fresh recording. Only code-wizard recordings are editable; get_clip omits the field for any clip that is not.",
+    "type": "string"
+   },
+   "scenes": {
+    "description": "REQUIRED \u2014 the recording to make, as a list of scenes. This is the ONLY way to specify what to record. A normal single recording is exactly ONE scene; a code-wizard multi-scene / marketing video is N scenes (one clip per scene, and ALL cuts of one video go in a SINGLE record_screen call). A narrated scene REQUIRES a non-empty narration_script; a b-roll scene is silent (no narration, no article). A cut that starts somewhere disconnected is just a scene with entry.mode \"fresh\". Cleopatra orgs accept exactly ONE narrated scene. Do not set scene_id \u2014 it is assigned server-side.",
+    "items": {
+     "properties": {
+      "article_script": {
+       "description": "Article text written into the written guide for this scene.",
+       "type": "string"
+      },
+      "article_script_mode": {
+       "description": "How the article is treated for this scene. Overrides the top-level setting for this scene.",
+       "enum": [
+        "rewrite",
+        "exact"
+       ],
+       "type": "string"
+      },
+      "clip_name": {
+       "description": "Title for the clip this scene produces.",
+       "type": "string"
+      },
+      "custom_instructions": {
+       "description": "Extra guidance for recording this scene only, e.g. 'select project X' or 'scroll to the pricing table'.",
+       "type": "string"
+      },
+      "description": {
+       "description": "What should happen on screen during this scene.",
+       "type": "string"
+      },
+      "entry": {
+       "description": "How this scene begins relative to the preceding one.",
+       "properties": {
+        "mode": {
+         "description": "'fresh' (default) or 'continue' \u2014 how this scene begins relative to the previous one. Consumed by AVS (contract: MULTI_VIDEO_MODE_CONTRACT.md in gigauser-backend-prod).",
+         "enum": [
+          "fresh",
+          "continue"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "mode"
+       ],
+       "type": "object"
+      },
+      "exact_article_script": {
+       "description": "Legacy flag \u2014 prefer article_script_mode instead. When true, article_script for this scene is used verbatim and left unreworded. Overrides the top-level setting for this scene.",
+       "type": "boolean"
+      },
+      "exact_video_script": {
+       "description": "Legacy flag \u2014 prefer video_script_mode instead. When true, narration_script for this scene is used verbatim and left unreworded. Overrides the top-level setting for this scene.",
+       "type": "boolean"
+      },
+      "exit": {
+       "description": "How this scene ends.",
+       "properties": {
+        "mode": {
+         "description": "'hard' (default), 'hold' or 'freeze' \u2014 how this scene ends. Consumed by AVS (contract: MULTI_VIDEO_MODE_CONTRACT.md in gigauser-backend-prod).",
+         "enum": [
+          "hard",
+          "hold",
+          "freeze"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "mode"
+       ],
+       "type": "object"
+      },
+      "narration_script": {
+       "description": "Voiceover text spoken over this scene. Required for a narrated scene, omitted for b-roll.",
+       "type": "string"
+      },
+      "pace": {
+       "description": "b-roll scenes ONLY \u2014 set to null on narrated scenes by the normalizer, so it has no effect there. Controls how long the scene dwells ('quick' | 'normal' | 'hold'); absent means unset, not 'normal'.",
+       "enum": [
+        "quick",
+        "normal",
+        "hold"
+       ],
+       "type": "string"
+      },
+      "type": {
+       "description": "Scene kind. 'narrated' carries a voiceover and requires narration_script; 'b-roll' is silent footage with no narration or article.",
+       "enum": [
+        "narrated",
+        "b-roll"
+       ],
+       "type": "string"
+      },
+      "video_script_mode": {
+       "description": "How the narration is treated for this scene. Overrides the top-level setting for this scene.",
+       "enum": [
+        "rewrite",
+        "near_exact",
+        "exact"
+       ],
+       "type": "string"
+      },
+      "voice_engine": {
+       "description": "Speech engine used to render this scene's voice.",
+       "type": "string"
+      },
+      "voice_name": {
+       "description": "Voice to narrate this scene, from find(type='voices').",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "video_intention": {
+    "default": "",
+    "description": "One-line intent shared across all scenes of a multi-scene recording (e.g. \"punchy 30s launch teaser for feature X\"). Ignored for single-scene recordings.",
+    "type": "string"
+   },
+   "video_script_mode": {
+    "description": "How the narration is treated. 'exact': the user's narration is final and is read word for word; steps the script does not mention play silently. 'near_exact': keep the user's narration word for word, but briefly narrate steps the recording must take that the script does not mention (for example opening a settings dialog to reach something) \u2014 use this when the user gives a finished script and did not ask for strictly exact wording. 'rewrite': the narration is a draft and may be reworded to match what was recorded \u2014 use this when there is no user script or it is rough. Overrides exact_video_script when both are set.",
+    "enum": [
+     "rewrite",
+     "near_exact",
+     "exact"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "guide_id",
+   "chat_id",
+   "preceding_clip_id",
+   "scenes"
+  ],
+  "type": "object"
+ },
+ "name": "record_screen",
+ "title": "Record screen"
+}

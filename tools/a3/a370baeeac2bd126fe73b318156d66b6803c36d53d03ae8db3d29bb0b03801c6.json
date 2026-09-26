@@ -1,0 +1,539 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Ranked unified search for equivalent terms across multiple medical terminologies.\n\nUse this tool to:\n- Find the same concept in different coding systems\n- Compare how terminologies represent a concept\n- Support terminology mapping and data integration\n\nSearches across: ICD-11, SNOMED CT, LOINC, RxNorm, and MeSH. Set `target_terminologies` to limit which are searched, or set `source_terminology` to exclude one (e.g. when you already have a code from that terminology and want equivalents elsewhere). The two combine: source is subtracted from targets. `limit` caps candidates per terminology (default 5, max 10).\n\nEvery candidate carries `match_score` (lexical similarity to the search term, 0-1) and `rank` (global position across all searched terminologies) \u2014 both computed by this server, since upstreams don't expose comparable relevance scores. Candidates from different terminologies whose titles are lexically identical are clustered in `groups` \u2014 a strong same-concept signal (absence of a group is NOT evidence of non-equivalence).\n\nSearches upstreams in English. For official pt-BR content, use the dedicated tools: `icd11_search`/`mesh_search` accept `language: \"pt\"`, and `cid10_search` is natively Portuguese.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "limit": {
+    "description": "Maximum candidates returned PER terminology (1-10, default 5). This is a cap, not a page: the live fan-out has no stable cursor across five upstreams, so raise the limit instead of paging.",
+    "maximum": 10,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "source_terminology": {
+    "description": "If set, this terminology is excluded from the search. Use this when the term came from this terminology and you want equivalents in the others. Combines with target_terminologies by subtraction (source is removed from the target list).",
+    "enum": [
+     "icd11",
+     "snomed",
+     "loinc",
+     "rxnorm",
+     "mesh"
+    ],
+    "type": "string"
+   },
+   "target_terminologies": {
+    "description": "Limit the search to these terminologies. If omitted, all five are searched.",
+    "items": {
+     "enum": [
+      "icd11",
+      "snomed",
+      "loinc",
+      "rxnorm",
+      "mesh"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "term": {
+    "description": "Medical term to search (e.g., \"diabetes\", \"aspirin\")",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "term"
+  ],
+  "type": "object"
+ },
+ "name": "find_equivalent",
+ "outputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "attribution": {
+    "description": "Canonical source URLs of this response (attribution list)",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "groups": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "members": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "code": {
+          "type": "string"
+         },
+         "match_score": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+         },
+         "terminology": {
+          "enum": [
+           "icd11",
+           "snomed",
+           "loinc",
+           "rxnorm",
+           "mesh"
+          ],
+          "type": "string"
+         },
+         "title": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "terminology",
+         "code",
+         "title",
+         "match_score"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "normalized_title": {
+       "type": "string"
+      },
+      "terminologies": {
+       "items": {
+        "enum": [
+         "icd11",
+         "snomed",
+         "loinc",
+         "rxnorm",
+         "mesh"
+        ],
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "normalized_title",
+      "terminologies",
+      "members"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "provenance": {
+    "description": "One provenance block per upstream source that contributed to this response (contract v1.0; licenses are never merged)",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "citation": {
+       "description": "Ready-to-use citation/attribution string",
+       "type": "string"
+      },
+      "data_vintage": {
+       "description": "Version/release of the data as exposed by the source; null when not exposed",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "license": {
+       "description": "License / legal regime of the data",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "retrieved_at": {
+       "description": "Real instant of the upstream extraction (ISO-8601, UTC). Responses served from cache keep the ORIGINAL fetch instant.",
+       "type": "string"
+      },
+      "source": {
+       "description": "Official upstream source of this data",
+       "type": "string"
+      },
+      "source_url": {
+       "description": "Canonical URL of the source (API base or dataset release)",
+       "type": "string"
+      }
+     },
+     "required": [
+      "source",
+      "source_url",
+      "data_vintage",
+      "retrieved_at",
+      "citation",
+      "license"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "ranking": {
+    "additionalProperties": false,
+    "properties": {
+     "method": {
+      "const": "lexical",
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "method",
+     "note"
+    ],
+    "type": "object"
+   },
+   "results": {
+    "additionalProperties": false,
+    "properties": {
+     "icd11": {
+      "additionalProperties": false,
+      "properties": {
+       "error": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "found": {
+        "type": "boolean"
+       },
+       "items": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "code": {
+           "type": "string"
+          },
+          "match_score": {
+           "maximum": 1,
+           "minimum": 0,
+           "type": "number"
+          },
+          "rank": {
+           "maximum": 9007199254740991,
+           "minimum": 1,
+           "type": "integer"
+          },
+          "title": {
+           "type": "string"
+          },
+          "uri": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "code",
+          "title",
+          "uri",
+          "match_score",
+          "rank"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "found",
+       "error",
+       "items"
+      ],
+      "type": "object"
+     },
+     "loinc": {
+      "additionalProperties": false,
+      "properties": {
+       "error": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "found": {
+        "type": "boolean"
+       },
+       "items": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "code": {
+           "type": "string"
+          },
+          "match_score": {
+           "maximum": 1,
+           "minimum": 0,
+           "type": "number"
+          },
+          "rank": {
+           "maximum": 9007199254740991,
+           "minimum": 1,
+           "type": "integer"
+          },
+          "title": {
+           "type": "string"
+          },
+          "uri": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "code",
+          "title",
+          "uri",
+          "match_score",
+          "rank"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "found",
+       "error",
+       "items"
+      ],
+      "type": "object"
+     },
+     "mesh": {
+      "additionalProperties": false,
+      "properties": {
+       "error": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "found": {
+        "type": "boolean"
+       },
+       "items": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "code": {
+           "type": "string"
+          },
+          "match_score": {
+           "maximum": 1,
+           "minimum": 0,
+           "type": "number"
+          },
+          "rank": {
+           "maximum": 9007199254740991,
+           "minimum": 1,
+           "type": "integer"
+          },
+          "title": {
+           "type": "string"
+          },
+          "uri": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "code",
+          "title",
+          "uri",
+          "match_score",
+          "rank"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "found",
+       "error",
+       "items"
+      ],
+      "type": "object"
+     },
+     "rxnorm": {
+      "additionalProperties": false,
+      "properties": {
+       "error": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "found": {
+        "type": "boolean"
+       },
+       "items": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "code": {
+           "type": "string"
+          },
+          "match_score": {
+           "maximum": 1,
+           "minimum": 0,
+           "type": "number"
+          },
+          "rank": {
+           "maximum": 9007199254740991,
+           "minimum": 1,
+           "type": "integer"
+          },
+          "title": {
+           "type": "string"
+          },
+          "uri": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "code",
+          "title",
+          "uri",
+          "match_score",
+          "rank"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "found",
+       "error",
+       "items"
+      ],
+      "type": "object"
+     },
+     "snomed": {
+      "additionalProperties": false,
+      "properties": {
+       "error": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "found": {
+        "type": "boolean"
+       },
+       "items": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "code": {
+           "type": "string"
+          },
+          "match_score": {
+           "maximum": 1,
+           "minimum": 0,
+           "type": "number"
+          },
+          "rank": {
+           "maximum": 9007199254740991,
+           "minimum": 1,
+           "type": "integer"
+          },
+          "title": {
+           "type": "string"
+          },
+          "uri": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "code",
+          "title",
+          "uri",
+          "match_score",
+          "rank"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "found",
+       "error",
+       "items"
+      ],
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "searched_terminologies": {
+    "items": {
+     "enum": [
+      "icd11",
+      "snomed",
+      "loinc",
+      "rxnorm",
+      "mesh"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "source_terminology": {
+    "anyOf": [
+     {
+      "enum": [
+       "icd11",
+       "snomed",
+       "loinc",
+       "rxnorm",
+       "mesh"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "term": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "term",
+   "source_terminology",
+   "searched_terminologies",
+   "results",
+   "groups",
+   "ranking",
+   "provenance",
+   "attribution"
+  ],
+  "type": "object"
+ },
+ "title": "Find Equivalents Across Terminologies"
+}

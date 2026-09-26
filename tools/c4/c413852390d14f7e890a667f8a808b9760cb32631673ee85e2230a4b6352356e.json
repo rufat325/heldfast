@@ -1,0 +1,240 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Update clips (batch)"
+ },
+ "description": "Update one or more clips in a single call \u2014 background, transition, duration, title, visibility, position, and (video clips) the footage transform via video_styling. Always batch.\n\nEach entry: { clip_index, duration?, title?, background_color? | background?, transition?, hidden?, position?, voiceover_volume?, video_styling? }\n- voiceover_volume: 0-100. This is how you make a clip SILENT \u2014 set 0 to mute the narration while keeping the text and its word timings. get_clip and get_project report the current value, so read it before muting to restore it later. There is no \"delete voiceover\" tool; muting is the supported way.\n- background_color: hex (keeps the existing pattern/image, changes color). background: full object from find(type='backgrounds') \u2014 replaces the whole background.\n- transition: { type, duration, direction?, color? }, or null to remove. Set on the OUTGOING clip \u2014 the transition plays at the END of clip_index, into the next clip. Types: circleWipe, rainbowWipe, cornerWipe, stack, colorWipe, dissolve, pushPull, fadeToColor. Directions: rainbowWipe/cornerWipe take topLeft|topRight|bottomLeft|bottomRight; colorWipe left|right; stack/pushPull left|right|top|bottom.\n- position: move the clip to a new zero-based index. Moves apply FIRST (in array order), then property patches \u2014 keep reorders in a separate call from property edits so indices stay predictable.\n- video_styling (VIDEO CLIPS ONLY \u2014 ignored on slide clips): reposition/resize the clip's recording on the canvas, e.g. into a designed window slot. { position?: [cx, cy], size?: [w, h] } as canvas fractions 0\u20131 ([1,1] = full-bleed, position is the footage CENTER), plus crop? and border?. Fields merge onto the clip's existing video_styling.\n\nConcurrency: parallel-safe per clip \u2014 all property updates land in ONE save. Safe to fan out across DIFFERENT clips. Do NOT run concurrently with element/voiceover edits on the SAME clip, or whole-project mutations (add_clips, add_audio, update_project). When adding audio + resizing clips, run update_clips BEFORE add_audio.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "project_id": {
+    "description": "Project ID",
+    "type": "string"
+   },
+   "updates": {
+    "description": "One entry per clip to update.",
+    "items": {
+     "properties": {
+      "background": {
+       "additionalProperties": {},
+       "description": "Full background object from find(type='backgrounds')",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "background_color": {
+       "description": "Hex background color (keeps pattern, changes color)",
+       "type": "string"
+      },
+      "clip_index": {
+       "description": "Zero-based clip index",
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "duration": {
+       "description": "New duration (seconds)",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      },
+      "hidden": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "enum": [
+          "0",
+          "1",
+          "true",
+          "false",
+          "yes",
+          "no"
+         ],
+         "type": "string"
+        }
+       ],
+       "description": "Whether the clip is hidden"
+      },
+      "position": {
+       "description": "Move clip to this zero-based index",
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "title": {
+       "description": "New clip title",
+       "type": "string"
+      },
+      "transition": {
+       "anyOf": [
+        {
+         "properties": {
+          "color": {
+           "description": "Hex color, honoured by fadeToColor (default #000000), colorWipe (default #073cad) and rainbowWipe (default #D43F8C).",
+           "type": "string"
+          },
+          "direction": {
+           "description": "Direction, honoured only by some types: rainbowWipe and cornerWipe take topLeft/topRight/bottomLeft/bottomRight (default topRight); colorWipe takes left or right (default right); stack and pushPull take left/right/top/bottom (default right). Ignored by dissolve, circleWipe and fadeToColor.",
+           "type": "string"
+          },
+          "duration": {
+           "description": "Transition length in seconds.",
+           "exclusiveMinimum": 0,
+           "type": "number"
+          },
+          "type": {
+           "description": "Transition style. NOTE: a clip's transition plays at the END of that clip, into the next one \u2014 to put a transition between clips 2 and 3, set it on clip 2.",
+           "enum": [
+            "circleWipe",
+            "rainbowWipe",
+            "cornerWipe",
+            "stack",
+            "colorWipe",
+            "dissolve",
+            "pushPull",
+            "fadeToColor"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "type",
+          "duration"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Transition at the END of this clip, into the next one; null to remove"
+      },
+      "video_styling": {
+       "description": "VIDEO CLIPS ONLY: reposition/resize the screen recording on the canvas (e.g. into a designed window slot). position/size are canvas fractions 0\u20131; [1,1] = full-bleed. Fields merge onto the clip's existing video_styling. Ignored for slide clips.",
+       "properties": {
+        "border": {
+         "anyOf": [
+          {
+           "properties": {
+            "borderWidth": {
+             "description": "Border width in pixels.",
+             "minimum": 0,
+             "type": "number"
+            },
+            "border_width": {
+             "description": "Snake-case alias for borderWidth. Border width in pixels.",
+             "minimum": 0,
+             "type": "number"
+            },
+            "color": {
+             "description": "Border color hex (defaults to brand color).",
+             "type": "string"
+            },
+            "type": {
+             "description": "Border style. 'none' = no border.",
+             "enum": [
+              "none",
+              "solid",
+              "glass",
+              "animated",
+              "browser"
+             ],
+             "type": "string"
+            }
+           },
+           "required": [
+            "type"
+           ],
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Frame around the footage ({type, color?, borderWidth?} \u2014 border_width also accepted), or null to clear."
+        },
+        "crop": {
+         "anyOf": [
+          {
+           "properties": {
+            "position": {
+             "description": "[left, top] as fractions of natural size (0\u20131).",
+             "items": {
+              "type": "number"
+             },
+             "maxItems": 2,
+             "minItems": 2,
+             "type": "array"
+            },
+            "size": {
+             "description": "[width, height] as fractions of natural size (0\u20131).",
+             "items": {
+              "type": "number"
+             },
+             "maxItems": 2,
+             "minItems": 2,
+             "type": "array"
+            }
+           },
+           "required": [
+            "position",
+            "size"
+           ],
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Footage crop rect in fractional coords (0\u20131), or null to clear."
+        },
+        "position": {
+         "description": "Footage center [x,y] as canvas fractions 0\u20131 (0.5,0.5 = centered).",
+         "items": {
+          "type": "number"
+         },
+         "maxItems": 2,
+         "minItems": 2,
+         "type": "array"
+        },
+        "size": {
+         "description": "Footage [width,height] as canvas fractions 0\u20131 ([1,1] = full-bleed).",
+         "items": {
+          "type": "number"
+         },
+         "maxItems": 2,
+         "minItems": 2,
+         "type": "array"
+        }
+       },
+       "type": "object"
+      },
+      "voiceover_volume": {
+       "description": "Narration loudness for this clip, 0-100 (default 100). Set 0 for a silent cut \u2014 this MUTES the voiceover without deleting it, so the text and its word timings survive and you can restore it by setting the volume back. No-op on a clip that has no voiceover.",
+       "maximum": 100,
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "clip_index"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "project_id",
+   "updates"
+  ],
+  "type": "object"
+ },
+ "name": "update_clips",
+ "title": "Update clips (batch)"
+}

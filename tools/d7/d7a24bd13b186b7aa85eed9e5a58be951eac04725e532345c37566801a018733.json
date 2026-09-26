@@ -1,0 +1,68 @@
+{
+ "_meta": {
+  "openai/fileParams": [
+   "files"
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Upload file"
+ },
+ "description": "Upload one or more files to Clueso. Pick a mode by client + where the file lives:\n\n0. **files** \u2014 ChatGPT only: files the user attached in the conversation. ChatGPT fills each entry (download_url + file_id) itself; pass the attachments here rather than asking the user to re-upload. Returns one mcp_upload_id per file.\n1. **file_name** \u2014 HOSTED upload, the default for any non-UI / programmatic upload (Claude Code, Cursor, Claude Desktop, scripts). Returns an upload URL on Clueso's OWN base domain + a ready-to-run curl that streams a single local file to it; Clueso relays the bytes to storage server-side. The PUT targets the base domain \u2014 NOT cloud storage directly \u2014 so it works on desktop/agent clients that can't reach or are blocked from S3. Requirement: the client must be able to PUT bytes to the Clueso base domain (run the returned curl, or any HTTP PUT). The agent (or the user at a shell prompt) runs the curl. Prefer this whenever there's no human at a browser.\n2. **file_url**: Pass a public https URL. Server fetches and stages the file. Returns mcp_upload_id immediately. Use when the file is already on the open web \u2014 no user interaction needed.\n3. **request_hosted_upload** (UI mode \u2014 use ONLY when a human should pick files in a browser: many files at once, or a host with no shell / no PUT capability): Returns a single upload_token + upload_page URL. Share the link with the user; they open it in a new browser tab, drop their files, click Done. Then call check_uploads(upload_token) to retrieve all mcp_upload_ids. Call once for all files.\n\nHosted uploads cover any number of files per call: one call issues one upload_token, and that token covers every file the user drops on the page. Repeat calls issue additional tokens, each tracking only its own files.\n\nThe returned mcp_upload_id (prefixed `mup_`) can be passed to:\n- add_elements / update_elements (image or video \u2192 an element ON a clip: pass it as `type_data.mcp_upload_id`, on either tool \u2014 this is how a local image becomes on-canvas content, and how an existing element's source is swapped). To fill an animation's image slot, pass it inside `type_data.parameter_values` on update_elements only \u2014 parameter_values is an update-path field and is stripped on add.\n- add_audio (audio \u2192 project music track that plays under all clips)\n- add_clips(kind='video') (video or audio \u2192 sequential clip with auto-transcription)\n- add_clips(kind='pptx') (.ppt/.pptx \u2192 slide clips)\n- add_article_media (image/GIF \u2192 article asset)\n- analyze_audio (audio \u2192 transcript / silences / beats / features)",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "file_name": {
+    "description": "File name with extension. Returns a Clueso upload URL + curl command that streams this single local file to us (single file).",
+    "type": "string"
+   },
+   "file_names": {
+    "description": "List of file names the user will upload (for hosted mode). Shown on the upload page as guidance.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "file_url": {
+    "description": "Public URL to fetch the file from",
+    "type": "string"
+   },
+   "files": {
+    "description": "ChatGPT file attachments, one entry per file (filled by ChatGPT).",
+    "items": {
+     "properties": {
+      "download_url": {
+       "description": "Temporary download URL supplied by ChatGPT",
+       "type": "string"
+      },
+      "file_id": {
+       "description": "ChatGPT file id",
+       "type": "string"
+      },
+      "file_name": {
+       "type": "string"
+      },
+      "mime_type": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "download_url",
+      "file_id"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "request_hosted_upload": {
+    "description": "If true, returns a hosted upload page. Call once for all files \u2014 the page accepts multiple uploads under one token.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "name": "upload_file",
+ "title": "Upload file"
+}

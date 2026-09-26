@@ -1,0 +1,471 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "check": [
+      "pdfa",
+      "signed"
+     ],
+     "pdfBase64": "<base64>"
+    },
+    "title": "CI: assert PDF/A + signed"
+   },
+   {
+    "input": {
+     "check": [
+      "attachments"
+     ],
+     "pdfBase64": "<base64>"
+    },
+    "title": "Detect Factur-X attachments"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Read-only facts about a PDF: version, pageCount, encryption, pdfA claim (the claim, not its validity \u2014 use veraPDF for that), signatureCount, hasSignaturePlaceholder, attachments[], info; presence-gated dss / docTimestampCount / trapped; `signatures:true` lists every field (subFilter, isDocTimestamp, isPlaceholder, byteRange, vriKey); `pages:true` adds per-page sizes and boxes. `check:[\u2026]` turns it into a CI assertion ('pdfa','signed','encrypted','placeholder','attachments','dss','docTimestamp','trapped') \u2192 checks (requested keys only) + checksPassed. Encrypted sources: pass `password`. Token-frugal: verbosity:'summary', fields:[\u2026].",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "annotations": {
+    "default": false,
+    "description": "When true, include an annotations[] array listing every page annotation (/Annots: links, text notes, highlights, shapes, widgets\u2026) with its 0-based page, subtype, rect and, when present, contents (truncated to 200 chars), title, color, quadPoints and link url. Off by default to keep responses compact.",
+    "type": "boolean"
+   },
+   "check": {
+    "description": "CI assertions \u2192 checks (requested keys only) + checksPassed (all hold). 'signed' = a signature field with signed content exists (structural; validity is verify_pdf's job), 'placeholder' = an unsigned placeholder exists, 'dss' = /DSS present, 'docTimestamp' = a /DocTimeStamp exists, 'trapped' = /Info /Trapped set, 'annotations' = at least one page annotation exists, 'pdfx' = the XMP claims PDF/X (the claim, not its validity \u2014 validate_pdf standard:'pdf-x-4').",
+    "items": {
+     "enum": [
+      "pdfa",
+      "signed",
+      "encrypted",
+      "placeholder",
+      "attachments",
+      "dss",
+      "docTimestamp",
+      "trapped",
+      "annotations",
+      "pdfx"
+     ],
+     "type": "string"
+    },
+    "maxItems": 10,
+    "type": "array"
+   },
+   "fields": {
+    "description": "Optional dot-path projection applied to the structured result (e.g. ['pageCount','signatureCount']). Composes after verbosity. Unknown paths are omitted.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "pages": {
+    "default": false,
+    "description": "When true, include per-page metadata in the response.",
+    "type": "boolean"
+   },
+   "password": {
+    "description": "Password (user or owner) of an encrypted source. Never logged or echoed.",
+    "maxLength": 4096,
+    "minLength": 1,
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded PDF bytes to inspect.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "signatures": {
+    "default": false,
+    "description": "When true, include a signatures[] array describing every signature field (field name, SubFilter, document-timestamp flag, placeholder flag, ByteRange, /Contents length, /VRI key). Off by default to keep responses compact.",
+    "type": "boolean"
+   },
+   "verbosity": {
+    "default": "full",
+    "description": "'full' (default) or 'summary' (scalars only: version, pageCount, encryption, pdfA, signatureCount, hasSignaturePlaceholder, attachmentCount, + docTimestampCount / trapped / pdfX / checksPassed when present; arrays and dss dropped).",
+    "enum": [
+     "summary",
+     "full"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "pdfBase64"
+  ],
+  "type": "object"
+ },
+ "name": "inspect_pdf",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Structured inspection result. Every property is optional because the result can be projected: verbosity:'summary' returns only the scalar summary fields, fields:[...] keeps a dot-path subset. Defaults return the full shape.",
+  "properties": {
+   "annotationCount": {
+    "description": "Total number of page annotations (opt-in via the `annotations` input).",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "annotations": {
+    "description": "Page annotations (opt-in via the `annotations` input), in page order then /Annots order. Only the keys the annotation actually carries are emitted.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "color": {
+       "description": "/C colour components (0\u20131; 1, 3 or 4 values).",
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "contents": {
+       "description": "Decoded /Contents, truncated to 200 characters.",
+       "maxLength": 200,
+       "type": "string"
+      },
+      "page": {
+       "description": "0-based page index.",
+       "minimum": 0,
+       "type": "integer"
+      },
+      "quadPoints": {
+       "description": "/QuadPoints of a text-markup annotation.",
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "rect": {
+       "description": "/Rect [x1, y1, x2, y2] in PDF user space; absent when malformed.",
+       "items": {
+        "type": "number"
+       },
+       "maxItems": 4,
+       "minItems": 4,
+       "type": "array"
+      },
+      "subtype": {
+       "description": "/Subtype, e.g. Link, Text, Highlight, Square, FreeText, Widget.",
+       "type": "string"
+      },
+      "title": {
+       "description": "Decoded /T (author / title).",
+       "type": "string"
+      },
+      "url": {
+       "description": "Target of a URI-action link annotation.",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "attachmentCount": {
+    "description": "summary only: number of embedded files.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "attachments": {
+    "description": "Embedded files exposed via /Names \u2192 /EmbeddedFiles (PDF/A-3, Factur-X).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "description": {
+       "type": "string"
+      },
+      "mimeType": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "relationship": {
+       "type": "string"
+      },
+      "sizeBytes": {
+       "minimum": 0,
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "checks": {
+    "additionalProperties": {
+     "type": "boolean"
+    },
+    "description": "One boolean per REQUESTED check (keys = the check[] you passed, nothing else).",
+    "type": "object"
+   },
+   "checksPassed": {
+    "description": "Present when check[] was supplied: true when every requested check holds.",
+    "type": "boolean"
+   },
+   "docTimestampCount": {
+    "description": "Number of /DocTimeStamp signature fields, present only when at least one exists.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "dss": {
+    "additionalProperties": false,
+    "description": "Document Security Store summary (ISO 32000-2 \u00a712.8.4.3), present only when the catalog has a /DSS.",
+    "properties": {
+     "certs": {
+      "description": "Number of /DSS /Certs entries.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "crls": {
+      "description": "Number of /DSS /CRLs entries.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "ocsps": {
+      "description": "Number of /DSS /OCSPs entries.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "vriKeys": {
+      "description": "/VRI dictionary keys (uppercase-hex SHA-1 of each covered signature /Contents).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "encryption": {
+    "enum": [
+     "none",
+     "aes-128",
+     "aes-256",
+     "rc4",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "encryptionInfo": {
+    "additionalProperties": false,
+    "description": "Precise Standard Security Handler details (pdfnative v1.6.0), present only when the document is encrypted and was opened successfully. Objects served by the reader are already decrypted.",
+    "properties": {
+     "algorithm": {
+      "enum": [
+       "rc4-40",
+       "rc4-128",
+       "aes128",
+       "aes256"
+      ],
+      "type": "string"
+     },
+     "authenticatedAs": {
+      "description": "Which supplied password opened the document.",
+      "enum": [
+       "user",
+       "owner"
+      ],
+      "type": "string"
+     },
+     "revision": {
+      "description": "Standard Security Handler revision (2, 3, 4 or 6).",
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "hasSignaturePlaceholder": {
+    "description": "True when at least one signature widget exists with empty /Contents \u2014 i.e. an unsigned placeholder awaiting `sign_pdf`.",
+    "type": "boolean"
+   },
+   "info": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Document /Info dictionary entries decoded as strings.",
+    "type": "object"
+   },
+   "pageCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "pageLabels": {
+    "description": "Logical page-numbering ranges from the /PageLabels number tree (ISO 32000-1 \u00a712.4.2), or absent when the document has none. Each range gives the 0-based first page, numbering style, optional prefix and start value.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "prefix": {
+       "type": "string"
+      },
+      "start": {
+       "type": "integer"
+      },
+      "startPage": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "style": {
+       "enum": [
+        "decimal",
+        "roman",
+        "Roman",
+        "alpha",
+        "Alpha",
+        "none"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "pdfA": {
+    "description": "Detected PDF/A claim (e.g. '1B', '2B', '2U', '3B') from XMP metadata, or null when absent.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "pdfX": {
+    "description": "PDF/X claim from XMP (pdfxid:GTS_PDFXVersion, e.g. 'PDF/X-4'), present only when the document makes one. A claim, not a verdict: validate_pdf standard:'pdf-x-4' checks it.",
+    "type": "string"
+   },
+   "perPage": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "artBox": {
+       "description": "/ArtBox, present only when set on the page.",
+       "items": {
+        "type": "number"
+       },
+       "maxItems": 4,
+       "minItems": 4,
+       "type": "array"
+      },
+      "bleedBox": {
+       "description": "/BleedBox, present only when set on the page.",
+       "items": {
+        "type": "number"
+       },
+       "maxItems": 4,
+       "minItems": 4,
+       "type": "array"
+      },
+      "cropBox": {
+       "description": "/CropBox, present only when set on the page.",
+       "items": {
+        "type": "number"
+       },
+       "maxItems": 4,
+       "minItems": 4,
+       "type": "array"
+      },
+      "height": {
+       "type": "number"
+      },
+      "index": {
+       "type": "integer"
+      },
+      "trimBox": {
+       "description": "/TrimBox [llx lly urx ury], present only when set on the page.",
+       "items": {
+        "type": "number"
+       },
+       "maxItems": 4,
+       "minItems": 4,
+       "type": "array"
+      },
+      "userUnit": {
+       "description": "/UserUnit (PDF 1.6+), present only when set on the page.",
+       "type": "number"
+      },
+      "width": {
+       "type": "number"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "signatureCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "signatures": {
+    "description": "Signature fields (opt-in via the `signatures` input). Document timestamps are listed inline with isDocTimestamp=true.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "byteRange": {
+       "description": "/ByteRange, or [] when absent.",
+       "items": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "type": "array"
+      },
+      "contentsLength": {
+       "description": "Decoded /Contents length in bytes (including zero padding).",
+       "minimum": 0,
+       "type": "integer"
+      },
+      "fieldName": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "isDocTimestamp": {
+       "type": "boolean"
+      },
+      "isPlaceholder": {
+       "description": "True for an unsigned placeholder (all-zero /ByteRange or /Contents).",
+       "type": "boolean"
+      },
+      "subFilter": {
+       "description": "e.g. adbe.pkcs7.detached, ETSI.CAdES.detached, ETSI.RFC3161.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "vriKey": {
+       "description": "Uppercase-hex SHA-1 of /Contents \u2014 the /DSS /VRI key. Null for placeholders.",
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "trapped": {
+    "description": "/Info /Trapped flag, present only when the document carries one.",
+    "enum": [
+     "True",
+     "False",
+     "Unknown"
+    ],
+    "type": "string"
+   },
+   "version": {
+    "description": "PDF version (e.g. \"1.7\").",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Inspect PDF metadata"
+}

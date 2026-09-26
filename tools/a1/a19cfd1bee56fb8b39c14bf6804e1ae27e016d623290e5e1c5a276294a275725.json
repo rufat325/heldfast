@@ -1,0 +1,209 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Financial news in two modes. 'company': recent articles for one symbol over a date range \u2014 headline, source, datetime, summary, URL (\"what's driving AAPL today?\"); requires `symbol`. 'market': broad market headlines by category (general, forex, crypto, merger); uses `category`. Resolve a company name with finnhub_search_symbols first for company mode.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "category": {
+    "default": "general",
+    "description": "Market mode: news category. See finnhub://news-categories.",
+    "enum": [
+     "general",
+     "forex",
+     "crypto",
+     "merger"
+    ],
+    "type": "string"
+   },
+   "from": {
+    "description": "Company mode: window start (YYYY-MM-DD). Defaults to today \u2212 7 days.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 15,
+    "description": "Max articles (1\u2013100). Default 15 \u2014 news lists run long; keep context lean.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "mode": {
+    "description": "'company' = recent articles for one symbol over a date range (requires `symbol`). 'market' = broad headlines by `category`.",
+    "enum": [
+     "company",
+     "market"
+    ],
+    "type": "string"
+   },
+   "symbol": {
+    "description": "Required for `company` mode. US ticker. Ignored in `market` mode.",
+    "type": "string"
+   },
+   "to": {
+    "description": "Company mode: window end (YYYY-MM-DD). Defaults to today.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "mode"
+  ],
+  "type": "object"
+ },
+ "name": "finnhub_get_news",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "mode",
+     "articles",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "articles": {
+    "description": "Articles, newest first.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single news article.",
+     "properties": {
+      "category": {
+       "description": "Finnhub category tag (market mode). Note: the response category may differ from the requested category (e.g., \"business\" for a \"general\" request).",
+       "type": "string"
+      },
+      "datetime": {
+       "description": "Publish time, ISO 8601.",
+       "type": "string"
+      },
+      "headline": {
+       "description": "Article headline.",
+       "type": "string"
+      },
+      "related": {
+       "description": "Related symbol(s) Finnhub tagged.",
+       "type": "string"
+      },
+      "source": {
+       "description": "Publisher name.",
+       "type": "string"
+      },
+      "summary": {
+       "description": "Article summary (may be empty).",
+       "type": "string"
+      },
+      "url": {
+       "description": "Link to the article.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "headline",
+      "source",
+      "datetime",
+      "summary",
+      "url"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "cap": {
+    "description": "The limit that was applied.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `missing_symbol`: mode 'company' was requested without a symbol. `not_us_or_paid`: Upstream HTTP 403 on the symbol. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "missing_symbol",
+         "not_us_or_paid"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "mode": {
+    "description": "The mode used (echo of input).",
+    "enum": [
+     "company",
+     "market"
+    ],
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when no articles were found.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of articles returned.",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Total articles available before the limit.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when articles were capped at the limit.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Finnhub Get News"
+}

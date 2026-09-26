@@ -1,0 +1,199 @@
+{
+ "description": "Does this strategy survive an honest test? Backtest a trading strategy honestly \u2014 look-ahead-aware validation with Deflated-Sharpe-Ratio / multiple-testing correction (Bailey & L\u00f3pez de Prado). Returns an EVIDENCE verdict (insufficient_evidence | anecdote | failed_oos | passed_oos) plus metrics, flags and caveats \u2014 NOT a buy/sell recommendation. Call this before acting on a strategy or signal list. Accepts a named catalog strategy (type=rules), a timestamped BUY/SELL signal list (signal_list), or a timestamped trade list (trade_list). Checks: realistic next-bar fills (look-ahead/optimism), net of cost, out-of-sample split, and a hard 30-round-trip sample gate (under 30 is always \"anecdote\"). Not reproducible via generic backtest tools that ignore overfitting. [API Pro tier]",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "costs": {
+    "additionalProperties": false,
+    "description": "Trading costs. Default 10 bps (crypto) / 5 bps (else) \u2014 a gross-only claim usually shrinks once these apply.",
+    "properties": {
+     "fee_bps": {
+      "description": "Per-side fee in basis points, e.g. 10 = 0.10%.",
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "fee_bps"
+    ],
+    "type": "object"
+   },
+   "market": {
+    "additionalProperties": false,
+    "description": "Which market the claim is about \u2014 prices are re-fetched from here, not taken from you.",
+    "properties": {
+     "asset_type": {
+      "description": "Asset class, normally 'crypto'.",
+      "enum": [
+       "crypto",
+       "tokenized_equity",
+       "tokenized_etf",
+       "commodities"
+      ],
+      "type": "string"
+     },
+     "interval": {
+      "description": "Candle interval the signals refer to. Candle interval: '1d' daily, '2d'/'3d' multi-day, '1w' weekly, '1M' monthly. Multi-day candles (2d/3d) are anchored to the Unix epoch, so one of n possible alignments is used. Measured on our own corpus, the choice of alignment alone moves CAGR by 6.66 pp on average (max 12.30). Treat differences below that as not distinguishable \u2014 1d/2d/3d behaved as one block in our tests, not a ranking.",
+      "enum": [
+       "1d",
+       "2d",
+       "3d",
+       "1w",
+       "1M"
+      ],
+      "type": "string"
+     },
+     "symbol": {
+      "description": "Pair / symbol the strategy is claimed to work on, e.g. BTCUSDT.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "symbol",
+     "asset_type",
+     "interval"
+    ],
+    "type": "object"
+   },
+   "oos": {
+    "additionalProperties": false,
+    "description": "How the claim is tested out-of-sample. Omit for the default split \u2014 the out-of-sample part is what separates a finding from a fit.",
+    "properties": {
+     "scheme": {
+      "description": "Out-of-sample scheme: 'split' (one in-sample/out-of-sample cut, default) or 'walk_forward' (rolling re-evaluation).",
+      "enum": [
+       "split",
+       "walk_forward"
+      ],
+      "type": "string"
+     },
+     "split_frac": {
+      "description": "In-sample fraction for scheme=split; default 0.7.",
+      "maximum": 0.9,
+      "minimum": 0.3,
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "strategy": {
+    "additionalProperties": false,
+    "description": "The claim being validated \u2014 supply exactly one of: a catalog strategy (type=rules), your signals (type=signal_list) or your finished trades (type=trade_list).",
+    "properties": {
+     "name": {
+      "description": "Catalog strategy key (type=rules), e.g. 'rsi_sma'.",
+      "type": "string"
+     },
+     "params": {
+      "additionalProperties": {},
+      "description": "Strategy parameters for type=rules; omit for the audited defaults.",
+      "type": "object"
+     },
+     "signals": {
+      "description": "type=signal_list: timestamped BUY/SELL signals (paired into round-trips).",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "side": {
+         "enum": [
+          "buy",
+          "sell"
+         ],
+         "type": "string"
+        },
+        "ts": {
+         "description": "ISO timestamp of the decision.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "ts",
+        "side"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "trades": {
+      "description": "type=trade_list: timestamped round-trips with the prices you claim you got.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "entry_px": {
+         "type": "number"
+        },
+        "entry_ts": {
+         "type": "string"
+        },
+        "exit_px": {
+         "type": "number"
+        },
+        "exit_ts": {
+         "type": "string"
+        },
+        "side": {
+         "enum": [
+          "long",
+          "short"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "entry_ts",
+        "entry_px",
+        "exit_ts",
+        "exit_px"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "type": {
+      "description": "How the claim is supplied: 'rules' = a catalog strategy re-run by us \u00b7 'signal_list' = your timestamped BUY/SELL decisions \u00b7 'trade_list' = your finished round-trips.",
+      "enum": [
+       "rules",
+       "signal_list",
+       "trade_list"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type"
+    ],
+    "type": "object"
+   },
+   "window": {
+    "additionalProperties": false,
+    "description": "Period over which the claim is checked.",
+    "properties": {
+     "from": {
+      "description": "Evaluation start, YYYY-MM-DD.",
+      "type": "string"
+     },
+     "to": {
+      "description": "Evaluation end, YYYY-MM-DD. Default: today.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "from"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "strategy",
+   "market",
+   "window"
+  ],
+  "type": "object"
+ },
+ "name": "validate_strategy",
+ "title": "Validate a strategy/signal (honest backtest)"
+}

@@ -1,0 +1,284 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Full company context for one US symbol in a single call: profile (name, exchange, industry, country, market cap, shares outstanding, IPO date, website, logo), headline fundamentals (P/E, EPS, 52-week range, beta, dividend yield, margins, growth), and sector peers. Combines three endpoints so \"tell me about Apple\" needs one tool call, not three. Resolve a company name with finnhub_search_symbols first. International symbols are not on the free tier.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "symbol": {
+    "description": "US stock ticker (e.g., \"AAPL\"). Resolve a company name with finnhub_search_symbols first. International symbols are not on the free tier.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "symbol"
+  ],
+  "type": "object"
+ },
+ "name": "finnhub_get_company",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "symbol",
+     "profile",
+     "fundamentals",
+     "peers"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `symbol_not_found`: /stock/profile2 returned an empty object for the symbol. `not_us_or_paid`: Upstream HTTP 403 \u2014 international or paid-only symbol. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "symbol_not_found",
+         "not_us_or_paid"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "fundamentals": {
+    "additionalProperties": false,
+    "description": "Curated headline fundamentals: P/E, EPS, 52-week range, beta, dividend yield, margins, and growth. Every field nullable \u2014 Finnhub omits metrics for thinly-covered names.",
+    "properties": {
+     "beta": {
+      "description": "Beta vs. the market.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "dividendYieldTTM": {
+      "description": "Current dividend yield %, TTM.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "epsTTM": {
+      "description": "Earnings per share, TTM.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "grossMarginTTM": {
+      "description": "Gross margin %, TTM.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "netProfitMarginTTM": {
+      "description": "Net profit margin %, TTM.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "peTTM": {
+      "description": "Price/earnings, trailing twelve months.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "revenueGrowthTTMYoy": {
+      "description": "Revenue growth % YoY, TTM.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "roeTTM": {
+      "description": "Return on equity %, TTM.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "week52High": {
+      "description": "52-week high price.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "week52Low": {
+      "description": "52-week low price.",
+      "type": [
+       "number",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "peTTM",
+     "epsTTM",
+     "week52High",
+     "week52Low",
+     "beta",
+     "dividendYieldTTM",
+     "netProfitMarginTTM",
+     "grossMarginTTM",
+     "revenueGrowthTTMYoy",
+     "roeTTM"
+    ],
+    "type": "object"
+   },
+   "partial": {
+    "description": "Names of the sub-fetches that failed (e.g., [\"metrics\"]) when the call partially degraded. Absent on a full success.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "peers": {
+    "description": "Sector peer symbols from Finnhub (includes the queried symbol). Empty when none.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "profile": {
+    "additionalProperties": false,
+    "description": "Company profile: name, exchange, industry, country, currency, market cap, shares, IPO date, website, and logo.",
+    "properties": {
+     "country": {
+      "description": "Country code (e.g., \"US\").",
+      "type": "string"
+     },
+     "currency": {
+      "description": "Reporting currency.",
+      "type": "string"
+     },
+     "exchange": {
+      "description": "Listing exchange (e.g., \"NASDAQ NMS - GLOBAL MARKET\").",
+      "type": "string"
+     },
+     "industry": {
+      "description": "Finnhub industry classification.",
+      "type": "string"
+     },
+     "ipo": {
+      "description": "IPO date (YYYY-MM-DD). Null when omitted.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "logo": {
+      "description": "Logo image URL. Null when omitted.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "marketCapitalization": {
+      "description": "Market cap in millions of `currency`. Null when omitted.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "name": {
+      "description": "Company name.",
+      "type": "string"
+     },
+     "shareOutstanding": {
+      "description": "Shares outstanding in millions. Null when omitted.",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "weburl": {
+      "description": "Company website. Null when omitted.",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "name",
+     "exchange",
+     "industry",
+     "country",
+     "currency",
+     "marketCapitalization",
+     "shareOutstanding",
+     "ipo",
+     "weburl",
+     "logo"
+    ],
+    "type": "object"
+   },
+   "symbol": {
+    "description": "The symbol queried (echo of input).",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Finnhub Get Company"
+}

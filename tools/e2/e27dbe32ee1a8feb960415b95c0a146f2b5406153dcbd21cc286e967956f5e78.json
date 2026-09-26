@@ -1,0 +1,149 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Find resources"
+ },
+ "description": "Find any resource in Clueso by type, optionally filtered by name or exact id. One tool for listing and searching across the workspace.\n\ntype:\n  \u2022 projects | folders | clueprints | workspaces\n  \u2022 backgrounds | voices | fonts | image_gen_style_packs | element_components\n(voices carry `gender`, `tags`, `accent`, `preview_url` and \u2014 where one has been written \u2014 a free-text `description` of tone and pace, which is the field actually worth choosing on. `tags` is a small closed vocabulary, so it groups voices rather than telling them apart. Choose deliberately: voiceover is the film's clock, and regenerating speech later rescales the clip and every element time and keyframe with it.)\n  \u2022 images | videos | music | sfx   \u2014 media; each result carries a `source` ('org' = your saved-media library, 'stock' = a stock/curated provider). Scope with `source`, pick the library with `provider` (see below). Stock results are a short described shortlist \u2014 pick the best fit and use its `src`. Stock video results also carry `safe_src` and a `video_files` tier list with one entry marked `recommended` \u2014 use `safe_src` (or the recommended tier) in add_elements; tiers above 1080p can exceed its ~200MB source cap and fail. For a Freesound music/sfx result, `src` is an OPAQUE handle (not a playable URL) \u2014 pass it straight to add_audio and the original is fetched + hosted by Clueso server-side; a `preview_url` is included only so you can tell what it sounds like.\n(fonts = the typefaces THIS WORKSPACE has uploaded as brand fonts, each with `id`, `name` and `src`. Pass a returned `name` as a text element's `font_setting.font` \u2014 that is the whole contract; you never pass the url. This list is the ONLY way to know which non-Google families actually exist here: a font_setting naming a family in neither this list nor Google Fonts silently renders Inter, with no error and a confident-looking `layout.text_width_px` measured against the wrong face. Check here before building a layout on a brand typeface.)\n(image_gen_style_packs = generation style presets for generate_media kind='image' style_id; element_components = saved components (e.g. animations) from THIS WORKSPACE only \u2014 there is no community library for components (unlike clueprints); each reports param_keys. Insert one AS-IS with add_elements(component_id=...), or generate a variant from it with base_component_id.)\n\nFilters (all optional):\n  \u2022 query     \u2014 for stock media it's the search phrase (real semantic search for provider='clueso'; provider keyword search otherwise). For clueprints a query runs a relevance-ranked search across your workspace + the global community library (search_summary, relevance_reason, tags, is_community, fork_count). For everything else it's a case-insensitive name substring.\n  \u2022 provider  \u2014 which stock library to search (ONE call, no merging). Choose by strength:\n       images  \u2192 'pexels' (default; realistic photography) or 'pixabay' (illustrations, vectors, icons, clip-art \u2014 set image_type)\n       videos  \u2192 'pexels' (default; real-world footage) or 'pixabay' (motion graphics \u2014 set video_type='animation')\n       music   \u2192 'clueso' (default; our curated, brand-safe library with the best descriptions/search \u2014 try this FIRST) or 'freesound' (niche/genre tracks)\n       sfx     \u2192 'freesound' (default; vast sound-effect library) or 'clueso' (curated sfx)\n  \u2022 image_type \u2014 images + provider='pixabay': 'photo' | 'illustration' | 'vector'\n  \u2022 video_type \u2014 videos + provider='pixabay': 'film' | 'animation'\n  \u2022 id        \u2014 exact id; returns just that one record (any type)\n  \u2022 source    \u2014 media only: 'org' | 'stock' | 'all' (default = org + stock). Under 'all', stock is appended only when a query is given. sfx is stock only.\n  \u2022 folder_id \u2014 projects + saved media (images/videos/music): restrict to a folder\n  \u2022 engine / language     \u2014 voices only\n  \u2022 creator_id / mine_only \u2014 clueprints only\n  \u2022 orientation \u2014 stock images/videos: 'landscape' | 'portrait' | 'square'\n  \u2022 color       \u2014 stock images: a color name/hex, e.g. 'blue'\n  \u2022 size        \u2014 stock videos: 'large' | 'medium' | 'small'\n  \u2022 min_duration / max_duration \u2014 stock videos + freesound audio: length bounds in seconds\n  \u2022 page / limit          \u2014 paging for large sets (projects, components, clueprints \u2014 a clueprint list is sliced to the limit with no marker when more exist, so page through rather than assuming the first page is everything); stock media ignores these (fixed shortlist)\n\nReturns { type, count, items: [{ id, name, type, ... }] }. Feed the returned id straight into the consuming tool (set_voice, update_clips background, generate_media style_id, add_audio src, use_clueprint, etc.). Any `duration` on a returned item is in SECONDS \u2014 pass it straight to add_audio's source_duration.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "color": {
+    "description": "stock images only: color name or hex, e.g. 'blue'.",
+    "type": "string"
+   },
+   "creator_id": {
+    "description": "clueprints only: filter by creator id.",
+    "type": "string"
+   },
+   "engine": {
+    "description": "voices only: 'eleven' | 'cartesia' | 'google'.",
+    "type": "string"
+   },
+   "folder_id": {
+    "description": "projects/images/videos/music only: restrict to a folder.",
+    "type": "string"
+   },
+   "id": {
+    "description": "Exact id \u2014 returns just that record.",
+    "type": "string"
+   },
+   "image_type": {
+    "description": "stock images + provider='pixabay' only: 'photo' | 'illustration' | 'vector' (flat/drawn graphics, icons, clip-art). Use illustration/vector for graphic looks; photo (or Pexels) for realism.",
+    "enum": [
+     "photo",
+     "illustration",
+     "vector"
+    ],
+    "type": "string"
+   },
+   "language": {
+    "description": "voices only: e.g. 'en'.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Page size (default 50; voices default 5 \u2014 a '_more' item flags further pages).",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "max_duration": {
+    "description": "stock videos + freesound audio: maximum clip length in seconds.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "min_duration": {
+    "description": "stock videos only: minimum clip length in seconds.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "mine_only": {
+    "description": "clueprints only: only ones I created.",
+    "type": "boolean"
+   },
+   "orientation": {
+    "description": "stock images/videos only: result orientation.",
+    "enum": [
+     "landscape",
+     "portrait",
+     "square"
+    ],
+    "type": "string"
+   },
+   "page": {
+    "description": "Page (default 1) \u2014 projects/element_components/clueprints.",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "provider": {
+    "description": "stock media: which library to search (exactly one). images/videos: 'pexels' (default \u2014 polished real-world photos & footage) | 'pixabay' (illustrations, vectors, clip-art, icons + more variety; pair with image_type/video_type). music/sfx: 'clueso' (default for music \u2014 our curated, brand-safe, well-described library, best semantic search) | 'freesound' (huge community library; best for niche music and sound effects \u2014 default for sfx).",
+    "enum": [
+     "pexels",
+     "pixabay",
+     "clueso",
+     "freesound"
+    ],
+    "type": "string"
+   },
+   "query": {
+    "description": "Case-insensitive substring match on name.",
+    "type": "string"
+   },
+   "size": {
+    "description": "stock videos only: minimum resolution bucket.",
+    "enum": [
+     "large",
+     "medium",
+     "small"
+    ],
+    "type": "string"
+   },
+   "source": {
+    "description": "media types (images/videos/music/sfx) only: where to search \u2014 'org' (your saved workspace media), 'stock' (stock library \u2014 images/videos via Pexels, music from Clueso's catalog), 'all' (both; default). sfx is stock-only.",
+    "enum": [
+     "org",
+     "stock",
+     "all"
+    ],
+    "type": "string"
+   },
+   "type": {
+    "description": "Resource type to find.",
+    "enum": [
+     "projects",
+     "folders",
+     "clueprints",
+     "workspaces",
+     "backgrounds",
+     "voices",
+     "fonts",
+     "image_gen_style_packs",
+     "element_components",
+     "images",
+     "videos",
+     "music",
+     "sfx"
+    ],
+    "type": "string"
+   },
+   "video_type": {
+    "description": "stock videos + provider='pixabay' only: 'film' (live footage) | 'animation' (motion graphics).",
+    "enum": [
+     "film",
+     "animation"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "type"
+  ],
+  "type": "object"
+ },
+ "name": "find",
+ "title": "Find resources"
+}

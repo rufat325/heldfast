@@ -1,0 +1,33 @@
+{
+ "description": "Diagnose and heal the full nonce state for the active wallet in one shot.\n\nHandles 90% of stuck-tx cases automatically:\n1. Fetches current nonce state from Hiro API (gaps, mempool)\n2. In dryRun mode: shows what would happen without broadcasting\n3. In execute mode (dryRun=false):\n   - Fills every gap with a 1 uSTX self-transfer to the PoX burn address\n   - Optionally RBF-bumps the chain head (lowest non-gap pending tx) to kick off processing\n\nRBF bump behavior:\n- Token-transfer txs: rebuilt at same nonce with fee * feeMultiplier and rebroadcast\n- Sponsored txs: skipped with explanation (sender cannot RBF without sponsor key)\n- Contract-call txs: skipped with manual RBF instructions\n\nAlways run nonce_health first to understand the current state.\nRequires wallet to be unlocked for execute mode (dryRun=false).\n\nReturns:\n- address, dryRun flag, confirmedNonce\n- gapsFound: list of missing nonces\n- actions: per-action detail (fill_gap or bump_head) with txids, fees, status\n- warnings: informational notes\n- summary: human-readable description of what happened\n\nTip: call `earning_opportunities` to see how to put your assets to work.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "address": {
+    "description": "STX address to heal. Defaults to the active wallet address.",
+    "type": "string"
+   },
+   "bumpHead": {
+    "default": true,
+    "description": "Whether to RBF-bump the first real pending tx (chain head) after filling gaps. Default true.",
+    "type": "boolean"
+   },
+   "dryRun": {
+    "default": true,
+    "description": "If true (default), preview proposed actions without broadcasting. Set to false to execute.",
+    "type": "boolean"
+   },
+   "feeMultiplier": {
+    "default": 1.5,
+    "description": "Fee multiplier for RBF bump (e.g. 1.5 = 50% higher fee). Minimum 1.1. Default 1.5.",
+    "minimum": 1.1,
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "name": "nonce_heal"
+}

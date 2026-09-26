@@ -1,0 +1,101 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Atomic idempotency witness. Claims a {namespace, action_key} pair exactly once, so a fleet of agents cannot perform the same side effect twice. Call this BEFORE any non-idempotent action such as sending an email, charging a card, or posting an order. Returns one of: 'claimed' \u2014 you won, do the work, then call once_key_complete; 'in_progress' \u2014 another agent holds a live lease, wait retry_after seconds and do NOT do the work; 'duplicate' \u2014 already done, and the 'result' field carries the original outcome, so use it instead of repeating the work; 'held' \u2014 another agent claimed this key, set no lease, and has NOT completed it: there is no result and there may never be one, so do NOT do the work and do NOT treat it as done, because the key stays locked until expires_at; 'conflict' \u2014 the same key was claimed with a different payload hash, so your key derivation is wrong. Backed by a strongly consistent Durable Object; this is not something an agent can safely reimplement locally. Costs $0.010 in USDC on Base, paid via the x402 protocol, or from a credit token \u2014 call credits_trial for free credit if you have neither.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "action_key": {
+    "description": "Stable identifier for the action being claimed",
+    "type": "string"
+   },
+   "credit_token": {
+    "description": "Optional. A credit token from credits_trial or /credits/buy. Supplying it pays for this call from that balance, so no x402 payment or wallet is needed.",
+    "type": "string"
+   },
+   "lease_ttl": {
+    "description": "Seconds you have to call once_key_complete before the claim is treated as abandoned and another agent may take it over. Set this if your work could crash partway. Omit it to hold the claim for the full ttl, which guarantees nothing else can ever run the side effect.",
+    "type": "integer"
+   },
+   "namespace": {
+    "description": "Isolation scope, e.g. your application name",
+    "type": "string"
+   },
+   "namespace_token": {
+    "description": "One-time token issued by the first call that claimed this namespace. Required for every later call.",
+    "type": "string"
+   },
+   "payload_sha256": {
+    "description": "Optional hash of the action payload. If it differs from the stored hash, the result is a conflict.",
+    "type": "string"
+   },
+   "ttl": {
+    "description": "Claim lifetime in seconds (default 86400)",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "namespace",
+   "action_key"
+  ],
+  "type": "object"
+ },
+ "name": "once_key_claim",
+ "outputSchema": {
+  "properties": {
+   "action_key": {
+    "description": "The key that was claimed",
+    "type": "string"
+   },
+   "claimed_at": {
+    "description": "ISO-8601 claim time",
+    "type": "string"
+   },
+   "expires_at": {
+    "description": "ISO-8601 expiry of the claim record",
+    "type": "string"
+   },
+   "has_result": {
+    "description": "Distinguishes a recorded null result from no result at all",
+    "type": "boolean"
+   },
+   "lease_expires_at": {
+    "description": "Call once_key_complete before this or the claim may be taken over",
+    "type": "string"
+   },
+   "namespace": {
+    "description": "Isolation scope",
+    "type": "string"
+   },
+   "namespace_token": {
+    "description": "Issued only on the first claim in a namespace, shown exactly once",
+    "type": "string"
+   },
+   "note": {
+    "description": "Present alongside a newly issued namespace_token",
+    "type": "string"
+   },
+   "receipt": {
+    "description": "Payment receipt",
+    "type": "string"
+   },
+   "result": {
+    "description": "The recorded result, present when status is 'duplicate'."
+   },
+   "status": {
+    "description": "'claimed' means you own the action and must perform it. 'duplicate' means someone already did: do NOT repeat the side effect, use `result` instead.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "status",
+   "action_key"
+  ],
+  "type": "object"
+ },
+ "title": "Claim an action exactly once"
+}

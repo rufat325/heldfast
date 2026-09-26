@@ -1,0 +1,253 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get SEC fails-to-deliver (FTD) data for a stock. Each quantity is the aggregate net BALANCE of shares that had failed to deliver and were still outstanding on that settlement date, as published by the SEC -- NOT the number of new fails that day. Balances carry over between days, so never sum quantities across dates (that counts the same unsettled shares repeatedly); compare levels or take the maximum instead. Fails arise from many causes (operational and processing delays, long sales, market-maker activity), and FTD data on its own is not evidence of naked short selling. Free/keyless access covers the trailing 92 days. structuredContent carries the exact share quantities.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "days": {
+    "default": 90,
+    "description": "Days of settlement-date history (default 90; Free/keyless access allows up to 92)",
+    "maximum": 1825,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "limit": {
+    "default": 100,
+    "description": "Rows per page, 1-500 (default 100). A long `days` window can hold more rows than one page; the answer says when the page is full and names the next one.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number (default 1)",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "ticker": {
+    "description": "Stock ticker symbol (e.g. 'GME', 'TSLA')",
+    "maxLength": 200,
+    "type": "string"
+   }
+  },
+  "required": [
+   "ticker"
+  ],
+  "type": "object"
+ },
+ "name": "get_ftd_data",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "measure": {
+    "const": "outstanding_fail_balance",
+    "description": "Each quantity is the balance of fails outstanding on that settlement date -- not new fails that day; never sum across dates",
+    "type": "string"
+   },
+   "paging": {
+    "additionalProperties": false,
+    "description": "Paging state reconciled from ko.io meta.total_count and meta.softwall",
+    "properties": {
+     "continuation": {
+      "description": "SIGNIN_REQUIRED = page>1 needs a (free) ko.io API key",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "has_more": {
+      "description": "null = a full page came back and more MAY exist",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "next_page": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/paging/properties/total_count/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Next page THIS caller can open; null when there is none (or sign-in is required)"
+     },
+     "page": {
+      "type": "integer"
+     },
+     "per_page": {
+      "type": "integer"
+     },
+     "plan_row_cap": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/paging/properties/total_count/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Row cap the caller's plan applied to this page, if any"
+     },
+     "returned": {
+      "type": "integer"
+     },
+     "total_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Total rows matching the request, when ko.io reported it"
+     },
+     "truncated_by_plan": {
+      "description": "True when the plan's row cap withheld rows from this page",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "page",
+     "per_page",
+     "returned",
+     "total_count",
+     "has_more",
+     "next_page",
+     "continuation",
+     "plan_row_cap",
+     "truncated_by_plan"
+    ],
+    "type": "object"
+   },
+   "plan_limit": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "continuation": {
+        "$ref": "#/properties/rows/items/properties/settlement_date"
+       },
+       "date_basis": {
+        "$ref": "#/properties/rows/items/properties/settlement_date"
+       },
+       "effective_period": {
+        "$ref": "#/properties/rows/items/properties/settlement_date"
+       },
+       "policy_version": {
+        "$ref": "#/properties/rows/items/properties/settlement_date"
+       },
+       "row_cap": {
+        "anyOf": [
+         {
+          "$ref": "#/properties/paging/properties/total_count/anyOf/0"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "truncated": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "window_end": {
+        "$ref": "#/properties/rows/items/properties/settlement_date"
+       },
+       "window_start": {
+        "$ref": "#/properties/rows/items/properties/settlement_date"
+       }
+      },
+      "required": [
+       "policy_version",
+       "window_start",
+       "window_end",
+       "effective_period",
+       "date_basis",
+       "row_cap",
+       "truncated",
+       "continuation"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The Free/keyless plan limits ko.io applied to this answer (null for paid callers)"
+   },
+   "rows": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "price": {
+       "anyOf": [
+        {
+         "$ref": "#/properties/rows/items/properties/quantity/anyOf/0"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "quantity": {
+       "anyOf": [
+        {
+         "pattern": "^-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Outstanding fails-to-deliver balance (shares) on that settlement date"
+      },
+      "settlement_date": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "ticker": {
+       "$ref": "#/properties/rows/items/properties/settlement_date"
+      }
+     },
+     "required": [
+      "settlement_date",
+      "ticker",
+      "quantity",
+      "price"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "ticker": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "ticker",
+   "measure",
+   "rows",
+   "paging",
+   "plan_limit"
+  ],
+  "type": "object"
+ }
+}

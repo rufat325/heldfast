@@ -1,0 +1,285 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Analyze multiple dependency changes in parallel"
+ },
+ "description": "Analyzes a list of package upgrades in parallel and returns a unified risk report with packages ranked by recommendation level (security > caution > review > likely-safe > safe). Use when the user provides many dependency changes from a Dependabot PR, npm outdated output, lockfile diff, or batch upgrade. Returns: total count, breakdown by semver class, total security fixes found, packages with breaking changes, and per-package details. Limit 50 packages per call (chunk larger lists).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "changes": {
+    "description": "List of package changes to analyze",
+    "items": {
+     "properties": {
+      "ecosystem": {
+       "description": "Package ecosystem",
+       "enum": [
+        "npm",
+        "pypi",
+        "github-actions"
+       ],
+       "type": "string"
+      },
+      "fromVersion": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "name": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "toVersion": {
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "ecosystem",
+      "name",
+      "fromVersion",
+      "toVersion"
+     ],
+     "type": "object"
+    },
+    "maxItems": 50,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "changes"
+  ],
+  "type": "object"
+ },
+ "name": "analyze_packages_bulk",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "bySemverClass": {
+    "additionalProperties": false,
+    "description": "Breakdown of the batch by semver class",
+    "properties": {
+     "major": {
+      "description": "Count of major bumps",
+      "type": "number"
+     },
+     "minor": {
+      "description": "Count of minor bumps",
+      "type": "number"
+     },
+     "patch": {
+      "description": "Count of patch bumps",
+      "type": "number"
+     }
+    },
+    "required": [
+     "major",
+     "minor",
+     "patch"
+    ],
+    "type": "object"
+   },
+   "packages": {
+    "description": "Per-package results, ranked security > caution > review > likely-safe > safe",
+    "items": {
+     "anyOf": [
+      {
+       "additionalProperties": false,
+       "properties": {
+        "breakingChanges": {
+         "description": "Breaking changes extracted from release notes; empty when none were found",
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "ecosystem": {
+         "description": "Package ecosystem",
+         "enum": [
+          "npm",
+          "pypi",
+          "github-actions"
+         ],
+         "type": "string"
+        },
+        "fromVersion": {
+         "description": "Version being upgraded from",
+         "type": "string"
+        },
+        "migrationLinks": {
+         "description": "Migration or upgrade guide URLs found in release notes",
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "package": {
+         "description": "Package name that was analyzed",
+         "type": "string"
+        },
+        "recommendation": {
+         "description": "Single-line verdict explaining the recommendation level",
+         "type": "string"
+        },
+        "recommendationLevel": {
+         "description": "Risk classification, used to rank packages in bulk results",
+         "enum": [
+          "safe",
+          "likely-safe",
+          "review",
+          "caution",
+          "security"
+         ],
+         "type": "string"
+        },
+        "releaseCount": {
+         "description": "Number of GitHub releases found strictly between the two versions",
+         "type": "number"
+        },
+        "releaseExcerpts": {
+         "description": "Raw release-note excerpts, present only as a fallback when a major/minor bump yielded no breaking changes",
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "excerpt": {
+            "description": "Short excerpt of the release notes",
+            "type": "string"
+           },
+           "tag": {
+            "description": "Release tag the excerpt came from",
+            "type": "string"
+           }
+          },
+          "required": [
+           "tag",
+           "excerpt"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "repoUrl": {
+         "description": "Source repository URL, or null when none could be resolved",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "securityFixes": {
+         "description": "Advisories affecting fromVersion that are resolved at toVersion",
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "id": {
+            "description": "Advisory identifier (e.g. 'GHSA-29mw-wpgm-hmr9' or a CVE)",
+            "type": "string"
+           },
+           "severity": {
+            "description": "Severity as reported by OSV (e.g. 'LOW', 'MODERATE', 'HIGH', 'CRITICAL')",
+            "type": "string"
+           },
+           "summary": {
+            "description": "One-line description of the advisory",
+            "type": "string"
+           }
+          },
+          "required": [
+           "id",
+           "summary",
+           "severity"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "semverClass": {
+         "description": "Semver relationship between the two versions",
+         "enum": [
+          "major",
+          "minor",
+          "patch",
+          "downgrade",
+          "unknown"
+         ],
+         "type": "string"
+        },
+        "toVersion": {
+         "description": "Version being upgraded to",
+         "type": "string"
+        }
+       },
+       "required": [
+        "package",
+        "ecosystem",
+        "fromVersion",
+        "toVersion",
+        "semverClass",
+        "repoUrl",
+        "releaseCount",
+        "breakingChanges",
+        "securityFixes",
+        "migrationLinks",
+        "recommendation",
+        "recommendationLevel"
+       ],
+       "type": "object"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "error": {
+         "description": "Why the analysis could not be completed",
+         "type": "string"
+        },
+        "package": {
+         "description": "Package name whose analysis failed",
+         "type": "string"
+        },
+        "recommendationLevel": {
+         "const": "review",
+         "description": "Always 'review' \u2014 a package that could not be analyzed cannot be cleared automatically",
+         "type": "string"
+        }
+       },
+       "required": [
+        "package",
+        "error",
+        "recommendationLevel"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "type": "array"
+   },
+   "packagesWithBreakingChanges": {
+    "description": "How many packages had at least one breaking change",
+    "type": "number"
+   },
+   "securityFixesTotal": {
+    "description": "Total security advisories resolved across the whole batch",
+    "type": "number"
+   },
+   "totalPackages": {
+    "description": "Number of package changes submitted",
+    "type": "number"
+   }
+  },
+  "required": [
+   "totalPackages",
+   "bySemverClass",
+   "securityFixesTotal",
+   "packagesWithBreakingChanges",
+   "packages"
+  ],
+  "type": "object"
+ },
+ "title": "Analyze multiple dependency changes in parallel"
+}

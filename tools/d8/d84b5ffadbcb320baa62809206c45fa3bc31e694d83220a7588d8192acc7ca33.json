@@ -1,0 +1,62 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "USE WHEN a plan has been agreed and the next step is a repository rather than more advice. Builds the plan (same brain as `onchain_agent_build_plan`) and writes it into a small starter repo, returned as a base64 zip plus a manifest naming every file.\n\nWHAT IS IN THE ARCHIVE: `README.md` (the plan rendered, every source URL, and the disclosure that Sato OS is ours) \u00b7 `sato.plan.json` (the plan, signed at its own checked_at when a signing key is configured) \u00b7 `.env.example` (every environment variable the stack's own deploy specs ask for, values BLANK, each under a comment naming which listing wants it) \u00b7 `install.sh` (the documented install lines in order, each under its Preflight verdict) \u00b7 `agent.config.json` (chain, tokens and the venue Sato Route chose, with `chosen_by`) \u00b7 `.mcp.json` (Sato Hub's MCP server plus any MCP-native stack item) \u00b7 `docker-compose.yml` ONLY when every stack item documents a docker install.\n\nRULE ENFORCED: nothing is generated. Every line is a template constant or a field of the plan, copied verbatim. An install line we were not told is never invented, and a value we do not hold is left blank with a comment rather than filled with a plausible default.\n\nTHE ONE SAFETY RULE: a documented install that pipes a remote script into a shell (`curl \u2026 | sh`) is written as a COMMENTED line with a warning above it, never as an executable one, and it is reported in `quarantined_installs`. Uncommenting it is the reader's decision to take deliberately.\n\nDETERMINISTIC: the same plan produces a byte-identical archive \u2014 the timestamps come from the plan's `checked_at`, not the clock.\n\nNON-CUSTODIAL: the archive holds no keys and no secrets, and nothing here signs, deploys or moves anything.\n\nReturns (json): { name, files: [{ path, note, bytes }], env_names, quarantined_installs, zip_base64, bytes, plan: { goal, intent, chain, plan_url, checked_at, stack_slugs }, caveat }.\n\nExample: { goal: \"a Base trading agent that swaps USDC to ETH on a signal\", chain: \"Base\" }",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "budget_usd": {
+    "description": "Rough monthly budget in USD. Restated in the plan; it does not filter the stack.",
+    "maximum": 1000000,
+    "minimum": 0,
+    "type": "number"
+   },
+   "chain": {
+    "description": "Chain the agent runs on, e.g. 'Base'. When omitted it is read from the goal.",
+    "maxLength": 40,
+    "type": "string"
+   },
+   "constraints": {
+    "description": "Hard constraints to restate back, e.g. 'self-custody only'.",
+    "items": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "maxItems": 10,
+    "type": "array"
+   },
+   "goal": {
+    "description": "What the user wants to build, in plain words. The plan is built first, then written into files.",
+    "maxLength": 600,
+    "minLength": 3,
+    "type": "string"
+   },
+   "include_zip": {
+    "description": "True (default) returns the archive base64-encoded alongside the manifest. False returns each file's contents inline instead.",
+    "type": "boolean"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: 'markdown' (default) or 'json'.",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "goal"
+  ],
+  "type": "object"
+ },
+ "name": "onchain_agent_scaffold_plan",
+ "title": "Turn a build plan into a starter repo"
+}

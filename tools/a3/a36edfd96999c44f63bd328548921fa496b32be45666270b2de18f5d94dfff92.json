@@ -1,0 +1,30 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Find arbitrage opportunities on Polymarket via monotonicity violations + partition-sum checks. Call with NO args for a `trending_scan` of the top ~200 markets by weekly volume; pass `event` for the strongest per-event partition_check, or `topic` for a themed cross-event scan. `event` (recommended for a specific market): pass a Polymarket event slug like \"fed-decision-may-2026\" or \"when-will-bitcoin-hit-150k\"; walks child markets, checks date-axis / threshold-axis ordering AND computes the partition_check (sum of YES prices across mutually-exclusive legs \u2014 should \u22481; deviations >3pp emit a BUY/SELL EVERY LEG signal). `topic` (for cross-event scanning): pass a seed question like \"Strait of Hormuz traffic returns to normal\" or \"Fed rate decision\"; searches related events across the platform, flattens markets, runs the comparator on the union. Cross-event mode catches \"...by May 31\" vs \"...by Jun 30\" patterns that single-event misses. SEMANTIC ANCHOR: cross-event pairs require \u22650.30 Jaccard similarity on question tokens (prevents Powell-Fed-Pause being paired with Powell-DOJ-probe); skipped_low_similarity surfaces the rejected pair count. PARTITION FILTER: drops will-person-X / will-manager-Y / will-someone-else- placeholder slugs; partitions with >20% placeholder fraction return null arb signal. Response: opportunities[] (gap_pp, suggested_trade, reasoning, monotonicity violation context), and in event mode partition_check{sum_yes_prices, gap_from_1, placeholders_filtered, suggested_trade}. FEES: every opportunities[] row and partition_check.arbitrage carry edge_pp_gross (== gap_pp / overround_pp), fees_pp, edge_pp_net, net_positive, plus polymarket_fee_pp, fee_basis and fee_categories[]. BOTH cost components are modeled: Polymarket's own per-category TAKER FEE (fee = shares \u00d7 rate \u00d7 p \u00d7 (1-p), rates crypto 0.07 / sports-economics-culture-weather-other 0.05 / finance-politics-mentions-tech 0.04, geopolitics and world events fee-free; verified against Polymarket's own docs as of 2026-09-13) and Polygon gas (~$0.02/leg). The taker fee dominates: ~$1.75 per 100 shares on a crypto market at 50c versus $0.02 of gas, so rows that looked profitable before fleet #1927 may now show net_positive:false \u2014 that is the correction, not a regression. Each leg is priced at ITS OWN market's rate and price (the fee curve peaks at 50c and falls toward both extremes). fee_basis says where the rate came from: 'payload' (read off the market, the normal case), 'category' (mapped from its fee category), 'fee_free', or 'fallback' (rate unknown \u2014 charged at the modal 0.05 rather than assumed free, so an unreadable market is never reported as costless). Where fill_check reprices against live depth, this does NOT double-count that spread cost. FILL CHECK: when the partition signal fires, arbitrage.fill_check prices it against live CLOB depth (theoretical_edge_pp_at_book vs realizable_edge_pp at 1000 shares/leg, thin_legs[]) \u2014 realizable_edge_pp \u2264 0 means the overround exists only at last-trade, not in the book; do not trade it. For custom sizing use polymarket_fill_risk.",
+ "inputSchema": {
+  "examples": [
+   {
+    "topic": "Fed rate decision"
+   }
+  ],
+  "properties": {
+   "event": {
+    "description": "Single-event mode (use this if you know the specific Polymarket event): event slug like \"fed-decision-may-2026\" or \"when-will-bitcoin-hit-150k\". Full Polymarket URLs also accepted.",
+    "type": "string"
+   },
+   "topic": {
+    "description": "Cross-event mode (use this if you want to scan related events across the platform): a topic or seed question like \"Fed rate decision\" or \"Strait of Hormuz traffic returns to normal\". Tool searches Polymarket for related events and checks monotonicity across them.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "polymarket_arbitrage",
+ "title": "Polymarket Arbitrage",
+ "version": "v1.48d144d3"
+}

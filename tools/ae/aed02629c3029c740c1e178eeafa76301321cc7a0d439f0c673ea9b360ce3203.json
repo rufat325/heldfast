@@ -1,0 +1,389 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch a specific filing's metadata and document content by accession number. Returns the primary document as readable text. Use offset/next_offset for multi-page access to large filings (10-K, S-1 can exceed 1M chars): pass the next_offset from a truncated response to read the next page. Use section to jump directly to a heading (e.g. 'risk factors', 'item 7') without needing an offset.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "accession_number": {
+    "description": "Filing accession number in either format: \"0000320193-23-000106\" (dashes) or \"000032019323000106\" (no dashes). Obtained from secedgar_company_search or secedgar_search_filings results.",
+    "pattern": "^(?:\\d{10}-\\d{2}-\\d{6}|\\d{18})$",
+    "type": "string"
+   },
+   "cik": {
+    "description": "Company CIK, digits only (resolve via secedgar_company_search if you have a ticker or name). Optional but recommended \u2014 speeds up archive lookup. If omitted, likely filing CIKs are inferred from SEC search metadata and archive paths.",
+    "pattern": "^\\d{1,10}$",
+    "type": "string"
+   },
+   "content_limit": {
+    "default": 50000,
+    "description": "Maximum characters of document text to return per page. 10-K filings can exceed 500,000 characters; S-1/A can exceed 1,000,000. Default 50,000 captures ~12,000 words (typically business overview, risk factors, and MD&A). Increase to 200,000 for full financial statements, or decrease for quick summaries. Use offset or section for subsequent pages.",
+    "maximum": 200000,
+    "minimum": 1000,
+    "type": "integer"
+   },
+   "document": {
+    "description": "Specific document filename within the filing (e.g., \"ex-21.htm\" for subsidiaries list). Default: the primary document. Available documents are listed in the response metadata under documents; entries marked binary hold no text and are rejected.",
+    "type": "string"
+   },
+   "include_xbrl": {
+    "default": false,
+    "description": "Include XBRL viewer artifacts and machine-readable taxonomy files (R*.htm fragments, *_cal/_def/_lab/_pre.xml linkbases, *_htm.xml inline instance, *.xsd schemas, MetaLinks.json, FilingSummary.xml, Show.js, report.css, *-xbrl.zip, Financial_Report.xlsx, EX-101.* technical exhibits) under documents.xbrl. Off by default \u2014 these dominate filing indexes (~100 entries on a typical 10-K) and are rarely relevant when reading filing content.",
+    "type": "boolean"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Character offset into the extracted document text. Pass next_offset from a truncated response to continue reading the next page. Default 0 reads from the beginning.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "section": {
+    "description": "Jump to a named section by case-insensitive substring match against detected headings (e.g. 'risk factors', 'item 7', 'certain relationships'). Matching also ignores whitespace and quote-style differences, so a heading copied from the outline resolves whether it carries the filing's non-breaking spaces and curly quotes or plain ones. Takes precedence over offset when both are provided. On a miss, the error message includes the detected outline so you can pick the correct heading.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "accession_number"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_get_filing",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "accession_number",
+     "cik",
+     "primary_document",
+     "documents",
+     "content",
+     "content_truncated",
+     "content_total_length",
+     "filing_url"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "accession_number": {
+    "description": "Filing accession number, normalized to dash format.",
+    "type": "string"
+   },
+   "cap": {
+    "description": "The `content_limit` that was applied.",
+    "type": "number"
+   },
+   "cik": {
+    "description": "Filing entity CIK, zero-padded to 10 digits.",
+    "type": "string"
+   },
+   "company_name": {
+    "description": "Filing entity name. Absent if the CIK did not resolve to a known entity.",
+    "type": "string"
+   },
+   "content": {
+    "description": "Document text content for this page window.",
+    "type": "string"
+   },
+   "content_total_length": {
+    "description": "Full document length before any truncation.",
+    "type": "number"
+   },
+   "content_truncated": {
+    "description": "True if content was truncated at content_limit.",
+    "type": "boolean"
+   },
+   "documents": {
+    "additionalProperties": false,
+    "description": "Filing documents grouped by category. Every name is a valid document input EXCEPT entries carrying binary: true \u2014 scanned pages, PDFs, packaged archives and spreadsheets, which hold no text and are rejected with a binary_document error. Scans can outnumber readable documents in a filing, so read the flag before picking a name. XBRL viewer artifacts are suppressed by default; setting include_xbrl=true surfaces them under the xbrl bucket.",
+    "properties": {
+     "auxiliary": {
+      "description": "Other supporting documents that aren't the primary, exhibits, or XBRL artifacts (cover pages, audit consent letters, embedded graphics).",
+      "items": {
+       "additionalProperties": false,
+       "description": "One document entry from the filing.",
+       "properties": {
+        "binary": {
+         "description": "Present and true when the entry holds binary bytes \u2014 a scanned page or logo, a PDF exhibit, a packaged archive or spreadsheet. These cannot be converted to text and are rejected by the document input. Absent for readable entries.",
+         "type": "boolean"
+        },
+        "description": {
+         "description": "Human-readable description (e.g., \"Annual Report\", \"Subsidiaries of the Registrant\"). Absent when SEC published none for this entry.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Document filename within the filing archive.",
+         "type": "string"
+        },
+        "size": {
+         "description": "File size in bytes.",
+         "type": "number"
+        },
+        "type": {
+         "description": "SEC document type from the submission header (e.g., \"10-K\", \"EX-21.1\", \"GRAPHIC\", \"XML\"). When the submission header is unavailable, falls back to a label inferred from the filename: known XBRL artifacts (\"XBRL-LINKBASE\", \"XBRL-INSTANCE\", etc.), \"exhibit\" for common exhibit filename patterns (ex-21.htm, exhibit21, dex991), \"GRAPHIC\"/\"PDF\"/\"BINARY\" for known binary file extensions, and \"unknown\" for everything else.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "type"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "exhibits": {
+      "description": "Filed exhibits (EX-21 subsidiaries, EX-31/32 certifications, EX-99 press releases, etc.). Excludes XBRL technical exhibits (EX-101.*). Identified by the EX- prefix on the document type, or by common exhibit filename patterns when the submission header is unavailable (type \"exhibit\"). Exhibits with unrecognizable filenames may still appear under auxiliary in the header-less case.",
+      "items": {
+       "additionalProperties": false,
+       "description": "One document entry from the filing.",
+       "properties": {
+        "binary": {
+         "description": "Present and true when the entry holds binary bytes \u2014 a scanned page or logo, a PDF exhibit, a packaged archive or spreadsheet. These cannot be converted to text and are rejected by the document input. Absent for readable entries.",
+         "type": "boolean"
+        },
+        "description": {
+         "description": "Human-readable description (e.g., \"Annual Report\", \"Subsidiaries of the Registrant\"). Absent when SEC published none for this entry.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Document filename within the filing archive.",
+         "type": "string"
+        },
+        "size": {
+         "description": "File size in bytes.",
+         "type": "number"
+        },
+        "type": {
+         "description": "SEC document type from the submission header (e.g., \"10-K\", \"EX-21.1\", \"GRAPHIC\", \"XML\"). When the submission header is unavailable, falls back to a label inferred from the filename: known XBRL artifacts (\"XBRL-LINKBASE\", \"XBRL-INSTANCE\", etc.), \"exhibit\" for common exhibit filename patterns (ex-21.htm, exhibit21, dex991), \"GRAPHIC\"/\"PDF\"/\"BINARY\" for known binary file extensions, and \"unknown\" for everything else.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "type"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "primary": {
+      "description": "Primary filing document(s). Typically a single entry whose type matches the form (e.g., \"10-K\").",
+      "items": {
+       "additionalProperties": false,
+       "description": "One document entry from the filing.",
+       "properties": {
+        "binary": {
+         "description": "Present and true when the entry holds binary bytes \u2014 a scanned page or logo, a PDF exhibit, a packaged archive or spreadsheet. These cannot be converted to text and are rejected by the document input. Absent for readable entries.",
+         "type": "boolean"
+        },
+        "description": {
+         "description": "Human-readable description (e.g., \"Annual Report\", \"Subsidiaries of the Registrant\"). Absent when SEC published none for this entry.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Document filename within the filing archive.",
+         "type": "string"
+        },
+        "size": {
+         "description": "File size in bytes.",
+         "type": "number"
+        },
+        "type": {
+         "description": "SEC document type from the submission header (e.g., \"10-K\", \"EX-21.1\", \"GRAPHIC\", \"XML\"). When the submission header is unavailable, falls back to a label inferred from the filename: known XBRL artifacts (\"XBRL-LINKBASE\", \"XBRL-INSTANCE\", etc.), \"exhibit\" for common exhibit filename patterns (ex-21.htm, exhibit21, dex991), \"GRAPHIC\"/\"PDF\"/\"BINARY\" for known binary file extensions, and \"unknown\" for everything else.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "type"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "xbrl": {
+      "description": "XBRL viewer artifacts and machine-readable taxonomy files. Only present when include_xbrl=true.",
+      "items": {
+       "additionalProperties": false,
+       "description": "One document entry from the filing.",
+       "properties": {
+        "binary": {
+         "description": "Present and true when the entry holds binary bytes \u2014 a scanned page or logo, a PDF exhibit, a packaged archive or spreadsheet. These cannot be converted to text and are rejected by the document input. Absent for readable entries.",
+         "type": "boolean"
+        },
+        "description": {
+         "description": "Human-readable description (e.g., \"Annual Report\", \"Subsidiaries of the Registrant\"). Absent when SEC published none for this entry.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Document filename within the filing archive.",
+         "type": "string"
+        },
+        "size": {
+         "description": "File size in bytes.",
+         "type": "number"
+        },
+        "type": {
+         "description": "SEC document type from the submission header (e.g., \"10-K\", \"EX-21.1\", \"GRAPHIC\", \"XML\"). When the submission header is unavailable, falls back to a label inferred from the filename: known XBRL artifacts (\"XBRL-LINKBASE\", \"XBRL-INSTANCE\", etc.), \"exhibit\" for common exhibit filename patterns (ex-21.htm, exhibit21, dex991), \"GRAPHIC\"/\"PDF\"/\"BINARY\" for known binary file extensions, and \"unknown\" for everything else.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "type"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "primary",
+     "exhibits",
+     "auxiliary"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `document_not_found`: A specific document was requested but not present in the filing archive. `no_documents`: Filing index lists items but no fetchable primary document was found. `binary_document`: The requested document is a binary entry (scanned image, PDF, archive) with no text to return. `filing_not_found`: No filing matches the accession number under any candidate CIK. `offset_out_of_range`: The provided offset is at or beyond the end of the document. `section_not_found`: The section string did not match any detected heading in the document. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "document_not_found",
+         "no_documents",
+         "binary_document",
+         "filing_not_found",
+         "offset_out_of_range",
+         "section_not_found",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "filing_date": {
+    "description": "Date the filing was submitted (YYYY-MM-DD). Absent under the same conditions as form.",
+    "type": "string"
+   },
+   "filing_url": {
+    "description": "Direct URL to the filing on SEC.gov.",
+    "type": "string"
+   },
+   "form": {
+    "description": "Form type (e.g., \"10-K\", \"10-Q\"). From the company's submissions feed for a recent filing, else from the filing's own SEC header. Absent only when neither source carries it.",
+    "type": "string"
+   },
+   "next_offset": {
+    "description": "Character offset to pass as offset on the next call to continue reading. Only present when the response was truncated. Calling agents should follow this until content_truncated is false.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance on reading the next page when the content was capped.",
+    "type": "string"
+   },
+   "outline": {
+    "description": "Document outline \u2014 up to 50 detected headings with their character offsets. Present on the first page of a truncated response (offset=0, no section). Use a heading offset as offset, or pass heading text as section, to jump to that section.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One detected heading with its offset.",
+     "properties": {
+      "heading": {
+       "description": "Detected heading text.",
+       "type": "string"
+      },
+      "offset": {
+       "description": "Character offset of this heading in the full document. Pass as offset to jump directly to this section.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "heading",
+      "offset"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "period_ending": {
+    "description": "Period the filing reports on (YYYY-MM-DD), from the same source as form. Absent for forms with no period of report (S-8, Form 4, proxy statements) and when neither source carries it.",
+    "type": "string"
+   },
+   "primary_document": {
+    "description": "Filename of the filing's actual primary document (e.g., the 10-K HTML file).",
+    "type": "string"
+   },
+   "requested_document": {
+    "description": "Filename of the specific document requested via the document param. Only present when document differs from primary_document.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Characters of document text returned on this page.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the document is longer than `content_limit` allowed through.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Secedgar Get Filing"
+}

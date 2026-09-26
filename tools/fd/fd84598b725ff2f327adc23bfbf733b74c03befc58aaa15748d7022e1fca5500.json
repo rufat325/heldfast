@@ -1,0 +1,191 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Find weather observation stations near a location. Returns stations sorted by proximity with distance and bearing. Use to discover station IDs for nws_get_observations.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cursor": {
+    "description": "Opaque continuation token from a previous response's nextCursor. Omit for the first page. The token carries its own page size, so limit applies to the first page only. Every call re-fetches the station list, so pages are contiguous within one response; the registry changes rarely, but a later call can window an updated list.",
+    "type": "string"
+   },
+   "latitude": {
+    "description": "Center latitude for proximity search.",
+    "maximum": 90,
+    "minimum": -90,
+    "type": "number"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Max stations per page (1-50). totalCount still reports every station near the point, so pass the returned nextCursor as cursor to reach the rest.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "longitude": {
+    "description": "Center longitude for proximity search.",
+    "maximum": 180,
+    "minimum": -180,
+    "type": "number"
+   }
+  },
+  "required": [
+   "latitude",
+   "longitude"
+  ],
+  "type": "object"
+ },
+ "name": "nws_find_stations",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "stations",
+     "totalCount",
+     "shown"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `out_of_scope`: Coordinates fall outside US National Weather Service coverage. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "out_of_scope"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextCursor": {
+    "description": "Opaque token for the next page of stations \u2014 pass it back as `cursor`. Omitted when this is the last page.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when no stations were found near the requested coordinates, when stations remain beyond this page, or when the supplied cursor points past the end of the list.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of stations returned in this page",
+    "type": "number"
+   },
+   "stations": {
+    "description": "Nearby stations sorted by distance",
+    "items": {
+     "additionalProperties": false,
+     "description": "Observation station record with identity, location, and zone codes",
+     "properties": {
+      "bearing": {
+       "description": "Compass bearing from query point (e.g., \"NW\")",
+       "type": "string"
+      },
+      "county": {
+       "description": "County zone code (e.g., \"WAC033\")",
+       "type": "string"
+      },
+      "distanceKm": {
+       "description": "Distance from query point in kilometers",
+       "type": "number"
+      },
+      "elevationM": {
+       "description": "Elevation in meters",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "forecastZone": {
+       "description": "Forecast zone code (e.g., \"WAZ315\")",
+       "type": "string"
+      },
+      "name": {
+       "description": "Station name",
+       "type": "string"
+      },
+      "stationId": {
+       "description": "Station identifier (e.g., \"KSEA\")",
+       "type": "string"
+      },
+      "timeZone": {
+       "description": "IANA time zone",
+       "type": "string"
+      }
+     },
+     "required": [
+      "stationId",
+      "name",
+      "distanceKm",
+      "bearing",
+      "elevationM",
+      "timeZone",
+      "county",
+      "forecastZone"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalCount": {
+    "description": "Total observation stations available near this location before the page limit was applied \u2014 NOT the number returned in this page, which is shown. Same value on every page of one query; compare it against shown to tell whether stations were withheld.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Nws Find Stations"
+}

@@ -1,0 +1,1923 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get information about one or more anime or manga by their AniList ID(s). At the default `format: \"full\"` that means the whole card: title, format, status, episode/chapter/volume count, genres, score, synopsis, dates, and `rankings` \u2014 AniList's own ranking badges (e.g. \"#134 highest rated all time\", \"#11 highest rated 2024\"), one entry per rated/popular ranking window the title currently appears in. Also returns `nextAiringEpisode` (for currently-releasing anime), `externalLinks` (official sites, streaming platforms), and \u2014 [requires login] \u2014 `mediaListEntry`, the authenticated user's own list entry for this title, or null if it isn't on their list. Identify titles by AniList ID (`ids`) or by MyAnimeList ID (`malIds`) \u2014 exactly one of the two, and either accepts a batch. Use search_media first only when you have neither: a title search costs a call per title and can match the wrong entry, so prefer `malIds` whenever you already have MAL IDs. For a batch whose point is mapping IDs to titles rather than reading them, pass `format: \"compact\"` instead, which drops everything above except the identifiers, titles, type/format/status and episode/chapter counts \u2014 measured at 5KB against 125KB for the same 30-title batch. Returns a single object if you passed a single ID, or an array (same order as the IDs you passed, with `null` in place of any that didn't resolve to a real anime/manga) if you passed an array.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "format": {
+    "default": "full",
+    "description": "How much of each title to return. `full` (default) is the whole card \u2014 synopsis, tags, rankings, external links and your own list entry \u2014 which is the point of looking one title up. `compact` returns only id, MAL id, type, format, status, episode/chapter count and titles \u2014 measured at 169 bytes per title against 4,182 for the full card, and what you actually want when resolving a batch of IDs to titles (notably a `malIds` batch, whose job is mapping one ID space onto the other). `compact` ignores `includeStreamingEpisodes`, which is a detail field.",
+    "enum": [
+     "compact",
+     "full"
+    ],
+    "type": "string"
+   },
+   "ids": {
+    "anyOf": [
+     {
+      "exclusiveMinimum": 0,
+      "maximum": 2147483647,
+      "type": "integer"
+     },
+     {
+      "items": {
+       "exclusiveMinimum": 0,
+       "maximum": 2147483647,
+       "type": "integer"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "type": "array"
+     }
+    ],
+    "description": "A single AniList anime/manga ID, or an array of up to 50 IDs to fetch in one call (AniList's own per-page ceiling; it clamps anything higher, which would silently drop the surplus). Pass this OR `malIds`, not both. Each entry includes the full synopsis/tags/rankings, so a large batch is a large response."
+   },
+   "includeStreamingEpisodes": {
+    "default": false,
+    "description": "Also fetch `streamingEpisodes` (per-episode streaming links). Has no effect under `format: \"compact\"`, which returns no detail fields at all. Kept off by default \u2014 AniList doesn't paginate this field, so a long-running title can return hundreds of entries.",
+    "type": "boolean"
+   },
+   "malIds": {
+    "anyOf": [
+     {
+      "exclusiveMinimum": 0,
+      "maximum": 2147483647,
+      "type": "integer"
+     },
+     {
+      "items": {
+       "exclusiveMinimum": 0,
+       "maximum": 2147483647,
+       "type": "integer"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "type": "array"
+     }
+    ],
+    "description": "A single MyAnimeList ID (`idMal`), or an array of up to 50, to resolve straight to AniList titles \u2014 use this instead of searching by title when you already have MAL IDs (e.g. syncing a MAL list), since a title search costs one call per title and can match the wrong entry. Pass this OR `ids`, not both. MAL numbers anime and manga separately, so the SAME ID is a different title depending on `type` \u2014 passing the wrong `type` returns the wrong title, not an error."
+   },
+   "type": {
+    "description": "Whether the IDs refer to anime or manga. Required for `malIds` in particular: MAL numbers the two separately, so the same ID means different titles.",
+    "enum": [
+     "ANIME",
+     "MANGA"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "type"
+  ],
+  "type": "object"
+ },
+ "name": "get_media",
+ "outputSchema": {
+  "$defs": {
+   "__schema0": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "number"
+     },
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     },
+     {
+      "items": {
+       "$ref": "#/$defs/__schema0"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {
+       "$ref": "#/$defs/__schema0"
+      },
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     }
+    ]
+   }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "media": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {
+       "averageScore": {
+        "anyOf": [
+         {
+          "minimum": 0,
+          "type": "number"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "The weighted community rating across all AniList users, on AniList's 0-100 community scale. It stays 0-100 whatever the viewer's configured scoreFormat is, since that setting only changes how anilist.co displays scores. This is NOT the 0-10 scale a personal list-entry `score` uses."
+       },
+       "chapters": {
+        "anyOf": [
+         {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "countryOfOrigin": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "coverImage": {
+        "anyOf": [
+         {
+          "additionalProperties": false,
+          "properties": {
+           "large": {
+            "anyOf": [
+             {
+              "format": "uri",
+              "type": "string"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "description": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "duration": {
+        "anyOf": [
+         {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "endDate": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "properties": {
+           "day": {
+            "anyOf": [
+             {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "month": {
+            "anyOf": [
+             {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "year": {
+            "anyOf": [
+             {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "episodes": {
+        "anyOf": [
+         {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "externalLinks": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": {},
+           "properties": {
+            "icon": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "id": {
+             "exclusiveMinimum": 0,
+             "maximum": 2147483647,
+             "type": "integer"
+            },
+            "isDisabled": {
+             "type": [
+              "boolean",
+              "null"
+             ]
+            },
+            "language": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "notes": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "site": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "type": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "url": {
+             "type": [
+              "string",
+              "null"
+             ]
+            }
+           },
+           "required": [
+            "id"
+           ],
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "format": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "genres": {
+        "anyOf": [
+         {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "id": {
+        "exclusiveMinimum": 0,
+        "maximum": 2147483647,
+        "type": "integer"
+       },
+       "idMal": {
+        "anyOf": [
+         {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "isAdult": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "isFavourite": {
+        "description": "[Requires login] Whether this title is in the caller's favourites. Has a brief read-after-write lag on AniList's own backend \u2014 confirmed live, a re-check right after toggle_favourite can briefly still show the pre-toggle value.",
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "mediaListEntry": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "properties": {
+           "advancedScores": {
+            "anyOf": [
+             {
+              "$ref": "#/$defs/__schema0"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "completedAt": {
+            "anyOf": [
+             {
+              "additionalProperties": {},
+              "properties": {
+               "day": {
+                "anyOf": [
+                 {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                 },
+                 {
+                  "type": "null"
+                 }
+                ]
+               },
+               "month": {
+                "anyOf": [
+                 {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                 },
+                 {
+                  "type": "null"
+                 }
+                ]
+               },
+               "year": {
+                "anyOf": [
+                 {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                 },
+                 {
+                  "type": "null"
+                 }
+                ]
+               }
+              },
+              "type": "object"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "createdAt": {
+            "anyOf": [
+             {
+              "minimum": 0,
+              "type": "number"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "customLists": {
+            "anyOf": [
+             {
+              "items": {
+               "additionalProperties": {},
+               "properties": {
+                "enabled": {
+                 "type": [
+                  "boolean",
+                  "null"
+                 ]
+                },
+                "name": {
+                 "type": [
+                  "string",
+                  "null"
+                 ]
+                }
+               },
+               "type": "object"
+              },
+              "type": "array"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "hiddenFromStatusLists": {
+            "type": [
+             "boolean",
+             "null"
+            ]
+           },
+           "id": {
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647,
+            "type": "integer"
+           },
+           "notes": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "priority": {
+            "anyOf": [
+             {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "private": {
+            "type": [
+             "boolean",
+             "null"
+            ]
+           },
+           "progress": {
+            "anyOf": [
+             {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "progressVolumes": {
+            "anyOf": [
+             {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "repeat": {
+            "anyOf": [
+             {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "score": {
+            "anyOf": [
+             {
+              "minimum": 0,
+              "type": "number"
+             },
+             {
+              "type": "null"
+             }
+            ],
+            "description": "The caller's own score for this title, on a 0-10 scale (decimals allowed). It stays 0-10 on every account whatever the configured scoreFormat is, and matches the scale add_list_entry/update_list_entry take on write. This is NOT the 0-100 scale `averageScore`/`meanScore`/search_media's `averageScore_greater` filter use."
+           },
+           "startedAt": {
+            "anyOf": [
+             {
+              "additionalProperties": {},
+              "properties": {
+               "day": {
+                "anyOf": [
+                 {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                 },
+                 {
+                  "type": "null"
+                 }
+                ]
+               },
+               "month": {
+                "anyOf": [
+                 {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                 },
+                 {
+                  "type": "null"
+                 }
+                ]
+               },
+               "year": {
+                "anyOf": [
+                 {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                 },
+                 {
+                  "type": "null"
+                 }
+                ]
+               }
+              },
+              "type": "object"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "status": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "updatedAt": {
+            "anyOf": [
+             {
+              "minimum": 0,
+              "type": "number"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           }
+          },
+          "required": [
+           "id"
+          ],
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Whether this title is on the caller's own list \u2014 viewer-relative, so it only resolves when logged in; null both when logged out and when the title just isn't on the list (the two cases aren't distinguishable from this field alone)."
+       },
+       "nextAiringEpisode": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "properties": {
+           "airingAt": {
+            "anyOf": [
+             {
+              "minimum": 0,
+              "type": "number"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "episode": {
+            "anyOf": [
+             {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "id": {
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647,
+            "type": "integer"
+           },
+           "timeUntilAiring": {
+            "type": [
+             "number",
+             "null"
+            ]
+           }
+          },
+          "required": [
+           "id"
+          ],
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "popularity": {
+        "anyOf": [
+         {
+          "minimum": 0,
+          "type": "number"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "rankings": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": {},
+           "properties": {
+            "allTime": {
+             "type": [
+              "boolean",
+              "null"
+             ]
+            },
+            "context": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "format": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "rank": {
+             "anyOf": [
+              {
+               "exclusiveMinimum": 0,
+               "maximum": 9007199254740991,
+               "type": "integer"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "season": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "type": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "year": {
+             "anyOf": [
+              {
+               "exclusiveMinimum": 0,
+               "maximum": 9007199254740991,
+               "type": "integer"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "season": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "seasonYear": {
+        "anyOf": [
+         {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "siteUrl": {
+        "anyOf": [
+         {
+          "format": "uri",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "startDate": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "properties": {
+           "day": {
+            "anyOf": [
+             {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "month": {
+            "anyOf": [
+             {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           },
+           "year": {
+            "anyOf": [
+             {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+             },
+             {
+              "type": "null"
+             }
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "status": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "streamingEpisodes": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": {},
+           "properties": {
+            "site": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "thumbnail": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "title": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "url": {
+             "type": [
+              "string",
+              "null"
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "tags": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": {},
+           "properties": {
+            "isMediaSpoiler": {
+             "type": [
+              "boolean",
+              "null"
+             ]
+            },
+            "name": {
+             "type": "string"
+            },
+            "rank": {
+             "anyOf": [
+              {
+               "exclusiveMinimum": 0,
+               "maximum": 9007199254740991,
+               "type": "integer"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "title": {
+        "anyOf": [
+         {
+          "additionalProperties": false,
+          "properties": {
+           "english": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "native": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "romaji": {
+            "type": [
+             "string",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "trailer": {
+        "anyOf": [
+         {
+          "additionalProperties": false,
+          "properties": {
+           "id": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "site": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "thumbnail": {
+            "type": [
+             "string",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "type": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "volumes": {
+        "anyOf": [
+         {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "required": [
+       "id"
+      ],
+      "type": "object"
+     },
+     {
+      "items": {
+       "anyOf": [
+        {
+         "additionalProperties": {},
+         "properties": {
+          "averageScore": {
+           "anyOf": [
+            {
+             "minimum": 0,
+             "type": "number"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "The weighted community rating across all AniList users, on AniList's 0-100 community scale. It stays 0-100 whatever the viewer's configured scoreFormat is, since that setting only changes how anilist.co displays scores. This is NOT the 0-10 scale a personal list-entry `score` uses."
+          },
+          "chapters": {
+           "anyOf": [
+            {
+             "exclusiveMinimum": 0,
+             "maximum": 9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "countryOfOrigin": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "coverImage": {
+           "anyOf": [
+            {
+             "additionalProperties": false,
+             "properties": {
+              "large": {
+               "anyOf": [
+                {
+                 "format": "uri",
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              }
+             },
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "description": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "duration": {
+           "anyOf": [
+            {
+             "exclusiveMinimum": 0,
+             "maximum": 9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "endDate": {
+           "anyOf": [
+            {
+             "additionalProperties": {},
+             "properties": {
+              "day": {
+               "anyOf": [
+                {
+                 "exclusiveMinimum": 0,
+                 "maximum": 9007199254740991,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "month": {
+               "anyOf": [
+                {
+                 "exclusiveMinimum": 0,
+                 "maximum": 9007199254740991,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "year": {
+               "anyOf": [
+                {
+                 "exclusiveMinimum": 0,
+                 "maximum": 9007199254740991,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              }
+             },
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "episodes": {
+           "anyOf": [
+            {
+             "exclusiveMinimum": 0,
+             "maximum": 9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "externalLinks": {
+           "anyOf": [
+            {
+             "items": {
+              "additionalProperties": {},
+              "properties": {
+               "icon": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "id": {
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647,
+                "type": "integer"
+               },
+               "isDisabled": {
+                "type": [
+                 "boolean",
+                 "null"
+                ]
+               },
+               "language": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "notes": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "site": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "type": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "url": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               }
+              },
+              "required": [
+               "id"
+              ],
+              "type": "object"
+             },
+             "type": "array"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "format": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "genres": {
+           "anyOf": [
+            {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "id": {
+           "exclusiveMinimum": 0,
+           "maximum": 2147483647,
+           "type": "integer"
+          },
+          "idMal": {
+           "anyOf": [
+            {
+             "exclusiveMinimum": 0,
+             "maximum": 9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "isAdult": {
+           "type": [
+            "boolean",
+            "null"
+           ]
+          },
+          "isFavourite": {
+           "description": "[Requires login] Whether this title is in the caller's favourites. Has a brief read-after-write lag on AniList's own backend \u2014 confirmed live, a re-check right after toggle_favourite can briefly still show the pre-toggle value.",
+           "type": [
+            "boolean",
+            "null"
+           ]
+          },
+          "mediaListEntry": {
+           "anyOf": [
+            {
+             "additionalProperties": {},
+             "properties": {
+              "advancedScores": {
+               "anyOf": [
+                {
+                 "$ref": "#/$defs/__schema0"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "completedAt": {
+               "anyOf": [
+                {
+                 "additionalProperties": {},
+                 "properties": {
+                  "day": {
+                   "anyOf": [
+                    {
+                     "exclusiveMinimum": 0,
+                     "maximum": 9007199254740991,
+                     "type": "integer"
+                    },
+                    {
+                     "type": "null"
+                    }
+                   ]
+                  },
+                  "month": {
+                   "anyOf": [
+                    {
+                     "exclusiveMinimum": 0,
+                     "maximum": 9007199254740991,
+                     "type": "integer"
+                    },
+                    {
+                     "type": "null"
+                    }
+                   ]
+                  },
+                  "year": {
+                   "anyOf": [
+                    {
+                     "exclusiveMinimum": 0,
+                     "maximum": 9007199254740991,
+                     "type": "integer"
+                    },
+                    {
+                     "type": "null"
+                    }
+                   ]
+                  }
+                 },
+                 "type": "object"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "createdAt": {
+               "anyOf": [
+                {
+                 "minimum": 0,
+                 "type": "number"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "customLists": {
+               "anyOf": [
+                {
+                 "items": {
+                  "additionalProperties": {},
+                  "properties": {
+                   "enabled": {
+                    "type": [
+                     "boolean",
+                     "null"
+                    ]
+                   },
+                   "name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   }
+                  },
+                  "type": "object"
+                 },
+                 "type": "array"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "hiddenFromStatusLists": {
+               "type": [
+                "boolean",
+                "null"
+               ]
+              },
+              "id": {
+               "exclusiveMinimum": 0,
+               "maximum": 2147483647,
+               "type": "integer"
+              },
+              "notes": {
+               "type": [
+                "string",
+                "null"
+               ]
+              },
+              "priority": {
+               "anyOf": [
+                {
+                 "maximum": 9007199254740991,
+                 "minimum": 0,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "private": {
+               "type": [
+                "boolean",
+                "null"
+               ]
+              },
+              "progress": {
+               "anyOf": [
+                {
+                 "maximum": 9007199254740991,
+                 "minimum": 0,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "progressVolumes": {
+               "anyOf": [
+                {
+                 "maximum": 9007199254740991,
+                 "minimum": 0,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "repeat": {
+               "anyOf": [
+                {
+                 "maximum": 9007199254740991,
+                 "minimum": 0,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "score": {
+               "anyOf": [
+                {
+                 "minimum": 0,
+                 "type": "number"
+                },
+                {
+                 "type": "null"
+                }
+               ],
+               "description": "The caller's own score for this title, on a 0-10 scale (decimals allowed). It stays 0-10 on every account whatever the configured scoreFormat is, and matches the scale add_list_entry/update_list_entry take on write. This is NOT the 0-100 scale `averageScore`/`meanScore`/search_media's `averageScore_greater` filter use."
+              },
+              "startedAt": {
+               "anyOf": [
+                {
+                 "additionalProperties": {},
+                 "properties": {
+                  "day": {
+                   "anyOf": [
+                    {
+                     "exclusiveMinimum": 0,
+                     "maximum": 9007199254740991,
+                     "type": "integer"
+                    },
+                    {
+                     "type": "null"
+                    }
+                   ]
+                  },
+                  "month": {
+                   "anyOf": [
+                    {
+                     "exclusiveMinimum": 0,
+                     "maximum": 9007199254740991,
+                     "type": "integer"
+                    },
+                    {
+                     "type": "null"
+                    }
+                   ]
+                  },
+                  "year": {
+                   "anyOf": [
+                    {
+                     "exclusiveMinimum": 0,
+                     "maximum": 9007199254740991,
+                     "type": "integer"
+                    },
+                    {
+                     "type": "null"
+                    }
+                   ]
+                  }
+                 },
+                 "type": "object"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "status": {
+               "type": [
+                "string",
+                "null"
+               ]
+              },
+              "updatedAt": {
+               "anyOf": [
+                {
+                 "minimum": 0,
+                 "type": "number"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              }
+             },
+             "required": [
+              "id"
+             ],
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "Whether this title is on the caller's own list \u2014 viewer-relative, so it only resolves when logged in; null both when logged out and when the title just isn't on the list (the two cases aren't distinguishable from this field alone)."
+          },
+          "nextAiringEpisode": {
+           "anyOf": [
+            {
+             "additionalProperties": {},
+             "properties": {
+              "airingAt": {
+               "anyOf": [
+                {
+                 "minimum": 0,
+                 "type": "number"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "episode": {
+               "anyOf": [
+                {
+                 "maximum": 9007199254740991,
+                 "minimum": 0,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "id": {
+               "exclusiveMinimum": 0,
+               "maximum": 2147483647,
+               "type": "integer"
+              },
+              "timeUntilAiring": {
+               "type": [
+                "number",
+                "null"
+               ]
+              }
+             },
+             "required": [
+              "id"
+             ],
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "popularity": {
+           "anyOf": [
+            {
+             "minimum": 0,
+             "type": "number"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "rankings": {
+           "anyOf": [
+            {
+             "items": {
+              "additionalProperties": {},
+              "properties": {
+               "allTime": {
+                "type": [
+                 "boolean",
+                 "null"
+                ]
+               },
+               "context": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "format": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "rank": {
+                "anyOf": [
+                 {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                 },
+                 {
+                  "type": "null"
+                 }
+                ]
+               },
+               "season": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "type": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "year": {
+                "anyOf": [
+                 {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                 },
+                 {
+                  "type": "null"
+                 }
+                ]
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "season": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "seasonYear": {
+           "anyOf": [
+            {
+             "exclusiveMinimum": 0,
+             "maximum": 9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "siteUrl": {
+           "anyOf": [
+            {
+             "format": "uri",
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "startDate": {
+           "anyOf": [
+            {
+             "additionalProperties": {},
+             "properties": {
+              "day": {
+               "anyOf": [
+                {
+                 "exclusiveMinimum": 0,
+                 "maximum": 9007199254740991,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "month": {
+               "anyOf": [
+                {
+                 "exclusiveMinimum": 0,
+                 "maximum": 9007199254740991,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              },
+              "year": {
+               "anyOf": [
+                {
+                 "exclusiveMinimum": 0,
+                 "maximum": 9007199254740991,
+                 "type": "integer"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              }
+             },
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "status": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "streamingEpisodes": {
+           "anyOf": [
+            {
+             "items": {
+              "additionalProperties": {},
+              "properties": {
+               "site": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "thumbnail": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "title": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "url": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "tags": {
+           "anyOf": [
+            {
+             "items": {
+              "additionalProperties": {},
+              "properties": {
+               "isMediaSpoiler": {
+                "type": [
+                 "boolean",
+                 "null"
+                ]
+               },
+               "name": {
+                "type": "string"
+               },
+               "rank": {
+                "anyOf": [
+                 {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                 },
+                 {
+                  "type": "null"
+                 }
+                ]
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "title": {
+           "anyOf": [
+            {
+             "additionalProperties": false,
+             "properties": {
+              "english": {
+               "type": [
+                "string",
+                "null"
+               ]
+              },
+              "native": {
+               "type": [
+                "string",
+                "null"
+               ]
+              },
+              "romaji": {
+               "type": [
+                "string",
+                "null"
+               ]
+              }
+             },
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "trailer": {
+           "anyOf": [
+            {
+             "additionalProperties": false,
+             "properties": {
+              "id": {
+               "type": [
+                "string",
+                "null"
+               ]
+              },
+              "site": {
+               "type": [
+                "string",
+                "null"
+               ]
+              },
+              "thumbnail": {
+               "type": [
+                "string",
+                "null"
+               ]
+              }
+             },
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "type": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "volumes": {
+           "anyOf": [
+            {
+             "exclusiveMinimum": 0,
+             "maximum": 9007199254740991,
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          }
+         },
+         "required": [
+          "id"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "type": "array"
+     }
+    ]
+   }
+  },
+  "required": [
+   "media"
+  ],
+  "type": "object"
+ },
+ "title": "Get anime/manga details"
+}

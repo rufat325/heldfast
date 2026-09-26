@@ -1,0 +1,154 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "List the geography levels available for a given Census dataset and year, along with the parent geographies each level requires. Use before querying to confirm that the target geography level exists \u2014 ACS1 omits many sub-state levels, and not all datasets support tracts or block groups. The geography_level values returned here are the valid inputs to the geography_level parameter in census_query_data and census_compare_geographies.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "dataset": {
+    "description": "Dataset code (e.g., \"acs/acs5\", \"acs/acs1\"). Use census_list_datasets to discover valid values. Case is ignored, and a two-part code can be given by its last part alone \u2014 \"acs5\" is acs/acs5, \"pl\" is dec/pl. Three-part codes such as acs/acs5/profile must be given in full. The response echoes the resolved code.",
+    "type": "string"
+   },
+   "year": {
+    "description": "Vintage year. Defaults to the latest available year for the dataset.",
+    "type": "number"
+   }
+  },
+  "required": [
+   "dataset"
+  ],
+  "type": "object"
+ },
+ "name": "census_list_geographies",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "geography_levels",
+     "dataset",
+     "year",
+     "totalLevels"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "dataset": {
+    "description": "Dataset queried.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `dataset_not_found`: Dataset code is missing or not recognized, even after case and shorthand resolution. `year_not_available`: Dataset exists but the requested year has no data. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "dataset_not_found",
+         "year_not_available"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "geography_levels": {
+    "description": "Geography levels supported by this dataset and year.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single geography level available for this dataset.",
+     "properties": {
+      "example": {
+       "description": "Example FIPS value for this geography level.",
+       "type": "string"
+      },
+      "geography_level": {
+       "description": "Geography level name \u2014 the value to pass as geography_level in census_query_data (e.g., \"county\", \"tract\", \"zip code tabulation area\").",
+       "type": "string"
+      },
+      "required_parent_levels": {
+       "description": "Names of the parent geography levels required when requires_parent is true.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "requires_parent": {
+       "description": "Whether this level names any parent level. A parent is always mandatory for a concrete FIPS target; some levels drop their innermost parents when the target is \"*\", which is why a nationwide county query needs no parent_fips while a single county does.",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "geography_level",
+      "requires_parent",
+      "required_parent_levels",
+      "example"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalLevels": {
+    "description": "Total number of geography levels available for this dataset and year.",
+    "type": "number"
+   },
+   "year": {
+    "description": "Vintage year queried.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "List Census Geography Levels"
+}

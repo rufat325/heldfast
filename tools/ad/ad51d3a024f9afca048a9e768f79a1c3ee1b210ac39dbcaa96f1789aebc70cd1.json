@@ -1,0 +1,228 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Persist a privacy-minimized Exit Manifest for an eligible commitment, then return its manifest_id and secret access_token. Use only after check_reversibility says paidExitManifestAvailable=true; pass the exact commitment facts to preserve, with transaction-specific checkout_terms controlling the assessment when supplied. Use check_reversibility for evaluation only, or get_exit_manifest when a manifest already exists. This state-changing $0.25 stablecoin MPP operation checks eligibility before any payment challenge; a fresh authorization creates durable state, while an identical settled retry with the same payment credential recovers the same manifest without a second settlement. The plaintext access token is returned to the caller but stored only as a SHA-256 hash.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "description": "One contemplated or existing commitment to evaluate. merchant, commitment_type, and amount are required. Transaction-specific checkout_terms are the strongest input when available; maintained policy evidence can add context but never overrides conflicting transaction-specific terms.",
+  "properties": {
+   "amount": {
+    "description": "Commitment amount in major currency units, for example 125.50 for USD 125.50. Must be non-negative and uses currency below for all monetary interpretation.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "checkout_terms": {
+    "additionalProperties": false,
+    "description": "Transaction-specific cancellation, refund, renewal, charge, and loss terms observed for this exact commitment. Supply these whenever available; they control the transaction-specific assessment while maintained policy evidence remains contextual.",
+    "properties": {
+     "auto_renews": {
+      "description": "Whether the supplied transaction terms explicitly state that the commitment renews automatically.",
+      "type": "boolean"
+     },
+     "cancellable": {
+      "description": "Whether the supplied transaction terms explicitly state that the commitment can be canceled.",
+      "type": "boolean"
+     },
+     "cancellation_deadline": {
+      "description": "RFC 3339 timestamp with explicit timezone for the stated cancellation deadline, even when cancellation may involve a loss.",
+      "format": "date-time",
+      "type": "string"
+     },
+     "cancellation_method": {
+      "description": "Recorded method or path for cancellation/refund, such as an account page, support channel, or merchant instruction. This can make a later exit pack actionable.",
+      "maxLength": 240,
+      "type": "string"
+     },
+     "cancellation_penalty_amount": {
+      "description": "Stated cancellation penalty in major units of currency. Mutually exclusive with cancellation_penalty_percent.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "cancellation_penalty_percent": {
+      "description": "Stated cancellation penalty as a percentage from 0 to 100. Mutually exclusive with cancellation_penalty_amount.",
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+     },
+     "charge_timing": {
+      "description": "When the merchant states the charge will occur, such as immediately, at check-in, or 24 hours before renewal.",
+      "maxLength": 160,
+      "type": "string"
+     },
+     "free_cancellation_until": {
+      "description": "RFC 3339 deadline with explicit timezone through which the supplied terms state cancellation is free.",
+      "format": "date-time",
+      "type": "string"
+     },
+     "nonrefundable_amount": {
+      "description": "Amount explicitly stated as nonrefundable, in major units of currency.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "observed_at": {
+      "description": "RFC 3339 timestamp with explicit timezone for when the caller observed these checkout terms.",
+      "format": "date-time",
+      "type": "string"
+     },
+     "refundable": {
+      "description": "Whether the supplied transaction terms explicitly state that the committed amount is refundable.",
+      "type": "boolean"
+     },
+     "renewal_interval": {
+      "description": "Human-readable renewal interval from the supplied terms, such as monthly or annually. Use only when auto-renewal terms are stated.",
+      "maxLength": 80,
+      "type": "string"
+     },
+     "source_url": {
+      "description": "HTTP(S) source URL for the supplied transaction terms. ExitProof removes credentials, query parameters, and fragments before storing the URL.",
+      "maxLength": 500,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "client_reference": {
+    "description": "Optional caller-owned correlation reference. ExitProof stores only a SHA-256 hash; do not place secrets or sensitive personal data here.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "commitment_type": {
+    "description": "Closest category for the commitment being evaluated. This affects policy matching and should describe what the user is committing to, not the payment method.",
+    "enum": [
+     "subscription",
+     "reservation",
+     "ticket",
+     "service",
+     "software",
+     "digital_purchase",
+     "rental",
+     "deposit",
+     "other"
+    ],
+    "type": "string"
+   },
+   "country": {
+    "description": "Optional two-letter ISO 3166-1 alpha-2 country code, such as US. Used to scope maintained policy rules when geography matters.",
+    "maxLength": 2,
+    "minLength": 2,
+    "pattern": "^[A-Za-z]{2}$",
+    "type": "string"
+   },
+   "currency": {
+    "default": "USD",
+    "description": "Three-letter ISO 4217 currency code for amount and all monetary checkout terms. Defaults to USD.",
+    "maxLength": 3,
+    "minLength": 3,
+    "pattern": "^[A-Za-z]{3}$",
+    "type": "string"
+   },
+   "event_type": {
+    "default": "initial",
+    "description": "Lifecycle event for this commitment. Use renewal for a recurring renewal, reservation for a booking event, deposit for a deposit event, or leave omitted for an initial commitment.",
+    "enum": [
+     "initial",
+     "renewal",
+     "purchase",
+     "reservation",
+     "deposit",
+     "other"
+    ],
+    "type": "string"
+   },
+   "expected_commitment_at": {
+    "description": "RFC 3339 timestamp with explicit timezone for when the commitment is expected to occur. ExitProof evaluates time windows at the later of now and this timestamp.",
+    "format": "date-time",
+    "type": "string"
+   },
+   "merchant": {
+    "description": "Merchant, platform, provider, or counterparty name exactly enough to identify the commitment. Used to match maintained policy overlays; do not include account numbers, credentials, or secrets.",
+    "maxLength": 160,
+    "minLength": 1,
+    "type": "string"
+   },
+   "purchase_channel": {
+    "default": "unknown",
+    "description": "Where the commitment is being made or billed. Use apple or google_play when that billing platform controls cancellation/refund rules; use direct for the merchant itself.",
+    "enum": [
+     "direct",
+     "apple",
+     "google_play",
+     "marketplace",
+     "travel_agency",
+     "other",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "region": {
+    "description": "Optional state, province, or region label when the commitment or merchant terms are region-specific.",
+    "maxLength": 80,
+    "type": "string"
+   }
+  },
+  "required": [
+   "merchant",
+   "commitment_type",
+   "amount"
+  ],
+  "type": "object"
+ },
+ "name": "create_exit_manifest",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "Durable privacy-minimized Exit Manifest plus the bearer access token returned to the caller.",
+  "properties": {
+   "accessToken": {
+    "description": "Secret bearer token required with manifestId for later retrieval or exit-pack creation. ExitProof does not store this token in plaintext.",
+    "type": "string"
+   },
+   "accessTokenReissuedForSettlementRecovery": {
+    "description": "True only when deterministic settlement recovery re-derived the access token after a settled delivery failure.",
+    "type": "boolean"
+   },
+   "accessTokenReturnedOnce": {
+    "description": "Whether this response is the first normal return of the access token.",
+    "type": "boolean"
+   },
+   "assessment": {
+    "description": "Reversibility assessment preserved in the manifest.",
+    "type": "string"
+   },
+   "createdAt": {
+    "description": "Manifest creation timestamp.",
+    "type": "string"
+   },
+   "expiresAt": {
+    "description": "Manifest expiration timestamp.",
+    "type": "string"
+   },
+   "manifestId": {
+    "description": "Unguessable identifier for the stored Exit Manifest.",
+    "type": "string"
+   },
+   "paidExitPackAvailable": {
+    "description": "Whether the stored manifest is eligible for an exit-pack preflight at creation time.",
+    "type": "boolean"
+   },
+   "privacyNote": {
+    "description": "How ExitProof protects and may recover the access token.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "manifestId",
+   "createdAt",
+   "expiresAt",
+   "assessment",
+   "accessToken",
+   "accessTokenReturnedOnce",
+   "privacyNote"
+  ],
+  "type": "object"
+ },
+ "title": "Create Exit Manifest"
+}

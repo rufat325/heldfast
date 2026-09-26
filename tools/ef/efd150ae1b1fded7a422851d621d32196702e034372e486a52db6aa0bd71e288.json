@@ -1,0 +1,148 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Run a raw, read-only SPARQL SELECT against the CELLAR Virtuoso endpoint \u2014 an escape hatch for CDM ontology traversals the curated tools do not cover. Only SELECT is accepted; update forms and ASK/CONSTRUCT/DESCRIBE are rejected before execution, and results are capped at 100. The cdm:, skos:, and xsd: prefixes are auto-injected.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "sparql_query": {
+    "description": "A read-only SPARQL SELECT query. Leading comments and PREFIX/BASE declarations are allowed; the cdm:, skos:, and xsd: prefixes are auto-injected. LIMIT is injected at 100 if absent, or capped to 100. Key CDM predicates: cdm:resource_legal_id_celex (CELEX), cdm:work_date_document (date), cdm:work_has_resource-type (type), cdm:work_is_about_concept_eurovoc (EuroVoc subject), cdm:work_cites_work (citation). CELEX is an xsd:string literal \u2014 match it as a typed triple, ?work cdm:resource_legal_id_celex \"32016R0679\"^^xsd:string (an untyped literal matches nothing, in a triple or in FILTER(?celex = \"\u2026\"), and a FILTER(STR(\u2026)) comparison scans every CELEX). For text, use bif:contains with a single-quoted phrase.",
+    "minLength": 10,
+    "type": "string"
+   },
+   "timeout_hint": {
+    "description": "Optional client-side timeout in milliseconds (1000\u201355000). Defaults apply when omitted; the endpoint hard limit is 60 seconds.",
+    "maximum": 55000,
+    "minimum": 1000,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "sparql_query"
+  ],
+  "type": "object"
+ },
+ "name": "eurlex_query_sparql",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "bindings",
+     "variables",
+     "total"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "bindings": {
+    "description": "Raw SPARQL binding rows. To extract a value from a row: row[\"varName\"]?.value. Use the variables array to iterate in query order.",
+    "items": {
+     "additionalProperties": {},
+     "description": "A single SPARQL result row. Each key is a SELECT variable name; each value is a SPARQL term object with \"type\" (\"uri\", \"literal\", or \"bnode\") and \"value\" (the string value), plus \"datatype\" (an IRI) on a typed literal or \"xml:lang\" (a language tag) on a language-tagged literal \u2014 the two are mutually exclusive. A variable left unbound by an OPTIONAL has no key in the row at all.",
+     "properties": {},
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "cap": {
+    "description": "The server-enforced result ceiling that was applied.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `not_read_only`: The query is a SPARQL Update operation (INSERT, DELETE, WITH, LOAD, CLEAR, CREATE, DROP, COPY, MOVE, or ADD). `unsupported_query_form`: The query is not a SELECT: an ASK, CONSTRUCT, or DESCRIBE form, an unrecognized keyword, or no query keyword after the prologue. `sparql_error`: Virtuoso returned a syntax or semantic error \u2014 the query is malformed. `sparql_timeout`: The query exceeded the client-side timeout (timeout_hint, default 55 s) or the 60-second Virtuoso execution limit. Neither is retried: the call fails inside the configured bound. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "not_read_only",
+         "unsupported_query_form",
+         "sparql_error",
+         "sparql_timeout"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "On a zero-row result whose query has an untyped string literal as a triple object: how to type or language-tag it, since CELLAR stores identifiers as typed literals that an untyped one never matches.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of binding rows returned in this response.",
+    "type": "number"
+   },
+   "total": {
+    "description": "Number of binding rows returned (capped at 100 by the server).",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the server-enforced result ceiling capped the rows and more may exist upstream \u2014 narrow the query with FILTERs to see the rest.",
+    "type": "boolean"
+   },
+   "variables": {
+    "description": "Variable names from the SELECT head, in query order.",
+    "items": {
+     "description": "A SELECT variable name, in the order declared in the query.",
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Raw CELLAR SPARQL Query"
+}

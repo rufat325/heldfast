@@ -1,0 +1,64 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fuzzy-search contractors by business or individual name within a single state (or city) licensing database. USE WHEN: the user has a contractor's name but not their license number \u2014 'find Smith Plumbing in Texas', 'is there an active electrician named John Doe in California', vetting a contractor whose card you don't have in hand. Match is case-insensitive and tolerates partial words and reordered tokens (e.g. 'Smith Plumbing' matches 'Plumbing Smith Inc'). DO NOT USE FOR: license-number lookup (use verify_license \u2014 it's faster and authoritative); discovery of what states are supported (use list_supported_states); states where supports_name_search:false (the call will 400 \u2014 check list_supported_states first). RETURNS: {query: {state, name, trade}, total_results, results: [{name, license_number, trade, status, state, confidence, source_url}], cached, checked_at}. `confidence` is 0.0-1.0 (1.0 = exact match). Results are ranked by confidence descending. EXAMPLE: state='TN', city='nashville', name='100 PERCENT PLUMBING', trade='plumbing' \u2192 {results: [{name: '100 PERCENT PLUMBING INC', license_number: '...', confidence: 0.95, ...}]}. COST: this tool deducts 2 credits per call (vs 1 for verify_license) because name searches are more expensive \u2014 they may scrape multiple result pages. ERRORS: 400 NAME_SEARCH_NOT_SUPPORTED (this state's portal doesn't expose a name-search endpoint \u2014 check list_supported_states.supports_name_search); 502 STATE_PORTAL_UNAVAILABLE (retry); 429 RATE_LIMITED (back off).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "city": {
+    "description": "Optional city slug for municipal contractor licensing. Use this when the contractor holds a city-issued license (some cities issue licenses in addition to or instead of state licenses). Lowercase, no spaces \u2014 e.g. 'chicago', 'nyc', 'philadelphia', 'detroit', 'atlanta', 'dallas', 'lasvegas', 'nashville'. Call list_supported_states to see registered cities under each state.",
+    "maxLength": 64,
+    "minLength": 1,
+    "type": "string"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Maximum number of results to return (1-50, default 20). Results are ranked by name-match confidence.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "name": {
+    "description": "Business or individual name to fuzzy-match against the licensing database. Case-insensitive; partial matches and reordered words ('Smith Plumbing' matches 'Plumbing Smith Inc') are supported.",
+    "maxLength": 200,
+    "minLength": 2,
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Response format.",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "state": {
+    "description": "Two-letter US state code (e.g. 'CA', 'TX'). Call list_supported_states to see what's available \u2014 every US state is supported.",
+    "maxLength": 2,
+    "minLength": 2,
+    "type": "string"
+   },
+   "trade": {
+    "default": "general",
+    "description": "Trade type \u2014 e.g. 'general', 'electrical', 'plumbing', 'hvac', 'mechanical', 'roofing'. Defaults to 'general' if omitted. Valid values vary by state; check list_supported_states.supported_trades for the jurisdiction.",
+    "maxLength": 50,
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "state",
+   "name"
+  ],
+  "type": "object"
+ },
+ "name": "search_by_name",
+ "title": "Search Contractors by Name"
+}

@@ -1,0 +1,64 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Scan top Polymarket markets and return opportunities where Pipeworx data disagrees with market price. Built for \"what should I bet on today\" \u2014 agents discover opportunities without paging hundreds of markets. FIVE MODEL FAMILIES grouped into three response segments under by_segment: (1) MODEL_DRIVEN \u2014 crypto_price (lognormal barrier from 90d FRED log-returns) and news_momentum (GDELT 7d/21d article-volume ratio, soft signal w/ halved Kelly). (2) STRUCTURAL_ARBITRAGE \u2014 partition_overround on mutually-exclusive events; per-leg favorite-longshot bias correction with per-sport \u03b1 (tennis 1.02, soccer 1.10, MMA 1.15, default 1.0); placeholder-slug filter drops will-person-X / will-team-Y / will-manager-Z / will-someone-else- backstops; partitions with >20% placeholder fraction skipped entirely. (3) CONCENTRATED_LONGSHOT \u2014 basket trade when one leg \u226575% AND \u22652 longshots \u22648% AND portfolio return \u226525:1; rare-by-design (gates relaxed Run 8 from prior 85%/5%/50:1). EVERY OPPORTUNITY carries edge_pp_net (net of slippage AND Polymarket's own taker fee \u2014 fees_pp_applied itemises the fee component; see fees.ts for the published per-category schedule), kelly_fraction + kelly_fraction_half (capped at 0.25), market.liquidity, market.spread_pp, market.volume, plus a 24h-move warning (\"Market moved X.Xpp in 24h\") when the recent move alone exceeds the edge \u2014 your edge may already be in the price. TRADEABLE-EDGE KNOBS: min_liquidity / max_spread_pp drop opportunities where edge isn't realizable; min_partition_leg_kelly filters partitions by best per-leg Kelly. RESPONSE TOP-LEVEL: by_segment{model_driven,structural_arbitrage,concentrated_longshot}, fed_candidates/fed_note (Fed bets surface here, excluded from ranking \u2014 1m-T vs EFFR signal is unreliable at meeting-month horizons without paid OIS/SOFR-futures data), and _diagnostics{concentrated_longshot:{...funnel counters},category_counts,filter_skips} so callers can see WHY a segment is empty (top-N stale, all candidates failed gates, knob dropped them). Cached 1h at the KV level keyed on all knobs.",
+ "inputSchema": {
+  "examples": [
+   {
+    "limit": 5,
+    "window": "1wk"
+   }
+  ],
+  "properties": {
+   "category_filter": {
+    "description": "Comma-separated list to restrict the output: \"model_driven\" (crypto_price + news_momentum), \"structural_arbitrage\" (partition_overround), \"concentrated_longshot\". Combine like \"model_driven,structural_arbitrage\". Default: all.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Top N edges to return after ranking. Default 10, max 25.",
+    "type": "number"
+   },
+   "max_spread_pp": {
+    "description": "Tradeable-edge filter. Maximum bid/ask spread in percentage points on the representative market. Default null (no filter). Set to 2 to require tight books \u2014 anything wider eats most plausible edges.",
+    "type": "number"
+   },
+   "min_edge_pp": {
+    "description": "Minimum |edge| in percentage points to include (default 0.5). Edge is evaluated NET of slippage and Polymarket's own taker fee.",
+    "type": "number"
+   },
+   "min_kelly": {
+    "description": "Minimum half-Kelly fraction (as decimal, e.g. 0.005 = 0.5% of bankroll) to include single-leg opportunities. Default 0 (no filter). Skips opportunities that are too small to bet sensibly even if the edge is large.",
+    "type": "number"
+   },
+   "min_liquidity": {
+    "description": "Tradeable-edge filter. Minimum $ liquidity on the representative market (or for partition_overround, on at least one top_leg). Default 0 (no filter). Set to 5000 to drop thin-book opportunities where executing the edge would walk the book past breakeven.",
+    "type": "number"
+   },
+   "min_partition_leg_kelly": {
+    "description": "Minimum BEST per-leg half-Kelly fraction across a partition_overround opportunity's top_legs (or longshot_basket legs). Default 0 (no filter). Partition arbs always return kelly_fraction_half=0 at the parent level by design (basket trades don't compose to single-leg Kelly), so min_kelly never filters them \u2014 this knob applies to the per-leg Kelly inside top_legs instead. Use to suppress thin partitions whose individual leg edges aren't worth the per-leg slippage cost.",
+    "type": "number"
+   },
+   "slippage_pp": {
+    "description": "Assumed execution slippage in percentage points per leg (default 0.3), for bid/ask + thin depth cost that a last-trade price does not show. Subtracted from raw |edge| before ranking and Kelly sizing, ON TOP OF Polymarket's own taker fee \u2014 which is NOT zero (rate 0.04-0.07 depending on category, read off each market's own published fee schedule; see fees_pp_applied on every row and fees.ts for the full schedule). Bump slippage for very thin partitions; drop to 0 if you have a smarter fill model \u2014 the fee still applies regardless.",
+    "type": "number"
+   },
+   "window": {
+    "description": "Polymarket volume window to filter markets. Default 1wk.",
+    "enum": [
+     "24hr",
+     "1wk",
+     "1mo"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "polymarket_edges",
+ "title": "Polymarket Edges",
+ "version": "v1.6813c944"
+}

@@ -1,0 +1,158 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "PAID ($0.001 USDC via x402). Is this address worth sending to? Syntax, the domain's DNS (MX, then A/AAAA), disposable-provider and role-mailbox lists, a free-provider flag, a typo suggestion (gmial.com -> gmail.com), a normalized form (Gmail dots and +tags collapsed), and a risk verdict \u2014 low / medium / high / undeliverable \u2014 with reasons. No SMTP probe: it vouches for the DOMAIN, never the mailbox. An invalid address is a paid verdict (that IS the answer); a DNS failure answers 502 and is not charged. Without payment this returns the 402 challenge; the fiatdock-mcp npm package pays automatically.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "email": {
+    "description": "The email address to check",
+    "type": "string"
+   },
+   "payment": {
+    "description": "Base64 of a single x402 v2 PaymentPayload (EIP-3009 transferWithAuthorization on Base USDC). OMIT it on the first call: the 402 you get back carries `howToPay.payloadTemplate` \u2014 the exact envelope to fill in \u2014 plus the price and the EIP-712 domain. Send it on the second call to complete the purchase; it is forwarded as the PAYMENT-SIGNATURE header, never as body data. Nothing is charged for the 402 itself, and a call that fails after payment settles nothing.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "email"
+  ],
+  "type": "object"
+ },
+ "name": "email_check",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "checkedAt": {
+    "description": "ISO time of the check",
+    "type": "string"
+   },
+   "deliverableDomain": {
+    "description": "Syntax valid AND the domain accepts mail at the DNS level \u2014 a statement about the DOMAIN, never the mailbox",
+    "type": "boolean"
+   },
+   "domain": {
+    "description": "The part after @",
+    "type": "string"
+   },
+   "domainExists": {
+    "description": "The domain answered DNS (MX or A/AAAA); false = no such domain",
+    "type": "boolean"
+   },
+   "email": {
+    "description": "The address as given (trimmed)",
+    "type": "string"
+   },
+   "hasA": {
+    "description": "The domain has an A/AAAA record (mail may still be accepted without MX)",
+    "type": "boolean"
+   },
+   "hasMx": {
+    "description": "The domain publishes MX records",
+    "type": "boolean"
+   },
+   "isDisposable": {
+    "description": "The domain is on the disposable-provider list (a list, not a census)",
+    "type": "boolean"
+   },
+   "isFreeProvider": {
+    "description": "A consumer webmail provider (gmail, outlook, \u2026)",
+    "type": "boolean"
+   },
+   "isRole": {
+    "description": "A role mailbox (info@, support@, noreply@, \u2026) rather than a person",
+    "type": "boolean"
+   },
+   "local": {
+    "description": "The part before @",
+    "type": "string"
+   },
+   "method": {
+    "description": "Exactly what was checked, and that no SMTP probe was made",
+    "type": "string"
+   },
+   "mx": {
+    "description": "MX hosts by priority (up to 5)",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "exchange": {
+       "type": "string"
+      },
+      "priority": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "exchange",
+      "priority"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "normalized": {
+    "description": "Lower-cased; for Gmail, dots and the +tag in the local part removed",
+    "type": "string"
+   },
+   "reasons": {
+    "description": "Why: invalid_syntax, domain_not_found, domain_accepts_no_mail (a null MX, RFC 7505), no_mx_record, disposable_domain, role_mailbox, likely_typo, free_provider",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "risk": {
+    "description": "The verdict: undeliverable (bad syntax / no domain / no mail host), high (disposable), medium (role mailbox or likely typo), low",
+    "enum": [
+     "low",
+     "medium",
+     "high",
+     "undeliverable"
+    ],
+    "type": "string"
+   },
+   "suggestion": {
+    "description": "A corrected address when the domain looks like a typo of a common provider, else null",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "syntaxValid": {
+    "description": "Shaped like a real mailbox address",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "email",
+   "normalized",
+   "local",
+   "domain",
+   "syntaxValid",
+   "domainExists",
+   "mx",
+   "hasMx",
+   "hasA",
+   "isDisposable",
+   "isRole",
+   "isFreeProvider",
+   "suggestion",
+   "deliverableDomain",
+   "risk",
+   "reasons",
+   "method",
+   "checkedAt"
+  ],
+  "type": "object"
+ },
+ "title": "Check an email address ($0.001)"
+}

@@ -1,0 +1,75 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Generate a small capped set (1-5) of grounded tests from local evidence using your own model key (BYOK: OpenAI-compatible, Ollama, or Anthropic). Tests are diversified across lightweight LOCAL scenario buckets (happy_path, validation_error, edge_case, integration_flow, security_privacy, regression) chosen from the evidence \u2014 unjustified buckets are skipped, never padded. By default it focuses the top-gap behavior and returns up to `limit` bucket-diverse tests for it; pass multiple target_ids to split the budget across them. Each test reports its bucket plus VALIDATED grounding `evidence` (every cited entity resolved against the local graph with its kind, evidence strength, and source_ref) and discloses weak/candidate evidence; `evidence_summary` reports proof coverage and any broken citations, so the grounding is verifiable rather than asserted. If evidence is too thin, returns missing-evidence guidance instead of generic tests. Returns each test's code plus `run_hints` (a suggested file path + run command) and an `agent_workflow`: YOU (the agent) write each file and run it with your shell tools, then report pass/fail + stack traces \u2014 OrangePro never writes to or runs anything in the repo. Requires the repo's test framework/deps to already be installed.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "base_ref": {
+    "description": "PR-scoped generation: restrict to the behaviors the diff vs this ref touches (e.g. 'main') \u2014 for branch/PR review, target only the changed code. Requires a git repo + a real diff; returns structured guidance (status + guidance) instead of fabricating when there is none. Overrides target_ids.",
+    "type": "string"
+   },
+   "compare": {
+    "description": "Run BOTH arms \u2014 prompt-only baseline vs Local KG, same model + system prompt \u2014 and return side-by-side scores (completeness, context awareness, accuracy, domain specificity) plus both test suites. Non-persisting testing view.",
+    "type": "boolean"
+   },
+   "framework": {
+    "description": "Framework hint, e.g. 'playwright', 'vitest', 'pytest'.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Total tests to generate (1-5), spread across local scenario buckets. Default 3.",
+    "maximum": 5,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "model": {
+    "description": "Model name override.",
+    "type": "string"
+   },
+   "prompt_version": {
+    "description": "Prompt strategy. Defaults to v2; v5 is opt-in until corpus validation clears it as default.",
+    "enum": [
+     "v2",
+     "v5"
+    ],
+    "type": "string"
+   },
+   "provider": {
+    "description": "BYOK provider override (auto-detected from env if omitted). Use 'deterministic' for an offline stand-in; without any provider configured, generation returns setup guidance instead of degrading.",
+    "enum": [
+     "openai",
+     "ollama",
+     "anthropic",
+     "deterministic"
+    ],
+    "type": "string"
+   },
+   "target_ids": {
+    "description": "Behavior/requirement external ids to target. Default: the top-gap behavior. Pass several to split the budget across them (each gets a test when the budget allows, in priority order).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "workspace": {
+    "description": "Local workspace root. Defaults to the current directory.",
+    "type": "string"
+   },
+   "write_files": {
+    "description": "Deferred/premium: repo file writing is disabled in the first slice; always treated as false.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "name": "orangepro_generate_tests",
+ "title": "Generate grounded tests"
+}

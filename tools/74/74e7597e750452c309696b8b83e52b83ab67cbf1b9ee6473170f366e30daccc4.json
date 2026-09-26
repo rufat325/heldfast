@@ -1,0 +1,336 @@
+{
+ "_meta": {
+  "ui": {
+   "resourceUri": "ui://clarifyprompt/compose-panel.html"
+  },
+  "ui/resourceUri": "ui://clarifyprompt/compose-panel.html"
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Run the canonical ClarifyPrompt pipeline in ONE call: clarify (optional pre-stage) \u2192 ground OR optimize (core) \u2192 critique (optional post-stage) \u2192 optional auto-revise. Use this when you want the four-tool happy path without orchestrating five round-trips. Short-circuits if `pre_clarify` surfaces questions \u2014 caller answers and re-calls. When `sources` is non-empty the chain takes the strict ground_prompt branch; otherwise it goes through optimize_prompt. When `auto_revise` is true and critique returns a non-accept verdict with an improved rewrite, `final_prompt` is the rewrite. The `stages` array is a per-call audit log so callers can see exactly what ran.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "auto_revise": {
+    "default": false,
+    "description": "When true AND post_critique is true AND verdict !== 'accept' AND there's an improvedPrompt: `final_prompt` becomes the rewritten version instead of the raw optimization.",
+    "type": "boolean"
+   },
+   "category": {
+    "enum": [
+     "chat",
+     "image",
+     "voice",
+     "video",
+     "music",
+     "code",
+     "document"
+    ],
+    "type": "string"
+   },
+   "clarify_model": {
+    "description": "Override the LLM model for the clarify pre-stage. Default: env LLM_MODEL. Useful for per-stage cost/quality routing \u2014 e.g. run clarify on a cheap model while critique runs on a frontier one.",
+    "type": "string"
+   },
+   "critique_criteria": {
+    "description": "Override the default 6 critique criteria.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "description": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "description"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "critique_model": {
+    "description": "Override the LLM model for the critique judge AND rewrite.",
+    "type": "string"
+   },
+   "cwd": {
+    "type": "string"
+   },
+   "enrich_context": {
+    "default": false,
+    "type": "boolean"
+   },
+   "file_excerpt": {
+    "type": "string"
+   },
+   "file_language": {
+    "type": "string"
+   },
+   "file_path": {
+    "type": "string"
+   },
+   "include_bundle": {
+    "default": false,
+    "type": "boolean"
+   },
+   "max_iterations": {
+    "default": 1,
+    "description": "Max revise-loop iterations. With `auto_revise: true` AND `post_critique: true`, the engine can feed each iteration's improvedPrompt back through optimize+critique up to this cap. Stops early at verdict=accept or when there's no improvedPrompt. Default 1 (single-shot, no loop). Hard max 5 to prevent cost runaways.",
+    "maximum": 5,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "max_questions": {
+    "default": 3,
+    "exclusiveMinimum": 0,
+    "maximum": 5,
+    "type": "integer"
+   },
+   "mode": {
+    "enum": [
+     "concise",
+     "detailed",
+     "structured",
+     "step-by-step",
+     "bullet-points",
+     "technical",
+     "simple"
+    ],
+    "type": "string"
+   },
+   "optimize_model": {
+    "description": "Override the LLM model for the optimize/ground core stage.",
+    "type": "string"
+   },
+   "platform": {
+    "type": "string"
+   },
+   "post_critique": {
+    "default": false,
+    "description": "Run the critique judge against the optimized output. Adds ~3-5s on a local model.",
+    "type": "boolean"
+   },
+   "pre_clarify": {
+    "default": "auto",
+    "description": "'auto' = run clarify only if analyzer confidence is low / prompt is short. 'always' = force clarify. 'never' = skip. When clarification questions surface, the chain stops; caller answers and re-calls.",
+    "enum": [
+     "auto",
+     "always",
+     "never"
+    ],
+    "type": "string"
+   },
+   "prompt": {
+    "description": "The prompt to compose.",
+    "type": "string"
+   },
+   "revise_threshold": {
+    "default": 7,
+    "maximum": 10,
+    "minimum": 0,
+    "type": "number"
+   },
+   "session_id": {
+    "type": "string"
+   },
+   "skip_intent_resolution": {
+    "default": false,
+    "type": "boolean"
+   },
+   "sources": {
+    "description": "When non-empty, the chain takes the strict ground_prompt branch (caller-provided sources pinned at highest priority).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "body": {
+       "type": "string"
+      },
+      "kind": {
+       "type": "string"
+      },
+      "label": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "label",
+      "body"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "user_locale": {
+    "type": "string"
+   },
+   "user_pinned_instructions": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "prompt"
+  ],
+  "type": "object"
+ },
+ "name": "compose_prompt",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "clarification": {
+    "additionalProperties": true,
+    "properties": {
+     "analysis": {
+      "additionalProperties": true,
+      "properties": {
+       "category": {
+        "type": "string"
+       },
+       "confidence": {
+        "type": "string"
+       },
+       "intent": {
+        "type": "string"
+       },
+       "recommendedMode": {
+        "type": "string"
+       },
+       "source": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "clarificationNeeded": {
+      "type": "boolean"
+     },
+     "latencyMs": {
+      "type": "number"
+     },
+     "questions": {
+      "items": {
+       "$ref": "#/properties/stages/items"
+      },
+      "type": "array"
+     },
+     "reason": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "clarificationRequired": {
+    "type": "boolean"
+   },
+   "critique": {
+    "additionalProperties": true,
+    "properties": {
+     "analysis": {
+      "$ref": "#/properties/clarification/properties/analysis"
+     },
+     "dimensions": {
+      "items": {
+       "$ref": "#/properties/stages/items"
+      },
+      "type": "array"
+     },
+     "improvedPrompt": {
+      "type": "string"
+     },
+     "improvements": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "judgeModel": {
+      "type": "string"
+     },
+     "latencyMs": {
+      "type": "number"
+     },
+     "overallScore": {
+      "type": "number"
+     },
+     "summary": {
+      "type": "string"
+     },
+     "verdict": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "finalPrompt": {
+    "type": "string"
+   },
+   "grounding": {
+    "additionalProperties": true,
+    "properties": {
+     "analysis": {
+      "$ref": "#/properties/clarification/properties/analysis"
+     },
+     "bundle": {},
+     "category": {
+      "type": "string"
+     },
+     "context": {
+      "$ref": "#/properties/stages/items"
+     },
+     "id": {
+      "type": "string"
+     },
+     "mode": {
+      "type": "string"
+     },
+     "modeSource": {
+      "type": "string"
+     },
+     "optimizedPrompt": {
+      "type": "string"
+     },
+     "originalPrompt": {
+      "type": "string"
+     },
+     "platform": {
+      "type": "string"
+     },
+     "sessionId": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "iterations": {
+    "type": "number"
+   },
+   "optimization": {
+    "$ref": "#/properties/grounding"
+   },
+   "revised": {
+    "type": "boolean"
+   },
+   "stages": {
+    "items": {
+     "additionalProperties": true,
+     "properties": {},
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Compose the full pipeline"
+}

@@ -1,0 +1,45 @@
+{
+ "description": "Run a cosine-similarity search over agent-generated embeddings stored via record_embedding. Pass a pre-computed query_vector (you must embed your text first with your own embedding capability \u2014 this tool does NOT embed for you) and optionally restrict by entity_type or snapshot_id. Returns the most semantically similar files or symbols.\n\nWorks in both hosted mode (pgvector HNSW on Postgres) and local mode (pure-JS full-scan cosine over the SQLite embeddings table). The response shape is identical in both modes so agent prompts don't need to branch on backend.\n\nUnlike query_symbols (exact/fuzzy NAME match on qualifiedName), find_similar_code matches MEANING \u2014 \"rate limiting logic\" will return files implementing throttles even if the word \"rate-limit\" never appears. Only useful after you've seeded embeddings for the target corpus via record_embedding; if no embeddings exist, results will be empty.\n\nPrerequisites: Tentra API auth (hosted) OR TENTRA_BACKEND=local + at least one record_embedding call against the snapshot you're querying + a caller-generated query_vector of matching dimension. Read-only. Response: { results: [{ id, entityType, entityId, sourceText, distance }] } sorted by cosine distance ascending (closest first).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "entity_type": {
+    "description": "Restrict results to only files OR only symbols. Omit to include both. Default: both. Set to \"file\" to find similar whole-file summaries; \"symbol\" for similar functions/classes.",
+    "enum": [
+     "file",
+     "symbol"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Max matches to return, ranked by cosine similarity descending. Default 10. Max 50. Lower values cost less context.",
+    "exclusiveMinimum": 0,
+    "maximum": 50,
+    "type": "integer"
+   },
+   "query_vector": {
+    "description": "Pre-computed dense embedding of the search query, 1\u20134096 dims. The agent must embed its own text first (Tentra does NOT embed for you). Must share the same dimension as the vectors recorded via record_embedding \u2014 mismatched dims return no matches. Example dim: 1536 for OpenAI text-embedding-3-small.",
+    "items": {
+     "type": "number"
+    },
+    "maxItems": 4096,
+    "minItems": 1,
+    "type": "array"
+   },
+   "snapshot_id": {
+    "description": "Scope the search to one snapshot. Omit to search embeddings across every snapshot in the workspace (useful when embeddings were seeded without a snapshot_id).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "query_vector"
+  ],
+  "type": "object"
+ },
+ "name": "find_similar_code"
+}

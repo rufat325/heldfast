@@ -1,0 +1,340 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Return current bookable availability for one clinic, read from the clinic's own diary. Gives the soonest appointment and how many are free today, tomorrow and in the next 48 hours, per treatment type. Pass a date or a date range to get that day's appointment times, each carrying the ids start_booking needs to open the checkout on that exact slot. Every response says how old its reading is, and every date carries its own age, because the next few days are re-read every ten minutes and later dates far less often. Says plainly when a date has not been read rather than reporting it as having nothing. Covers self-pay first appointments booked online; the checkout page shows every live slot.",
+ "inputSchema": {
+  "properties": {
+   "clinic_id": {
+    "description": "The clinic id from search_clinics. Accepts the slug or the ULID.",
+    "type": "string"
+   },
+   "date": {
+    "description": "Optional single date, ISO format (2026-09-22). Returns that day's appointment times.",
+    "type": "string"
+   },
+   "date_from": {
+    "description": "Optional start of a date range, ISO format. Use with date_to.",
+    "type": "string"
+   },
+   "date_to": {
+    "description": "Optional end of a date range, ISO format. At most 14 days from date_from.",
+    "type": "string"
+   },
+   "service": {
+    "description": "Optional. Narrow to one treatment, e.g. \"physiotherapy\", \"osteopathy\", \"chiropractic\".",
+    "type": "string"
+   },
+   "time_of_day": {
+    "description": "Optional. Narrow the times to morning (before noon), afternoon (noon to 5pm) or evening (5pm on).",
+    "enum": [
+     "morning",
+     "afternoon",
+     "evening"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "clinic_id"
+  ],
+  "type": "object"
+ },
+ "name": "get_availability",
+ "outputSchema": {
+  "properties": {
+   "about": {
+    "description": "What MediMo is.",
+    "type": "string"
+   },
+   "booking_rule": {
+    "description": "Where bookings and payment complete.",
+    "type": "string"
+   },
+   "data": {
+    "properties": {
+     "availability": {
+      "properties": {
+       "age_minutes": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "as_of": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "by_specialism": {
+        "items": {
+         "properties": {
+          "name": {
+           "type": "string"
+          },
+          "next_available_at": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "slot_counts": {
+           "properties": {
+            "next_48_hours": {
+             "type": "integer"
+            },
+            "today": {
+             "type": "integer"
+            },
+            "tomorrow": {
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "specialism": {
+           "type": "string"
+          },
+          "state": {
+           "enum": [
+            "available",
+            "none"
+           ],
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "coverage": {
+        "enum": [
+         "complete",
+         "partial",
+         "unknown"
+        ],
+        "type": "string"
+       },
+       "coverage_note": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "horizon_days": {
+        "type": "integer"
+       },
+       "note": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "reason": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "scope": {
+        "type": "string"
+       },
+       "state": {
+        "enum": [
+         "available",
+         "none",
+         "stale",
+         "unknown"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "state"
+      ],
+      "type": "object"
+     },
+     "clinic_id": {
+      "type": "string"
+     },
+     "days": {
+      "description": "Present when a date or date range was asked for: one entry per date per treatment.",
+      "items": {
+       "properties": {
+        "age_minutes": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "as_of": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "coverage": {
+         "enum": [
+          "complete",
+          "partial",
+          "unknown"
+         ],
+         "type": "string"
+        },
+        "date": {
+         "type": "string"
+        },
+        "listed": {
+         "type": "integer"
+        },
+        "name": {
+         "type": "string"
+        },
+        "note": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "reading": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "slot_count": {
+         "description": "Whole day, regardless of any time_of_day filter.",
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "slot_count_scope": {
+         "type": "string"
+        },
+        "slots": {
+         "items": {
+          "properties": {
+           "at": {
+            "description": "ISO 8601 with offset. Pass to start_booking as starts_at.",
+            "type": "string"
+           },
+           "practitioner_id": {
+            "type": "string"
+           },
+           "service_id": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "service_ids": {
+            "description": "Every service bookable at this time.",
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           }
+          },
+          "required": [
+           "at",
+           "practitioner_id"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "specialism": {
+         "type": "string"
+        },
+        "state": {
+         "enum": [
+          "available",
+          "none",
+          "unknown"
+         ],
+         "type": "string"
+        },
+        "times_are_a_sample": {
+         "type": "boolean"
+        },
+        "truncated": {
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "date"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "name": {
+      "type": "string"
+     },
+     "requested": {
+      "properties": {
+       "date_from": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "date_to": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "time_of_day": {
+        "enum": [
+         "morning",
+         "afternoon",
+         "evening"
+        ],
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     }
+    },
+    "required": [
+     "clinic_id",
+     "name",
+     "availability"
+    ],
+    "type": "object"
+   },
+   "data_as_of": {
+    "description": "Age of the underlying reading, when different from generated_at.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "generated_at": {
+    "description": "When this response was produced. ISO 8601, Europe/London.",
+    "type": "string"
+   },
+   "price_promise": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "about",
+   "booking_rule",
+   "price_promise",
+   "generated_at",
+   "data"
+  ],
+  "type": "object"
+ },
+ "title": "Check clinic availability"
+}

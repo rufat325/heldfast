@@ -1,0 +1,101 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "WHAT: Slice of /llms-serp.txt around the first occurrence of the target URL (title/description/URL rows). path or url required in practice. If path is not http(s), it is turned into www(locale, path). No match \u2192 serp_not_found. RETURNS matchContext (~200 chars before + 400 after). Not a Google API.",
+ "inputSchema": {
+  "properties": {
+   "locale": {
+    "default": "de",
+    "description": "HTML locale for canonicalUrl and path prefixes. de = default, URLs have no prefix (https://www.ikeytz.com/preise). en|fr|ru|fa|ar|tr = prefix /{locale}/ (https://www.ikeytz.com/en/preise). Omit or empty = de. Does not change prices, phone numbers, or legal German names. Not a maps.ikeytz.com locale (maps is German-only).",
+    "enum": [
+     "de",
+     "en",
+     "fr",
+     "ru",
+     "fa",
+     "ar",
+     "tr"
+    ],
+    "type": "string"
+   },
+   "path": {
+    "description": "Site path (/preise) or used with locale to build the www URL to find in llms-serp.txt.",
+    "type": "string"
+   },
+   "url": {
+    "description": "If this starts with http, it is used as the search needle instead of path.",
+    "format": "uri",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_serp_snippet",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "Always the same envelope. tools/call returns content[0].text = summary (or JSON) AND structuredContent = this object. On success ok=true with summary + canonicalUrl + extra fields. On failure ok=false with error (snake_case code) and hint (recovery URL). Never writes, never submits forms, never calls /api/*. Attribution must be kept when quoting. Policy: ai-input yes with attribution; ai-train=no.",
+  "properties": {
+   "attribution": {
+    "description": "Required citation: 'Quelle: Schl\u00fcsseldienst Ludwigsburg ikeytz (ikeytz.com) \u00b7 ai-train=no \u00b7 https://www.ikeytz.com/.well-known/ai.txt'",
+    "type": "string"
+   },
+   "canonicalUrl": {
+    "description": "Best URL to show the user: https://www.ikeytz.com\u2026 page, or tel:+49\u2026, mailto:\u2026, https://wa.me/\u2026. Prefer this over constructing URLs.",
+    "type": "string"
+   },
+   "error": {
+    "description": "Present when ok=false. Codes include: unknown_tool, unknown_place, unknown_auswahl, unknown_ratgeber, unknown_doc, unknown_discovery, faq_not_found, wissen_not_found, serp_not_found, q_required, bad_datetime, bad_when_key, plus HTTP errors from fetch.",
+    "type": "string"
+   },
+   "hint": {
+    "description": "Present when ok=false. Absolute URL the agent should open or pass to get_ai_page / get_discovery.",
+    "type": "string"
+   },
+   "locale": {
+    "description": "Locale actually used for URLs (args.locale or de).",
+    "enum": [
+     "de",
+     "en",
+     "fr",
+     "ru",
+     "fa",
+     "ar",
+     "tr"
+    ],
+    "type": "string"
+   },
+   "matchContext": {
+    "description": "Surrounding SERP lines",
+    "type": "string"
+   },
+   "ok": {
+    "description": "true = use summary, canonicalUrl, and extra keys. false = do not invent data; read error + hint and retry with valid args or open hint.",
+    "type": "boolean"
+   },
+   "related": {
+    "description": "Always includes https://www.ikeytz.com/llms.txt. Geo tools also include https://maps.ikeytz.com/llms.txt.",
+    "items": {
+     "format": "uri",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "summary": {
+    "description": "Primary text for the model. For discovery tools this is the file window (possibly thousands of characters). For list tools a compact one-liner. Quote with attribution.",
+    "type": "string"
+   },
+   "tool": {
+    "description": "Echo of the tool name that produced this object (e.g. get_service_area).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "tool",
+   "attribution"
+  ],
+  "type": "object"
+ },
+ "title": "Get Serp Snippet"
+}

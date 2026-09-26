@@ -1,0 +1,44 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Attach declarative rules to a field. All three rule kinds (value_formula, validation, editability) are optional \u2014 pass only the ones you want to change. Omit a kind entirely to leave it untouched on this field; pass `null` to explicitly clear an existing rule.\n\nPlaceholders supported in formulas:\n  #FIELD(\"name\")        \u2014 the same row's cell in field \"name\"\n  #FIELD(\"name\", \"key\") \u2014 field \"name\" on the row carrying that key, in THIS SAME block\n  #KEY                  \u2014 the row's key value (quoted as a string literal)\n  #PLACEHOLDER          \u2014 the cell itself (validation/editability only)\n\nThe two-argument #FIELD is the only way to reach another row of the cell's own block: BLOCKREF is refused there (it depends on the whole-block vertex, so it would close a cycle). Use it for share-of-total or index-to-a-base-row columns, e.g. \"=#FIELD(\"amt\")/#FIELD(\"amt\",\"TOTAL\")\".\nThe other row is named by KEY, never by position \u2014 there is no \"previous row\" form, because rows can be reordered and inserted into, so a positional address would silently come to mean a different row. A running total (each row reading the row above) therefore has no rule form; write that column as ordinary cells outside the block.\nA rule that resolves onto the cell it is defining is rejected, as is a plain coordinate (A1/C3) landing inside the block \u2014 in a template a coordinate does not shift per row, so on the first row it would point at the cell being defined.\n\nEngine behaviour after this call:\n  - value_formula  \u2192 cells in the field become engine-computed (no direct writes). Every row's formula is re-materialized.\n  - validation     \u2192 a `ShadowKind::Validation` shadow is auto-installed on every row; warning markers refresh.\n  - editability    \u2192 a `ShadowKind::UserEditable` shadow is auto-installed on every row; the host permission patch reads it to gate writes.\n\nLeading \"=\" on the formula body is optional; omit or include either way.",
+ "inputSchema": {
+  "properties": {
+   "block": {
+    "type": "string"
+   },
+   "editability": {
+    "description": "Boolean formula, e.g. \"=#FIELD(\\\"status\\\")<>\\\"locked\\\"\". Pass null to clear; omit to leave existing untouched.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "field": {
+    "type": "string"
+   },
+   "validation": {
+    "description": "Boolean formula, e.g. \"#PLACEHOLDER>=0\". Pass null to clear; omit to leave existing untouched.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "value_formula": {
+    "description": "Formula template, e.g. \"=#FIELD(\\\"qty\\\")*#FIELD(\\\"price\\\")\", or \"=#FIELD(\\\"amt\\\")/#FIELD(\\\"amt\\\",\\\"TOTAL\\\")\" to divide by a named row of the same block. Pass null to clear; omit to leave existing untouched.",
+    "type": [
+     "string",
+     "null"
+    ]
+   }
+  },
+  "required": [
+   "block",
+   "field"
+  ],
+  "type": "object"
+ },
+ "name": "set_field_rule"
+}

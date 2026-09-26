@@ -1,0 +1,45 @@
+{
+ "description": "Fetch a URL and convert its HTML content to clean Markdown.\n\nUse after `search` (or its variants) when you have a URL and want the\nactual page text, not just the search snippet. Lightweight HTTP +\nHTML\u2192Markdown \u2014 handles ~80% of the static-HTML web (Wikipedia, docs\nsites, blogs, news, GitHub READMEs).\n\nWhat this DOES NOT handle:\n  \u2022 JavaScript-rendered pages (React/Vue/Angular SPAs) \u2014 content loads\n    after the initial HTML, which we don't execute. Returns minimal or\n    empty markdown for these.\n  \u2022 Bot-protected pages (Cloudflare challenge, captcha) \u2014 typically\n    fail with HTTP 403/503.\n  \u2022 Binary resources (PDF, images, archives) \u2014 returns an explanatory\n    hint instead of garbled bytes.\n\nFor those cases, fall back to a Chromium-backed reader (e.g. Crawl4AI\nexposed via the SearXNG-Compose `reader` profile).\n\nToken-efficient extraction modes (priority order \u2014 first one set wins):\n  \u2022 readHeadings:true        \u2014 returns ONLY the heading list (hierarchical\n                                 TOC). Cheapest survey of a long page.\n  \u2022 section:'<text>'         \u2014 returns content under first matching\n                                 heading, up to the next same-or-higher\n                                 heading. Use after readHeadings to jump.\n  \u2022 paragraphRange:'3-7'     \u2014 1-indexed paragraph slice; supports 'N'\n                                 (single) or 'N-M' (range).\n  \u2022 startChar + maxLength    \u2014 character window pagination. Response\n                                 includes total_length and truncated so\n                                 you can plan follow-up calls.\n\nIf no extraction mode is set, returns the full Markdown.\n\nRecommended workflow for long pages:\n  1. web_url_read(url, readHeadings: true)            \u2190 TOC scan\n  2. web_url_read(url, section: '<chosen heading>')   \u2190 targeted read\nFar more token-efficient than fetching the full page up front.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "maxLength": {
+    "description": "Maximum characters to return. Use with startChar for paginated reading; the response includes `total_length` and `truncated` so you can plan follow-up calls.",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "paragraphRange": {
+    "description": "1-indexed paragraph range, syntax 'N' or 'N-M' (e.g. '3-7' for paragraphs 3\u20137, '5' for paragraph 5 alone). Useful for sequential reading of long pages without re-fetching.",
+    "pattern": "^\\d+(-\\d+)?$",
+    "type": "string"
+   },
+   "readHeadings": {
+    "description": "When true, returns ONLY the page's heading list as a hierarchical TOC (token-cheap survey). Pair with a follow-up call using `section` to read the chunk you actually want.",
+    "type": "boolean"
+   },
+   "section": {
+    "description": "Substring match against headings (case-insensitive). Returns content under the FIRST heading containing this text, up to the next heading at the same or higher level. Use after readHeadings to read a targeted section without dumping the whole page.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "startChar": {
+    "description": "Character offset where extraction begins. Default 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "url": {
+    "description": "HTTP(S) URL to fetch and convert to Markdown. Static pages only \u2014 for JavaScript-rendered SPAs and bot-protected sites, use a Chromium-backed reader instead.",
+    "format": "uri",
+    "type": "string"
+   }
+  },
+  "required": [
+   "url"
+  ],
+  "type": "object"
+ },
+ "name": "web_url_read"
+}

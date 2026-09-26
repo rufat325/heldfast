@@ -1,0 +1,37 @@
+{
+ "description": "Recursively delete a directory and ALL of its contents from the project. REQUIRES confirm=true. For a non-empty folder you must ALSO pass recursive=true \u2014 otherwise the call refuses and reports the file/sub-folder count. The whole deletion lands as a SINGLE undo entry: one mcp_undo restores every file (empty sub-directories are not restored \u2014 only files are tracked). Three safety guards each REFUSE rather than half-delete: (1) refuses if any file inside is open in an editor tab \u2014 close the tabs or pass force=true (deleting an open scene can crash Godot); (2) refuses if any external file contains a literal \"res://...\" string pointing into this folder (preload, ext_resource, FileAccess.open targets, autoload entries \u2014 see below) \u2014 repoint them or pass force_orphan=true (leaves broken references); (3) refuses if the contents are too large to snapshot for undo without evicting existing undo history \u2014 pass allow_no_undo=true to delete without an undo entry. Refuses to touch res:// root or the godot_mcp addon. For a single file use delete_file instead. Returns {ok, path, deleted_files, deleted_count, removed_dirs, total_bytes, undo_available, message} and, on partial failure, partial:true with delete_errors.\n\nREFERENCE-SCAN BEHAVIOR (important): The external-reference guard does a literal substring search for \"res://\" path strings across .tscn / .tres / .gd / .cs / .gdshader / project.godot. It is intentionally conservative \u2014 any literal path-string match counts, including runtime FileAccess.open() targets that you may consider safe to delete (the script will just re-create the file on its next run). The scanner cannot statically distinguish load-bearing references from benign strings. If the referenced list looks like runtime/regenerable targets, pass force_orphan=true rather than trying to fight the scan.\n\nFRESHLY-CREATED FILES: If you are deleting a folder containing files you just wrote in this session (via create_script etc.), Godot may not have written the auto-generated .uid sidecars yet, and they would be missed by the undo snapshot. Call rescan_filesystem before delete_folder when full undo fidelity matters.",
+ "inputSchema": {
+  "properties": {
+   "allow_no_undo": {
+    "description": "If true, delete a folder too large to snapshot without recording an undo entry. The deletion then cannot be reverted with mcp_undo. Default false.",
+    "type": "boolean"
+   },
+   "confirm": {
+    "description": "REQUIRED. Must be explicitly true \u2014 safety gate against accidental deletes. Calls without confirm=true fail with an error.",
+    "type": "boolean"
+   },
+   "force": {
+    "description": "If true, bypass the \"file open in editor\" guard. Deleting an open scene/script can crash the editor \u2014 prefer closing the tabs. Default false.",
+    "type": "boolean"
+   },
+   "force_orphan": {
+    "description": "If true, delete even when files inside are still referenced from outside the folder. This WILL leave broken references. Default false.",
+    "type": "boolean"
+   },
+   "path": {
+    "description": "Folder to delete (e.g. res://enemies/old). res:// is prepended if missing.",
+    "type": "string"
+   },
+   "recursive": {
+    "description": "REQUIRED for a non-empty folder. Must be true to delete a folder that contains any files or sub-folders. Default false.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "path",
+   "confirm"
+  ],
+  "type": "object"
+ },
+ "name": "delete_folder"
+}

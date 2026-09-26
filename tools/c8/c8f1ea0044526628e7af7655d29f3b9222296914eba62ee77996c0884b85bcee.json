@@ -1,0 +1,112 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "[Requires login] Get the authenticated user's AniList notifications: new episodes airing, activity likes/replies/mentions, new followers, thread replies/likes, and media/staff/character data-submission updates. Every item has `id`, `type` and a human-readable `context`/`contexts` string; the rest of the fields depend on `type` (e.g. an AIRING item includes `media`/`episode`, a FOLLOWING item includes `user`, an ACTIVITY_MESSAGE item includes `message.message` \u2014 the actual DM text is nested one level inside `message`).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "markAsRead": {
+    "default": false,
+    "description": "Set true to also reset AniList's unread-notification badge count to 0, as a side effect of this call (the same effect as opening the notifications page on the site). Defaults to false so a routine check doesn't clear the badge.",
+    "type": "boolean"
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number for pagination. AniList's paginated connections (search results, a title's characters/staff/reviews, activity feeds, forum comments) reject a page whose page \u00d7 perPage exceeds ~5000 entries with an upstream error, so paging that deep fails rather than returning more results.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "perPage": {
+    "default": 25,
+    "description": "Results per page (max 50, AniList's own ceiling \u2014 it silently clamps anything higher).",
+    "exclusiveMinimum": 0,
+    "maximum": 50,
+    "type": "integer"
+   },
+   "type_in": {
+    "description": "Restrict to these notification types. Omit to get every type. This only filters what's returned here \u2014 whether a type is generated at all is controlled separately by the account's own notificationOptions (update_user); a type disabled there simply never appears, regardless of this filter.",
+    "items": {
+     "enum": [
+      "ACTIVITY_MESSAGE",
+      "ACTIVITY_REPLY",
+      "FOLLOWING",
+      "ACTIVITY_MENTION",
+      "THREAD_COMMENT_MENTION",
+      "THREAD_SUBSCRIBED",
+      "THREAD_COMMENT_REPLY",
+      "AIRING",
+      "ACTIVITY_LIKE",
+      "ACTIVITY_REPLY_LIKE",
+      "THREAD_LIKE",
+      "THREAD_COMMENT_LIKE",
+      "ACTIVITY_REPLY_SUBSCRIBED",
+      "RELATED_MEDIA_ADDITION",
+      "MEDIA_DATA_CHANGE",
+      "MEDIA_MERGE",
+      "MEDIA_DELETION",
+      "MEDIA_SUBMISSION_UPDATE",
+      "STAFF_SUBMISSION_UPDATE",
+      "CHARACTER_SUBMISSION_UPDATE"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_notifications",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "results": {
+    "additionalProperties": {},
+    "properties": {
+     "notifications": {
+      "items": {
+       "additionalProperties": {},
+       "description": "Only `id` is guaranteed here \u2014 the real object has more fields, but their shape depends on which variant of an underlying union type this is (e.g. which activity type), so only the field common to every variant is declared.",
+       "properties": {
+        "id": {
+         "exclusiveMinimum": 0,
+         "maximum": 2147483647,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "pageInfo": {
+      "additionalProperties": {},
+      "description": "Whether another page exists \u2014 this query only ever requests hasNextPage, not total/currentPage/lastPage (unlike some sibling paginated tools).",
+      "properties": {
+       "hasNextPage": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "results"
+  ],
+  "type": "object"
+ },
+ "title": "Get your AniList notifications"
+}

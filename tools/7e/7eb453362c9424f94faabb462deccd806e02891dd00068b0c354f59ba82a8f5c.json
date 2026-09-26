@@ -1,0 +1,33 @@
+{
+ "description": "Write UTF-8 text content to any file in the project. Creates the file if missing; REFUSES to clobber an existing file unless overwrite=true. Parent directories are auto-created (override with create_dirs=false). Refuses to write to plugin source (anywhere under res://addons/godot_mcp/ except res://addons/godot_mcp/cache/) unless force=true. Refuses paths containing \"..\" or \".\" traversal segments (would escape the project tree).\n\nUse this for non-GDScript text: .gdignore, .gitignore, README.md, .json configs, .gdshader files, custom .tres data, fixture files for tests, any plain-text content. For GDScript with boilerplate (class_name / extends), prefer create_script which adds those automatically and validates the path is .gd.\n\nThe write is captured by the undo system: a single mcp_undo restores the prior content (when overwriting) or deletes the file (when creating new). Binary content is NOT supported \u2014 for binary files write a GDScript helper that produces the file and run it via run_scene, or copy/move via rename_file.\n\nEditor sync after write: the call replaces the ResourceLoader cache entry for .tscn/.tres/.gdshader/.scn so the next load() sees the new content (sets cache_evicted:true on success), force-reloads any Script resource for .gd writes (sets script_reloaded:true), and reloads an open scene tab whose .tscn was just written (sets scene_reloaded:true). The refresh runs unconditionally for the recognized extensions \u2014 flags reflect whether each step succeeded, not whether a stale cache happened to exist beforehand, because Godot keeps resources alive in places ResourceLoader.has_cached() cannot see (open tabs, EditorFileSystem index). The script editor's in-memory tab buffer is NOT swapped (Godot exposes no public API for that) \u2014 if you wrote to a .gd that is currently open in the editor, the user may need to refocus the tab to see the new source. When any refresh action ran successfully, an editor_refresh:{cache_evicted, scene_reloaded, script_reloaded} field is included in the response.\n\nReturns {ok, path, existed, bytes_written, message} (plus editor_refresh when applicable).",
+ "inputSchema": {
+  "properties": {
+   "content": {
+    "description": "Text content to write. Encoded as UTF-8. Pass an empty string to create a zero-byte file.",
+    "type": "string"
+   },
+   "create_dirs": {
+    "description": "If true (default), missing parent directories are auto-created. If false, missing parent dirs return an error.",
+    "type": "boolean"
+   },
+   "force": {
+    "description": "Bypass the plugin-source-protection guard. Required to overwrite anything under res://addons/godot_mcp/ except res://addons/godot_mcp/cache/. Default false.",
+    "type": "boolean"
+   },
+   "overwrite": {
+    "description": "REQUIRED to replace an existing file. Default false \u2014 calls against an existing path without overwrite=true return file_exists:true and refuse.",
+    "type": "boolean"
+   },
+   "path": {
+    "description": "File path (res://... \u2014 res:// is prepended if missing).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "path",
+   "content"
+  ],
+  "type": "object"
+ },
+ "name": "write_file"
+}

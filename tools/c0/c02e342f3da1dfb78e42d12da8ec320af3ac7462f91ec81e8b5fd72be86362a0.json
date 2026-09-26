@@ -1,0 +1,56 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Save a message as a draft in OurFamilyWizard. RECIPIENTS: OurFamilyWizard does NOT persist recipients on drafts \u2014 recipientIds are accepted but the saved draft comes back with none (documented OFW behavior, noted once in the response, not warned about; supply recipientIds at send time instead). IDENTITY: the response leads with `draftKey`, the stable identity that survives editing \u2014 key off it, because the `id` changes on EVERY edit (replacing a draft creates a NEW draft and deletes the old one; OFW's update-in-place endpoint silently no-ops, so we never use it). Pass messageId to replace an existing draft; the response.id will be the NEW id, and a transparency NOTE documents the swap and which fields were carried over. THREADING: if replyToId is provided, the cache may rewrite it to the latest reply in the thread (note included). The threading verdict is read from OFW's full echo (replyToId/inReplyTo/showContext) \u2014 a warning appears ONLY when the reply linkage was genuinely dropped or re-targeted, and the response's top-level replyToId/inReplyTo always agree with its listData. Attach files via myFileIDs (from ofw_upload_attachment). After saving, the tool re-fetches the draft from OFW, and the returned `revision` reflects that authoritative state (so it will match on your next edit). SAFETY: because replacing DESTROYS the old draft rather than merging, passing messageId first re-reads that draft from OFW and REFUSES the write if its subject/body/recipients changed since you read it (drafts edited in the OFW web app do not bump any timestamp, so the local cache can be silently behind). A pure replyToId normalization by OFW is NOT treated as a conflict. The refusal returns the current server body under serverBody \u2014 merge your edit into it and retry with expectedRevision.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "body": {
+    "description": "Message body text",
+    "type": "string"
+   },
+   "expectedRevision": {
+    "description": "With messageId: the `revision` you got from ofw_list_drafts/ofw_get_message for that draft. Asserts you are replacing THAT version. If the draft changed on OFW since, the write is refused and the current server body is returned. Omit and the tool compares the server against the local cache instead \u2014 omitting never means \"overwrite anyway\".",
+    "type": "string"
+   },
+   "force": {
+    "description": "Default false. Overwrite even when the draft changed on OurFamilyWizard since you read it. The discarded server version is echoed back in the response. Only use after showing the user the conflict.",
+    "type": "boolean"
+   },
+   "messageId": {
+    "description": "ID of an existing draft to replace (the new draft will have a new id; the old is deleted)",
+    "type": "number"
+   },
+   "myFileIDs": {
+    "description": "Attachment file ids (from ofw_upload_attachment)",
+    "items": {
+     "type": "number"
+    },
+    "type": "array"
+   },
+   "recipientIds": {
+    "description": "Array of recipient user IDs (optional for drafts)",
+    "items": {
+     "type": "number"
+    },
+    "type": "array"
+   },
+   "replyToId": {
+    "description": "ID of the message this draft replies to",
+    "type": "number"
+   },
+   "subject": {
+    "description": "Message subject",
+    "type": "string"
+   }
+  },
+  "required": [
+   "subject",
+   "body"
+  ],
+  "type": "object"
+ },
+ "name": "ofw_save_draft"
+}

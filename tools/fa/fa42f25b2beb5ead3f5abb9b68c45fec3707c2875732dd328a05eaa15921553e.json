@@ -1,0 +1,350 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Retrieve a company's 8-K filings with their item codes decoded, optionally filtered to specific items. 8-K item codes are how material events are actually scoped \u2014 1.01 material agreements, 2.02 results of operations, 4.02 non-reliance on previously issued financials, 5.02 officer and director departures \u2014 and filtering by them is narrower than any form-level filter in secedgar_search_filings or secedgar_company_search, neither of which can see items. Each row carries the accession number and primary document for secedgar_get_filing; press releases usually ride as EX-99 exhibits rather than in the primary document. Two numbering regimes exist: filings from 2004-08-23 onward use the x.xx codes, earlier ones use single integers (12 was the old results-of-operations item, 9 the old Regulation FD item), and both are accepted as filters and decoded in the response. A date window reaches filings older than the recent submissions window by reading every archive page it overlaps, up to 10; without one, the scan reads back only as far as it needs to fill limit. Every scanned filing that passes the filter is materialized as df_<id> for item-distribution analysis over time (pass a date window to cover a longer span) \u2014 inspect it with secedgar_dataframe_describe, then analyze it with secedgar_dataframe_query.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "company": {
+    "description": "Company ticker symbol (e.g. \"AAPL\"), name (e.g. \"Apple\"), or CIK number (e.g. \"320193\"). Ticker is the exact lookup; name search matches current and former names.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "filed_after": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Only include filings filed on or after this date (YYYY-MM-DD). A date filter routes the scan into the older submissions archive pages, so it reaches 8-K filings that predate the recent window (the last year or 1,000 filings of every form, whichever holds more)."
+   },
+   "filed_before": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Only include filings filed on or before this date (YYYY-MM-DD). Use alone or with filed_after; together they bound the archive-page scan."
+   },
+   "items": {
+    "description": "Item codes to filter to; a filing matches when it reports any of them. Omit to return every 8-K. Current-regime codes are dotted (\"2.02\"), pre-2004-08-23 codes are bare integers (\"12\"), and the two vocabularies do not overlap \u2014 filtering on \"2.02\" alone returns nothing from a pre-2004 window, so pair them (\"2.02\", \"12\") when the window spans the changeover. Full decode table: the secedgar://filing-types resource.",
+    "items": {
+     "enum": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "1.01",
+      "1.02",
+      "1.03",
+      "1.04",
+      "1.05",
+      "2.01",
+      "2.02",
+      "2.03",
+      "2.04",
+      "2.05",
+      "2.06",
+      "3.01",
+      "3.02",
+      "3.03",
+      "4.01",
+      "4.02",
+      "5.01",
+      "5.02",
+      "5.03",
+      "5.04",
+      "5.05",
+      "5.06",
+      "5.07",
+      "5.08",
+      "6.01",
+      "6.02",
+      "6.03",
+      "6.04",
+      "6.05",
+      "6.06",
+      "7.01",
+      "8.01",
+      "9.01"
+     ],
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Filings returned inline, newest first. Every scanned filing that passes the filter is materialized as a dataframe when there are more than this and a canvas is available. Default 20.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "company"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_get_material_events",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "cik",
+     "company_name",
+     "total_matched",
+     "total_8k_scanned",
+     "item_distribution",
+     "filings"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit cap applied.",
+    "type": "number"
+   },
+   "cik": {
+    "description": "Central Index Key of the resolved company, zero-padded to 10 digits.",
+    "type": "string"
+   },
+   "company_name": {
+    "description": "SEC-conformed company name.",
+    "type": "string"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe holding every scanned 8-K that passes the filter. Item codes ride as a comma-separated `item_codes` column, so item-frequency-over-time queries split it (`unnest(string_split(item_codes, ','))`). Absent when the result fits inline, canvas is unavailable, or materialization failed.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     },
+     "truncated": {
+      "description": "True when archive pages in range went unread \u2014 the 10-page cap ended the scan, or an undated call stopped once limit was filled, which is before any archive page when the recent window alone fills it \u2014 so older matching filings may exist beyond the dataframe. Pass filed_after / filed_before to reach them.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at",
+     "truncated"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_match`: No company matches the query. `multiple_matches`: The query is ambiguous and matches several companies. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_match",
+         "multiple_matches",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "filings": {
+    "description": "Matching filings, newest first, capped at limit.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One 8-K filing.",
+     "properties": {
+      "accession_number": {
+       "description": "Filing accession number, dash format. Pass to secedgar_get_filing for the document text.",
+       "type": "string"
+      },
+      "description": {
+       "description": "SEC-provided filing description. Absent when SEC published none.",
+       "type": "string"
+      },
+      "filing_date": {
+       "description": "Date the filing was submitted (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "form": {
+       "description": "Form type \u2014 \"8-K\", or \"8-K/A\" for an amendment.",
+       "type": "string"
+      },
+      "items": {
+       "description": "Items this filing reports, decoded. Empty when EDGAR records no items for the filing, which happens on some older filings.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One reported 8-K item.",
+        "properties": {
+         "code": {
+          "description": "Item code exactly as EDGAR reported it.",
+          "type": "string"
+         },
+         "label": {
+          "description": "Item title from Form 8-K. Absent for a code neither numbering regime defines, so the raw code is never given a guessed meaning.",
+          "type": "string"
+         },
+         "regime": {
+          "description": "Which numbering the code belongs to: \"current\" for the dotted scheme in force since 2004-08-23, \"legacy\" for the single-integer scheme before it. Absent for an unrecognized code shape.",
+          "enum": [
+           "current",
+           "legacy"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "code"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "primary_document": {
+       "description": "Primary document filename \u2014 pass as `document` to secedgar_get_filing. Press releases are usually separate EX-99 exhibits, listed in that tool's document catalog. Absent on older filings, which EDGAR records without one; secedgar_get_filing still resolves them from the accession number alone.",
+       "type": "string"
+      },
+      "report_date": {
+       "description": "Date of the reported event (YYYY-MM-DD), which usually precedes the filing date. Absent when SEC records none.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "accession_number",
+      "form",
+      "filing_date",
+      "items"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "history_scanned_through": {
+    "description": "Oldest filing date reached by the scan (YYYY-MM-DD). Older filings were not examined: the recent window holds the last year or 1,000 filings of every form, whichever is more, and archive pages are read only for a date filter (every page overlapping it, up to 10) or to fill limit (stopping on the page that fills it). Absent when no filings were scanned.",
+    "type": "string"
+   },
+   "item_distribution": {
+    "additionalProperties": {
+     "type": "number"
+    },
+    "description": "Count of the 8-K filings scanned in the date window carrying each item code, before the items filter. Empty when no 8-K filings were scanned.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "items_filter": {
+    "description": "The item codes filtered on, echoed. Absent when no filter was applied.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance when nothing matched \u2014 distinguishes an empty date window from an items filter that excluded everything.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of filings shown inline.",
+    "type": "number"
+   },
+   "total_8k_scanned": {
+    "description": "8-K filings inside the date window before the items filter \u2014 compare against total_matched to see how much the items filter removed.",
+    "type": "number"
+   },
+   "total_matched": {
+    "description": "Filings matching every applied filter across the whole scan, which may exceed limit and the inline list.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the inline filings list was capped.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Material Events"
+}

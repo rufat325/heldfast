@@ -1,0 +1,211 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Create Card"
+ },
+ "description": "The one card tool: get the user a virtual debit card for a purchase. Cards are live and charged for real when used. For a FIRST-TIME user it starts by putting the user's OWN card in their Agentcard vault (any Visa, Mastercard, Amex, or Discover from any country, no identity verification (KYC), no balance funding): the call returns a secure link (vault_started); send it to the user (they type the card once and lock it with their passkey or master password; Agentcard never sees the number). A vaulted card pays through the buy tool, where the user approves each purchase on their device with their passkey or master password; it never becomes a card number you type, so after vault_started (or vault_ready, when a card is already in the vault) use buy for purchases instead of calling create_card again. If the user specifically needs a card NUMBER, that is an Agentcard funded from their cash balance, which requires KYC the first time: only after the user agrees, call create_card with source \"issued\". Established users: the saved default decides (get_settings default_payment: their chosen added card, or the wallet balance); with no saved default, an active ADDED card wins, otherwise the cash balance. Per-call overrides: connected_card_id issues against a specific added card, source \"issued\" forces the cash balance, restart_setup mints a fresh vault link. If the balance is short on the issued path, top up with add_funds. Connections through a company OAuth client have NO card count or amount limits; only first-party personal accounts have per-plan caps. Call get_plan for the limits in effect.",
+ "inputSchema": {
+  "properties": {
+   "amount_cents": {
+    "description": "Card funding amount in CENTS, not dollars (minimum 100). 100 = $1.00 and 2500 = $25.00 \u2014 a value like 25 would be $0.25. Company-governed connections have no maximum; personal accounts are capped by their plan \u2014 call get_plan for the limits in effect.",
+    "type": "number"
+   },
+   "connected_card_id": {
+    "description": "Multi-card: issue against a SPECIFIC added card (an id from the user's added cards, see list_added_cards) instead of the newest active one. Omit for the default.",
+    "type": "string"
+   },
+   "expires_at": {
+    "description": "Optional hard expiry for a multi-use card (ISO-8601 with timezone, e.g. \"2027-01-01T00:00:00Z\"). Must be in the future, at most 365 days out. The card closes automatically when it passes.",
+    "type": "string"
+   },
+   "funds_source": {
+    "description": "Where the card funds come from. OMIT unless instructed: the server applies the right default (company-connected accounts use the company wallet automatically when the company enables it). company_flow = the company's wallet funds the card; onramp_flow = the user's own wallet.",
+    "enum": [
+     "onramp_flow",
+     "company_flow"
+    ],
+    "type": "string"
+   },
+   "pending_card_id": {
+    "description": "Only when retrying an approval_pending purchase whose preset has since changed: the cardId from that earlier answer, together with purchase_key. The older approval link is retired once the replacement is minted. Never pass it for a different purchase.",
+    "type": "string"
+   },
+   "preset": {
+    "description": "Preset for this card: a template name (ai_labs, weekday_meals, cli_only, daily), comma-separated templates, a saved preset name/id, inline JSON privileges, or { name?, privileges }. Adds restrictions only \u2014 omit for a normal unrestricted card.",
+    "oneOf": [
+     {
+      "type": "string"
+     },
+     {
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "privileges": {
+        "items": {},
+        "type": "array"
+       }
+      },
+      "required": [
+       "privileges"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "purchase_key": {
+    "description": "The purchaseKey from the same approval_pending answer as pending_card_id; the pair proves the retry is for that purchase.",
+    "type": "string"
+   },
+   "restart_setup": {
+    "description": "Set true ONLY when the user lost or never received a vault link, it expired (about 15 minutes), or they want to add ANOTHER card. Never needed on the first call or for normal retries. amount_cents is still required on this call (the link itself carries no amount).",
+    "type": "boolean"
+   },
+   "scope_preset": {
+    "description": "Silent alias for preset 'ai_labs': a multi-use card restricted to AI-lab merchants (OpenAI, Anthropic, Gemini); charges anywhere else are declined at authorization. AI cards earn boosted tokenback on eligible spend. Implies type 'multi_use'. Prefer `preset`.",
+    "enum": [
+     "ai_labs"
+    ],
+    "type": "string"
+   },
+   "source": {
+    "description": "Force the card to be funded from the user's cash balance (the issued path: KYC + wallet funding) even when they have an added or vaulted card or would otherwise be offered the vault. Use it only after the user explicitly picks the balance option. Omit for the default (an active added card wins; first-time users get the vault link).",
+    "enum": [
+     "issued"
+    ],
+    "type": "string"
+   },
+   "type": {
+    "description": "Card behavior. 'single_use' (default) closes after its first approved charge \u2014 right for one-off purchases. 'multi_use' stays open across charges until its total limit is spent \u2014 right for subscriptions and recurring merchants. Multi-use cards can be paused (pause_card), resumed (resume_card), and resized (update_card_limit).",
+    "enum": [
+     "single_use",
+     "multi_use"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "amount_cents"
+  ],
+  "type": "object"
+ },
+ "name": "create_card",
+ "outputSchema": {
+  "properties": {
+   "approvalId": {
+    "description": "The approval request ID to pass to approve_request. Present only when status is \"approval_required\".",
+    "type": "string"
+   },
+   "approvalUrl": {
+    "description": "The passkey approval link to send to the user. Present only when status is \"approval_pending\".",
+    "type": "string"
+   },
+   "attachUrl": {
+    "description": "The secure link the user opens to finish an older add-card enrollment. Present only when status is \"attach_started\".",
+    "type": "string"
+   },
+   "balanceCents": {
+    "description": "Card balance in cents. Present only when status is \"created\".",
+    "type": "number"
+   },
+   "balanceDollars": {
+    "description": "Card balance formatted as USD dollars, e.g. \"12.50\". Present only when status is \"created\".",
+    "type": "string"
+   },
+   "cardId": {
+    "description": "The new card ID. Present only when status is \"created\".",
+    "type": "string"
+   },
+   "cardStatus": {
+    "description": "Card status, e.g. \"active\". Present only when status is \"created\".",
+    "type": "string"
+   },
+   "expiresAt": {
+    "description": "When the link expires (ISO 8601). Present when status is \"vault_started\" or \"attach_started\".",
+    "type": "string"
+   },
+   "expiry": {
+    "description": "Card expiry (MM/YY). Present only when status is \"created\".",
+    "type": "string"
+   },
+   "last4": {
+    "description": "Last four digits of the new card. Present only when status is \"created\".",
+    "type": "string"
+   },
+   "maxAmountCents": {
+    "description": "The issuing rail's per-card ceiling in cents. Present when status is \"limit_reached\" because the amount exceeded that ceiling; retry with amount_cents at most this value.",
+    "type": "number"
+   },
+   "message": {
+    "description": "Human-readable result or guidance for the next step.",
+    "type": "string"
+   },
+   "missingFields": {
+    "description": "What is missing when status is \"user_info_required\" (e.g. \"termsAccepted\", \"consent\").",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "pendingCardId": {
+    "description": "The parked card awaiting the passkey. Present only when status is \"approval_pending\"; pass it back as pending_card_id on the retry, with purchaseKey as purchase_key.",
+    "type": "string"
+   },
+   "preset": {
+    "description": "Preset summary for the new card, or null when unrestricted. Present when status is \"created\".",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "summary": {
+      "type": "string"
+     },
+     "version": {
+      "type": "number"
+     }
+    },
+    "type": [
+     "object",
+     "null"
+    ]
+   },
+   "purchaseKey": {
+    "description": "The purchase's key. Present only when status is \"approval_pending\"; pass it back as purchase_key with pending_card_id.",
+    "type": "string"
+   },
+   "reason": {
+    "description": "On \"issuing_suggested\" (legacy servers only; current servers route every first-time user to the vault instead): why the card could not be added. On \"kyc_required\": why the previous identity-verification attempt failed (e.g. \"document_unverified_other\"), present only when a prior attempt was rejected.",
+    "type": "string"
+   },
+   "source": {
+    "description": "\"connected\" when the card was created against the user's added card. Absent for wallet-funded cards.",
+    "type": "string"
+   },
+   "status": {
+    "description": "Outcome discriminator: \"created\" (card issued), \"vault_started\" (first-time setup: send vaultUrl to the user; once their card is in the vault, purchases go through buy, not create_card), \"vault_ready\" (the user's own card is already in their vault: use buy; only source \"issued\" produces a card number), \"attach_started\" / \"attach_pending\" (an older add-card enrollment still in flight: send attachUrl or wait, then call again with the same arguments), \"issuing_suggested\" (legacy servers only: offer the balance-funded fallback, noting it requires KYC, and only then call again with source \"issued\"), \"approval_required\" (human approval needed), \"approval_pending\" (added-card passkey approval: send approvalUrl to the user, then retry with the same arguments in ~10s), \"kyc_required\" (issued path only), \"user_info_required\" (check missingFields: phone/terms go through submit_user_info; consent must be recorded by the connecting platform), \"beta_capacity_reached\", \"issuing_balance_insufficient\" (issued path only), \"payment_method_declined\", \"limit_reached\", \"funding_in_progress\" (company wallet funding underway: retry with the same arguments in ~10s), \"funding_not_approved\", \"org_wallet_funding_required\", \"org_wallet_unavailable\" (the company wallet backing this account is not active: the company must finish setup; do not retry immediately), \"rate_limited\" (wait ~1 minute, then retry), \"issuer_daily_limit\" (the issuing rail's daily card budget is spent: retry in about an hour, never in a loop), \"issuer_capacity\" / \"wallet_balance_unavailable\" (the rail is briefly unavailable: retry shortly). A refusal this build does not model relays the backend's own code here with its message.",
+    "type": "string"
+   },
+   "vaultCards": {
+    "description": "How many cards the user already holds in their vault. Present only when status is \"vault_ready\".",
+    "type": "number"
+   },
+   "vaultUrl": {
+    "description": "The secure link the user opens to put their card in their vault. Present only when status is \"vault_started\".",
+    "type": "string"
+   }
+  },
+  "required": [
+   "message"
+  ],
+  "type": "object"
+ }
+}

@@ -1,0 +1,286 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Find which institutional managers reported holding an issuer, by searching 13F-HR information tables for one reporting quarter. This is the reverse direction of secedgar_get_institutional_holdings: that tool takes a manager and returns its portfolio, this one takes an issuer and returns its managers \u2014 pass a returned filer_cik plus the same quarter to read the actual position. Searching by cusip is the precise path, matching the identifier the information table itself carries; without it the issuer name is matched as a phrase against the filing text, which both over-matches (unrelated issuers sharing a word) and under-matches (managers writing the name differently), so prefer cusip whenever one is known. A CUSIP cannot be derived from a ticker here \u2014 read one off any 13F information table returned by secedgar_get_institutional_holdings. The returned list is unranked: the search index scores by text relevance, which carries no signal about position size, and no ordering by shares or market value is available without opening each filing. Managers holding under $100M in 13(f) securities are exempt from filing at all. When more managers match than fit inline, the full fetched set is staged as df_<id> \u2014 inspect it with secedgar_dataframe_describe, then analyze it with secedgar_dataframe_query.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cusip": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "9-character CUSIP/CINS",
+      "pattern": "^[0-9A-Za-z]{9}$",
+      "type": "string"
+     }
+    ],
+    "description": "The issuer's 9-character CUSIP (e.g. \"037833100\" for Apple common stock; foreign issuers use a CINS starting with a letter, e.g. \"H1467J104\"). The precise match key \u2014 information tables identify every position by CUSIP, so this avoids the name-phrase misses. Each share class has its own CUSIP, so a multi-class issuer needs one call per class. Read a CUSIP off the holdings returned by secedgar_get_institutional_holdings."
+   },
+   "issuer": {
+    "description": "The portfolio company whose holders you want \u2014 a ticker (\"AAPL\"), a 10-digit CIK (\"0000320193\"), or a company name. Without cusip, this resolves to the company's EDGAR-conformed name and that name is phrase-matched against 13F information tables, so it must identify one company. With cusip supplied, it is used only to label the result.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Filer rows returned inline. The full fetched set (up to 500 rows) is materialized as a dataframe when a canvas is available. Default 20.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "quarter": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "YYYY-QN",
+      "pattern": "^\\d{4}-Q[1-4]$",
+      "type": "string"
+     }
+    ],
+    "description": "Reporting quarter to search, \"YYYY-QN\" (e.g. \"2026-Q1\"). Omit for the newest quarter whose 45-day filing deadline has passed \u2014 the applied quarter and its filing window are echoed in the response. A quarter still inside its deadline returns nothing, because the filings do not exist yet."
+   }
+  },
+  "required": [
+   "issuer"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_find_holders",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "issuer",
+     "search_mode",
+     "search_key",
+     "quarter",
+     "filed_from",
+     "filed_to",
+     "total_filings",
+     "total_is_exact",
+     "fetched",
+     "holders_in_quarter",
+     "holders",
+     "ordering"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit cap applied.",
+    "type": "number"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe holding every fetched filer row, each carrying the issuer key and quarter so it joins across issuers and quarters. Absent when the result fits inline, canvas is unavailable, or materialization failed. Query with secedgar_dataframe_query.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     },
+     "truncated": {
+      "description": "True when more filers exist beyond the fetch budget \u2014 total_filings exceeds fetched.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at",
+     "truncated"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `issuer_not_found`: No cusip was given and the issuer does not resolve to a known EDGAR company. `ambiguous_issuer`: The issuer name matches several EDGAR companies and no cusip was given. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "issuer_not_found",
+         "ambiguous_issuer",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "fetched": {
+    "description": "Filings retrieved from the index, capped by the fetch budget of 500. Equals total_filings when the whole window fit inside the budget.",
+    "type": "number"
+   },
+   "filed_from": {
+    "description": "Start of the filing window searched (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "filed_to": {
+    "description": "End of the filing window searched (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "holders": {
+    "description": "One page of filers, capped at limit. Order carries no position-size meaning \u2014 see the ordering note.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One institutional manager reporting a position in this issuer.",
+     "properties": {
+      "accession_number": {
+       "description": "Accession number of the 13F-HR \u2014 pass to secedgar_get_filing.",
+       "type": "string"
+      },
+      "filer_cik": {
+       "description": "Filer CIK, zero-padded to 10 digits. Pass as company to secedgar_get_institutional_holdings for this manager's positions.",
+       "type": "string"
+      },
+      "filer_name": {
+       "description": "Institutional manager that filed, with ticker/CIK parentheticals stripped.",
+       "type": "string"
+      },
+      "filing_date": {
+       "description": "Date the 13F-HR was submitted (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "form": {
+       "description": "Form type, \"13F-HR\" or \"13F-HR/A\" for an amendment. Absent when the index carries no form tag.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "filer_name",
+      "filer_cik",
+      "accession_number",
+      "filing_date"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "holders_in_quarter": {
+    "description": "Distinct managers among the fetched filings reporting this quarter as their period \u2014 the set paged by limit and materialized on the dataframe. Lower than fetched by the filings dropped as amendments restating other quarters, and by managers that amended this quarter (kept once, at their latest filing).",
+    "type": "number"
+   },
+   "issuer": {
+    "description": "The issuer input, echoed.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when the search returned no filers \u2014 names the likely cause.",
+    "type": "string"
+   },
+   "ordering": {
+    "description": "How the holder list is ordered, and what that ordering does not mean.",
+    "type": "string"
+   },
+   "quarter": {
+    "description": "Reporting quarter searched, \"YYYY-QN\" \u2014 the requested one, or the applied default.",
+    "type": "string"
+   },
+   "resolved_issuer_cik": {
+    "description": "CIK of the resolved issuer, zero-padded to 10 digits. Absent when cusip was supplied.",
+    "type": "string"
+   },
+   "resolved_issuer_name": {
+    "description": "EDGAR-conformed company name the issuer resolved to, and the phrase that was searched. Absent when cusip was supplied (no company lookup runs).",
+    "type": "string"
+   },
+   "search_key": {
+    "description": "The exact term searched \u2014 the CUSIP, or the quoted phrase.",
+    "type": "string"
+   },
+   "search_mode": {
+    "description": "Which key matched the information tables. \"cusip\" matches the identifier the table itself carries; \"name\" phrase-matches the filing text and is looser in both directions.",
+    "enum": [
+     "cusip",
+     "name"
+    ],
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of filers shown inline.",
+    "type": "number"
+   },
+   "total_filings": {
+    "description": "Total 13F-HR filings matching the search key inside the filing window, as reported by the index. A slight over-count of this quarter's holders on two counts, both of which the returned rows correct for: a few percent are amendments restating an older quarter, and a few more are managers amending their own report for this quarter, which puts them in the window twice.",
+    "type": "number"
+   },
+   "total_is_exact": {
+    "description": "False when total_filings is a lower bound (the index capped the count).",
+    "type": "boolean"
+   },
+   "truncated": {
+    "description": "True when the inline holders list was capped.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Find Holders"
+}

@@ -1,0 +1,192 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Score an output with an LLM judge on your own key: a 0..1 score, a rationale and the spend.\n\nWhat it does. Calls Anthropic or OpenAI with IRIS_ANTHROPIC_API_KEY or IRIS_OPENAI_API_KEY; Iris never proxies. correctness needs expected, faithfulness needs source_material. The worst-case cost is checked against max_cost_usd first. Full detail: iris://capabilities.\n\nWhen not to use it. For length, keyword, PII or cost checks (evaluate_output, free).\n\nReturns. JSON: id, trace_id, score, passed, verdict, pass_threshold, self_reported_pass, disagreement, rationale, dimensions, model, provider, template, input_tokens, output_tokens, cost_usd, latency_ms, raw_response_id, warnings.\n\nErrors. IRIS_JUDGE_NOT_ENABLED (recovery has the steps); IRIS_JUDGE_UNKNOWN_MODEL; IRIS_UNKNOWN_TRACE; IRIS_BUDGET_EXCEEDED; IRIS_PROVIDER_ERROR. Failures return {\"error\":{code,message,recovery}} with isError; follow recovery.\n\nSiblings. evaluate_output \u2014 the free deterministic path; verify_citations \u2014 citation grounding.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "agent_model": {
+    "description": "The model that produced the output, for the same-family warning, when no linked trace records it",
+    "minLength": 1,
+    "type": "string"
+   },
+   "expected": {
+    "description": "Reference answer (required for correctness template)",
+    "type": "string"
+   },
+   "input": {
+    "description": "User question / prompt that produced the output (improves accuracy for helpfulness/safety)",
+    "type": "string"
+   },
+   "max_cost_usd": {
+    "description": "Cost cap in USD for this call; defaults to IRIS_LLM_JUDGE_MAX_COST_USD_PER_EVAL or 0.25. The worst case (two attempts, full max_output_tokens) is computed before the call and refused if it exceeds the cap",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "max_output_tokens": {
+    "description": "Judge output token cap; default 512",
+    "exclusiveMinimum": 0,
+    "maximum": 4096,
+    "type": "integer"
+   },
+   "model": {
+    "description": "Model ID. Supported: anthropic = claude-fable-5-1 | claude-opus-5 | claude-sonnet-5 (and the priced 4.x line); openai = gpt-5 | gpt-5-mini | gpt-4.1-mini (and the priced 4o, o3/o4 and retired o1 ids); an unknown id is refused with the full priced list. Required \u2014 cost varies a hundredfold across models",
+    "type": "string"
+   },
+   "output": {
+    "description": "The agent output text to evaluate",
+    "minLength": 1,
+    "type": "string"
+   },
+   "provider": {
+    "description": "Auto-detected from model when omitted",
+    "enum": [
+     "anthropic",
+     "openai"
+    ],
+    "type": "string"
+   },
+   "source_material": {
+    "description": "Provided RAG sources (required for faithfulness template)",
+    "type": "string"
+   },
+   "temperature": {
+    "description": "Sampling temperature; default 0 (deterministic)",
+    "maximum": 2,
+    "minimum": 0,
+    "type": "number"
+   },
+   "template": {
+    "description": "The question the judge answers; correctness needs expected, faithfulness and task_completed read source_material",
+    "enum": [
+     "accuracy",
+     "helpfulness",
+     "safety",
+     "correctness",
+     "faithfulness",
+     "task_completed"
+    ],
+    "type": "string"
+   },
+   "timeout_ms": {
+    "description": "Per-request timeout; default 60_000",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "trace_id": {
+    "description": "Link this evaluation to a stored trace (id from log_trace / get_traces); an unknown id is rejected BEFORE the judge is called",
+    "type": "string"
+   }
+  },
+  "required": [
+   "output",
+   "template",
+   "model"
+  ],
+  "type": "object"
+ },
+ "name": "evaluate_with_llm_judge",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {},
+  "properties": {
+   "cost_usd": {
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "dimensions": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "disagreement": {
+    "type": "boolean"
+   },
+   "id": {
+    "type": "string"
+   },
+   "input_tokens": {
+    "type": "number"
+   },
+   "latency_ms": {
+    "type": "number"
+   },
+   "model": {
+    "type": "string"
+   },
+   "output_tokens": {
+    "type": "number"
+   },
+   "pass_threshold": {
+    "type": "number"
+   },
+   "passed": {
+    "type": "boolean"
+   },
+   "provider": {
+    "enum": [
+     "anthropic",
+     "openai"
+    ],
+    "type": "string"
+   },
+   "rationale": {
+    "type": "string"
+   },
+   "raw_response_id": {
+    "type": "string"
+   },
+   "score": {
+    "type": "number"
+   },
+   "self_reported_pass": {
+    "type": "boolean"
+   },
+   "template": {
+    "type": "string"
+   },
+   "trace_id": {
+    "type": "string"
+   },
+   "verdict": {
+    "additionalProperties": {},
+    "properties": {},
+    "type": "object"
+   },
+   "warnings": {
+    "items": {},
+    "type": "array"
+   }
+  },
+  "required": [
+   "id",
+   "score",
+   "passed",
+   "pass_threshold",
+   "rationale",
+   "dimensions",
+   "model",
+   "provider",
+   "template",
+   "input_tokens",
+   "output_tokens",
+   "cost_usd",
+   "latency_ms"
+  ],
+  "type": "object"
+ },
+ "title": "Evaluate With LLM Judge"
+}

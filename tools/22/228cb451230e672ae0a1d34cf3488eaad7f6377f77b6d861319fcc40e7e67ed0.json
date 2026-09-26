@@ -1,0 +1,64 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "USE WHEN an agent (or the person it works for) wants to be told if something in its stack stops checking out \u2014 rather than re-running a Preflight on a schedule of its own. Goes through the SAME path the public form uses: same validation, same normalisation, same rate limit, one row per address and target.\n\nWHAT HAPPENS: the target is re-checked once a day by the public Preflight path, and an email is sent ONLY when the verdict CHANGES. Never on a schedule, never a digest. A transition INTO `unknown` (a check that failed to run) is recorded and never mailed \u2014 a failed check is not news about the target.\n\nFREE WHILE IN PREVIEW. A paid tier will be announced. No price is quoted here and none exists to quote.\n\nWHAT IS STORED: the normalised target, the address (a notice has to be delivered), an HMAC of it for counting, and the baseline verdict. No IP address and no name. Asking twice is idempotent; `action: \"unsubscribe\"` stops the mail and answers the same way whether a row existed or not.\n\nRULE ENFORCED: a verdict describes what was checked and when. It is not a safety, security or returns judgment, and a CHANGE is a change in what was observed \u2014 not a warning.\n\nReturns (json): { ok, action, target_kind, target, watch_id, verdict, notice, caveat }.\n\nExample: { target_kind: \"package\", target: \"solana-agent-kit\", notify_to: \"me@example.com\" }",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "action": {
+    "description": "subscribe (default) arms the watch; unsubscribe stops the mail for this address and target.",
+    "enum": [
+     "subscribe",
+     "unsubscribe"
+    ],
+    "type": "string"
+   },
+   "notify_to": {
+    "description": "The email address the change notice goes to. Stored once for delivery and counted by an HMAC; it never enters telemetry or logs.",
+    "maxLength": 254,
+    "minLength": 6,
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: 'markdown' (default) or 'json'.",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "target": {
+    "description": "The thing itself, in the spelling that kind takes. It is normalised, so two spellings of one repository become one watch.",
+    "maxLength": 300,
+    "minLength": 1,
+    "type": "string"
+   },
+   "target_kind": {
+    "description": "What is being watched: repo (owner/name or a GitHub URL), package (npm name), endpoint (an https URL), agent (an ERC-8004 reference like 'base:42').",
+    "enum": [
+     "repo",
+     "package",
+     "endpoint",
+     "agent"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "target_kind",
+   "target",
+   "notify_to"
+  ],
+  "type": "object"
+ },
+ "name": "onchain_agent_watch",
+ "title": "Watch a repo, package, endpoint or agent for a Preflight verdict change"
+}

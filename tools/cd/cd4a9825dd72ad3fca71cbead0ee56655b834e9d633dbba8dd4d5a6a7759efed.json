@@ -1,0 +1,187 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search the EuroVoc thesaurus, resolving a keyword into concept URIs usable in the eurovoc_concept subject filter of eurlex_search_documents. Matches both preferred and alternative (non-preferred) labels, so a common synonym reaches the concept it stands for. Returns each concept URI, its preferred label in the requested language, code, broader (parent) label, and the alternative label that matched when one did. Concepts with an exact label match come first, then those whose label or one of its words starts with the keyword, then other substring matches, each group ordered by preferred label.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "keyword": {
+    "description": "Search term matched against EuroVoc preferred and alternative concept labels (e.g. \"privacy\", \"agriculture\", \"product liability\").",
+    "minLength": 1,
+    "type": "string"
+   },
+   "language": {
+    "default": "en",
+    "description": "Language code for concept labels (e.g. \"en\", \"fr\", \"de\"). Case-insensitive \u2014 \"EN\" and \"en\" behave identically. Defaults to English.",
+    "pattern": "^[A-Za-z]{2,3}$",
+    "type": "string"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Maximum number of EuroVoc concepts to return (1\u201350). Defaults to 20.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Pagination offset \u2014 number of concepts to skip. Defaults to 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "keyword"
+  ],
+  "type": "object"
+ },
+ "name": "eurlex_browse_subjects",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "concepts",
+     "total",
+     "offset",
+     "has_more"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit that was applied to this response.",
+    "type": "number"
+   },
+   "concepts": {
+    "description": "Matching EuroVoc concepts, exact label matches first, then word-start matches, then other substring matches, each group ordered by preferred label.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single EuroVoc concept with its URI, label, code, and hierarchy context.",
+     "properties": {
+      "broader_label": {
+       "description": "Preferred label of the broader (parent) concept, if available.",
+       "type": "string"
+      },
+      "concept_code": {
+       "description": "Numeric EuroVoc concept code.",
+       "type": "string"
+      },
+      "concept_uri": {
+       "description": "Full URI for the EuroVoc concept, usable in the eurovoc_concept filter.",
+       "type": "string"
+      },
+      "matched_label": {
+       "description": "Alternative (non-preferred) EuroVoc label that matched the keyword, when one did \u2014 the closest match (exact, then word start, then substring), alphabetical among equals. Absent when the keyword matched the preferred label alone.",
+       "type": "string"
+      },
+      "pref_label": {
+       "description": "Preferred label for the concept in the requested language.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "concept_uri",
+      "pref_label"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode.",
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "has_more": {
+    "description": "True only when CELLAR returned an additional valid row beyond this page.",
+    "type": "boolean"
+   },
+   "next_offset": {
+    "description": "Offset for the next page. Present only when has_more is true.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance for the next call: on an empty first page, the keyword and language that matched nothing and how to broaden them; on a page with more rows, the offset to continue from.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Pagination offset used for this response.",
+    "type": "number"
+   },
+   "shown": {
+    "description": "Number of concepts returned in this response.",
+    "type": "number"
+   },
+   "total": {
+    "description": "Number of concepts returned in this response.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when an additional CELLAR row proves more concepts exist beyond this page.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Browse EuroVoc Subjects"
+}

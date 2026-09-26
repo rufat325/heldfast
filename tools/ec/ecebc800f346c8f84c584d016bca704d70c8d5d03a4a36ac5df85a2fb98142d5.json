@@ -1,0 +1,249 @@
+{
+ "_meta": {
+  "fastmcp": {
+   "tags": []
+  }
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Search legal documents across jurisdictions (DE federal, EU, Bavaria, North Rhine-Westphalia, Saxony) using hybrid semantic + keyword search. Returns ranked results with content snippets, not full text.\n\nSuitable for topic questions and case facts when the relevant provision or decision is not yet known. A known citation is resolved by legal_lookup; several known citations by legal_lookup_batch. Natural-language questions using the documents' terminology usually rank better than keyword lists or doctrinal labels, e.g. 'Wann verj\u00e4hrt ein Schadensersatzanspruch?' or 'Wie sind mehrdeutige Vertragsklauseln auszulegen?'. Ranking indicates textual relevance, not legal applicability or exhaustive coverage. document_kind separates norms from case-law: the three norm subtypes ('statute'/'regulation'/'directive') form one filter class \u2014 any of them admits all three, so an EU regulation or directive is never hidden by a reflexive 'statute'. 'decision' restricts to court decisions and drops every norm before ranking, so it can hide the statute that answers a rule question. Without a document_kind filter, norms, case law and guidance can rank together, subject to other filters. This supports mixed questions (norm + its case-law application) and unclear German-vs-EU scope (e.g. data protection: BDSG vs DSGVO). Legislative materials are excluded by default and require explicit scope. A statute law_abbreviation combined with a decision scope ('decision', a decision source_type, court or decision_type) yields an empty set, because decisions carry file-number identifiers, not statute abbreviations; cited_norm filters decisions by the provision they cite. legal://filter_values documents the per-value definitions and the disambiguation list. law_abbreviation, jurisdiction and source_type restrict the law, jurisdiction and source respectively; when omitted, these filters add no restriction. Other filters and the corpus-language default still apply. legal://rechtsrahmen lists which law governs which domain (EU vs national, substantive vs procedural).\n\nCommon mix-ups (which law governs):\n- Procedural law by jurisdiction: ZPO (zivilrecht), STPO (strafrecht), VWGO (verwaltungsrecht), ARBGG (arbeitsrecht), SGG (sozialrecht), BVERFGG (verfassungsrecht), FAMFG (familienrecht)\n- AO, ESTG, KSTG, USTG, FGO: AO=procedure, EStG/KStG/UStG=substantive\n- VVG, BGB: Insurance rescission \u2192 BGB \u00a7\u00a7 812ff, not VVG\n- VERSAUSGLG, FAMFG: VersAusglG=substantive, FamFG=procedure\n- APOG, AMG: ApoG=operation, AMG=drug approval\n- WEHRPFLG, SG: WPflG=conscription, SG=soldiers\n- AGG, BETRVG: AGG=anti-discrimination, BetrVG=works council",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "chapter": {
+    "anyOf": [
+     {
+      "maxLength": 1024,
+      "minLength": 1,
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Narrows to one chapter/section within a law; reduces recall. Only meaningful together with law_abbreviation."
+   },
+   "cited_norm": {
+    "anyOf": [
+     {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Restrict results to court decisions that verifiably cite this provision (citation-graph filter, e.g. '\u00a7 573 BGB' or 'Art. 6 DSGVO'). With a case-specific query \u2014 e.g. query='Eigenbedarfsk\u00fcndigung H\u00e4rtefall hohes Alter', cited_norm='\u00a7 573 BGB' \u2014 citing candidates are ranked by relevance to the query. A citation does not establish applicability to the facts. legal_find_citing_decisions yields the unranked inventory, newest first. Matching is paragraph-level (Abs./Satz/Nr. are ignored). Only court decisions carry citations, so this filter implicitly restricts to case law \u2014 no document_kind needed. For an EU directive both the directive article ('Art. 9 Richtlinie 2011/83/EU') and the national transposition norm ('\u00a7 355 BGB') are valid filters: the directive article matches EU case law (EuGH/EuG) and German decisions citing it directly (richtlinienkonforme Auslegung), while the transposition norm matches the larger body of German decisions applying the transposed rule. The transposition norm covers everyday German case law, the directive article EU-level interpretation. EU regulations (DSGVO, MDR) are cited directly."
+   },
+   "court": {
+    "anyOf": [
+     {
+      "description": "German federal and state courts and EU courts available as search filters.",
+      "enum": [
+       "BGH",
+       "BVerfG",
+       "BVerwG",
+       "BFH",
+       "BAG",
+       "BSG",
+       "BPatG",
+       "GmSOGB",
+       "S\u00e4chsisches OVG",
+       "Oberverwaltungsgericht NRW",
+       "Oberlandesgericht D\u00fcsseldorf",
+       "Oberlandesgericht Hamm",
+       "Oberlandesgericht K\u00f6ln",
+       "Landesarbeitsgericht D\u00fcsseldorf",
+       "Landesarbeitsgericht Hamm",
+       "Landesarbeitsgericht K\u00f6ln",
+       "Landessozialgericht NRW",
+       "Finanzgericht D\u00fcsseldorf",
+       "Finanzgericht K\u00f6ln",
+       "Finanzgericht M\u00fcnster",
+       "Verfassungsgerichtshof NRW",
+       "EuGH",
+       "EuG"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Filter by court: BGH, BVerwG, BFH, BAG, BSG, BVerfG, BPatG, GmSOGB, S\u00e4chsisches OVG, Oberverwaltungsgericht NRW, Oberlandesgericht D\u00fcsseldorf, Oberlandesgericht Hamm, Oberlandesgericht K\u00f6ln, Landesarbeitsgericht D\u00fcsseldorf, Landesarbeitsgericht Hamm, Landesarbeitsgericht K\u00f6ln, Landessozialgericht NRW, Finanzgericht D\u00fcsseldorf, Finanzgericht K\u00f6ln, Finanzgericht M\u00fcnster, Verfassungsgerichtshof NRW, EuGH, EuG."
+   },
+   "date_from": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Include results from this date onwards (YYYY-MM-DD)."
+   },
+   "date_to": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Include results until this date (YYYY-MM-DD)."
+   },
+   "decision_type": {
+    "anyOf": [
+     {
+      "description": "Type of court decision: judgment (Urteil) or order (Beschluss).",
+      "enum": [
+       "Urteil",
+       "Beschluss"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Filter by decision type: 'Urteil' or 'Beschluss'."
+   },
+   "document_kind": {
+    "anyOf": [
+     {
+      "description": "Document class: legislation, court decisions, legislative materials or guidance.",
+      "enum": [
+       "statute",
+       "regulation",
+       "directive",
+       "decision",
+       "explanatory_memorandum",
+       "guidance"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Filter by document class: the three norm subtypes 'statute', 'regulation' and 'directive' form ONE filter class \u2014 any of them admits all three, so they need not be told apart, and an EU regulation or directive is never hidden by a reflexive 'statute'. Three values discriminate: 'decision' restricts to court case-law (how a norm is applied), 'guidance' restricts to supervisory-authority soft law (EDPB/EDSA and Datenschutzkonferenz \u2014 authoritative readings of the GDPR/BDSG, not enacted norms and not binding), and 'explanatory_memorandum' restricts to legislative materials (Gesetzesbegr\u00fcndung / BT-Drucksachen \u2014 the legislator's intent behind a norm; ratio legis, purpose of an amendment). Materials are opt-in: reachable via this value, source_type='gesetzesmaterialien', or legal_get_materials for one provision, not in an unfiltered search. Empty = no document-class filter: norms, case law and guidance can rank together, subject to other filters. legal://filter_values documents the per-value definitions and disambiguation."
+   },
+   "jurisdiction": {
+    "anyOf": [
+     {
+      "description": "Jurisdiction of the legal document.",
+      "enum": [
+       "de",
+       "eu",
+       "de_by",
+       "de_sn",
+       "de_nw"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Filter by jurisdiction: 'de' (all German law \u2014 matches federal AND state law, incl. Staatsvertr\u00e4ge like the Medienstaatsvertrag), 'eu' (EU), 'de_by' (Bavaria only), 'de_nw' (North Rhine-Westphalia only), 'de_sn' (Saxony only \u2014 Saxon state law is not in the corpus, so this matches Saxon court decisions). 'de' includes state law; source_type='gii' restricts to federal statutes. Empty = no jurisdiction filter."
+   },
+   "language": {
+    "anyOf": [
+     {
+      "description": "Document language, independent of the language of the answer.",
+      "enum": [
+       "de",
+       "en"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Document language: 'de' (default, German-language documents from German and EU sources) or 'en' (currently EDPB/EDSA data-protection guidance only). DE and EN are separate corpora \u2014 a document published in both languages has one entry per language under the same abbreviation. 'en' selects the English corpus regardless of the answer language; 'edsa' is published mostly in English."
+   },
+   "law_abbreviation": {
+    "anyOf": [
+     {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Restrict to the named document, e.g. 'bgb', 'dsgvo'. A statute abbreviation does not select decisions citing that statute; cited_norm selects those decisions. Omitted or null = no law filter."
+   },
+   "query": {
+    "description": "Natural-language question or case facts, e.g. 'Wann verj\u00e4hrt ein Schadensersatzanspruch?'. Terms used in the relevant legal documents help retrieval.",
+    "maxLength": 1000,
+    "minLength": 1,
+    "type": "string"
+   },
+   "source_type": {
+    "anyOf": [
+     {
+      "enum": [
+       "bayern_gesetze",
+       "bverfge",
+       "bverwg",
+       "dsk",
+       "edsa",
+       "eurlex",
+       "eurlex_caselaw",
+       "gesetzesmaterialien",
+       "gii",
+       "nrw_gesetze",
+       "nrw_rechtsprechung",
+       "rechtsprechung",
+       "sachsen_rechtsprechung",
+       "verwaltungsvorschriften"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Filter by source: 'gii' (German federal laws like BGB, StGB), 'eurlex' (EU legislation, including regulations like DSGVO/DSA, directives and treaties), 'eurlex_caselaw' (EU court decisions, EuGH/EuG), 'rechtsprechung' (federal court decisions, 2010 onwards), 'bverfge' (BVerfG leading decisions from the official reporter BVerfGE, up to 2009 \u2014 the reported slice, not every BVerfG decision of that era), 'bverwg' (BVerwG judgments (Urteile) up to 2009), 'sachsen_rechtsprechung' (Saxon OVG decisions), 'nrw_rechtsprechung' (NRW higher-court decisions: OVG/OLG/LAG/LSG/FG/VerfGH), 'bayern_gesetze' (Bavaria), 'nrw_gesetze' (North Rhine-Westphalia), 'verwaltungsvorschriften' (federal administrative regulations, e.g. TA Luft, BMGVwV), 'edsa' (EDPB/EDSA data-protection guidance \u2014 soft law, not enacted norms; mostly English, see the language parameter), 'dsk' (Datenschutzkonferenz guidance: Orientierungshilfen, Kurzpapiere, Beschl\u00fcsse \u2014 the German supervisory authorities' reading of GDPR/BDSG), 'gesetzesmaterialien' (legislative materials \u2014 Gesetzesbegr\u00fcndung from Bundestag Drucksachen, the legislator's intent behind a federal norm; the corpus includes draft bills that never became law. Materials are opt-in: they appear with this value or document_kind='explanatory_memorandum', not in an unfiltered search). Empty = no source filter."
+   },
+   "top_k": {
+    "default": 5,
+    "description": "Number of results to return (default 5).",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "legal_search",
+ "outputSchema": {
+  "additionalProperties": true,
+  "type": "object"
+ },
+ "title": "Search Legal Documents"
+}

@@ -1,0 +1,130 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "USE WHEN an agent wants a public, machine-readable identity: an Agent Passport at satohub.ai/agents/<slug> plus a manifest at /api/agents/<slug>/manifest that another agent can read before deciding to work with it.\n\nTWO STEPS. Call it with `name` and `wallet_address` and no signature, and it returns the exact challenge to sign (EIP-191 personal_sign) and the `signed_at` that goes with it \u2014 the same string GET /api/agents/challenge returns, deterministic, valid 15 minutes. Call it again with `wallet_signature` and `signed_at` plus the registration fields, and the passport issues immediately.\n\nWITHOUT A SIGNATURE the registration is accepted and lands PENDING for human review; `contact_email` is required on that path. Signature verification is EVM-only for now \u2014 a Solana wallet can register, unsigned.\n\nWHAT THE SIGNATURE PROVES: control of the key. Nothing else. verification_status is Self-Reported on every passport issued here and no input can change it. Declared standards, endpoints and stack are claims; the endpoint gets one live probe and the wallet one on-chain lookup, and both are reported as what was observed, not as approval.\n\nLIMIT: 5 write calls an hour per caller. The challenge step counts, so fetch it once and sign it.\n\nReturns (json): unsigned first call { challenge, signed_at, expires_in_seconds, next }; registration { ok, slug, sato_agent_id, status, wallet_verified, passport_url, manifest_url, note }.\n\nExample: { name: \"Example Agent\", wallet_address: \"0x\u2026\" } then the same plus { description, agent_type: [\"Trading\"], chains_supported: [\"Base\"], wallet_signature: \"0x\u2026\", signed_at: \"\u2026\" }",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "agent_type": {
+    "description": "What kind of work it does. At least one is required to register.",
+    "items": {
+     "enum": [
+      "Research / Market-Intel",
+      "Trading",
+      "DeFi / Yield",
+      "Payments / Commerce",
+      "Security",
+      "Social / Content",
+      "Workflow / Automation",
+      "Gaming",
+      "Data / Oracle",
+      "Coding / Dev"
+     ],
+     "type": "string"
+    },
+    "maxItems": 4,
+    "type": "array"
+   },
+   "chains_supported": {
+    "description": "Chains it operates on, by display name. At least one is required to register.",
+    "items": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "maxItems": 10,
+    "type": "array"
+   },
+   "contact_email": {
+    "description": "Required when registering without a signature \u2014 an unsigned registration goes to a human, who may need to ask something.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "description": {
+    "description": "What the agent does (20-1000 chars). Required to register; omit it only on the challenge step.",
+    "maxLength": 1000,
+    "type": "string"
+   },
+   "endpoint_url": {
+    "description": "An MCP or A2A endpoint the agent serves. Probed once on registration; a declaration is not a working service.",
+    "maxLength": 300,
+    "type": "string"
+   },
+   "name": {
+    "description": "The agent's name. Bound into the signed challenge \u2014 changing it invalidates a signature.",
+    "maxLength": 80,
+    "minLength": 3,
+    "type": "string"
+   },
+   "repo_url": {
+    "description": "The agent's source repository, if public.",
+    "maxLength": 300,
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: 'markdown' (human-readable, default) or 'json' (machine-readable).",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "signed_at": {
+    "description": "The `signed_at` value returned with the challenge. Valid for 15 minutes.",
+    "maxLength": 40,
+    "type": "string"
+   },
+   "stack": {
+    "description": "Directory slugs the agent is built from. Unknown slugs are an error, not silently dropped \u2014 the join is the point.",
+    "items": {
+     "maxLength": 120,
+     "type": "string"
+    },
+    "maxItems": 25,
+    "type": "array"
+   },
+   "standards": {
+    "description": "Standards the agent DECLARES support for. Declared, never verified.",
+    "items": {
+     "enum": [
+      "x402",
+      "erc-8004",
+      "mcp",
+      "a2a"
+     ],
+     "type": "string"
+    },
+    "maxItems": 4,
+    "type": "array"
+   },
+   "wallet_address": {
+    "description": "The AGENT's own wallet: EVM (0x\u2026) or a Solana-style base58 address. Required for the signature path \u2014 signature verification is EVM-only for now.",
+    "maxLength": 100,
+    "type": "string"
+   },
+   "wallet_signature": {
+    "description": "An EIP-191 personal_sign signature over the exact challenge this tool returns when called without one. Present: the passport issues immediately.",
+    "maxLength": 300,
+    "type": "string"
+   },
+   "website_url": {
+    "description": "The agent's public page.",
+    "maxLength": 300,
+    "type": "string"
+   }
+  },
+  "required": [
+   "name"
+  ],
+  "type": "object"
+ },
+ "name": "onchain_agent_register_agent",
+ "title": "Register an Agent Passport (self-issue with a wallet signature)"
+}

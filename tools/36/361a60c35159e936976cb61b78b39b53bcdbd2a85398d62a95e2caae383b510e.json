@@ -1,0 +1,333 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Chargeable Weight Calculator"
+ },
+ "description": "Calculate air freight chargeable weight \u2014 the greater of actual gross weight and volumetric weight, which is what airlines bill. Volumetric weight (kg) = (L x W x H in cm) / divisor; the IATA-standard divisor is 6,000 (1 CBM = 166.67 kg), while express integrators (DHL, FedEx, UPS) typically use 5,000.\n\nBehavior: deterministic; per-piece volumetric weight is rounded to 2 decimal places before totalling; basis reports which weight governs (\"volumetric\" = cargo is light for its size, \"actual\" = dense). Air mode only \u2014 sea W/M (1 CBM = 1,000 kg) is covered by consignment_calculator with mode=sea. Missing or non-positive inputs error with the failing parameter named. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: chargeable_weight_kg, basis, volumetric_weight_kg (total and per piece), gross_weight_kg, cbm, ratio, factor and pieces under result; normalized_input echoes the interpreted inputs and any defaults applied; plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nRelated: cbm_calculator (volume only), consignment_calculator (multi-line, all modes), uld_lookup (the equipment the freight flies in).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "factor": {
+    "description": "Volumetric divisor in cm\u00b3/kg. Default: 6000 (IATA standard); express carriers typically 5000.",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "gross_weight_kg": {
+    "description": "Actual gross weight of the WHOLE shipment (all pieces) in kilograms. Example: 500.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "height_cm": {
+    "description": "Height of one piece in centimetres (> 0). Example: 100.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "length_cm": {
+    "description": "Length of one piece in centimetres (> 0). Example: 120.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "pieces": {
+    "description": "Number of identical pieces. Default: 1.",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "width_cm": {
+    "description": "Width of one piece in centimetres (> 0). Example: 80.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   }
+  },
+  "required": [
+   "length_cm",
+   "width_cm",
+   "height_cm",
+   "gross_weight_kg"
+  ],
+  "type": "object"
+ },
+ "name": "chargeable_weight_calculator",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "basis": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "cbm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "chargeable_weight_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "factor": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "gross_weight_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "meta": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "pieces": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "ratio": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "volumetric_weight_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "volumetric_weight_per_piece_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

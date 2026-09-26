@@ -1,0 +1,218 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search USPTO patent applications and grants \u2014 **without a `granted_after`/`granted_before` bound this returns the APPLICATION corpus sorted newest-FILED-first, not issued patents.** USPTO publishes an application ~18 months after filing and typically takes 2+ years to grant it, so the newest rows in an unfiltered search are always recent, unexamined filings with `grant_date: null` \u2014 that is expected, not stale data. **Pick the date field on the QUESTION'S VERB, not on the word \"recent\":** a question asking who has FILED / applied for / sought patents in a window wants `filed_after`/`filed_before` \u2014 the default application corpus already includes pending AND granted patents, so no `granted_after` is needed or wanted, and adding one will silently drop recently-filed-but-not-yet-examined applications (grant lags filing by 2+ years, so \"filed in the last 3 years\" AND \"granted in the last 3 years\" are mostly DISJOINT sets). Only use `granted_after`/`granted_before` when the question explicitly says GRANTED / ISSUED / APPROVED / \"has a patent\" (not just \"recent patents\"). Use `query` for free-text keywords (\"lithium battery\", \"crispr\", \"machine learning\"); all terms are required (AND), and you can quote a phrase to keep it together. A question that names several DISTINCT ways of describing the same idea (e.g. a condition plus a detection method, each expressed as its own quoted phrase) should still be passed as one query \u2014 if the literal AND-of-everything match returns zero, the tool automatically retries once with those same quoted phrases OR'd together instead and marks the response `broadened: true`; it never invents synonyms and it only ever relaxes multi-phrase AND to OR on a genuine zero, so a search that is narrow for a real reason (e.g. one specific applicant with no matching filings, or an ordinary bare-keyword AND) still correctly returns zero. Optional structured filters: `applicant` (exact corporate name as filed, e.g. \"APPLE INC.\"), `inventor` (person name), `title` (words in the invention title), `number` (a specific application number), `filed_after` / `filed_before`, `granted_after` / `granted_before`. Common synonyms are understood \u2014 `assignee`, `company` and `owner` all reach `applicant`, and `keywords`, `q` or `text` all reach `query`. Results include title, application number, filing date, first applicant, all applicants, inventors, status, classification. `total` is the full match count but USPTO returns at most 25 records per search \u2014 narrow with applicant or a date range rather than raising `limit`. Powered by the USPTO Open Data Portal (data.uspto.gov).",
+ "inputSchema": {
+  "examples": [
+   {
+    "filed_after": "2023-09-25",
+    "filed_before": "2026-09-25",
+    "query": "\"cell-free RNA\""
+   },
+   {
+    "query": "machine learning neural networks"
+   },
+   {
+    "query": "blockchain cryptocurrency"
+   },
+   {
+    "applicant": "APPLE INC."
+   },
+   {
+    "inventor": "Hinton",
+    "query": "neural"
+   }
+  ],
+  "properties": {
+   "_apiKey": {
+    "description": "USPTO ODP API key. Get free at https://data.uspto.gov/myodp. Falls back to platform key if configured.",
+    "type": "string"
+   },
+   "applicant": {
+    "description": "Optional. Company applicant name as it appears on the USPTO filing. **Must include the exact corporate suffix** the company uses (PBC / Inc. / LLC / Corporation / Co. / NV / AG / KK). A wrong or missing suffix matches nothing \u2014 \"Apple\" returns zero where \"APPLE INC.\" returns hundreds. Examples: \"Anthropic, PBC\" (not \"Anthropic Inc.\"), \"Apple Inc.\" (not \"Apple\"), \"Alphabet Inc.\" (not \"Google\"), \"Meta Platforms, Inc.\" (not \"Facebook\"), \"Microsoft Corporation\" (not \"Microsoft Corp.\"). If you get zero results plus a `warning` field, the name form is wrong rather than the company being absent \u2014 retry with a different corporate form.",
+    "type": "string"
+   },
+   "filed_after": {
+    "description": "Optional. Filter to patents FILED on/after this date (ISO YYYY-MM-DD). Use this for \"who has filed / applied for patents on X (recently / in the last N years)\" \u2014 it covers both pending applications and already-granted patents, so it is the right bound even when the question also says \"recent\". Do NOT substitute `granted_after` for a filing-activity question: grant lags filing by 2+ years, so a recent filing window under `granted_after` typically returns zero even when filing activity is real.",
+    "type": "string"
+   },
+   "filed_before": {
+    "description": "Optional. Filter to patents FILED on/before this date (ISO YYYY-MM-DD).",
+    "type": "string"
+   },
+   "granted_after": {
+    "description": "Optional. Filter to patents GRANTED (issued) on/after this date (ISO YYYY-MM-DD) \u2014 use ONLY when the question explicitly says GRANTED / ISSUED / APPROVED, not for a plain \"recent patents\" or \"who has filed\" question (use `filed_after` for those \u2014 see its description). Accepted synonym: `issued_after`.",
+    "type": "string"
+   },
+   "granted_before": {
+    "description": "Optional. Filter to patents GRANTED (issued) on/before this date (ISO YYYY-MM-DD). Accepted synonym: `issued_before`.",
+    "type": "string"
+   },
+   "inventor": {
+    "description": "Optional. Inventor name as recorded on the filing; a last name matches most reliably. Examples: \"Hinton\", \"Bengio\". Accepted synonyms: `inventor_name`, `author`.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Number of results to return (default 10). USPTO caps every search at 25 records, so values above 25 have no effect \u2014 use the filters to narrow instead.",
+    "type": "number"
+   },
+   "number": {
+    "description": "Optional. A specific US application number, digits only or formatted \u2014 \"16123456\" or \"16/123,456\". Accepted synonyms: `application_number`, `patent_number`.",
+    "type": "string"
+   },
+   "query": {
+    "description": "Free-text keywords. Every term must appear (they are AND-ed), so add words to narrow and remove words to widen. Wrap words in double quotes to require them adjacent: `\"machine learning\" model` needs the exact phrase plus the word model. Examples: \"lithium battery\", \"crispr\", \"neural network\". Pass \"*\" if you only want to filter by applicant/date with no keyword constraint. If several quoted phrases ANDed together match nothing, the tool retries once with them OR'd instead (see `broadened` in the response) rather than returning a bare zero.",
+    "type": "string"
+   },
+   "title": {
+    "description": "Optional. Words that must appear in the invention title, which narrows far harder than `query` does since `query` searches the whole record. Example: \"solid state battery\".",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "search_patents",
+ "outputSchema": {
+  "properties": {
+   "filters": {
+    "description": "Echo of the structured filters applied; each is null when unused",
+    "properties": {
+     "applicant": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "filed_after": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "filed_before": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "granted_after": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "granted_before": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "type": "object"
+   },
+   "note": {
+    "description": "Present when total exceeds the returned records \u2014 explains the 25-record ODP page cap",
+    "type": "string"
+   },
+   "patents": {
+    "description": "Same records with full ODP fields",
+    "items": {
+     "properties": {
+      "assignee_organization": {
+       "description": "Assignee organization name or null",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "date": {
+       "description": "Patent filing date or null",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "inventors": {
+       "description": "List of inventors",
+       "items": {
+        "properties": {
+         "first_name": {
+          "description": "Inventor first name or null",
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "last_name": {
+          "description": "Inventor last name or null",
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "patent_number": {
+       "description": "Patent number",
+       "type": "string"
+      },
+      "title": {
+       "description": "Patent title",
+       "type": "string"
+      }
+     },
+     "required": [
+      "patent_number",
+      "title",
+      "date",
+      "inventors",
+      "assignee_organization"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "query": {
+    "description": "The composed ODP query string actually sent",
+    "type": "string"
+   },
+   "results": {
+    "description": "Back-compat summary shape (title, number, dates, applicant)",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "returned": {
+    "description": "Number of records in this response",
+    "type": "number"
+   },
+   "total": {
+    "description": "Total number of matching applications (USPTO ODP returns at most 25 records per search regardless of limit)",
+    "type": "number"
+   },
+   "warning": {
+    "description": "Present when an applicant filter matched nothing \u2014 ODP matches the corporate name literally (\"APPLE INC.\" not \"Apple\")",
+    "type": "string"
+   }
+  },
+  "required": [
+   "query",
+   "filters",
+   "total",
+   "returned",
+   "results",
+   "patents"
+  ],
+  "type": "object"
+ },
+ "title": "Search Patents",
+ "version": "v1.927c938e"
+}

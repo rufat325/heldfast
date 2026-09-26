@@ -1,0 +1,207 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Search Contracts & RFPs"
+ },
+ "description": "CONTRACTS & PROCUREMENT \u2014 Search government contracts, RFPs, RFIs, BAAs, and solicitations from SAM.gov. Better than searching SAM.gov directly \u2014 includes semantic search and NAICS industry filtering to exclude commodity noise. Use when user wants: contracts, RFPs, procurement, bids, government work. Examples: \"IT consulting services\", \"construction management\", \"cybersecurity contracts\". BATCH MODE (paid): pass a queries[] array of 2-5 variations instead of query to run them in parallel, dedupe, and return all unique results in one call \u2014 this replaces the former batch_search_procurement tool. When sam_filters.place_of_performance_state (alias: pop_state, accepted in both single and batch mode) is set, the response includes a placeOfPerformance field reporting how many results are confirmed performed in that state (matched), how many have no confirmed location and are shown demoted with a caveat (unknownServed, excluded instead when user_context.location_strict is true), and how many were excluded for being tagged to a different, parseable state (otherStateExcluded; geography we could not parse into any state, such as a bare address or ZIP code, counts as unknownServed instead); a batch call sums these across every sub-query. Paid plans show new listings the day they open; the free plan reaches the same listings after 10 days. Counts toward your monthly searches. A batch counts as 1 call.",
+ "inputSchema": {
+  "anyOf": [
+   {
+    "required": [
+     "query"
+    ]
+   },
+   {
+    "required": [
+     "queries"
+    ]
+   },
+   {
+    "required": [
+     "source"
+    ]
+   },
+   {
+    "required": [
+     "organization"
+    ]
+   }
+  ],
+  "properties": {
+   "compact": {
+    "description": "Return compact results (default: true). Set to false for full details.",
+    "type": "boolean"
+   },
+   "cursor": {
+    "description": "Pagination cursor from previous response",
+    "type": "string"
+   },
+   "deadline_within_days": {
+    "description": "Only opportunities closing within N days",
+    "type": "number"
+   },
+   "detail_level": {
+    "description": "Batch mode only: controls response verbosity (minimal/compact [default]/full). Ignored in single-query mode.",
+    "enum": [
+     "minimal",
+     "compact",
+     "full"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "description": "Max results (default: 25)",
+    "type": "number"
+   },
+   "max_response_tokens": {
+    "description": "Batch mode only: token budget for the response (default 4000). Server auto-caps results to fit. Ignored in single-query mode.",
+    "minimum": 500,
+    "type": "number"
+   },
+   "max_results": {
+    "description": "Batch mode only: maximum merged results to return (default 10). Ignored in single-query mode (use limit).",
+    "minimum": 1,
+    "type": "number"
+   },
+   "min_quality": {
+    "description": "Minimum record-completeness tier (default: medium). any removes this quality-tier filter; relevance, access and other filters still apply.",
+    "enum": [
+     "high",
+     "medium",
+     "low",
+     "any"
+    ],
+    "type": "string"
+   },
+   "new_within_days": {
+    "description": "Backwards-compatible alias for posted_within_days. Only opportunities WE ADDED (ingested) in the last N days for recurring/delta checks (\"what is new since my last check\"). Additive to all other filters. In queryless browse mode without a single source, the recency window is sampled across sources round-robin by ingest recency so one bulk harvester cannot own the digest; each source remains newest first. The response includes newSince and windowCoverage: sourcesSampled counts distinct sources returned by the grouped provider query before MCP quality, judge, recency-withhold, and page filters; it is absent when no grouped sample was available, including when sampling was not attempted, and 0 means the grouped query succeeded but returned no sourced rows; sourcesServed counts distinct sources delivered on this page. windowCoverage.order is \"recency\" for the queryless browse digest or \"relevance\" when a query is present. windowIncomplete/incompleteReason is separate from ceilingTruncated, which is true only when the 2,000-row ceiling excluded records; ceilingTruncated and hardCeiling are present only when order is \"recency\" and are omitted entirely under \"relevance\" (query mode never walks past a single bounded fetch, so no ceiling logic runs). Not the opportunity posted date or deadline.",
+    "type": "number"
+   },
+   "offset": {
+    "description": "Batch mode only: number of merged results to skip for pagination (default 0). Ignored in single-query mode.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "organization": {
+    "description": "Filter by contracting agency",
+    "type": "string"
+   },
+   "posted_within_days": {
+    "description": "Preferred alias for new_within_days: only opportunities WE ADDED (ingested) in the last N days. In queryless browse mode without a single source, the recency window is sampled across sources round-robin by ingest recency so one bulk harvester cannot own the digest; each source remains newest first. In windowCoverage, sourcesSampled counts distinct sources returned by the grouped provider query before MCP quality, judge, recency-withhold, and page filters; it is absent when no grouped sample was available, including when sampling was not attempted, and 0 means the grouped query succeeded but returned no sourced rows; sourcesServed counts distinct sources delivered on this page. windowCoverage.order is \"recency\" for the queryless browse digest or \"relevance\" when a query is present. windowIncomplete/incompleteReason is separate from ceilingTruncated, which is true only when the 2,000-row ceiling excluded records; ceilingTruncated and hardCeiling are present only when order is \"recency\" and are omitted entirely under \"relevance\" (query mode never walks past a single bounded fetch, so no ceiling logic runs). Uses the same ingest freshness field as newSince/recurring checks; not the opportunity posted date or deadline. If both posted_within_days and new_within_days are supplied, posted_within_days wins.",
+    "type": "number"
+   },
+   "procurement_type": {
+    "description": "Filter by industry. professional_services = consulting/engineering/R&D (NAICS 54xxxx). it_services = software/IT (NAICS 5415xx). construction = building (NAICS 23xxxx). manufacturing = production (NAICS 31-33xxxx).",
+    "enum": [
+     "professional_services",
+     "it_services",
+     "construction",
+     "manufacturing",
+     "all"
+    ],
+    "type": "string"
+   },
+   "queries": {
+    "description": "BATCH MODE (paid, replaces batch_search_procurement): array of 2-5 search queries to run in parallel, dedupe, and merge. Example for IT services: [\"IT services contract\", \"software development federal\", \"technology consulting government\", \"computer services procurement\"]. When set, query is ignored and the batch response params (detail_level, max_results, offset, max_response_tokens) apply.",
+    "items": {
+     "type": "string"
+    },
+    "maxItems": 5,
+    "minItems": 1,
+    "type": "array"
+   },
+   "query": {
+    "description": "Natural language search query. Provide either query (single search) or queries (batch mode) \u2014 exactly one.",
+    "type": "string"
+   },
+   "sam_filters": {
+    "description": "SAM.gov specific filters",
+    "properties": {
+     "department": {
+      "description": "Top-level federal department or independent agency, e.g. \"Department of Energy\", \"DOE\", \"Defense\", \"GSA\". Matched against the live SAM.gov department facet (agency name, acronym, or \"Department of X\" phrasing all resolve); an unrecognized value is applied as-is and reported in the response as departmentFilter.",
+      "type": "string"
+     },
+     "place_of_performance_state": {
+      "description": "State code (e.g., \"CA\", \"TX\"). Alias: pop_state (used by search_grantsplus/batch_search_procurement) is also accepted here.",
+      "type": "string"
+     },
+     "pop_state": {
+      "description": "Alias for place_of_performance_state \u2014 state code (e.g., \"CA\", \"TX\"). When both are sent, place_of_performance_state wins.",
+      "type": "string"
+     },
+     "psc_code": {
+      "description": "Product Service Code. NOT YET APPLIED to results \u2014 accepted for schema compatibility with other tools but currently reported in the response as an ignored filter; do not rely on it to narrow results.",
+      "type": "string"
+     },
+     "set_aside": {
+      "description": "Set-aside type. Supported: SDVOSB, VOSB, WOSB, EDWOSB, 8a/8(a), HUBZone, SBA/\"Small Business\" (each expands to all matching SAM codes and CSV labels). Actually filters results.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "since": {
+    "description": "Stateless alternative to posted_within_days/new_within_days: ISO 8601 instant. Only opportunities ingested at/after this instant. Store the previous response newSince.newest and pass it here to manage your own watermark.",
+    "type": "string"
+   },
+   "source": {
+    "description": "Filter to a specific source/domain, e.g. \"sam.gov\" or an agency source domain.",
+    "type": "string"
+   },
+   "status": {
+    "description": "Filter by status",
+    "enum": [
+     "open",
+     "closed",
+     "all"
+    ],
+    "type": "string"
+   },
+   "user_context": {
+    "description": "User context for better filtering",
+    "properties": {
+     "exclude_naics_prefixes": {
+      "description": "NAICS prefixes to EXCLUDE (e.g., [\"31\",\"32\",\"33\"] for manufacturing)",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "location": {
+      "type": "string"
+     },
+     "location_strict": {
+      "description": "With a recognized location, requests geographic filtering; nationwide or unspecified records and explicitly broader fallbacks may remain. Check geographyFilterOutcome and warnings. With sam_filters.place_of_performance_state (or pop_state in batch), true additionally excludes records without a confirmed performance location; false demotes and caveats them.",
+      "type": "boolean"
+     },
+     "naics_codes": {
+      "description": "NAICS codes to INCLUDE (e.g., [\"541611\"])",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "organization_type": {
+      "description": "Common natural-language phrasing (e.g. \"501(c)(3) nonprofit\") is also parsed; unparseable values are ignored with an explicit note in the response.",
+      "enum": [
+       "nonprofit",
+       "startup",
+       "small_business",
+       "university",
+       "government",
+       "individual"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "type": "object"
+ },
+ "name": "search_procurement",
+ "title": "Search Contracts & RFPs"
+}

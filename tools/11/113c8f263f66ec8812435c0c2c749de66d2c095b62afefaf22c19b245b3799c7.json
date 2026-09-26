@@ -1,0 +1,175 @@
+{
+ "_meta": {
+  "openai/toolInvocation/invoked": "Standings ready",
+  "openai/toolInvocation/invoking": "Fetching standings\u2026",
+  "securitySchemes": [
+   {
+    "scopes": [
+     "mcp:read"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get season standings and outcome snapshot; includes verified season-outcome fields when available. Returns team records, rankings, and points summaries. The rank field is a standings sort position (1 = best): on ESPN it is computed by Flaim from win percentage, with wins as the tie-breaker; on Sleeper it is computed by Flaim from wins, with points for as the tie-breaker; on Yahoo it is passed through from Yahoo's own standings API. It is NOT a verified postseason finish. For verified postseason outcome, use finalRank and championshipWon instead. Also returns seasonPhase (regular_season/playoffs_in_progress/season_complete), seasonComplete, and per-team outcome fields: finalRank, championshipWon, playoffOutcome, outcomeConfidence, madePlayoffs, playoffSeed. Outcome fields are null when not verifiable \u2014 do not infer championship from rank or team name. outcomeConfidence is 'explicit' when the platform reports final ranks, or 'derived' when the champion and runner-up were determined from the final winners-bracket matchup (ESPN historical seasons may omit final ranks); 'derived' only ever appears on ESPN \u2014 Yahoo always returns null here, and Sleeper returns 'explicit' for any completed season whose winners bracket names a champion, including when the finish came from the bracket rather than from reported placements; a tied championship game is resolved using the league's playoff tie rule (ESPN's default advances the higher seed). Note: playoffOutcome returns 'in_progress' on Sleeper for teams in active playoffs; ESPN and Yahoo return null for that state. ESPN may also include projected-rank fields. Yahoo and Sleeper leagues also return waiverPriority (the team's current waiver-claim priority, 1 = first \u2014 this is the live priority, NOT get_transactions' waiver_priority, which is the priority some past claim used) and faabBalance (remaining free-agent budget; 0 means spent out, not unknown; on Sleeper it already reflects FAAB traded between teams, so it can exceed the league's starting budget). Either can be null (not applicable, or not reported by the platform \u2014 do not read null as proof the league lacks FAAB) and they are not mutually exclusive: a FAAB league may also report waiverPriority as its tie-breaker for equal bids. ESPN standings omit both fields entirely rather than returning null. Use established session context (call get_user_session only if needed), then get_league_info for the specified league if this chat has not already loaded it, so team names and league context are already established. For multi-league comparisons, call once per league. For historical finish questions, call get_ancient_history first to discover seasons, then call this tool per season for verified outcomes. Read-only. Current date is 2026-09-26.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "league_id": {
+    "description": "League ID (get from get_user_session)",
+    "type": "string"
+   },
+   "platform": {
+    "description": "Fantasy platform (e.g., \"espn\", \"yahoo\", \"sleeper\")",
+    "enum": [
+     "espn",
+     "yahoo",
+     "sleeper"
+    ],
+    "type": "string"
+   },
+   "season_year": {
+    "description": "Season start year \u2014 use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season. Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).",
+    "type": "number"
+   },
+   "sport": {
+    "description": "Sport type (e.g., \"football\", \"baseball\")",
+    "enum": [
+     "football",
+     "baseball",
+     "basketball",
+     "hockey"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "platform",
+   "sport",
+   "league_id",
+   "season_year"
+  ],
+  "type": "object"
+ },
+ "name": "get_standings",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "data": {
+    "additionalProperties": true,
+    "description": "Platform envelope. Field availability varies by platform (ESPN, Yahoo, Sleeper); absent fields are not provided by that platform.",
+    "properties": {
+     "leagueId": {
+      "type": "string"
+     },
+     "leagueKey": {
+      "type": "string"
+     },
+     "leagueName": {
+      "type": "string"
+     },
+     "seasonComplete": {
+      "type": "boolean"
+     },
+     "seasonPhase": {
+      "description": "regular_season, playoffs_in_progress, or season_complete",
+      "type": "string"
+     },
+     "seasonYear": {
+      "type": "number"
+     },
+     "standings": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "championshipWon": {
+         "type": [
+          "boolean",
+          "null"
+         ]
+        },
+        "faabBalance": {
+         "description": "Yahoo and Sleeper: remaining FAAB (free-agent budget) balance; 0 is a real spent-out balance, not unknown. On Sleeper the value already nets out FAAB traded between teams, so it can exceed the league starting budget. Null for leagues that do not use FAAB or when the platform did not report a usable value, so null alone does not prove the league lacks FAAB. Absent (not null) on ESPN.",
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "finalRank": {
+         "description": "Verified postseason finish; null when not verifiable",
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "madePlayoffs": {
+         "type": [
+          "boolean",
+          "null"
+         ]
+        },
+        "outcomeConfidence": {
+         "description": "explicit or derived; null when unknown",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "playoffOutcome": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "playoffSeed": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "waiverPriority": {
+         "description": "Yahoo and Sleeper: the team's current waiver-claim priority, 1 = first. Present for rolling-priority leagues and for FAAB leagues that use priority as their bid tie-breaker. Null when priority does not apply or the platform did not report a usable value. Absent (not null) on ESPN. Distinct from get_transactions' waiver_priority, which is a past claim's priority.",
+         "type": [
+          "number",
+          "null"
+         ]
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "success": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "success",
+   "data"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "mcp:read"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "League Standings"
+}

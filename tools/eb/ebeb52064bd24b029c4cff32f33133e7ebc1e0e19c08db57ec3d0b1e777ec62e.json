@@ -1,0 +1,458 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "YNAB: Create Multiple Transactions"
+ },
+ "description": "Create 1\u2013100 transactions in a single batch with duplicate detection and dry-run support.\n\nArgs:\n  - budget_id (string, optional): Budget UUID. Omit to use the default budget.\n  - transactions (array, required): Up to 100 transaction objects. Each requires account_id, date, and exactly one of amount_decimal (preferred), amount_milliunits, or deprecated amount.\n  - dry_run (boolean, optional): Validate without saving. Default: false.\n\nReturns: summary (created, duplicates, failed), results[], transactions[].\n\nExamples:\n  - Dry run first: set dry_run=true to validate before committing\n  - If you explicitly want YNAB-side duplicate import detection, set import_id on each transaction\n\nWrite safety: call without confirmation_token to preview. Execute the identical validated request with the short-lived confirmation_token returned by that preview.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "budget_id": {
+    "minLength": 1,
+    "type": "string"
+   },
+   "confirmation_token": {
+    "description": "Short-lived, single-use token returned by the immediately preceding preview of this exact validated request.",
+    "minLength": 16,
+    "type": "string"
+   },
+   "dry_run": {
+    "type": "boolean"
+   },
+   "transactions": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "account_id": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "amount": {
+       "description": "Deprecated legacy alias for amount_milliunits. Use amount_decimal for currency input or amount_milliunits for raw YNAB values.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "amount_decimal": {
+       "description": "Preferred: amount in decimal currency units (for example, -12.34). Rounded exactly to the nearest YNAB milliunit.",
+       "type": "number"
+      },
+      "amount_milliunits": {
+       "description": "Raw YNAB milliunits. Use only when the value is already converted.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "approved": {
+       "type": "boolean"
+      },
+      "category_id": {
+       "type": "string"
+      },
+      "cleared": {
+       "enum": [
+        "cleared",
+        "uncleared",
+        "reconciled"
+       ],
+       "type": "string"
+      },
+      "date": {
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "type": "string"
+      },
+      "flag_color": {
+       "enum": [
+        "red",
+        "orange",
+        "yellow",
+        "green",
+        "blue",
+        "purple"
+       ],
+       "type": "string"
+      },
+      "import_id": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "memo": {
+       "type": "string"
+      },
+      "payee_id": {
+       "type": "string"
+      },
+      "payee_name": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "account_id",
+      "date"
+     ],
+     "type": "object"
+    },
+    "maxItems": 100,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "transactions"
+  ],
+  "type": "object"
+ },
+ "name": "ynab_create_transactions",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+   {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "const": "ynab_create_transactions",
+      "type": "string"
+     },
+     "dry_run": {
+      "const": true,
+      "type": "boolean"
+     },
+     "note": {
+      "type": "string"
+     },
+     "summary": {
+      "additionalProperties": false,
+      "properties": {
+       "accounts_affected": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "categories_affected": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "date_range": {
+        "additionalProperties": false,
+        "properties": {
+         "earliest": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "type": "string"
+         },
+         "latest": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "type": "string"
+         }
+        },
+        "required": [
+         "earliest",
+         "latest"
+        ],
+        "type": "object"
+       },
+       "total_amount": {
+        "type": "number"
+       },
+       "total_transactions": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "total_transactions",
+       "total_amount",
+       "accounts_affected",
+       "categories_affected"
+      ],
+      "type": "object"
+     },
+     "transactions_preview": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "account_id": {
+         "type": "string"
+        },
+        "amount": {
+         "type": "number"
+        },
+        "category_id": {
+         "type": "string"
+        },
+        "date": {
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+         "type": "string"
+        },
+        "import_id": {
+         "type": "string"
+        },
+        "memo": {
+         "type": "string"
+        },
+        "payee_id": {
+         "type": "string"
+        },
+        "payee_name": {
+         "type": "string"
+        },
+        "request_index": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "request_index",
+        "account_id",
+        "date",
+        "amount"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "validation": {
+      "const": "passed",
+      "type": "string"
+     }
+    },
+    "required": [
+     "dry_run",
+     "action",
+     "validation",
+     "summary",
+     "transactions_preview",
+     "note"
+    ],
+    "type": "object"
+   },
+   {
+    "additionalProperties": {},
+    "properties": {
+     "duplicate_import_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "message": {
+      "type": "string"
+     },
+     "mode": {
+      "enum": [
+       "full",
+       "summary",
+       "ids_only"
+      ],
+      "type": "string"
+     },
+     "results": {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "correlation_key": {
+         "type": "string"
+        },
+        "error": {
+         "type": "string"
+        },
+        "error_code": {
+         "type": "string"
+        },
+        "request_index": {
+         "type": "number"
+        },
+        "status": {
+         "enum": [
+          "created",
+          "duplicate",
+          "updated",
+          "failed"
+         ],
+         "type": "string"
+        },
+        "transaction_id": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "request_index",
+        "status",
+        "correlation_key"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "server_knowledge": {
+      "type": "number"
+     },
+     "success": {
+      "type": "boolean"
+     },
+     "summary": {
+      "additionalProperties": false,
+      "properties": {
+       "created": {
+        "type": "number"
+       },
+       "duplicates": {
+        "type": "number"
+       },
+       "failed": {
+        "type": "number"
+       },
+       "total_requested": {
+        "type": "number"
+       },
+       "updated": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "total_requested",
+       "failed"
+      ],
+      "type": "object"
+     },
+     "transactions": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "account_id": {
+         "description": "Account ID",
+         "type": "string"
+        },
+        "account_name": {
+         "description": "Account name",
+         "type": "string"
+        },
+        "amount": {
+         "description": "Transaction amount in dollars",
+         "type": "number"
+        },
+        "approved": {
+         "description": "Approved flag",
+         "type": "boolean"
+        },
+        "category_id": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Category ID"
+        },
+        "category_name": {
+         "description": "Category name",
+         "type": "string"
+        },
+        "cleared": {
+         "description": "Cleared status",
+         "type": "string"
+        },
+        "date": {
+         "description": "Transaction date",
+         "type": "string"
+        },
+        "deleted": {
+         "description": "Deleted flag",
+         "type": "boolean"
+        },
+        "flag_color": {
+         "description": "Flag color",
+         "type": "string"
+        },
+        "id": {
+         "description": "Transaction ID",
+         "type": "string"
+        },
+        "import_id": {
+         "description": "Import ID",
+         "type": "string"
+        },
+        "matched_transaction_id": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Matched transaction ID"
+        },
+        "memo": {
+         "description": "Transaction memo",
+         "type": "string"
+        },
+        "payee_id": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Payee ID"
+        },
+        "payee_name": {
+         "description": "Payee name",
+         "type": "string"
+        },
+        "transfer_account_id": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Transfer account ID"
+        },
+        "transfer_transaction_id": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Transfer transaction ID"
+        }
+       },
+       "required": [
+        "id",
+        "date",
+        "amount",
+        "cleared",
+        "approved",
+        "account_id",
+        "deleted"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "success",
+     "summary",
+     "results"
+    ],
+    "type": "object"
+   }
+  ],
+  "type": "object"
+ }
+}

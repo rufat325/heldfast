@@ -1,0 +1,121 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Change what is in a collection"
+ },
+ "description": "Edit a collection's membership without republishing (which would create a new collection and abandon its comments and history). `action` is one of: \"add\" - append new `artifacts` (name, mime, content) and/or `existing_artifact_ids` (already-published files of the same space); files already in the collection are skipped, so it is safe to retry. \"reorder\" - set the full order: `artifact_ids` must be the FULL current member set, every file once (a partial or unknown-id list is rejected; work from a fresh get_collection). \"move\" - move `artifact_id` from this collection to `to_collection_id` in the same workspace, carrying its comments, reviews and history; if that empties the source it archives itself (a cross-workspace move is refused - share instead). Returns a lean ack (revision, or from_revision/to_revision for a move) plus `share_code_holders` when the edit exposes files to a share code - re-read with get_collection if you need the full state. WARNING: adding/moving into a share-coded collection makes those files readable by the code's holders. Refuses archived and memory collections. For a larger or binary file use `kythe add <collection-id> <file>`, which streams bytes off disk - up to 32 MiB per artifact - rather than through the model.\n\nOver MCP the whole request is limited to 1048576 bytes, and base64 inflates content by 4/3, so roughly 786432 bytes of file is the practical maximum here. Larger content goes over the API or the CLI, which have no such ceiling.",
+ "icons": [
+  {
+   "mimeType": "image/svg+xml",
+   "sizes": [
+    "any"
+   ],
+   "src": "https://kythene.com/favicon.svg"
+  }
+ ],
+ "inputSchema": {
+  "properties": {
+   "action": {
+    "description": "action is one of: \"add\" (add files), \"reorder\" (set the full member order),\n \"move\" (move a file to another collection).",
+    "type": "string"
+   },
+   "artifactId": {
+    "description": "move: the artifact to move, and the destination collection (same space);\n collection_id is the source.",
+    "type": "string"
+   },
+   "artifactIds": {
+    "description": "reorder: the FULL current member set, every artifact once, in the order you\n want (a partial or unknown-id list is rejected; work from a fresh\n get_collection).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "artifacts": {
+    "description": "add: new files to create and append.",
+    "items": {
+     "properties": {
+      "content": {
+       "contentEncoding": "base64",
+       "description": "content carries the artifact bytes (32 MiB max per artifact over the API\n and the CLI). An MCP request is capped far lower - the tool description\n carries that endpoint's real ceiling.",
+       "type": "string"
+      },
+      "mime": {
+       "description": "mime is the content type; defaults to application/octet-stream.",
+       "type": "string"
+      },
+      "name": {
+       "description": "name is the artifact's filename-like name, e.g. \"bench-results.json\".",
+       "type": "string"
+      },
+      "note": {
+       "description": "note is an optional version note.",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "collectionId": {
+    "description": "collection_id is the collection to edit (for a move, the SOURCE collection).",
+    "type": "string"
+   },
+   "existingArtifactIds": {
+    "description": "add: references to already-published artifacts of the same space to append.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "note": {
+    "description": "add: optional version note.",
+    "type": "string"
+   },
+   "space": {
+    "description": "space optionally selects which of your spaces to act in (an id or name\n from list_spaces). Omit it when you belong to a single space.",
+    "type": "string"
+   },
+   "toCollectionId": {
+    "description": "to_collection_id is the collection to move the artifact INTO; collection_id\n is the one it leaves. Both must be in the same space.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "collectionId",
+   "action"
+  ],
+  "type": "object"
+ },
+ "name": "edit_collection",
+ "outputSchema": {
+  "properties": {
+   "fromRevision": {
+    "description": "from_revision / to_revision are the source and destination revisions after a\n move.",
+    "type": "integer"
+   },
+   "ok": {
+    "description": "ok is true when the edit applied.",
+    "type": "boolean"
+   },
+   "revision": {
+    "description": "revision is the collection's revision after add/reorder.",
+    "type": "integer"
+   },
+   "shareCodeHolders": {
+    "description": "share_code_holders lists share-code labels whose holders can now read a\n newly-added or newly-moved file anonymously (the exposure the edit created).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "toRevision": {
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Change what is in a collection"
+}

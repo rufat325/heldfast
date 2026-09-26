@@ -1,0 +1,358 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search fossil occurrences filtered by taxon, geologic time, geography, and depositional environment \u2014 the flagship. Use base_name for a clade and all its descendants (what \"Tyrannosaurus occurrences\" usually means), base_id for that same clade by resolved taxon id, or taxon_name for an exact taxon. Bound the age by a named interval (e.g. \"Maastrichtian\") or a max_ma/min_ma range, and/or a lng/lat bounding box; scope to a single locality with collection_no (take it from a paleobiology_search_collections row). At least one filter is required \u2014 taxon, time, place, environment, or collection_no. Every row carries two distinct coordinate systems \u2014 modern lng/lat (where the rock is today) and paleo lng/lat (where the landmass sat at deposition) \u2014 plus the formation, age interval, and higher classification (phylum through genus); never plot a deep-time occurrence on a modern coastline. Resolve a name with paleobiology_get_taxon first if unsure. Broad queries return many rows: an inline preview answers the immediate question, and when the set outgrows that preview the matching occurrences \u2014 up to the per-call cap \u2014 stage on a DataCanvas (canvas_id + table_name, returned only then) for SQL via paleobiology_dataframe_query (count by interval, group by formation/country, map by region). The response reports how many occurrences matched in total, which rows this page covers, and the offset that reaches the next page \u2014 page through the whole match set with limit/offset.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "base_id": {
+    "description": "Clade-inclusive taxon filter by PBDB taxon id \u2014 the taxon_no from paleobiology_get_taxon, or accepted_no on an occurrence row. Same clade-inclusive semantics as base_name, but unambiguous where a name is not (homonyms, synonyms, unresolved spellings). Supply this or base_name, never both.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "base_name": {
+    "description": "Clade-inclusive taxon filter \u2014 this taxon and all descendants, e.g. \"Dinosauria\". The usual choice. Supply this or base_id, never both.",
+    "type": "string"
+   },
+   "canvas_id": {
+    "description": "Canvas id from a prior call to re-stage onto the same workspace. Reusing it REPLACES (overwrites) the prior occurrence table \u2014 each search restages the full result, it does not append to or accumulate across earlier ones. Omit to start fresh; the response returns a new id.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   },
+   "collection_no": {
+    "description": "Restrict to one collection (locality) by its PBDB collection_no \u2014 the fauna found together at that site. Take the id from a paleobiology_search_collections row to drill from a locality into its occurrences.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "environment": {
+    "description": "Depositional environment: \"marine\", \"terrestrial\", or \"freshwater\" (lacustrine + fluvial). Omit for all.",
+    "enum": [
+     "marine",
+     "terrestrial",
+     "freshwater"
+    ],
+    "type": "string"
+   },
+   "interval": {
+    "description": "Named geologic interval bounding the age, e.g. \"Cretaceous\" or \"Maastrichtian\". Alternative to max_ma/min_ma.",
+    "type": "string"
+   },
+   "latmax": {
+    "description": "Northern edge of the bounding box, decimal degrees (\u221290\u202690). Valid on its own \u2014 a lone latitude edge filters as a half-plane.",
+    "maximum": 90,
+    "minimum": -90,
+    "type": "number"
+   },
+   "latmin": {
+    "description": "Southern edge of the bounding box, decimal degrees (\u221290\u202690). Valid on its own \u2014 a lone latitude edge filters as a half-plane.",
+    "maximum": 90,
+    "minimum": -90,
+    "type": "number"
+   },
+   "limit": {
+    "default": 100,
+    "description": "Maximum occurrences to pull per page (1\u2013500). Caps the pull (further bounded by PBDB_MAX_OCCURRENCES); broad queries stage that page on the canvas for SQL. Pair with offset to walk the whole match set.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "lngmax": {
+    "description": "Eastern edge of the bounding box, decimal degrees (\u2212180\u2026180). Longitude is a closed pair \u2014 supply lngmin with it or neither.",
+    "maximum": 180,
+    "minimum": -180,
+    "type": "number"
+   },
+   "lngmin": {
+    "description": "Western edge of the bounding box, decimal degrees (\u2212180\u2026180). Longitude is a closed pair \u2014 supply lngmax with it or neither.",
+    "maximum": 180,
+    "minimum": -180,
+    "type": "number"
+   },
+   "max_ma": {
+    "description": "Older age bound in millions of years ago. Alternative to interval. When paired with min_ma it must be strictly greater \u2014 max_ma is the deeper-time end of the window.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "min_ma": {
+    "description": "Younger age bound in millions of years ago. Alternative to interval. When paired with max_ma it must be strictly smaller \u2014 min_ma is the nearer-to-present end of the window.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Number of matching occurrences to skip before this page \u2014 page with limit by advancing offset. The response notice names the exact offset that reaches the next page.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "taxon_name": {
+    "description": "Exact taxon filter \u2014 only this taxon, not descendants. Use instead of base_name when you want a single taxon.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "paleobiology_search_occurrences",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "occurrences",
+     "spilled",
+     "row_count",
+     "totalCount",
+     "attribution"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "attribution": {
+    "description": "CC-BY data attribution for the Paleobiology Database.",
+    "type": "string"
+   },
+   "canvas_id": {
+    "description": "Canvas id holding the staged occurrence set \u2014 pass to paleobiology_dataframe_query. Present only when spilled is true; a result that fit inline stages nothing, so there is no table to query.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `missing_filter`: The call carried only pagination fields \u2014 no taxon, time, place, environment, or collection filter. `conflicting_taxon_filter`: Both base_name and base_id were supplied \u2014 PBDB accepts only one clade selector. `incomplete_bbox`: Exactly one of lngmin/lngmax was supplied \u2014 a longitude box needs both edges. `inverted_ma_range`: min_ma was greater than or equal to max_ma \u2014 the age window is inverted or empty. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "missing_filter",
+         "conflicting_taxon_filter",
+         "incomplete_bbox",
+         "inverted_ma_range"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when no occurrence matched, when results spilled to the canvas, when occurrences remain past this page (naming the offset that reaches the next one), when offset ran past the end of the match set, when a filter value was not recognized and ignored, or when DataCanvas is off.",
+    "type": "string"
+   },
+   "occurrences": {
+    "description": "Inline preview of matching occurrences for the requested page. The staged occurrence set is on the canvas when spilled is true \u2014 it is one page of the match set rather than every match (the notice states which rows this page covers, how many matched upstream, and the offset that reaches the next page).",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single fossil occurrence with modern and paleo coordinates, age, strata, and classification.",
+     "properties": {
+      "accepted_name": {
+       "description": "PBDB accepted name (may differ from the identification under synonymy).",
+       "type": "string"
+      },
+      "accepted_no": {
+       "description": "PBDB taxon id of the accepted name \u2014 chain into paleobiology_get_taxon.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "accepted_rank": {
+       "description": "Rank of the accepted name.",
+       "type": "string"
+      },
+      "cc": {
+       "description": "ISO 3166-1 alpha-2 country code of the modern locality, when known.",
+       "type": "string"
+      },
+      "classification": {
+       "additionalProperties": false,
+       "description": "Higher classification of the accepted name (phylum \u2192 genus) \u2014 group rows by family or order without a per-row paleobiology_get_taxon call. Each level is present only when PBDB resolves it; omitted entirely when PBDB resolves none.",
+       "properties": {
+        "class": {
+         "description": "Class, when classified.",
+         "type": "string"
+        },
+        "family": {
+         "description": "Family, when classified.",
+         "type": "string"
+        },
+        "genus": {
+         "description": "Genus, when classified.",
+         "type": "string"
+        },
+        "order": {
+         "description": "Order, when classified (PBDB sentinel orders are omitted).",
+         "type": "string"
+        },
+        "phylum": {
+         "description": "Phylum, when classified.",
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "collection_no": {
+       "description": "Locality this came from \u2014 chain into paleobiology_search_collections.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "county": {
+       "description": "County of the modern locality, when known.",
+       "type": "string"
+      },
+      "early_interval": {
+       "description": "Named geologic interval of the older age bound, e.g. \"Late Maastrichtian\".",
+       "type": "string"
+      },
+      "formation": {
+       "description": "Geologic formation, when recorded.",
+       "type": "string"
+      },
+      "geological_group": {
+       "description": "Geologic group, when recorded.",
+       "type": "string"
+      },
+      "geoplate": {
+       "description": "Tectonic plate id under the paleo-model, when reported.",
+       "type": "string"
+      },
+      "identified_name": {
+       "description": "The original field/published identification.",
+       "type": "string"
+      },
+      "identified_rank": {
+       "description": "Rank of the identified name.",
+       "type": "string"
+      },
+      "lat": {
+       "description": "MODERN latitude \u2014 where the rock sits today. Not where the organism lived.",
+       "type": "number"
+      },
+      "late_interval": {
+       "description": "Named interval of the younger bound \u2014 present only when the age spans two intervals.",
+       "type": "string"
+      },
+      "lng": {
+       "description": "MODERN longitude \u2014 where the rock sits today. Not where the organism lived.",
+       "type": "number"
+      },
+      "max_ma": {
+       "description": "Older age bound in millions of years ago.",
+       "type": "number"
+      },
+      "member": {
+       "description": "Geologic member, when recorded.",
+       "type": "string"
+      },
+      "min_ma": {
+       "description": "Younger age bound in millions of years ago.",
+       "type": "number"
+      },
+      "occurrence_no": {
+       "description": "PBDB occurrence id \u2014 read the full record via the paleobiology://occurrence/{occurrence_no} resource.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "paleolat": {
+       "description": "PALEO latitude \u2014 where the landmass sat at deposition. Omitted when PBDB has no reconstruction.",
+       "type": "number"
+      },
+      "paleolng": {
+       "description": "PALEO longitude \u2014 where the landmass sat at deposition. Omitted when PBDB has no reconstruction.",
+       "type": "number"
+      },
+      "paleomodel": {
+       "description": "Plate-tectonic model used for the paleo-coordinates (e.g. \"gplates\"). They are model-dependent.",
+       "type": "string"
+      },
+      "reference_no": {
+       "description": "PBDB bibliographic reference id for provenance.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "state": {
+       "description": "State/province of the modern locality, when known.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "occurrence_no"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "row_count": {
+    "description": "Rows staged on the canvas when spilled; otherwise the preview length. Capped at the per-call limit (PBDB_MAX_OCCURRENCES) \u2014 compare against the totalCount enrichment for how many matched upstream.",
+    "type": "number"
+   },
+   "spilled": {
+    "description": "True when the result exceeded the inline preview and the staged occurrence set was written to the canvas.",
+    "type": "boolean"
+   },
+   "table_name": {
+    "description": "Canvas table holding the staged occurrence set. Present only when spilled is true.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Total occurrences matching the filters upstream \u2014 the number this call was drawn from, which may exceed the staged set.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "paleobiology-mcp-server: search fossil occurrences"
+}

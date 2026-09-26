@@ -1,0 +1,133 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Probe many local documents in one call \u2014 inventory a folder, triage a batch of uploads, or compare a set of files. One engine process handles the whole batch, so this is much cheaper than calling probe once per file.\n\nTakes literal paths; expand any glob yourself first. Returns one entry per path, in the order given, each carrying that file's report or its own error envelope. A file that fails does not affect the others.\n\nDefaults to the compact \"values\" view because inventory rarely needs per-target evidence; pass view: \"report\" when it does.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "budget": {
+    "description": "Override the level's resource limits. Raise after a BUDGET_EXCEEDED error.",
+    "properties": {
+     "max_archive_entries": {
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     },
+     "max_expanded_bytes": {
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     },
+     "max_physical_bytes": {
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     },
+     "timeout_ms": {
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "level": {
+    "description": "Probe budget and eligible paths. header: identity only. metadata (default). deep: higher-cost paths, needed only when a target's min_level says so.",
+    "enum": [
+     "header",
+     "metadata",
+     "deep"
+    ],
+    "type": "string"
+   },
+   "min_confidence": {
+    "description": "Weakest evidence a path may offer. Default high; lower it to accept an approximation.",
+    "enum": [
+     "low",
+     "medium",
+     "high",
+     "exact"
+    ],
+    "type": "string"
+   },
+   "paths": {
+    "description": "Document paths, at most 64 per call. Literal paths only.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 64,
+    "minItems": 1,
+    "type": "array"
+   },
+   "targets": {
+    "description": "Short names (slide_count), canonical names (powerpoint.slide_count), or presets: @header, @summary, @security, @structure, @assets, @quality, @format, @all. Defaults to the driver's own set. Call list_targets rather than guessing a name. @summary omits statistics needing a full-file read, so ask for a PDF's page_count explicitly.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 64,
+    "minItems": 1,
+    "type": "array"
+   },
+   "view": {
+    "description": "report: full evidence \u2014 value, confidence, path, and cost per target. values: a compact target-to-value map.",
+    "enum": [
+     "report",
+     "values"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "paths"
+  ],
+  "type": "object"
+ },
+ "name": "probe_batch",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "reports": {
+    "description": "One entry per requested path, in order. A per-file failure is confined to it.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "path": {
+       "type": "string"
+      },
+      "report": {
+       "additionalProperties": {},
+       "description": "A DeckProbe schema-v2 envelope. See the deckprobe://schema resource.",
+       "properties": {
+        "schema_version": {
+         "type": "number"
+        },
+        "status": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      }
+     },
+     "required": [
+      "path",
+      "report"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "reports"
+  ],
+  "type": "object"
+ },
+ "title": "Probe several documents"
+}

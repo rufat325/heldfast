@@ -1,0 +1,158 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Use preflight_check before your agent spends on a paid tool or endpoint: the Embassy answers WHO is paid, WHAT is delivered, what CHANGED, the full COST, and WHO TAKES A CUT \u2014 then returns a signed PROCEED, PROCEED_WITH_CAUTION, BLOCKED, or UNKNOWN verdict with the full evidence envelope. POST the tool inputs as JSON to paid_url with an x402 v2 PAYMENT-SIGNATURE header. See https://docs.cdp.coinbase.com/x402 Paid tool \u2014 $0.25, USDC on Base or Arbitrum One. Paid URL: https://aemb.pro/v1/preflight/check.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "context": {
+    "additionalProperties": false,
+    "description": "principal_wallet + chain. Optional.",
+    "properties": {
+     "chain": {
+      "maxLength": 30,
+      "type": "string"
+     },
+     "principal_wallet": {
+      "maxLength": 100,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "dry_run": {
+    "description": "true = free dry-run, intercepted before the payment gate",
+    "type": "boolean"
+   },
+   "idempotency_key": {
+    "description": "Idempotency key: UUID v4, client-generated, one per logical request. Replaying the same key on this tool returns the original receipt \u2014 the action is not re-run, and the first request's receipt wins even if you resend different inputs. Published example keys are rejected. Keys are scoped per tool and per payer account: a key never returns another wallet's receipt.",
+    "type": "string"
+   },
+   "intent": {
+    "additionalProperties": false,
+    "description": "The intended invocation: operation (required), params_summary (sha256 of canonical params), advertised_cost_usdc",
+    "properties": {
+     "advertised_cost_usdc": {
+      "maxLength": 20,
+      "type": "string"
+     },
+     "operation": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     },
+     "params_summary": {
+      "maxLength": 200,
+      "type": "string"
+     }
+    },
+    "required": [
+     "operation"
+    ],
+    "type": "object"
+   },
+   "policy": {
+    "description": "Policy strings (max 20)",
+    "items": {
+     "maxLength": 200,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "subject": {
+    "additionalProperties": false,
+    "description": "The spend target: server_id (required), artifact (mcpb:// | oci:// | https://), claimed_version",
+    "properties": {
+     "artifact": {
+      "maxLength": 2000,
+      "type": "string"
+     },
+     "claimed_version": {
+      "maxLength": 100,
+      "type": "string"
+     },
+     "server_id": {
+      "maxLength": 500,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "server_id"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "subject",
+   "intent",
+   "idempotency_key"
+  ],
+  "type": "object"
+ },
+ "name": "preflight_check",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "asset": {
+    "description": "Settlement asset",
+    "type": "string"
+   },
+   "facilitator": {
+    "description": "x402 facilitator",
+    "type": "string"
+   },
+   "how": {
+    "description": "How to pay: POST the tool inputs as JSON to paid_url with an x402 v2 PAYMENT-SIGNATURE header",
+    "type": "string"
+   },
+   "networks": {
+    "description": "EVM CAIP-2 network ids accepted",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "paid_url": {
+    "description": "x402-paid HTTPS URL to POST the tool inputs to",
+    "type": "string"
+   },
+   "payment_required": {
+    "const": true,
+    "description": "Always true: this MCP tool is a payment pointer; the tool itself is monetized via x402.",
+    "type": "boolean"
+   },
+   "price": {
+    "description": "Exact price, e.g. \"$0.15\"",
+    "type": "string"
+   },
+   "tool": {
+    "description": "Tool name, e.g. verified_check",
+    "type": "string"
+   }
+  },
+  "required": [
+   "payment_required",
+   "tool",
+   "paid_url",
+   "price",
+   "networks",
+   "asset",
+   "facilitator",
+   "how"
+  ],
+  "type": "object"
+ },
+ "title": "Preflight Check"
+}

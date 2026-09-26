@@ -1,0 +1,198 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Compare la couverture du r\u00e9f\u00e9rentiel FINESS DREES (sites physiques agr\u00e9\u00e9s LBM/pharmacie/etc.) au r\u00e9f\u00e9rentiel SIRENE DINUM (SIRET physiques actifs au NAF cible) dans un rayon g\u00e9ographique. M\u00e9trique : ratio sites FINESS / SIRET SIRENE. Utile pour d\u00e9tecter une sur-d\u00e9claration FINESS (sites encore list\u00e9s mais SIRET ferm\u00e9s) ou une sous-d\u00e9claration DREES (sites SIRENE non agr\u00e9\u00e9s FINESS). Inclut une m\u00e9thodologie explicite + caveats. V0.13.2 : si `familles` n'est pas pass\u00e9, le scope FINESS est auto-d\u00e9riv\u00e9 du NAF cible (garantit un ratio coh\u00e9rent \u2014 sinon `finess_sites` m\u00e9langerait toutes les familles co-localis\u00e9es dans le rayon). Le matching FINESS\u2194SIRET est gat\u00e9 par activit\u00e9 NAF\u2194famille (cas H\u00f4pital Franco-Britannique : IFSI et labo au 4 rue Kl\u00e9ber ne sont plus confondus). Source : FINESS DREES + DINUM Recherche Entreprises + SIRENE INSEE.",
+ "inputSchema": {
+  "properties": {
+   "familles": {
+    "description": "Familles FINESS \u00e0 inclure c\u00f4t\u00e9 DREES. V0.13.2 : si omis, auto-d\u00e9riv\u00e9 du NAF cible via la table naf-finess-mapping (ex: naf=8690B \u2192 familles=[labo] ; naf=8610Z \u2192 multi-familles hospitali\u00e8res). Passer explicitement si vous voulez restreindre davantage le scope. Valeurs : mco, ssr, sld, had, psychiatrie, dialyse, ambulatoire, labo, imagerie, pharmacie, msp_cpts, ehpad, residence_autonomie, senior_accompagnement, ssiad, aide_domicile, handicap_enfants, handicap_adultes, addictologie, enfance_protection, pmi, hebergement_social, prevention_sante, groupement.",
+    "items": {
+     "enum": [
+      "mco",
+      "ssr",
+      "sld",
+      "had",
+      "psychiatrie",
+      "dialyse",
+      "ambulatoire",
+      "labo",
+      "imagerie",
+      "pharmacie",
+      "msp_cpts",
+      "ehpad",
+      "residence_autonomie",
+      "senior_accompagnement",
+      "ssiad",
+      "aide_domicile",
+      "handicap_enfants",
+      "handicap_adultes",
+      "addictologie",
+      "enfance_protection",
+      "pmi",
+      "hebergement_social",
+      "prevention_sante",
+      "groupement"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "lat": {
+    "description": "Latitude WGS84 du centre de la zone.",
+    "type": "number"
+   },
+   "lon": {
+    "description": "Longitude WGS84 du centre de la zone.",
+    "type": "number"
+   },
+   "max_unites_legales": {
+    "default": 10,
+    "description": "Nombre maximum d'unit\u00e9s l\u00e9gales DINUM \u00e0 d\u00e9plier (1-25, d\u00e9faut 10). Au-del\u00e0 : truncated_unites_legales=true.",
+    "maximum": 25,
+    "minimum": 1,
+    "type": "number"
+   },
+   "naf": {
+    "description": "Code NAF SIRENE \u00e0 comparer (ex: '8690B' labos d'analyses m\u00e9dicales, '4773Z' pharmacies, '8621Z' m\u00e9decine g\u00e9n\u00e9rale).",
+    "type": "string"
+   },
+   "radius_km": {
+    "default": 5,
+    "description": "Rayon de la zone en km (0.1-50, d\u00e9faut 5).",
+    "maximum": 50,
+    "minimum": 0.1,
+    "type": "number"
+   }
+  },
+  "required": [
+   "lon",
+   "lat",
+   "naf"
+  ],
+  "type": "object"
+ },
+ "name": "finess_sirene_coverage_in_radius",
+ "outputSchema": {
+  "description": "Audit de couverture FINESS vs SIRENE dans un rayon. coverage_ratio = matched / total_finess. Caveats explicites pour cadrer la m\u00e9thode (FINESS = sites physiques agr\u00e9\u00e9s, SIRENE = SIRET actifs au NAF cible).",
+  "properties": {
+   "caveats": {
+    "description": "Limitations m\u00e9thodologiques explicites (discipline z\u00e9ro overclaim).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "coverage_ratio": {
+    "description": "matched / finess_sites \u2208 [0, 1]. null si `sirene_sirets === 0` (zone rurale + NAF rare \u2192 ratio non calculable).",
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "coverage_status": {
+    "description": "Statut typ\u00e9 du calcul (toujours pr\u00e9sent). `computed` = calcul nominal (finess_sites peut \u00eatre 0 sur rayon vide). `scope_empty_unknown_naf` = NAF non mapp\u00e9, court-circuit (corriger le NAF ou compl\u00e9ter naf-finess-mapping). `scope_empty_familles_incompatible` = `familles` toutes incompatibles avec le NAF (r\u00e9viser le couple ou omettre `familles` pour auto-derive). Le `caveats[]` reste expos\u00e9 en parall\u00e8le pour lecture humaine \u2014 ce champ fait foi pour le routage.",
+    "enum": [
+     "computed",
+     "scope_empty_unknown_naf",
+     "scope_empty_familles_incompatible"
+    ],
+    "type": "string"
+   },
+   "familles_auto_derivees": {
+    "description": "Familles FINESS auto-d\u00e9riv\u00e9es du `naf` cible quand `familles` n'est pas pass\u00e9 (V0.13.2 couche 1 \u2014 garantit un ratio coh\u00e9rent). `null` si le caller a pass\u00e9 `familles` explicitement.",
+    "items": {
+     "type": "string"
+    },
+    "type": [
+     "array",
+     "null"
+    ]
+   },
+   "familles_excluees_naf": {
+    "description": "Familles pass\u00e9es en input mais incompatibles avec le `naf` cible, exclues du p\u00e9rim\u00e8tre FINESS (V0.13.2 couche 2). Absent si tout est coh\u00e9rent ou si `familles` n'a pas \u00e9t\u00e9 pass\u00e9.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "finess_only_count": {
+    "type": "number"
+   },
+   "finess_only_samples": {
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "finess_sites": {
+    "description": "Nombre de sites FINESS dans le rayon (r\u00e9f\u00e9rentiel DREES).",
+    "type": "number"
+   },
+   "matched_count": {
+    "description": "Nombre de matchs greedy Dice \u2265 0.7.",
+    "type": "number"
+   },
+   "matched_samples": {
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "methodology": {
+    "description": "Description LLM-friendly de l'algorithme appliqu\u00e9.",
+    "type": "string"
+   },
+   "perimetre": {
+    "description": "Lentille de la source : ce que le comptage inclut/exclut. Lire `completeness_note` et la restituer au lecteur final.",
+    "properties": {
+     "completeness_note": {
+      "type": "string"
+     },
+     "compte": {
+      "type": "string"
+     },
+     "exclut": {
+      "type": "string"
+     },
+     "lens": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "sirene_only_count": {
+    "type": "number"
+   },
+   "sirene_only_samples": {
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "sirene_sirets": {
+    "description": "Nombre de SIRET physiques actifs au NAF cible dans le rayon (DINUM/SIRENE).",
+    "type": "number"
+   },
+   "truncated_unites_legales": {
+    "description": "true si le cap `maxUnitesLegales` a \u00e9t\u00e9 atteint avant \u00e9num\u00e9ration compl\u00e8te.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "finess_sites",
+   "sirene_sirets",
+   "coverage_ratio",
+   "methodology",
+   "familles_auto_derivees",
+   "coverage_status"
+  ],
+  "type": "object"
+ }
+}

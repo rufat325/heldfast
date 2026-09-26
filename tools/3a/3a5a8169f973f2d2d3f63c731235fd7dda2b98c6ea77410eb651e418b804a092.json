@@ -1,0 +1,363 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Unit Converter"
+ },
+ "description": "Convert freight and logistics units: weight (kg, lbs, oz, tonnes, short_tons, long_tons), volume (cbm, cuft, cuin, litres, gal_us, gal_uk), length (cm, inches, m, feet, mm), plus two freight-specific targets valid only FROM cbm \u2014 chargeable_kg (air volumetric weight at the IATA 6,000 divisor, 1 CBM = 166.67 kg) and freight_tonnes (sea W/M, 1 CBM = 1 freight tonne).\n\nBehavior: deterministic; the response names both units and states the formula used. Cross-dimension conversions (e.g. kg to litres) and freight targets from a non-cbm source error with the accepted-unit list. Note: short ton (US) = 2,000 lb, long ton (UK) = 2,240 lb, metric tonne = 2,204.6 lb. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: input {value, unit, name}, result {value, unit, name}, formula and note under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nRelated: cbm_calculator (dimensions to volume first), chargeable_weight_calculator (proper air billing weight with pieces and a custom divisor).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "from": {
+    "description": "Source unit \u2014 weight (kg, lbs, oz, tonnes, short_tons, long_tons), volume (cbm, cuft, cuin, litres, gal_us, gal_uk) or length (cm, inches, m, feet, mm). Must be the same dimension as \"to\".",
+    "enum": [
+     "kg",
+     "lbs",
+     "oz",
+     "tonnes",
+     "short_tons",
+     "long_tons",
+     "cbm",
+     "cuft",
+     "cuin",
+     "litres",
+     "gal_us",
+     "gal_uk",
+     "cm",
+     "inches",
+     "m",
+     "feet",
+     "mm"
+    ],
+    "type": "string"
+   },
+   "to": {
+    "description": "Target unit \u2014 any same-dimension unit, plus chargeable_kg and freight_tonnes (both only valid from cbm).",
+    "enum": [
+     "kg",
+     "lbs",
+     "oz",
+     "tonnes",
+     "short_tons",
+     "long_tons",
+     "cbm",
+     "cuft",
+     "cuin",
+     "litres",
+     "gal_us",
+     "gal_uk",
+     "cm",
+     "inches",
+     "m",
+     "feet",
+     "mm",
+     "chargeable_kg",
+     "freight_tonnes"
+    ],
+    "type": "string"
+   },
+   "value": {
+    "description": "The numeric value to convert. Example: 5.",
+    "type": "number"
+   }
+  },
+  "required": [
+   "value",
+   "from",
+   "to"
+  ],
+  "type": "object"
+ },
+ "name": "unit_converter",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "formula": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "input": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "properties": {
+           "name": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "unit": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "value": {
+            "type": [
+             "number",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "note": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "result": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "properties": {
+           "name": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "unit": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "value": {
+            "type": [
+             "number",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

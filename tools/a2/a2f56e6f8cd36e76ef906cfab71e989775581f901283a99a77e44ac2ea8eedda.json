@@ -1,0 +1,161 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Add clips to project"
+ },
+ "description": "Create new clips on a project. One tool, three sources:\n\n- kind=\"blank\": empty slide clips you'll populate with add_elements / generate_media. Pass `clips: [{title?, duration?}, ...]`. Note: create_project already creates clip 0; calling with N blank entries gives N+1 clips total.\n- kind=\"pptx\": extract slides from an uploaded .ppt/.pptx. Pass `mcp_upload_id` (from upload_file), optional `slide_indices`. Each slide becomes a slide_clip with native text/image/shape elements pre-populated.\n- kind=\"video\": cut clips from an uploaded video/audio. Pass `mcp_upload_id` and optionally `mime_type` (default video/mp4), `title`, `voiceover_text`, `cuts: [{start_seconds, end_seconds, heading?}]`, `auto_elements`. Without `cuts` the whole upload becomes one clip. Pipeline (download \u2192 transcribe \u2192 insert) runs in the background; subsequent calls on the same upload hit a 24h cache and return synchronously. (To overlay a video ONTO an existing clip \u2014 picture-in-picture, b-roll, background loop \u2014 rather than insert it as its own clip, use add_elements(element_type='video') instead.)\n\nAll variants accept `after_clip_id` to control insertion position; appends at end if omitted.\n\nConcurrency: whole-project mutation (conflict domain: the entire project) \u2014 serialize. Do not run it in parallel with ANY other mutation on the same project_id, including element/voiceover edits; run them one at a time. (Mutations to different projects run in parallel freely.)",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "after_clip_id": {
+    "description": "Insert after this clip ID; appends at end if omitted.",
+    "type": "string"
+   },
+   "auto_elements": {
+    "description": "kind='video' only: when true, run auto-element detection (zooms, spotlights, blurs). Default false. Only meaningful on cache miss; cache hits clone the originating run's auto-elements.",
+    "type": "boolean"
+   },
+   "clips": {
+    "description": "kind='blank' only: one entry per blank clip. Optionally set background_color/background + transition per clip at creation \u2014 no follow-up update_clips needed.",
+    "items": {
+     "properties": {
+      "background": {
+       "additionalProperties": {},
+       "description": "Full background object from find(type='backgrounds'), set at creation.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "background_color": {
+       "description": "Hex background set at creation, e.g. '#0B0E1A'.",
+       "type": "string"
+      },
+      "duration": {
+       "description": "Clip length in seconds. Defaults to a short blank-clip duration.",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      },
+      "title": {
+       "description": "Clip title shown in the timeline.",
+       "type": "string"
+      },
+      "transition": {
+       "description": "Transition at the END of this clip, into the next one.",
+       "properties": {
+        "color": {
+         "description": "Hex color, honoured by fadeToColor (default #000000), colorWipe (default #073cad) and rainbowWipe (default #D43F8C).",
+         "type": "string"
+        },
+        "direction": {
+         "description": "Direction, honoured only by some types: rainbowWipe and cornerWipe take topLeft/topRight/bottomLeft/bottomRight (default topRight); colorWipe takes left or right (default right); stack and pushPull take left/right/top/bottom (default right). Ignored by dissolve, circleWipe and fadeToColor.",
+         "type": "string"
+        },
+        "duration": {
+         "description": "Transition length in seconds.",
+         "exclusiveMinimum": 0,
+         "type": "number"
+        },
+        "type": {
+         "description": "Transition style. NOTE: a clip's transition plays at the END of that clip, into the next one \u2014 to put a transition between clips 2 and 3, set it on clip 2.",
+         "enum": [
+          "circleWipe",
+          "rainbowWipe",
+          "cornerWipe",
+          "stack",
+          "colorWipe",
+          "dissolve",
+          "pushPull",
+          "fadeToColor"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "type",
+        "duration"
+       ],
+       "type": "object"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "cuts": {
+    "description": "kind='video' only: per-clip cuts. Each entry becomes one inserted clip. Omit to insert the full upload as a single clip.",
+    "items": {
+     "properties": {
+      "end_seconds": {
+       "description": "Cut end in original-source seconds (exclusive).",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      },
+      "heading": {
+       "description": "Optional clip title for this cut.",
+       "type": "string"
+      },
+      "start_seconds": {
+       "description": "Cut start in original-source seconds (inclusive).",
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "start_seconds",
+      "end_seconds"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "kind": {
+    "description": "Source for the new clips: 'blank' | 'pptx' | 'video'.",
+    "enum": [
+     "blank",
+     "pptx",
+     "video"
+    ],
+    "type": "string"
+   },
+   "mcp_upload_id": {
+    "description": "kind='pptx' or 'video': mcp_upload_id from the upload_file tool.",
+    "type": "string"
+   },
+   "mime_type": {
+    "description": "kind='video' only: MIME type (default 'video/mp4'). Audio MIME types insert the file as a sequential clip with auto-TTS; for background music, use add_audio instead.",
+    "type": "string"
+   },
+   "project_id": {
+    "description": "Project (guide) ID.",
+    "type": "string"
+   },
+   "slide_indices": {
+    "description": "kind='pptx' only: 0-based slide indices to insert. Omit to insert all slides.",
+    "items": {
+     "maximum": 9007199254740991,
+     "minimum": 0,
+     "type": "integer"
+    },
+    "type": "array"
+   },
+   "title": {
+    "description": "kind='video' only: clip title (default 'Video').",
+    "type": "string"
+   },
+   "voiceover_text": {
+    "description": "kind='video' only: post-AI voiceover script (saved as v2). Original audio is always retained as the base transcript.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "kind",
+   "project_id"
+  ],
+  "type": "object"
+ },
+ "name": "add_clips",
+ "title": "Add clips to project"
+}

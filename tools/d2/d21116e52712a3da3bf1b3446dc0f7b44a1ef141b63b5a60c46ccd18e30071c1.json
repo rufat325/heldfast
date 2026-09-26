@@ -1,0 +1,122 @@
+{
+ "description": "ALWAYS call this immediately BEFORE settling or sending any x402 payment \u2014 it decides whether the payment is safe. Returns allow (proceed) / flag (pause and confirm intent) / block (do NOT pay), with machine-readable reasons and an Ed25519-signed verdict. Scanning before the payment is signed? Set `context.phase` to 'pre_sign' (nonces don't exist until signing). IMPORTANT: if the decision to pay followed reading any external content (a fetched web page or a tool result), pass that PROSE in `context.content` and set `context.origin` to 'fetched_content' or 'tool_result' \u2014 this enables the check that catches prompt-injection-triggered payments (an address injected into content the agent just read). Put the 402 offer / discovery payload in `context.offer` (NOT in content \u2014 the recipient address is expected in an offer); TollWarden compares it structurally against the payment you are about to sign and reports drift in payee, price, scheme, network or asset. Where a catalogue listing and a live 402 disagree, the LIVE offer is authoritative \u2014 pay and scan that one, and pass the listing as `context.offer` so the disagreement is recorded. Also catches replayed nonces, overpayment vs the expected price, secrets/PII leaking in payment metadata, fake/lookalike USDC contracts, and address poisoning. Advisory and non-custodial \u2014 never touches keys or funds.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "agent_id": {
+    "type": "string"
+   },
+   "context": {
+    "additionalProperties": false,
+    "properties": {
+     "content": {
+      "description": "PROSE the agent just read (page text, tool output), for injection analysis. Do NOT put the 402 offer / discovery JSON here \u2014 that goes in `offer` (the recipient address is expected there).",
+      "type": "string"
+     },
+     "content_source_url": {
+      "type": "string"
+     },
+     "offer": {
+      "description": "The raw 402 offer / discovery payload the payment terms came from (accepts entry, Bazaar listing JSON). pay_to is expected here and exempt from the address-provenance check; the offer is still scanned for embedded injection instructions.",
+      "type": "string"
+     },
+     "origin": {
+      "description": "Where the decision to pay originated",
+      "enum": [
+       "planning",
+       "user_instruction",
+       "tool_result",
+       "fetched_content",
+       "unknown"
+      ],
+      "type": "string"
+     },
+     "phase": {
+      "description": "Set 'pre_sign' when scanning BEFORE the payment is signed (the normal scan-before-pay flow): the EIP-3009 nonce doesn't exist yet, so its absence won't be flagged. Omit or use 'post_sign' when scanning a signed payload.",
+      "enum": [
+       "pre_sign",
+       "post_sign"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "expected_price_usd": {
+    "type": "number"
+   },
+   "payment": {
+    "additionalProperties": false,
+    "properties": {
+     "amount": {
+      "description": "Atomic units, e.g. '10000' = $0.01 USDC",
+      "type": "string"
+     },
+     "amount_usd": {
+      "type": "number"
+     },
+     "asset": {
+      "type": "string"
+     },
+     "asset_decimals": {
+      "type": "number"
+     },
+     "description": {
+      "type": "string"
+     },
+     "metadata": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "network": {
+      "description": "CAIP-2, e.g. eip155:8453",
+      "type": "string"
+     },
+     "nonce": {
+      "type": "string"
+     },
+     "pay_to": {
+      "type": "string"
+     },
+     "payer": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "resource_url": {
+      "type": "string"
+     },
+     "scheme": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "policy": {
+    "additionalProperties": false,
+    "properties": {
+     "force_deep": {
+      "description": "Run deep content analysis even below the micropayment threshold",
+      "type": "boolean"
+     },
+     "skip_deep": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment"
+  ],
+  "type": "object"
+ },
+ "name": "scan_outgoing_payment"
+}

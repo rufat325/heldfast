@@ -1,0 +1,56 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "R\u00e9cup\u00e8re le d\u00e9tail complet d'un \u00e9tablissement de sant\u00e9 par son num\u00e9ro FINESS (9 chiffres) : raison sociale, cat\u00e9gorie + famille, adresse compl\u00e8te (voie + CP + ville + code INSEE + d\u00e9partement), coordonn\u00e9es GPS, t\u00e9l\u00e9phone. Retourne un objet `LookupResult` discrimin\u00e9 par `found`. `found: true` \u2192 champs FINESS \u00e0 plat. `found: false` \u2192 `{ found: false, key, lookupStatus: 'not_found', message }` (num\u00e9ro inexistant, \u00e9tablissement ferm\u00e9, ou trop r\u00e9cent pour le flux). Source : FINESS / ANS (flux quotidien, ing\u00e9r\u00e9 le 1\u1d49\u02b3 et le 15 ; \u00e9tablissements EN SERVICE uniquement). Chaque r\u00e9sultat porte `geo_precision: \"adresse\"` d\u00e8s que `coords` est pr\u00e9sent (point WGS84 ANS ou point BAN de l'adresse, jamais un centro\u00efde ; un \u00e9tablissement sans `coords` n'a pas de point connu et est invisible des recherches par rayon) et `siret_ans` (SIRET d\u00e9clar\u00e9 par l'ANS, fait brut non v\u00e9rifi\u00e9 SIRENE \u2014 pour le verdict : reconcilier_finess_sirene / verifier_site_actif). Note : champ `email` toujours `null` (non expos\u00e9 par FINESS public).",
+ "inputSchema": {
+  "properties": {
+   "include_freshness": {
+    "default": false,
+    "description": "Si true, ajoute un champ `data_freshness` au payload (dans `query_metadata` si pr\u00e9sent, sinon \u00e0 la racine) listant, par source (FINESS, Ameli, RPPS, CDS, IRIS), la derni\u00e8re ingestion r\u00e9ussie (`last_success_at`, `staleness_days`) ET la derni\u00e8re fois que la donn\u00e9e a r\u00e9ellement chang\u00e9 (`last_data_change_at`, `data_age_days` \u2014 un run court-circuit\u00e9 \u00ab fichier amont identique \u00bb compte comme succ\u00e8s mais ne rajeunit pas la donn\u00e9e ; c'est `data_age_days` qui dit l'\u00e2ge r\u00e9el de ce qui est servi). Opt-in pour ne pas alourdir les payloads par d\u00e9faut. Cache 5min c\u00f4t\u00e9 serveur \u2014 co\u00fbt n\u00e9gligeable.",
+    "type": "boolean"
+   },
+   "num_finess": {
+    "description": "Num\u00e9ro FINESS exact (9 chiffres).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "num_finess"
+  ],
+  "type": "object"
+ },
+ "name": "etablissement_by_finess",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

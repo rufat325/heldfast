@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Registry EVENTS of a Polish company, derived from the official KRS daily bulletin (Krajowy Rejestr S\u0105dowy, Ministry of Justice): liquidation opened or closed, bankruptcy, restructuring, activity suspension and resumption, dissolution, mergers and transformations, tax or social-security arrears and enforcement, annual-accounts filings, changes of name, legal form, registered office or share capital, and strike-off. Each event carries the bulletin day it appeared on and, when the register publishes one, the register's own date. The response always states the observation window (gap-free by construction) \u2014 the register publishes no retroactive event history. IMPORTANT: this endpoint does NOT check that the KRS number exists \u2014 a non-existent number returns exactly the same `aucun_evenement: true` answer as a real company that stayed quiet; the `existence` block says which case applies, and get_european_company_profile (pays=PL) settles existence with a 404. GDPR by design: no officers, shareholders, liquidators or curators, never a PESEL \u2014 and no FREE TEXT from the register either: the narrative wording of a decision can name a notary or a receiver, so it is read only to extract a date and then discarded (that date is flagged `date_source_inferee`). What is served: the event type from a closed list, its register section, its dates, its wpis number, amounts, and the deciding court or authority. Paid via x402 ($0.02 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "krs": {
+    "description": "10-digit Polish KRS number, leading zeros included, e.g. 0000006865",
+    "pattern": "^\\d{10}$",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "krs"
+  ],
+  "type": "object"
+ },
+ "name": "get_polish_company_registry_events",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Polish registry events (KRS)"
+}

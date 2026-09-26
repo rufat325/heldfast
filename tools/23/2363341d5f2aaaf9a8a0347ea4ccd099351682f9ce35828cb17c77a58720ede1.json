@@ -1,0 +1,301 @@
+{
+ "_meta": {
+  "openai/outputTemplate": "ui://escapestays/results.html",
+  "openai/toolInvocation/invoked": "Homes ready",
+  "openai/toolInvocation/invoking": "Checking homes\u2026",
+  "ui": {
+   "resourceUri": "ui://escapestays/results.html"
+  }
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Search Luxury Lodging homes"
+ },
+ "description": "Search Luxury Lodging's directly bookable vacation rentals by destination, dates, group size, bedrooms and amenities. With dates, only homes confirmed available are returned. Interchangeable units of the same type are returned once, with every unit's id listed in `similar_units` so any of them can still be quoted and booked; `limit` counts those results, while `total_matching` counts the individual homes confirmed available. A busy market can hold more than one request can price, so `unpriced_in_time` counts matching homes whose availability was never established: they are unknown, not unavailable. Pet-friendly searches also report `pet_policy_unknown`: otherwise matching homes with unverified policies, including without dates. Never tell a guest a place has nothing when either unknown count is above zero -- set `price_all_matches` to check the whole market, raise `limit`, narrow the place, or quote a specific home. Always quote the stay total from get_live_quote rather than the nightly rate.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "amenities": {
+    "description": "Amenities the home must have, as recorded by the property manager.",
+    "items": {
+     "enum": [
+      "pool",
+      "hot_tub",
+      "parking",
+      "wifi",
+      "kitchen",
+      "washer",
+      "pets"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "bathrooms_min": {
+    "description": "Fewest bathrooms acceptable.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "bedrooms_min": {
+    "description": "Fewest bedrooms acceptable.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "check_in": {
+    "description": "Check-in date, YYYY-MM-DD. Give both dates to filter by real availability.",
+    "type": "string"
+   },
+   "check_out": {
+    "description": "Check-out date, YYYY-MM-DD.",
+    "type": "string"
+   },
+   "guests": {
+    "description": "Number of guests, including children.",
+    "maximum": 40,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "limit": {
+    "description": "How many properties to return (default 8).",
+    "maximum": 20,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "market": {
+    "description": "Market or city name, when the guest named one exactly.",
+    "type": "string"
+   },
+   "max_total": {
+    "description": "Budget for the whole stay in dollars, including cleaning, fees and taxes. Only works with dates.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "pets": {
+    "description": "The guest is bringing a pet. Only return pet-friendly homes, include the pet fee in dated totals, and preserve the pet selection in booking links.",
+    "type": "boolean"
+   },
+   "price_all_matches": {
+    "description": "Price every matching home rather than a fast sample, so total_matching is the real count and the cheapest result is genuinely the cheapest. Slower, and still bounded \u2014 check unpriced_in_time. Use it when a guest asks how many homes are free or for the cheapest; leave it off for browsing.",
+    "type": "boolean"
+   },
+   "query": {
+    "description": "Free text place, e.g. 'Tampa', 'near Chicago downtown', a neighbourhood or a landmark.",
+    "type": "string"
+   },
+   "sort": {
+    "description": "total_price_* needs dates and orders by the stay total; from_price_asc orders by starting nightly rate; sleeps_desc puts the largest homes first.",
+    "enum": [
+     "total_price_asc",
+     "total_price_desc",
+     "from_price_asc",
+     "sleeps_desc"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "search_properties",
+ "outputSchema": {
+  "properties": {
+   "availability_note": {
+    "type": "string"
+   },
+   "dates_checked": {
+    "description": "False means availability is unknown and every price is a starting nightly rate.",
+    "type": "boolean"
+   },
+   "matches": {
+    "description": "How many results this response carries.",
+    "type": "integer"
+   },
+   "pet_policy_unknown": {
+    "description": "Otherwise matching homes omitted from a pet-friendly search because their pet policy is unknown, not confirmed to prohibit pets. Applies with or without dates; included in unpriced_in_time when dated. A positive count means the pet-friendly inventory is incomplete.",
+    "type": "integer"
+   },
+   "properties": {
+    "items": {
+     "properties": {
+      "avg_per_night": {
+       "description": "stay_total divided by nights. A derived figure; quote the total, not this.",
+       "type": "number"
+      },
+      "avg_per_night_display": {
+       "type": "string"
+      },
+      "bathrooms": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "bedrooms": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "booking_url": {
+       "description": "Where the guest completes the booking on Luxury Lodging's own site.",
+       "type": "string"
+      },
+      "city": {
+       "type": "string"
+      },
+      "from_price_note": {
+       "description": "Only present when from_price_per_night is null: what we can and cannot see about this home's calendar. Call get_availability before suggesting dates; do not describe the home as booked out or as ready to book.",
+       "type": "string"
+      },
+      "from_price_per_night": {
+       "description": "Starting nightly rate, not a stay total. Absent dates, this is all that is known. Null means no starting rate is published for this home, never that it is free or cheap -- read from_price_note.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "highlights": {
+       "description": "Up to three short phrases an agent can repeat when recommending the home.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "name": {
+       "type": "string"
+      },
+      "neighbourhood": {
+       "description": "Neighbourhood-level location only; the exact address is shared after booking.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "nights": {
+       "type": "integer"
+      },
+      "photo": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "property_id": {
+       "type": "integer"
+      },
+      "property_type": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "review_count": {
+       "description": "How many 4- and 5-star reviews this home has. Never present this as, or derive, an average rating.",
+       "type": "integer"
+      },
+      "review_sources": {
+       "description": "Which platforms those reviews came from.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "similar_units": {
+       "description": "Only present when interchangeable units of this type exist; any of these ids can be quoted and booked.",
+       "properties": {
+        "count": {
+         "type": "integer"
+        },
+        "note": {
+         "type": "string"
+        },
+        "property_ids": {
+         "items": {
+          "type": "integer"
+         },
+         "type": "array"
+        }
+       },
+       "required": [
+        "count",
+        "note",
+        "property_ids"
+       ],
+       "type": "object"
+      },
+      "sleeps": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "state": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "stay_total": {
+       "description": "Total for the requested dates including cleaning, fees and taxes. Only present when dates were given and the home was priced.",
+       "type": "number"
+      },
+      "stay_total_display": {
+       "type": "string"
+      },
+      "top_amenities": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "property_id",
+      "name",
+      "city",
+      "top_amenities",
+      "review_count",
+      "review_sources",
+      "highlights",
+      "booking_url"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "searched_location": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "total_matching": {
+    "description": "How many individual homes matched, counting every interchangeable unit.",
+    "type": "integer"
+   },
+   "total_matching_groups": {
+    "description": "How many distinct unit types matched.",
+    "type": "integer"
+   },
+   "unpriced_in_time": {
+    "description": "Matching homes whose availability was never established for these dates, because their pet policy could not be verified, a quote failed, the request ran out of budget, or it did not reach them. They are unknown, not unavailable \u2014 raise `limit`, narrow the place, or use get_live_quote.",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "matches",
+   "total_matching",
+   "total_matching_groups",
+   "unpriced_in_time",
+   "dates_checked",
+   "availability_note",
+   "properties"
+  ],
+  "type": "object"
+ },
+ "title": "Search Luxury Lodging homes"
+}

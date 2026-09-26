@@ -1,0 +1,72 @@
+{
+ "description": "The run: starting the project, stopping it, or booting it once to see whether it comes up clean. start keeps it running and collecting output until it quits or is stopped, windowed where there is a display and headless where there is not, unless headless says otherwise; only runtime_capture needs the window. A run that quits on its own is kept, so a scene that prints an answer and quits is start, then editor_output until running is false. What runs is a scene: a SceneTree script is not an entry point here, so put the script on the root of a scene of its own and name that in scene. args hands the game its own flags, the ones it reads with OS.get_cmdline_user_args(), and a run carrying any is started by this server rather than by the editor. check boots it headless for a few frames, waits for it to quit, and answers with the verdict: whether it came up, and every error and warning it printed on the way. start and check both wait first for a scan the open editor is running and for the class cache it writes just after, since a game booted in between resolves no global class, as does every other engine this server starts on the project; waitedForEditorScanMs says how long, and scanNote says when a scan ran past thirty seconds and the game started during it. A start waits for the game to become something the runtime_* tools can talk to and says which it is under runtime: listening with the port it took, or why not, so the first call after a start does not have to be made twice. When it is not listening, mayYetAnnounce says whether that is final: false is a runtime that is not coming, true is a game still on its way up, which editor_status will see and runtimeWaitMs waits longer for. A start this server made also answers with transcript, the file both the run's streams are written to, so a watch on it can be armed off the start rather than off a second call. Operations: start (needs projectPath): run the project until it quits or is stopped; stop: end the run and answer with what it printed last, naming the process ended under endedPid: for a run the editor plays, the number its game announced under, read at the stop rather than remembered, and the operating system hands a freed number to the next process, so it can equal the game before it. A game that started processes of its own keeps them unless andChildren says to end those too. stopped is false, with the number under notSignalled, when that number no longer answers as the process the run was started as and nothing was signalled; check (needs projectPath): boot headless, quit after a few frames, and report the verdict; wait: wait for the run to end, then answer as editor_output does. Default start.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "andChildren": {
+    "description": "stop: also end what the game started for itself, with OS.create_process or otherwise, such as a bench's workers and whatever those started in turn. Only the processes under the run's, to any depth, that are games of this project are ended: announced as one, or this project's engine run with --path on this project by its command line, which is how a bench whose workers deliberately carry no runtime is reached. They are named under endedChildren, with what identified each under identifiedBy; any other process under the run is left and named under childrenLeft, and childrenUnknown is true when nothing could be listed, with the note saying whether the platform would not or the run has no process to list under. Default false, and the run's process is ended either way.",
+    "type": "boolean"
+   },
+   "args": {
+    "description": "The game's own arguments, what OS.get_cmdline_user_args() answers, such as [\"--level=2\"]. The separator is added here. A run with any is started by this server rather than by the editor, which fixes the game's command line when it opens the project, so the debug_* tools do not answer for it.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "env": {
+    "description": "Environment variables for this run alone, as a map of strings, over the server's own environment. Like savesIn, a run carrying any is started by this server rather than played by the editor. Names beginning with GDHARNESS_ are refused: they are this server's contract with the addon in the game, and the runtime directory is set here whatever the rest of the environment says, so a game that moves TEMP still announces where this server looks.",
+    "type": "object"
+   },
+   "frames": {
+    "description": "check: frames to run before quitting. Default 3.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "headless": {
+    "description": "start: force a window or no window.",
+    "type": "boolean"
+   },
+   "op": {
+    "description": "What to do.",
+    "enum": [
+     "start",
+     "stop",
+     "check",
+     "wait"
+    ],
+    "type": "string"
+   },
+   "pid": {
+    "description": "stop: a game of this project that no server here is holding, by its process id as editor_status lists it under runtimes: one a server before a reconnect started and left no note for, or one started some other way. It is ended only when it announced itself for this project and the operating system describes it as this project's engine run, --path on the project and no editor flag, started before it announced; otherwise nothing is signalled and the answer says which of those failed. The run this server holds is ended the ordinary way whether or not its number is given.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "projectPath": {
+    "description": "Absolute path to the project directory, the one holding project.godot.",
+    "type": "string"
+   },
+   "runtimeWaitMs": {
+    "description": "start: how long to wait for the game to announce its runtime before answering. Default 5000, or half as long again as the last boot of this project took when that is more, up to 60000: the server notes how long each game took to announce, so a project that boots slowly is waited for from its second start on without being asked to. What it waits for is the first frame, so everything the game does before drawing one is inside it, including work the args just asked for: a flag that simulates six years of game time before anything is drawn makes the announcement that late, on a project that announces promptly without it. Raise it for such a run rather than reading runtime listening false as a fault. 0 does not wait at all, which is the one to pass for a scene that announces nothing by construction, such as a bench that prints and quits.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "savesIn": {
+    "description": "An absolute directory for this run's user://, so a game that saves writes nowhere near the copy somebody plays: opening a save writes the one being left, and a game that autosaves writes on its own. Godot takes no flag for it, so this is the environment, and the run is started by this server rather than played by the editor, which cannot be given one. It does not have to exist: the engine makes it, and the Godot/app_userdata/<project> tree under it, measured on 4.7.2. On macOS the engine reads user:// off HOME and ignores it, also measured, and the answer says so under savesNote rather than leaving the caller to find out from the player's save list.",
+    "type": "string"
+   },
+   "scene": {
+    "description": "A scene to run instead of the main scene.",
+    "type": "string"
+   },
+   "timeoutMs": {
+    "description": "check: how long to give the boot before it is called hung. Default 60000. wait: how long to wait for the run to end before answering anyway. Default 600000.",
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [],
+  "type": "object"
+ },
+ "name": "editor_run"
+}

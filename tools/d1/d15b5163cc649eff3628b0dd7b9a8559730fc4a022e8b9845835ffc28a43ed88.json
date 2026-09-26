@@ -1,0 +1,353 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List the 5%-and-over beneficial owners of a public company, parsed from the structured SCHEDULE 13D and SCHEDULE 13G filings made about it. The input is the ISSUER \u2014 the company being held \u2014 which is the opposite direction from secedgar_get_institutional_holdings, where the input is the manager. 13D is the activist form and carries the filer's stated purpose of the transaction; 13G is the passive form and has no purpose field at all, which is the substantive difference between a stake that intends to influence control and one that does not. Every filing is returned with each reporting person listed separately, because voting power, dispositive power, and percent of class are reported per person even on a joint filing where several funds and their controlling principal report overlapping shares \u2014 summing those percentages double-counts the same position. Coverage starts at 2024-12-18, when SEC replaced the legacy SC 13D / SC 13G text filings with this XML format; earlier stakes are readable but not parseable, and the response reports how many of them the issuer has. The full parsed set is materialized as df_<id> when a canvas is available, one row per reporting person, so it joins against the insider and 13F dataframes on issuer CIK \u2014 inspect it with secedgar_dataframe_describe, then analyze it with secedgar_dataframe_query.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "form_kind": {
+    "default": "all",
+    "description": "Which schedule to return. \"13D\" is the activist form, filed by a holder that may seek to influence control and carrying a stated purpose of transaction. \"13G\" is the passive form, available to institutions and holders under 20% that certify no control intent. \"all\" (default) returns both, newest first.",
+    "enum": [
+     "all",
+     "13D",
+     "13G"
+    ],
+    "type": "string"
+   },
+   "include_amendments": {
+    "default": true,
+    "description": "Whether to include amendments (SCHEDULE 13D/A, SCHEDULE 13G/A). Amendments carry the current position and are how an ongoing stake is tracked, so they are included by default. Set false to see only filings that opened a new position.",
+    "type": "boolean"
+   },
+   "issuer": {
+    "description": "The company whose blockholders you want \u2014 a ticker (\"AAPL\"), a 10-digit CIK (\"0000320193\"), or a company name. This is the subject company of the schedule, not the investor filing it; passing an investment manager here returns the schedules filed about that manager, which is almost always empty.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Number of filings to fetch and parse, newest first. Each filing is a separate document fetch, so this is the cost of the call as well as its depth. Default 10; a widely-held company can have dozens of blockholder filings a year.",
+    "maximum": 20,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "issuer"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_get_beneficial_owners",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "issuer",
+     "issuer_cik",
+     "issuer_name",
+     "form_kind",
+     "total_structured_filings",
+     "filings_parsed",
+     "structured_coverage_from",
+     "legacy_filings_before_coverage",
+     "filings"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit cap applied.",
+    "type": "number"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe holding one row per reporting person across every parsed filing, each row carrying the issuer, form, accession, and dates alongside the person's powers. Joins against the insider and 13F dataframes on issuer_cik. Absent when canvas is unavailable or nothing parsed.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     },
+     "truncated": {
+      "description": "True when the issuer has more structured filings than limit fetched \u2014 the dataframe holds the parsed filings only, not the whole history.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at",
+     "truncated"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `issuer_not_found`: The issuer input does not resolve to a known EDGAR company. `ambiguous_issuer`: The issuer name matches several EDGAR companies. `no_filings_found`: The issuer has no structured SCHEDULE 13D/13G filings matching the requested form kind. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "issuer_not_found",
+         "ambiguous_issuer",
+         "no_filings_found",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "filings": {
+    "description": "Blockholder filings, newest first, capped at limit.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One SCHEDULE 13D or 13G filing made about this issuer.",
+     "properties": {
+      "accession_number": {
+       "description": "Accession number \u2014 pass to secedgar_get_filing for the full document.",
+       "type": "string"
+      },
+      "amendment_number": {
+       "description": "Amendment sequence from the cover page. Absent on an original filing.",
+       "type": "string"
+      },
+      "cusips": {
+       "description": "CUSIPs of the subject class from the cover page. Empty when none listed.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "event_date": {
+       "description": "Date of the event that required the filing (YYYY-MM-DD) \u2014 when the position actually crossed or changed, which precedes filing_date. Absent when the cover page omits it.",
+       "type": "string"
+      },
+      "filing_date": {
+       "description": "Date the schedule was submitted (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "form": {
+       "description": "EDGAR form name, e.g. \"SCHEDULE 13D\" or \"SCHEDULE 13G/A\".",
+       "type": "string"
+      },
+      "is_amendment": {
+       "description": "True when the form name carries the /A suffix.",
+       "type": "boolean"
+      },
+      "purpose_of_transaction": {
+       "description": "Item 4 purpose-of-transaction prose \u2014 what the holder says it intends. Present on 13D filings only; 13G has no such field, which is what makes it the passive form. Absent on an amendment that restates no purpose.",
+       "type": "string"
+      },
+      "purpose_truncated": {
+       "description": "True when purpose_of_transaction was clipped to fit \u2014 read the full item with secedgar_get_filing on this accession number.",
+       "type": "boolean"
+      },
+      "reporting_persons": {
+       "description": "Every reporting person on this filing. A joint filing lists a fund, its adviser, and its controlling principal separately, each reporting the same underlying shares.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One reporting person from the schedule cover page.",
+        "properties": {
+         "aggregate_amount_owned": {
+          "description": "Shares beneficially owned by this person. Absent when the person reports no amount, which happens on an exit amendment reporting a zero position.",
+          "type": "number"
+         },
+         "cik": {
+          "description": "Reporting person CIK, when the schedule carries one. SCHEDULE 13G never does \u2014 its cover page has no CIK field \u2014 so this is populated on 13D filings only.",
+          "type": "string"
+         },
+         "citizenship": {
+          "description": "SEC citizenship or place-of-organization code \u2014 a US state (\"DE\"), or an SEC country code (\"X1\" United States, \"E9\" Cayman Islands).",
+          "type": "string"
+         },
+         "excludes_certain_shares": {
+          "description": "True when the reported aggregate deliberately excludes shares this person disclaims beneficial ownership of. Absent when the filing does not answer.",
+          "type": "boolean"
+         },
+         "name": {
+          "description": "Reporting person as named on the cover page.",
+          "type": "string"
+         },
+         "notes": {
+          "description": "The filer's own cover-page footnote, usually the share count the percentage was computed against. Clipped when long \u2014 the full text is in the filing.",
+          "type": "string"
+         },
+         "percent_of_class": {
+          "description": "Percent of the class this person beneficially owns (0-100), as this person reports it. Per person, not per filing: joint filers report overlapping shares, so these do not sum to a group total.",
+          "type": "number"
+         },
+         "person_types": {
+          "description": "SEC type-of-reporting-person codes \u2014 IN individual, CO corporation, PN partnership, IA investment adviser, HC holding company, OO other. One person can carry several.",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "shared_dispositive_power": {
+          "description": "Shares this person may sell or transfer jointly with another party.",
+          "type": "number"
+         },
+         "shared_voting_power": {
+          "description": "Shares this person votes jointly with another party.",
+          "type": "number"
+         },
+         "sole_dispositive_power": {
+          "description": "Shares this person alone may sell or transfer.",
+          "type": "number"
+         },
+         "sole_voting_power": {
+          "description": "Shares this person alone may vote.",
+          "type": "number"
+         }
+        },
+        "required": [
+         "name",
+         "person_types"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "schedule": {
+       "description": "Which schedule this is \u2014 13D activist, 13G passive.",
+       "enum": [
+        "13D",
+        "13G"
+       ],
+       "type": "string"
+      },
+      "security_class": {
+       "description": "Title of the class of securities the schedule covers. A multi-class issuer has a separate schedule per class, so percentages are of this class only.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "form",
+      "schedule",
+      "is_amendment",
+      "accession_number",
+      "filing_date",
+      "cusips",
+      "purpose_truncated",
+      "reporting_persons"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "filings_parsed": {
+    "description": "Filings actually fetched and parsed \u2014 total_structured_filings capped by limit.",
+    "type": "number"
+   },
+   "form_kind": {
+    "description": "The schedule filter applied \u2014 the requested value, or the default \"all\".",
+    "enum": [
+     "all",
+     "13D",
+     "13G"
+    ],
+    "type": "string"
+   },
+   "issuer": {
+    "description": "The issuer input, echoed.",
+    "type": "string"
+   },
+   "issuer_cik": {
+    "description": "CIK of the resolved issuer, zero-padded to 10 digits.",
+    "type": "string"
+   },
+   "issuer_name": {
+    "description": "EDGAR-conformed name of the resolved issuer.",
+    "type": "string"
+   },
+   "legacy_filings_before_coverage": {
+    "description": "Legacy SC 13D / SC 13G filings in the issuer's recent submissions window \u2014 pre-2024-12-18 stakes this tool cannot parse. Reach them with secedgar_search_filings and read them with secedgar_get_filing. A floor, not a lifetime count: the submissions window holds the last year or 1,000 filings of every type, whichever is more.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when no filings matched \u2014 names the coverage boundary and the fallback.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of filings returned.",
+    "type": "number"
+   },
+   "structured_coverage_from": {
+    "description": "First filing date on which SEC required this XML format (YYYY-MM-DD). Blockholder filings before it exist but are not parseable into this schema.",
+    "type": "string"
+   },
+   "total_structured_filings": {
+    "description": "Structured SCHEDULE 13D/13G filings matching the form filter in the issuer's recent submissions window, before the limit. The population the returned filings are the newest slice of.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when filings were capped by limit.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Beneficial Owners"
+}

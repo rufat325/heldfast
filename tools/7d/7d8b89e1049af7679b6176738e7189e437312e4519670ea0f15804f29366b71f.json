@@ -1,0 +1,364 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get top institutional holders of a stock from SEC 13F filings. Shows which hedge funds, mutual funds, and pension funds own the most shares, with quarter-over-quarter changes.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "limit": {
+    "default": 20,
+    "description": "Results per page",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "ticker": {
+    "description": "Stock ticker symbol (e.g. 'NVDA')",
+    "maxLength": 200,
+    "type": "string"
+   }
+  },
+  "required": [
+   "ticker"
+  ],
+  "type": "object"
+ },
+ "name": "get_stock_holders",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "entity_grain": {
+    "anyOf": [
+     {
+      "enum": [
+       "filer",
+       "family"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "filer = each row is one 13F filer CIK (not consolidated into manager families); null = ko.io did not state it"
+   },
+   "family": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "canonical_cik": {
+        "$ref": "#/properties/quarter_date"
+       },
+       "name": {
+        "$ref": "#/properties/quarter_date"
+       },
+       "slug": {
+        "$ref": "#/properties/quarter_date"
+       }
+      },
+      "required": [
+       "slug",
+       "name",
+       "canonical_cik"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "paging": {
+    "additionalProperties": false,
+    "description": "Paging state reconciled from ko.io meta.total_count and meta.softwall",
+    "properties": {
+     "continuation": {
+      "description": "SIGNIN_REQUIRED = page>1 needs a (free) ko.io API key",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "has_more": {
+      "description": "null = a full page came back and more MAY exist",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "next_page": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/total_institutions/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Next page THIS caller can open; null when there is none (or sign-in is required)"
+     },
+     "page": {
+      "type": "integer"
+     },
+     "per_page": {
+      "type": "integer"
+     },
+     "plan_row_cap": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/total_institutions/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Row cap the caller's plan applied to this page, if any"
+     },
+     "returned": {
+      "type": "integer"
+     },
+     "total_count": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/total_institutions/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Total rows matching the request, when ko.io reported it"
+     },
+     "truncated_by_plan": {
+      "description": "True when the plan's row cap withheld rows from this page",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "page",
+     "per_page",
+     "returned",
+     "total_count",
+     "has_more",
+     "next_page",
+     "continuation",
+     "plan_row_cap",
+     "truncated_by_plan"
+    ],
+    "type": "object"
+   },
+   "plan_limit": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "continuation": {
+        "$ref": "#/properties/quarter_date"
+       },
+       "date_basis": {
+        "$ref": "#/properties/quarter_date"
+       },
+       "effective_period": {
+        "$ref": "#/properties/quarter_date"
+       },
+       "policy_version": {
+        "$ref": "#/properties/quarter_date"
+       },
+       "row_cap": {
+        "$ref": "#/properties/total_institutions"
+       },
+       "truncated": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "window_end": {
+        "$ref": "#/properties/quarter_date"
+       },
+       "window_start": {
+        "$ref": "#/properties/quarter_date"
+       }
+      },
+      "required": [
+       "policy_version",
+       "window_start",
+       "window_end",
+       "effective_period",
+       "date_basis",
+       "row_cap",
+       "truncated",
+       "continuation"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The Free/keyless plan limits ko.io applied to this answer (null for paid callers)"
+   },
+   "position_basis": {
+    "$ref": "#/properties/quarter_date"
+   },
+   "position_basis_note": {
+    "$ref": "#/properties/quarter_date"
+   },
+   "quarter_date": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "requested_cik": {
+    "$ref": "#/properties/quarter_date"
+   },
+   "rows": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "action": {
+       "$ref": "#/properties/quarter_date"
+      },
+      "call_shares": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "cik": {
+       "$ref": "#/properties/quarter_date"
+      },
+      "equity_shares": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "family": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "canonical_cik": {
+           "$ref": "#/properties/quarter_date"
+          },
+          "name": {
+           "$ref": "#/properties/quarter_date"
+          },
+          "slug": {
+           "$ref": "#/properties/quarter_date"
+          }
+         },
+         "required": [
+          "slug",
+          "name",
+          "canonical_cik"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "The manager family this holder belongs to, when ko.io attributes it"
+      },
+      "has_option_legs": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "holding_value": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "name": {
+       "$ref": "#/properties/quarter_date"
+      },
+      "portfolio_weight_pct": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "put_shares": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "rank": {
+       "type": "integer"
+      },
+      "reported_by_members": {
+       "$ref": "#/properties/total_institutions"
+      },
+      "share_change": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "shares_held": {
+       "anyOf": [
+        {
+         "pattern": "^-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      }
+     },
+     "required": [
+      "rank",
+      "cik",
+      "name",
+      "shares_held",
+      "holding_value",
+      "portfolio_weight_pct",
+      "share_change",
+      "action",
+      "equity_shares",
+      "call_shares",
+      "put_shares",
+      "has_option_legs",
+      "family",
+      "reported_by_members"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "ticker": {
+    "type": "string"
+   },
+   "total_institutions": {
+    "anyOf": [
+     {
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   }
+  },
+  "required": [
+   "ticker",
+   "quarter_date",
+   "position_basis",
+   "position_basis_note",
+   "entity_grain",
+   "requested_cik",
+   "family",
+   "total_institutions",
+   "rows",
+   "paging",
+   "plan_limit"
+  ],
+  "type": "object"
+ }
+}

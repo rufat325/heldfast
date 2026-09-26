@@ -1,0 +1,185 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search SEC Form 4 insider transactions with rich filters: ticker, insider CIK, transaction code/category, date range, a dollar floor (min_value), institutional-ownership trend, and (Pro+) upper trade-size bounds plus post-trade return screening (1d/1w/1m/3m/6m, returns as fractions e.g. 0.05 = +5%). Returns transaction-level rows \u2014 shares, price, total value, transaction code, 10b5-1 flag, insider role flags. Use this for filtered or historical search across many companies/insiders; use get_recent_filings for an unfiltered live feed instead, or get_insider_transactions/get_company_insiders when you already have a specific insider or company. Free plan, including min_value; max_value/min_shares/max_shares/min_return_*/max_return_*/has_returns require Pro. Paginated, max 100/page, and paging depth is plan-limited (Free 20 pages, Starter 100, Pro+ unlimited) \u2014 for a bulk pull use the REST endpoint GET /v1/transactions/export (Business) instead of paging.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "category": {
+    "description": "Include only one category of transactions. open_market = P/S (the signal most users want); grants = award/comp noise; derivatives = option exercises etc.",
+    "enum": [
+     "open_market",
+     "grants",
+     "derivatives",
+     "gifts",
+     "other"
+    ],
+    "type": "string"
+   },
+   "cik": {
+    "description": "Company CIK number \u2014 SEC's numeric filer identifier, e.g. 0000320193. Leading zeros optional.",
+    "type": "string"
+   },
+   "code": {
+    "description": "Single SEC transaction code to filter to. P=open-market purchase, S=open-market sale, A=grant/award, M=option exercise, F=tax withholding on vesting, D=disposition to issuer, G=gift, C=conversion of derivative, J=other. Use `codes` instead to match more than one.",
+    "enum": [
+     "P",
+     "S",
+     "A",
+     "M",
+     "F",
+     "D",
+     "G",
+     "C",
+     "J"
+    ],
+    "type": "string"
+   },
+   "codes": {
+    "description": "Comma-separated list of SEC transaction codes to include, e.g. \"P,S\" (see `code` for the letter meanings). Multi-code superset of `code`.",
+    "type": "string"
+   },
+   "exclude_10b5": {
+    "description": "If true, exclude pre-scheduled 10b5-1 plan trades. Recommended for signal analysis \u2014 filters out automatic, non-discretionary trades.",
+    "type": "boolean"
+   },
+   "exclude_category": {
+    "description": "Exclude an entire category of transactions, e.g. exclude_category=derivatives drops all option-related rows.",
+    "enum": [
+     "open_market",
+     "grants",
+     "derivatives",
+     "gifts",
+     "other"
+    ],
+    "type": "string"
+   },
+   "exclude_codes": {
+    "description": "Comma-separated list of SEC transaction codes to exclude, e.g. \"A,M,F,G\" to drop grants, option exercises, tax withholding and gifts.",
+    "type": "string"
+   },
+   "exclude_derivative": {
+    "description": "If true, drop derivative-security rows \u2014 the cleanest single \"no options\" switch.",
+    "type": "boolean"
+   },
+   "filed_from": {
+    "description": "Inclusive start of the filed-date window, format YYYY-MM-DD. Filters on Filing.FiledAt (when the filing became public), not transactionDate \u2014 the two can differ by days to weeks. Use this to replay disclosures in the order the market actually saw them.",
+    "type": "string"
+   },
+   "filed_to": {
+    "description": "Inclusive end of the filed-date window, format YYYY-MM-DD. Filters on Filing.FiledAt.",
+    "type": "string"
+   },
+   "from": {
+    "description": "Start date, inclusive, format YYYY-MM-DD (e.g. 2026-01-01). Filters on transactionDate.",
+    "type": "string"
+   },
+   "has_returns": {
+    "description": "If true, only return transactions with at least one computed post-trade return horizon (any of 1d/1w/1m/3m/6m). Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "boolean"
+   },
+   "insider_cik": {
+    "description": "Insider CIK number \u2014 SEC's numeric filer identifier, e.g. 0001214128. Leading zeros optional.",
+    "type": "string"
+   },
+   "inst_ownership_trend": {
+    "description": "Filter by the trailing quarter-over-quarter trend in institutional (13F) ownership of the underlying company. No effect if institutional-ownership enrichment is disabled server-side; rows where the trend was suppressed for insufficient 13F coverage still match \"stable\".",
+    "enum": [
+     "increasing",
+     "decreasing",
+     "stable"
+    ],
+    "type": "string"
+   },
+   "max_return_1d": {
+    "description": "Maximum 1-day post-trade return as a fraction (e.g. -0.1 = -10%), inclusive. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "max_return_1m": {
+    "description": "Maximum 1-month post-trade return as a fraction, inclusive. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "max_return_1w": {
+    "description": "Maximum 1-week post-trade return as a fraction, inclusive. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "max_return_3m": {
+    "description": "Maximum 3-month post-trade return as a fraction, inclusive. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "max_return_6m": {
+    "description": "Maximum 6-month post-trade return as a fraction, inclusive. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "max_shares": {
+    "description": "Maximum number of shares, inclusive. Requires Pro plan or higher \u2014 the whole call is rejected with 403 on Free/Starter, not silently ignored.",
+    "type": "number"
+   },
+   "max_value": {
+    "description": "Maximum trade value in USD (shares \u00d7 price), inclusive. Requires Pro plan or higher \u2014 the whole call is rejected with 403 on Free/Starter, not silently ignored. Use min_value alone to screen by size on a free key.",
+    "type": "number"
+   },
+   "min_return_1d": {
+    "description": "Minimum 1-day post-trade return, as a FRACTION not a percentage (0.05 = +5%), inclusive. Rows with no computed 1-day return are excluded. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "min_return_1m": {
+    "description": "Minimum 1-month post-trade return as a fraction (0.05 = +5%), inclusive. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "min_return_1w": {
+    "description": "Minimum 1-week post-trade return as a fraction (0.05 = +5%), inclusive. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "min_return_3m": {
+    "description": "Minimum 3-month post-trade return as a fraction (0.05 = +5%), inclusive. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "min_return_6m": {
+    "description": "Minimum 6-month post-trade return as a fraction (0.05 = +5%), inclusive. Requires Pro plan or higher \u2014 omitted or ignored on Free.",
+    "type": "number"
+   },
+   "min_shares": {
+    "description": "Minimum number of shares, inclusive. Requires Pro plan or higher \u2014 the whole call is rejected with 403 on Free/Starter, not silently ignored.",
+    "type": "number"
+   },
+   "min_value": {
+    "description": "Minimum trade value in USD (shares \u00d7 price), inclusive. Available on every plan.",
+    "type": "number"
+   },
+   "page": {
+    "default": 1,
+    "description": "1-based page number. Defaults to 1. Paging depth is plan-limited: Free reaches page 20, Starter page 100, Pro and above unlimited; beyond that the call returns 402 with the upgrade path. If you need the full history rather than a page of it, the REST endpoint GET /v1/transactions/export (Business plan) streams the entire filtered set as CSV in one request.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "default": 20,
+    "description": "Results per page. Defaults to 20, maximum 100.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "significant": {
+    "description": "If true, preset = open-market trades only, no 10b5-1 plan trades, no derivatives. The \"just show me real discretionary buys and sells\" filter. Explicit params override it.",
+    "type": "boolean"
+   },
+   "ticker": {
+    "description": "Stock ticker symbol, case-insensitive, e.g. AAPL or aapl. Also accepts a comma-separated list of up to 25 symbols (e.g. \"AAPL,MSFT\") to match any of them in one call; tokens are trimmed and upper-cased, empty tokens are ignored, and more than 25 symbols returns 400.",
+    "type": "string"
+   },
+   "to": {
+    "description": "End date, inclusive, format YYYY-MM-DD (e.g. 2026-12-31). Filters on transactionDate.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_transactions"
+}

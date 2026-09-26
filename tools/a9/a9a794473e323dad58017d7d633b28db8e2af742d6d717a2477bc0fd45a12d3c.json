@@ -1,0 +1,435 @@
+{
+ "_meta": {
+  "openai/toolInvocation/invoked": "Transactions ready",
+  "openai/toolInvocation/invoking": "Fetching transactions\u2026",
+  "securitySchemes": [
+   {
+    "scopes": [
+     "mcp:read"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get recent league transactions including adds, drops, waivers, and completed trades. Use established session context (call get_user_session only if needed), then get_league_info, if this chat has not already loaded it, so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes type, status, week (null on Yahoo, and on Sleeper rows that carry no week), and optional team_ids. ESPN and Sleeper rows always include date (YYYY-MM-DD) and timestamp. Yahoo rows include them once Yahoo stamps the transaction: a still-unstamped row is returned without date and timestamp only for type=waiver or type=pending_trade requests, and on every other Yahoo request it is left out and counted in dropped_invalid_timestamp_count. The response contains at most count rows, newest first; if the row count equals count, older transactions inside the window may be missing. Raise count up to 100 before claiming completeness. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN week always means matchup period, including daily sports where one matchup spans several provider scoring periods; week 0 is ESPN preseason, and omitting week selects the current and previous matchup periods. Sleeper accepts positive matchup weeks starting at 1; omit week for its current and previous week. Yahoo uses a recent 14-day timestamp window and ignores explicit week, except that type=waiver and type=pending_trade return the authenticated user's own pending items with no timestamp window. ESPN serves rows from its structured transaction source (source mTransactions2) with FAAB bid amounts, directional trade_sides, and full trade-lifecycle and failed-bid coverage; trades missing directional detail are filled from the activity feed (source mTransactions2_with_activity_trade_details). If the structured source is unavailable, ESPN falls back to its completed-activity feed (source activity_feed) where failed-bid and trade-lifecycle filters are unavailable. Inspect source/limitations/window metadata before claiming completeness. ESPN responses include a teams map (team ID to display name) to resolve numeric team_ids. Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only. Current date is 2026-09-26.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "count": {
+    "description": "Maximum transactions to return (default: 25, max: 100)",
+    "type": "number"
+   },
+   "league_id": {
+    "description": "League ID (get from get_user_session)",
+    "type": "string"
+   },
+   "platform": {
+    "description": "Fantasy platform (e.g., \"espn\", \"yahoo\", \"sleeper\")",
+    "enum": [
+     "espn",
+     "yahoo",
+     "sleeper"
+    ],
+    "type": "string"
+   },
+   "season_year": {
+    "description": "Season start year \u2014 use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season. Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).",
+    "type": "number"
+   },
+   "sport": {
+    "description": "Sport type (e.g., \"football\", \"baseball\")",
+    "enum": [
+     "football",
+     "baseball",
+     "basketball",
+     "hockey"
+    ],
+    "type": "string"
+   },
+   "type": {
+    "description": "Optional transaction type filter. Sleeper supports add/drop/trade/waiver. Yahoo supports add/drop/trade plus waiver/pending_trade for the authenticated user's own pending items. ESPN supports every listed type except pending_trade via its structured source, including failed_bid and the trade lifecycle types; if ESPN has fallen back to its activity feed, those structured-only filters return ESPN_TRANSACTION_TYPE_UNAVAILABLE rather than an empty result.",
+    "enum": [
+     "add",
+     "drop",
+     "trade",
+     "waiver",
+     "pending_trade",
+     "trade_proposal",
+     "trade_decline",
+     "trade_veto",
+     "trade_uphold",
+     "failed_bid"
+    ],
+    "type": "string"
+   },
+   "week": {
+    "description": "Optional public week selector. ESPN accepts matchup period 0 or later (0 = preseason), including baseball, basketball, and hockey; omit it for the current and previous matchup periods. Sleeper accepts matchup week 1 or later; omit it for the current and previous week. Yahoo ignores week and uses a recent 14-day timestamp window",
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "platform",
+   "sport",
+   "league_id",
+   "season_year"
+  ],
+  "type": "object"
+ },
+ "name": "get_transactions",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "data": {
+    "additionalProperties": true,
+    "description": "Platform envelope. Field availability varies by platform (ESPN, Yahoo, Sleeper); absent fields are not provided by that platform.",
+    "properties": {
+     "count": {
+      "type": "number"
+     },
+     "dropped_invalid_timestamp_count": {
+      "type": "number"
+     },
+     "league_id": {
+      "type": "string"
+     },
+     "limitations": {
+      "additionalProperties": true,
+      "properties": {
+       "exact_date_bounds_unavailable": {
+        "const": true,
+        "type": "boolean"
+       },
+       "omitted_conflicting_rows": {
+        "type": "number"
+       },
+       "omitted_unscoped_rows": {
+        "type": "number"
+       },
+       "structured_details_incomplete": {
+        "const": true,
+        "type": "boolean"
+       },
+       "window_coverage_incomplete": {
+        "const": true,
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "platform": {
+      "type": "string"
+     },
+     "season_year": {
+      "type": "number"
+     },
+     "source": {
+      "enum": [
+       "mTransactions2",
+       "mTransactions2_with_activity_trade_details",
+       "activity_feed"
+      ],
+      "type": "string"
+     },
+     "sport": {
+      "type": "string"
+     },
+     "teams": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "ESPN team ID to display name map",
+      "type": "object"
+     },
+     "transactions": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "date": {
+         "type": "string"
+        },
+        "draft_picks": {
+         "anyOf": [
+          {
+           "items": {},
+           "type": "array"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "faab_bid": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "players_added": {
+         "items": {
+          "additionalProperties": true,
+          "properties": {
+           "id": {
+            "type": "string"
+           },
+           "name": {
+            "type": "string"
+           },
+           "position": {
+            "type": "string"
+           },
+           "team": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "id"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "players_dropped": {
+         "items": {
+          "additionalProperties": true,
+          "properties": {
+           "id": {
+            "type": "string"
+           },
+           "name": {
+            "type": "string"
+           },
+           "position": {
+            "type": "string"
+           },
+           "team": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "id"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "provider_scoring_period_id": {
+         "type": "number"
+        },
+        "status": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "team_ids": {
+         "items": {
+          "type": [
+           "string",
+           "number"
+          ]
+         },
+         "type": "array"
+        },
+        "timestamp": {
+         "type": "number"
+        },
+        "trade_sides": {
+         "anyOf": [
+          {
+           "items": {
+            "additionalProperties": true,
+            "properties": {
+             "acquired": {
+              "items": {
+               "additionalProperties": true,
+               "properties": {
+                "id": {
+                 "type": "string"
+                },
+                "name": {
+                 "type": "string"
+                },
+                "position": {
+                 "type": "string"
+                },
+                "team": {
+                 "type": "string"
+                }
+               },
+               "required": [
+                "id"
+               ],
+               "type": "object"
+              },
+              "type": "array"
+             },
+             "gave_up": {
+              "items": {
+               "additionalProperties": true,
+               "properties": {
+                "id": {
+                 "type": "string"
+                },
+                "name": {
+                 "type": "string"
+                },
+                "position": {
+                 "type": "string"
+                },
+                "team": {
+                 "type": "string"
+                }
+               },
+               "required": [
+                "id"
+               ],
+               "type": "object"
+              },
+              "type": "array"
+             },
+             "team_id": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "transaction_id": {
+         "type": "string"
+        },
+        "type": {
+         "type": "string"
+        },
+        "waiver_priority": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "week": {
+         "type": [
+          "number",
+          "null"
+         ]
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "truncated": {
+      "type": "boolean"
+     },
+     "warning": {
+      "type": "string"
+     },
+     "window": {
+      "additionalProperties": true,
+      "properties": {
+       "date_bounds_kind": {
+        "enum": [
+         "exact_contiguous",
+         "envelope_non_contiguous",
+         "unavailable"
+        ],
+        "type": "string"
+       },
+       "end_date": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "mode": {
+        "enum": [
+         "explicit_week",
+         "recent_two_weeks",
+         "recent_two_weeks_timestamp",
+         "pending",
+         "preseason"
+        ],
+        "type": "string"
+       },
+       "normalization": {
+        "enum": [
+         "none",
+         "legacy_scoring_period_to_matchup"
+        ],
+        "type": "string"
+       },
+       "provider_scoring_period_ids": {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       "requested_week": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "start_date": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "timezone": {
+        "const": "America/New_York",
+        "type": "string"
+       },
+       "unit": {
+        "const": "matchup_period",
+        "type": "string"
+       },
+       "weeks": {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       }
+      },
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "success": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "success",
+   "data"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "mcp:read"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "League Transactions"
+}

@@ -1,0 +1,144 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Is each citation in an output supported by its source? Extracts, fetches (opt-in, SSRF-guarded) and judges on your key.\n\nWhat it does. Fetches only with allow_fetch or IRIS_CITATION_ALLOW_FETCH=1, blocking private addresses. One judge call per resolved citation, capped by max_cost_usd_total; overall_score is supported / judged, null when none was judged. Full detail: iris://capabilities.\n\nWhen not to use it. With no citations (evaluate_output). Without IRIS_ANTHROPIC_API_KEY or IRIS_OPENAI_API_KEY.\n\nReturns. JSON: id, trace_id, overall_score, passed, verdict, total_unsupported, total_citations_found, total_resolved, total_judged, total_supported, total_cost_usd, citations.\n\nErrors. IRIS_JUDGE_NOT_ENABLED, IRIS_JUDGE_UNKNOWN_MODEL, IRIS_UNKNOWN_TRACE (before any spend); IRIS_JUDGE_FAILED when every judge call failed. Failures return {\"error\":{code,message,recovery}} with isError; follow recovery.\n\nSiblings. evaluate_with_llm_judge \u2014 general semantic scoring; evaluate_output \u2014 the free deterministic path.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "allow_fetch": {
+    "description": "Permit outbound HTTP to resolve URLs/DOIs. Defaults to IRIS_CITATION_ALLOW_FETCH=1; false otherwise. SSRF-guarded regardless.",
+    "type": "boolean"
+   },
+   "domain_allowlist": {
+    "description": "Restrict fetches to hostnames in this list (suffix match allowed). Merged with IRIS_CITATION_DOMAINS env.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "max_citations": {
+    "description": "Max citations to verify (extras skipped, not errored); default 20, at most 50",
+    "exclusiveMinimum": 0,
+    "maximum": 50,
+    "type": "integer"
+   },
+   "max_cost_usd_total": {
+    "description": "Cap TOTAL judge cost across all citations in this call; default 1.00 USD \u2014 the pipeline stops when the next call would exceed it",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "model": {
+    "description": "Judge model for per-citation verification. Supported: anthropic = claude-fable-5-1 | claude-opus-5 | claude-sonnet-5 (and the priced 4.x line); openai = gpt-5 | gpt-5-mini | gpt-4.1-mini (and the priced 4o, o3/o4 and retired o1 ids); an unknown id is refused with the full priced list.",
+    "type": "string"
+   },
+   "output": {
+    "description": "The agent output containing citations to verify",
+    "minLength": 1,
+    "type": "string"
+   },
+   "per_source_max_bytes": {
+    "description": "Per-URL body cap; default 5MB",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "per_source_timeout_ms": {
+    "description": "Per-URL fetch timeout; default 10_000",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "provider": {
+    "description": "Auto-detected from model when omitted",
+    "enum": [
+     "anthropic",
+     "openai"
+    ],
+    "type": "string"
+   },
+   "trace_id": {
+    "description": "Link verification result to a stored trace (id from log_trace / get_traces); an unknown id is rejected before any fetch or judge call",
+    "type": "string"
+   }
+  },
+  "required": [
+   "output",
+   "model"
+  ],
+  "type": "object"
+ },
+ "name": "verify_citations",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {},
+  "properties": {
+   "citations": {
+    "items": {},
+    "type": "array"
+   },
+   "id": {
+    "type": "string"
+   },
+   "overall_score": {
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "passed": {
+    "type": [
+     "boolean",
+     "null"
+    ]
+   },
+   "total_citations_found": {
+    "type": "number"
+   },
+   "total_cost_usd": {
+    "type": "number"
+   },
+   "total_judged": {
+    "type": "number"
+   },
+   "total_resolved": {
+    "type": "number"
+   },
+   "total_supported": {
+    "type": "number"
+   },
+   "total_unsupported": {
+    "type": "number"
+   },
+   "trace_id": {
+    "type": "string"
+   },
+   "verdict": {
+    "additionalProperties": {},
+    "properties": {},
+    "type": "object"
+   }
+  },
+  "required": [
+   "id",
+   "overall_score",
+   "passed",
+   "total_unsupported",
+   "total_citations_found",
+   "total_resolved",
+   "total_judged",
+   "total_supported",
+   "total_cost_usd",
+   "citations"
+  ],
+  "type": "object"
+ },
+ "title": "Verify Citations"
+}

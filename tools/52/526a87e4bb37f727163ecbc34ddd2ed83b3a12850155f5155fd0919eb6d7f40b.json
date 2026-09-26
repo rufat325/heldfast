@@ -1,0 +1,133 @@
+{
+ "agent_dogfood": true,
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Pre-trade / pre-commit verdict"
+ },
+ "description": "Independent second-opinion governance verdict for AI agents before they commit an irreversible action \u2014 shipping code, running a shell command, or placing a trade. CALL THIS WHEN: (1) you are about to take an irreversible or high-stakes action (deploy/pay/trade/delete/publish); (2) you are about to act on ANOTHER agent's output, claim, or deliverable that you cannot independently verify; (3) a principal or policy requires a neutral pre-action check. You cannot self-issue a trustworthy verdict on your own work \u2014 that is what this is for. Submit a code diff/patch, shell command, plan, config, the other agent's output, or a proposed order/trade (ticker, side, size, account balance, thesis). Returns a structured verdict (approve / approve_with_concerns / reject), issues ranked by severity, suggested fixes, and alternatives \u2014 you (the agent) read it and proceed automatically on a non-reject verdict. This is NOT a human-approval step: it's an automated second opinion, advisory, never blocks, no human in the loop \u2014 you stay fully autonomous and decide. Capital-scale-aware. Model-agnostic. Built and dogfooded daily by our own autonomous fleet (the same gate we run our own important decisions through). A self-building known-bad-address registry (GET /review/known-bad, free, no auth) forces a byte-reproducible reject \u2014 independent of the judgment model \u2014 on any address a prior real verdict already rejected; not an LLM-only judgment call end to end. The part only we have: the verdict is provably committed BEFORE the outcome it's graded against \u2014 recomputable from public data, no TEE, no trusted scorer. Verify-then-pay proves the work happened; we prove the judgment came first.",
+ "inputSchema": {
+  "examples": [
+   {
+    "artifact": "systemctl restart my-trading-bot.service && curl -X POST https://api.exchange.com/v3/order -d '{\"side\":\"buy\",\"qty\":100000}'",
+    "artifact_type": "shell_command",
+    "concerns": "Is the order-of-operations safe? What can go wrong between restart and the order?",
+    "context": "About to deploy a tuned config and immediately open a 100k-sat position on the exchange",
+    "severity_threshold": "high"
+   }
+  ],
+  "properties": {
+   "action_binding": {
+    "description": "Optional: the exact real-world action this verdict authorizes \u2014 tool identity, materialized (not templated) arguments, and the id of the agent that will execute it, e.g. {'tool': 'place_order', 'agent_id': 'your-stable-agent-id', 'args': {...}}. v14+: `tool` and `args` are bound as SEPARATE preimage fields (action_binding_tool_hash = sha256(tool), action_binding_args_hash = sha256(RFC-8785-JCS(args))) so a verifier can assert 'same tool, different arguments' as a checkable statement; `agent_id` is bound as a plain string (action_binding_agent_id, not hashed). All bound DIRECTLY into decision_ref \u2014 so the verdict commits to the exact action, not just the free-text `artifact` argument or the verdict conclusion. Recomputing decision_ref without byte-identical tool/args/agent_id values produces a different hash: an approval cannot be replayed against a different tool, different materialized arguments, or a different agent. Every sub-key is optional. Max ~8KB JSON-encoded. NOT independently verified by us \u2014 we hash exactly what you send. HONEST LIMIT: nothing stops a caller from submitting an under-specified action_binding (e.g. tool+side but not size) and getting an approval reusable across the omitted dimension \u2014 that's about who controls what goes into the fingerprint, not how it's hashed.",
+    "type": "object"
+   },
+   "artifact": {
+    "description": "The artifact to review: unified diff / patch, shell command, plan, config, analysis, agent output, or raw text",
+    "type": "string"
+   },
+   "artifact_type": {
+    "default": "general",
+    "description": "Type of artifact. 'code_diff' or 'patch' triggers deep code review. 'plan' for architecture/strategy. 'trade' triggers the capital-scale-aware risk-manager review of a proposed entry/exit. 'onchain_action' triggers the on-chain risk review of a proposed transfer/swap/approval/contract call (e.g. a Base MCP action) BEFORE you sign it \u2014 catches scam/honeypot tokens, unlimited-allowance drainers, address poisoning, slippage/MEV. 'sanctions_screening' for a compliance/AML result BEFORE acting on it \u2014 checks a categorical verdict (e.g. CLEAN) carries its own scope, not an unscoped claim. Tailors focus and suggestions. IMPORTANT for trade/onchain_action/sanctions_screening: a REJECT can happen purely from low confidence on an action you can't undo, even if content-wise the review leaned approve \u2014 see the response's reversibility_gate field. When present, epistemic_basis tells you WHY it's a reject: 'evidence_against' means a deterministic engine found a real positive finding (a known-bad address, an on-chain/sanctions hit); 'insufficient_evidence' means no finding either way, just confidence below the reversibility floor \u2014 different situations, do not treat them identically if your own logic branches on the reason.",
+    "enum": [
+     "code_diff",
+     "patch",
+     "shell_command",
+     "plan",
+     "config_change",
+     "analysis",
+     "agent_output",
+     "trade",
+     "onchain_action",
+     "sanctions_screening",
+     "general"
+    ],
+    "type": "string"
+   },
+   "concerns": {
+    "description": "Specific things to check (e.g. 'production safety', 'edge cases in trading logic', 'regulatory risk')",
+    "type": "string"
+   },
+   "confidentiality_tier": {
+    "default": "hash_only",
+    "description": "Which privacy/evidentiary tradeoff this verdict should use, only meaningful with sign=true. 'hash_only' (default): the proof carries only artifact_hash, raw content never disclosed \u2014 strongest privacy, weakest standalone evidentiary value (a third party can't confirm what the hash corresponds to without your later cooperation). 'partial_disclosure': pass disclosed_summary, bound raw into decision_ref, so a third party gets real checkable context without full exposure. 'full_disclosure': records intent to publish this verdict to the public /ledger (full_disclosure_requested=true in the proof) \u2014 strongest evidentiary tier, but actual publication is still a separate curated step on our side, not yet fully self-serve.",
+    "enum": [
+     "hash_only",
+     "partial_disclosure",
+     "full_disclosure"
+    ],
+    "type": "string"
+   },
+   "context": {
+    "description": "What you are trying to accomplish, why now, success criteria",
+    "type": "string"
+   },
+   "disclosed_summary": {
+    "description": "Only used when confidentiality_tier='partial_disclosure'. A real, human-readable description of the reviewed artifact/decision you're choosing to make public \u2014 bound raw into decision_ref. Ignored for other tier values.",
+    "type": "string"
+   },
+   "external_evidence": {
+    "description": "Optional (v17, 2026-09-10): third-party evidence this judgment relied on \u2014 e.g. a tool-reliability registry's own historical PASS/FAIL record, worked out live with arian-gogani/nobulex-registry#1. Array of {'source': str, 'record': str (the issuer's OWN exact saved bytes, verbatim \u2014 never re-parsed/re-emitted as JSON on our side), 'record_sha256': str (issuer-computed, not independently verified by us), 'evidence_type': str, 'observed_at': ISO 8601, 'validity_until': ISO 8601 | null}. All entries hashed together (RFC-8785-JCS) into external_evidence_hash, bound into decision_ref \u2014 so 'this exact evidence was what the verdict considered' is checkable, not just claimed in reasoning text. Does NOT authenticate the issuer, verify record_sha256, or establish freshness \u2014 that's the caller's own responsibility before relying on the cited evidence.",
+    "type": "array"
+   },
+   "include_trading_state": {
+    "default": false,
+    "description": "Sentinel mode: inject live Sovereign Earner state (equity, regime, open position, PnL) for trading-related reviews. Highly recommended for any trading or risk decision.",
+    "type": "boolean"
+   },
+   "intended_audience": {
+    "description": "Optional: declare who/what this verdict is intended for (your own DID, endpoint URL, or gateway identifier). Bound into decision_ref so it can't be silently stripped or altered once issued. NOT independently verified \u2014 a reader compares this against their own identity and treats a mismatch as a signal the proof may be presented outside its intended context, a real context-binding replay-protection gap that earlier policy versions had no way to represent at all.",
+    "type": "string"
+   },
+   "intended_verifier": {
+    "description": "Optional: a CAIP-10 string naming the specific on-chain verifier/gate this verdict is meant to be checked against, e.g. 'eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432'. Bound into decision_ref (itself inside the schnorr-signed content) so it achieves real crypto-level domain separation \u2014 the raw signed bytes otherwise bind only to our pubkey + content, nothing to a specific chain/contract, so a proof is technically replayable against any gate willing to accept it. NOT independently verified \u2014 a gate compares this against its own chain_id/address.",
+    "type": "string"
+   },
+   "mediator_attestation": {
+    "description": "Optional (v22): your mediator proves control of its own key. {key_url (https, mediator's own domain), public_key_ed25519_b64, requested_at (unix s, +-600 s), nonce (8-128 ASCII), signature_ed25519_b64} -- Ed25519 over the RFC 8785 JCS bytes of {schema:'invinoveritas.mediator_request.v1', artifact_hash (sha256 hex of the exact artifact), artifact_type, requested_at, nonce}; key_url must list the key. Requires sign=true; checked before any charge; bound into the proof as mediator_attestation_hash. Establishes key control at issue time, NOT independence.",
+    "type": "object"
+   },
+   "related_claims": {
+    "description": "Optional (policy v20): a structured claim about related_proof_event -- a non-empty subset of {artifact_hash, verdict, verified_at, policy_version, decision_ref}. Compared by exact equality against the referenced proof (which we re-verify); the claims hash, comparison version and result (matched|mismatched|missing_proof|unverifiable_proof; not_supplied if omitted) are bound into decision_ref. Faithful restatement only: not relevance, authorization or truth.",
+    "type": "object"
+   },
+   "related_proof_event": {
+    "description": "Optional: if the artifact being reviewed IS another party's already-signed verdict proof (a verdict-of-verdict re-review), pass that proof's full signed event ({id, pubkey, created_at, kind, tags, content, sig}). We independently re-verify it ourselves before its source_class can affect this call's own \u2014 capped, never upgraded (an independent_mediator call reviewing an agent_reported inner verdict stays agent_reported). Fails closed to agent_reported if the inner event doesn't verify, regardless of your own registry status. One hop only. HONEST SCOPE: we verify the cited event's own authenticity, not that it's actually the thing your artifact claims to be re-reviewing.",
+    "type": "object"
+   },
+   "request_capture_ref": {
+    "description": "Optional: a requester-controlled commitment (a hash/id you generated and can independently prove existed at request-time) that this artifact was submitted for review \u2014 the captured-admission-v0 review profile (trustless-ai/recompute-kit). Echoed back verbatim in the response's admission_receipt. NOT independently verified by us; closes the /ledger raw-tape-vs-published gap only for requesters who opt in.",
+    "type": "string"
+   },
+   "severity_threshold": {
+    "default": "all",
+    "description": "Minimum severity to report",
+    "enum": [
+     "blocker",
+     "high",
+     "medium",
+     "all"
+    ],
+    "type": "string"
+   },
+   "sign": {
+    "default": false,
+    "description": "Return a PORTABLE SIGNED proof of this verdict (binds verdict + artifact hash + our pubkey), including a content-addressed decision_ref = sha256(JCS({artifact_hash, artifact_type, policy_version, verdict, source_class})). Attach it to your output so a downstream agent can confirm via verify_proof \u2014 WITHOUT trusting you or us \u2014 that invinoveritas issued this verdict for this exact artifact. The agent-to-agent trust handshake. For artifact_type=trade|onchain_action|sanctions_screening, the proof also carries source_class ('agent_reported' today \u2014 no mediation-point integration exists yet) and, when applicable, a vantage_limitation field disclosing that the verdict is occurrence evidence, not an absence/completeness claim \u2014 check it before treating an irreversible-class verdict as sufficient on its own. The proof also carries an opaque engine_generation counter (informational, not bound into decision_ref) \u2014 compare it across two proofs to detect a backend/judgment-engine change between calls without us disclosing which model we run.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "artifact"
+  ],
+  "type": "object"
+ },
+ "modes": {
+  "coding_agents": "Ideal for coding agents (Claude, Cursor, Cline, etc.): use artifact_type=code_diff|patch before any write or risky terminal command \u2014 the verdict always includes concrete suggested fixes.",
+  "sentinel": "Pass `include_trading_state: true` for higher-signal trading/risk reviews (injects current Sovereign Earner state)."
+ },
+ "name": "review",
+ "pricing": "~200 sats base + length bonus",
+ "supported_payments": [
+  "Bearer Token (credits)",
+  "L402 Lightning"
+ ]
+}

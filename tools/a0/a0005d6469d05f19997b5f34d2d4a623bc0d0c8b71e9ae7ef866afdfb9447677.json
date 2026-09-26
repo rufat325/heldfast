@@ -1,0 +1,89 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Grade bets against the close (CLV)"
+ },
+ "description": "Hobby+ endpoint. Grades PLACED bets against their closing lines. Closing line value is the only durable proxy for whether a bettor has edge: did the price they took beat the number the market settled on? Send the bets and each comes back with its closing price, the de-vigged closing fair probability, CLV, and \u2014 once the game settles \u2014 the graded resolution and actual stat value, plus a portfolio summary. Stateless: nothing is stored. TWO CLV numbers are returned deliberately. clv_pct is price-vs-price: familiar and quotable, but VIG-BLIND, so it flatters a bet taken on the juicy side of a wide market. ev_vs_close_pct scores the price against the DE-VIGGED close and is the honest one \u2014 report that one when the user asks whether they got value. The de-vig anchors to the SHARPEST book quoting that line at close (fair_source), not the book they bet at, because de-vigging their own book always returns a negative number (they paid its hold). Bets whose event has not started carry closing_is_final=false, are counted in summary.pending, and are EXCLUDED from the summary averages: before kickoff the 'closing' price is just the latest price, so CLV is ~0 by construction \u2014 do not present those as results. Matching is fail-closed: a bet that cannot be pinned to exactly one stored outcome returns matched=false with an unmatched_reason instead of a wrong match, so surface those rows rather than silently dropping them. Max 500 bets per request. Free tier returns structure with every number nulled.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "bets": {
+    "description": "Placed bets to grade. selection is the subject: player name for a prop, team name for a game line.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "bookmaker": {
+       "type": "string"
+      },
+      "event_id": {
+       "type": [
+        "string",
+        "number"
+       ]
+      },
+      "market": {
+       "type": "string"
+      },
+      "period": {
+       "description": "Canonical period code (q1, h1, p1, f5). Omit for full-game markets.",
+       "type": "string"
+      },
+      "point": {
+       "type": "number"
+      },
+      "price": {
+       "description": "American odds actually taken, e.g. -110 or 145.",
+       "type": "number"
+      },
+      "ref": {
+       "description": "Echoed back untouched, so rows can be aligned without relying on order.",
+       "type": "string"
+      },
+      "selection": {
+       "type": "string"
+      },
+      "side": {
+       "description": "'Over' or 'Under' for two-way markets. Omit for YES-only props where the player IS the outcome.",
+       "type": "string"
+      },
+      "sport_key": {
+       "type": "string"
+      },
+      "stake": {
+       "description": "Defaults to 1 unit when computing profit_units.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "sport_key",
+      "event_id",
+      "market",
+      "bookmaker",
+      "selection",
+      "price"
+     ],
+     "type": "object"
+    },
+    "maxItems": 500,
+    "type": "array"
+   },
+   "devig": {
+    "description": "How the closing anchor's vig is removed before closing_fair_prob / ev_vs_close_pct. 'multiplicative' (default) or 'shin' (loads the overround onto the longshot). Same vocabulary as propline_get_event_ev; echoed as devig_method.",
+    "enum": [
+     "multiplicative",
+     "shin"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "bets"
+  ],
+  "type": "object"
+ },
+ "name": "propline_grade_clv",
+ "title": "Grade bets against the close (CLV)"
+}

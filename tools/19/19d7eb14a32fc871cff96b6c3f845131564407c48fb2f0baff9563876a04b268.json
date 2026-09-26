@@ -1,0 +1,44 @@
+{
+ "description": "Invoke any method on any node, in either the editor's on-disk scene or the running game. The write counterpart to query_runtime_node (which only reads).\n\n**Two modes** controlled by `runtime`:\n  \u2022 `runtime: false` (default, editor mode) \u2014 Loads the .tscn from disk, finds the node, invokes the method, ALWAYS saves the scene back. Snapshot taken so `mcp_undo` reverts the file. Use for **engine/built-in methods that mutate persistent scene state**: `CollisionObject2D.set_collision_layer_value(layer, on)`, `Curve2D.add_point(pos)`, `Node.add_user_signal(name)`, `Node.add_to_group(name, true)` (the `true` is required to persist into the .tscn).\n    \u26a0\ufe0f **Editor mode cannot run user-defined methods in non-@tool scripts.** Godot's editor instantiates scenes with `GEN_EDIT_STATE_MAIN`, which attaches scripts and lets `@export` vars round-trip but does NOT dispatch user method bodies for non-@tool scripts. `call_method` detects this case and refuses with `reason: \"non_tool_script_method\"` \u2014 DO NOT use editor mode to invoke `take_damage`, `respawn`, `play_intro`, or any other game-logic method on your script. Use runtime mode for that.\n  \u2022 `runtime: true` \u2014 Routes the call to the MCPRuntime helper inside the running game. Finds the live node in the active SceneTree, invokes the method, returns the serialized result. Use to drive the game from the AI: `Player.take_damage(50)`, `AnimationPlayer.play(\"intro\")`, `AudioStreamPlayer.play()`, `Inventory.add_item(\"sword\", 1)`. REQUIRES `run_scene` first (the game must be running) \u2014 same precondition as query_runtime_node / send_input.\n\n**node_path resolution:**\n  \u2022 editor mode \u2014 relative to scene root, e.g. \"Player\" or \"UI/HUD/HealthLabel\", or \".\" for root.\n  \u2022 runtime mode \u2014 absolute (\"/root/Main/Player\") OR relative to current_scene (\"Player\"). Same rules as query_runtime_node.\n\n**args** \u2014 array of positional arguments. Each follows the same form as `modify_node_property.value`: primitives (`1.5`, `\"hello\"`, `true`, `null`), arrays, or `{type:\"Vector2\",x,y}` / `{type:\"Color\",r,g,b,a}` / `{type:\"NodePath\",...}` / `{type:\"Resource\",path:\"res://...\"}` discriminated objects.\n\n**Method validation** \u2014 on miss, returns `closest_matches` (top similar method names) and an `available_methods_sample` so the AI can self-correct. Arity is also pre-checked against `MethodInfo` (with default-arg awareness).\n\n**Destructive denylist** \u2014 `queue_free`, `free`, `set_script`, `remove_child`, `replace_by`, `reparent` require `confirm: true`. In runtime mode, calls directly on `/root/<name>` (likely autoloads or the active scene root) also require confirm. Use `attach_script` / `detach_script` / `remove_node` instead of the corresponding raw method calls in editor mode.\n\n**Coroutines** \u2014 methods containing `await` return a `GDScriptFunctionState`. Such calls are dispatched fire-and-forget: `is_coroutine: true, awaited: false` is reported, side effects still run, but the return value is not captured. Follow up with `wait` + `query_runtime_node` to observe results.\n\n**Return shape (success):** `{ok:true, runtime, scene_path?, node_path, node_class, method, method_signature?, duration_ms, return_value?, return_type?, awaited, is_coroutine}`. `awaited` and `is_coroutine` are ALWAYS present (stable for parsing). `return_value` / `return_type` are omitted when `expect_return: false` or the method is a coroutine. Object/Node returns are serialized as `{type:\"Object\", class, name?, node_path?, serializable:false}` \u2014 follow up with `query_runtime_node` to inspect properties. Resource returns are `{type:\"Resource\", class, resource_path?}`.",
+ "inputSchema": {
+  "properties": {
+   "args": {
+    "description": "Positional arguments to pass. Default: []. Arity is pre-checked against the method signature (allowing for default arguments).",
+    "items": {
+     "description": "Positional argument. Primitive, array, or {type:\"Vector2\"|\"Vector3\"|\"Color\"|\"Resource\"|...} discriminated object \u2014 same form as modify_node_property.value."
+    },
+    "type": "array"
+   },
+   "confirm": {
+    "description": "Required for methods on the destructive denylist (queue_free, free, set_script, remove_child, replace_by, reparent) and, in runtime mode, for direct calls on /root/<name> (autoload/scene root territory). Defaults false.",
+    "type": "boolean"
+   },
+   "expect_return": {
+    "description": "Capture and serialize the return value (default: true). Set false for void / fire-and-forget calls to skip serialization in the response.",
+    "type": "boolean"
+   },
+   "method": {
+    "description": "Method name on the target node. Validated against node.has_method(); on miss returns closest_matches and available_methods_sample.",
+    "type": "string"
+   },
+   "node_path": {
+    "description": "Path to the target node. Editor mode: relative to scene root (e.g. \"Player\", \"UI/HUD/Label\", or \".\" for root). Runtime mode: absolute (/root/Main/Player) or relative to current_scene (Player).",
+    "type": "string"
+   },
+   "runtime": {
+    "description": "When true, call on the live node in the running game via MCPRuntime. Requires the game to be running (run_scene first). When false (default), operates on the .tscn file in the editor.",
+    "type": "boolean"
+   },
+   "scene_path": {
+    "description": "Editor mode only: which .tscn to operate on. Defaults to the editor's currently edited scene (must be saved at least once). Ignored when runtime=true.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "node_path",
+   "method"
+  ],
+  "type": "object"
+ },
+ "name": "call_method"
+}

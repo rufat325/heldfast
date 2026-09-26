@@ -1,0 +1,795 @@
+{
+ "annotations": {
+  "access": "free",
+  "connect_url": "https://dchub.cloud/connect?ref=mcp-tools-list&tool=plan_query",
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "maturity": "unknown",
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Plan Query"
+ },
+ "description": "INSPECT-ONLY \u2014 returns the plan WITHOUT running it. For a real multi-step DC Hub question call `execute_plan(intent=\"...\")` instead: it uses the SAME deterministic no-LLM planner and then RUNS the sequence server-side, returning the answers in one envelope. Reach for plan_query only to review, log, diff or audit a plan before executing it yourself. Deterministic keyword routing over the tool registry \u2014 no LLM, no network, same intent always returns the same plan (free). Returns _entity=query_plan {best_tool, intent_confidence + workflow_confidence (dual 0-1: question-read vs executability), reason, planner_rationale, recommended_sequence:[{step, tool, depends_on, estimated_calls, why, args_hint}], execution_waves (steps grouped into concurrency waves), execution_strategy.parallel_groups, execution_estimate {estimated_calls, estimated_latency_ms, parallelizable}, alternatives (each with when + rejected_because), coverage_notes, matched_classes} plus a versioned `replay` (schema_version 1): planner_version, decisions:[{id, step, kind, status, decision, rationale, decision_confidence, depends_on}], rejected:[{id, tool, reason}], execution_graph:{waves, parallel_groups} \u2014 auditable and machine-readable, safe to log and diff across versions. args_hint values in <angle brackets> come from the named earlier step \u2014 substitute them, never invent them. Pass structured hints via context (lat/lon, iso, market, capacity_mw, candidate_id, state, since) to sharpen the plan. For a family-level browse use discover_tools. This tool plans \u2014 it never executes; tools/list stays canonical for schemas.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "context": {
+    "description": "Optional structured hints: {lat, lon, iso, market, capacity_mw, candidate_id, state (2-letter), since} \u2014 sharpens args_hint values and routing (e.g. lat/lon boosts the site-analysis route)"
+   },
+   "intent": {
+    "description": "Natural-language description of what you are trying to find out, e.g. \"rank markets for a 200MW AI campus\" or \"how much power is available in ERCOT\"",
+    "type": "string"
+   }
+  },
+  "required": [
+   "intent"
+  ],
+  "type": "object"
+ },
+ "name": "plan_query",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "Deterministic query plan: best_tool + ordered recommended_sequence over the DC Hub tool registry \u2014 keyword/regex routing, no LLM, same intent \u2192 same plan \u2014 plus a versioned replay decision-trail, alongside the DC Hub envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "alternatives": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "rejected_because": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Why the planner did NOT make this the primary route \u2014 the deterministic rejection reason"
+        },
+        "tool": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Alternative tool name"
+        },
+        "when": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "When to prefer this tool over the recommended sequence"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Adjacent tools for nearby intents, including runner-up intent classes"
+   },
+   "best_tool": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The single best first tool to call for this intent (exact name from tools/list)"
+   },
+   "chaining": {
+    "description": "Zero-drift chaining guidance (candidate_id contract) when the plan crosses get_refined_queue \u2192 analyze_site / rank_sites"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "confidence": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Deterministic router confidence, 0-1 \u2014 same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat)."
+   },
+   "coverage_notes": {
+    "description": "Tier/coverage caveats for the recommended tools (free-tier previews, depth gates, honest-unknown semantics)"
+   },
+   "estimated_calls": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Total estimated API calls for the whole plan (sum of per-step estimates)"
+   },
+   "execution_estimate": {
+    "description": "r-planner-v3 deterministic cost preview: {estimated_calls (plan NODE count \u2014 one per step; the top-level estimated_calls is the fan-out-weighted API-call total), estimated_latency_ms (sum over waves of the SLOWEST tool in each wave, from a static 3-tier table: heavy synthesis 3000ms / standard read 1200ms / light free read 500ms), parallelizable (any wave holds 2+ steps)}"
+   },
+   "execution_strategy": {
+    "description": "r-planner-v3 explicit strategy: {parallel_groups: string[][] \u2014 execution_waves rendered as TOOL-NAME arrays (e.g. [[\"get_grid_intelligence\",\"get_interconnection_queue\",\"get_refined_queue\"]]), note: plan-only disclaimer \u2014 this tool only plans; execute the sequence yourself}"
+   },
+   "execution_waves": {
+    "description": "The execution graph as concurrency waves: array of arrays of step numbers; every step in a wave can run concurrently once earlier waves finish (derived from depends_on)"
+   },
+   "intent": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The natural-language intent that was routed (echoed back)"
+   },
+   "intent_class": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The matched intent class (market_ranking | capacity_search | market_comparison | grid_headroom | interconnection_queue | hosting_capacity | water_climate | site_analysis | deals_ma | fiber_power_pairing | fiber | price | incentives_tax | power_timeline | changes_delta | facility_search | unknown)"
+   },
+   "intent_confidence": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "How confident the router is that it read the QUESTION right (0-1, deterministic) \u2014 driven by keyword score + margin over the runner-up class"
+   },
+   "matched_classes": {
+    "description": "Every intent class that scored, with its score \u2014 the router's full deterministic trace"
+   },
+   "note": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Router disclaimer \u2014 deterministic keyword routing, tools/list stays canonical"
+   },
+   "ok": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "true when the intent was routed"
+   },
+   "parallelizable": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "true when at least one execution wave holds 2+ steps \u2014 the plan is not purely sequential"
+   },
+   "planner_rationale": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "One sentence on why the PLAN has this shape (ordering / parallelism / what mints what) \u2014 distinct from reason, which covers intent routing"
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "reason": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Why the router chose best_tool \u2014 the matched keywords / context signals"
+   },
+   "recommended_sequence": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "args_hint": {
+         "description": "Suggested arguments \u2014 values in <angle brackets> are produced by an earlier step (e.g. \"<metro_slug from step 1>\")"
+        },
+        "depends_on": {
+         "description": "Step numbers this step has a HARD DATA dependency on (it consumes a value they mint \u2014 slug, candidate_id, chosen ISO). Empty = can start immediately; user-supplied placeholders are not dependencies."
+        },
+        "estimated_calls": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Estimated API calls this step costs (fan-out steps like per-finalist reads are > 1)"
+        },
+        "step": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "1-based step order"
+        },
+        "tool": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Tool name (exact, from tools/list)"
+        },
+        "why": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "What this step contributes to answering the intent"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Ordered tool sequence mirroring the DC Hub recipe for the matched intent class"
+   },
+   "replay": {
+    "additionalProperties": {},
+    "description": "FIRST-CLASS VERSIONED replay object (r-planner-v5.1, ChatGPT schema review): the planner's auditable decision trail \u2014 routing + per-step selection + rejections + concurrency graph, each decision with a stable id + status, keyed by planner_version so an agent can cite \"Decision D2 selected rank_markets because\u2026\" and downstream tooling survives planner upgrades.",
+    "properties": {
+     "compatibility": {
+      "description": "The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version."
+     },
+     "decisions": {
+      "anyOf": [
+       {
+        "items": {
+         "additionalProperties": {},
+         "properties": {
+          "decision": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "What the planner decided (route to a class / call a tool)"
+          },
+          "decision_confidence": {
+           "anyOf": [
+            {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "string"
+              }
+             ]
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "0-1 \u2014 intent_confidence for the routing decision, workflow_confidence for step decisions"
+          },
+          "depends_on": {
+           "description": "Step numbers this step depends on (step decisions only)"
+          },
+          "id": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "Stable decision id \u2014 D0 = routing decision, D1..Dn = per-step selections; cite as \"Decision D2\""
+          },
+          "kind": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "\"route\" (the intent\u2192class decision) or \"step\" (a tool selection)"
+          },
+          "rationale": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "The deterministic reason for the decision"
+          },
+          "status": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "Decision lifecycle \u2014 one of planned | running | completed | failed | skipped | cancelled. plan_query only ever emits \"planned\" (it never executes); the full enum is published now so consumers can code the whole lifecycle without an SDK bump later."
+          },
+          "step": {
+           "anyOf": [
+            {
+             "anyOf": [
+              {
+               "type": "number"
+              },
+              {
+               "type": "string"
+              }
+             ]
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "0 for the routing decision, else the 1-based step number"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The ordered, auditable decision trail \u2014 one route decision + one per recommended step"
+     },
+     "execution_graph": {
+      "description": "{waves: number[][], parallel_groups: string[][]} \u2014 the concurrency graph the plan executes as"
+     },
+     "intent": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The routed intent (echoed) \u2014 duplicated so replay is self-contained"
+     },
+     "intent_class": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "How to read + cite the replay; plan-only disclaimer"
+     },
+     "planner_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Semantic version of the PLANNER BEHAVIOR (routing/output) \u2014 bumps when routing changes (e.g. 5.1 replay field renames \u2192 5.2 capacity_search/market_comparison \u2192 5.4 fiber_power_pairing \u2192 5.5 the hosting_capacity distribution class \u2192 5.6 the incentives_tax class + stateFromPlace arg signal \u2192 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, \"rank markets by\" credits market_ranking \u2192 5.8 reversed-order timing vocabulary: \"timeline for power \u2026\" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom \u2192 5.9 replay.why_live_data, an additive per-class \"why this answer needed live data\" reason; routing unchanged \u2192 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged \u2192 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> \u2014 the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents \u2192 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway \u2026) bind a centroid + radius for ARGUMENTS only \u2014 never class scoring \u2014 reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical \u2192 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields). Distinct from schema_version."
+     },
+     "rejected": {
+      "anyOf": [
+       {
+        "items": {
+         "additionalProperties": {},
+         "properties": {
+          "id": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "Stable rejection id (R1..Rn)"
+          },
+          "reason": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "Why it was rejected \u2014 the deterministic rejected_because"
+          },
+          "tool": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "The tool/route the planner did NOT take"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Roads not taken, with reasons \u2014 the \"why not\" half of the audit trail"
+     },
+     "schema_version": {
+      "anyOf": [
+       {
+        "anyOf": [
+         {
+          "type": "number"
+         },
+         {
+          "type": "string"
+         }
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Version of the REPLAY OBJECT SHAPE (field set) \u2014 independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 \u2192 5.6) have all left it at 1."
+     },
+     "why_live_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "ENUM (v5.10): why this plan needs LIVE data \u2014 one of the requires_* codes published in the canonical taxonomy (/api/v1/canon/taxonomy why_live_reasons). Enumerated so stamped replays aggregate (\"N% of executions needed live queue data\"); count THIS, not the phrase. Absent when intent_class=unknown."
+     },
+     "why_live_data": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Human phrase for why_live_code, resolved from the same canonical taxonomy \u2014 display it, never parse it. Additive at schema v1 (introduced 5.9 as class-keyed prose; enum-backed since 5.10)."
+     }
+    },
+    "type": "object"
+   },
+   "routing_hint": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {
+       "advisory": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "States that this recommends an entry point and asserts nothing about success"
+       },
+       "best_path": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Where to start: `execute_plan` for a multi-capability question, or the one tool name for a single-capability lookup"
+       },
+       "expected_outputs": {
+        "anyOf": [
+         {
+          "items": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "An output CLASS to expect \u2014 not a tool name"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Bounded list of what the recommended path returns"
+       },
+       "external_sources_recommended": {
+        "anyOf": [
+         {
+          "items": {
+           "anyOf": [
+            {
+             "additionalProperties": {},
+             "properties": {
+              "source_class": {
+               "anyOf": [
+                {
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ],
+               "description": "Closed enum: brokerage_research | market_analytics | financial_context | utility_or_iso_filing | operator_disclosure"
+              },
+              "why": {
+               "anyOf": [
+                {
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ],
+               "description": "What that class of source holds that DC Hub does not, quoting our own published limit"
+              }
+             },
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "What this question needs that DC Hub does NOT hold, named by SOURCE CLASS and never by vendor. An EMPTY array is an answer: DC Hub covers this class end to end."
+       },
+       "problem": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "The matched intent class \u2014 the SAME closed enum as intent_class, so it is branchable, not free text"
+       },
+       "why": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Short deterministic rationale for that entry point"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "ADVISORY router: collapses 92 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version \u2014 those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata."
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   },
+   "workflow_confidence": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "How confident the router is that the plan can EXECUTE cleanly with the signals in hand (0-1, deterministic) \u2014 boosted by resolved context signals, docked for placeholder args the user must still supply; step-minted placeholders don't dock"
+   },
+   "workflow_confidence_basis": {
+    "description": "The arithmetic behind workflow_confidence: {resolved_signals, minted_placeholders, user_supplied_placeholders}"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Plan Query"
+}

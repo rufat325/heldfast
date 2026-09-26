@@ -1,0 +1,345 @@
+{
+ "_meta": {
+  "apiVersion": "1.0.0",
+  "examples": [
+   {
+    "input": {
+     "includeData": false,
+     "zipBase64": "<zip-base64>"
+    },
+    "title": "Dry run: what would be extracted?"
+   },
+   {
+    "input": {
+     "outputDir": "unpacked/report",
+     "outputMode": "file",
+     "zipBase64": "<zip-base64>"
+    },
+    "title": "Extract into the sandbox"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Extract with every engine guard ON unless you name the relaxation: zip-slip / absolute / drive / UNC / NUL / ADS / Windows-device names \u2192 ZIP_PATH_TRAVERSAL (rejectTraversal:false SKIPS them, listed in `skipped`; an unsafe path is never emitted); symlinks \u2192 ZIP_SYMLINK_REJECTED (rejectSymlinks:false extracts the target text as data, never a link); duplicate sanitized paths \u2192 ZIP_EXTRACT_DUPLICATE_PATH (onDuplicate 'first' | 'last'); declared sizes / ratios beyond `limits` \u2192 ZIP_LIMIT_EXCEEDED; overlapping entries and central/local divergence are always refused. `filter` keeps a subset. outputMode 'base64' (default) returns files inline (\u2264 16 MiB each, \u2264 32 MiB total; includeData:false = dry run of the plan); 'file' streams into a relative `outputDir` inside ZIPNATIVE_MCP_OUTPUT_DIR (never overwrites) and returns resource links. Directories are implied by paths (emptyDirectories:true creates the explicit ones). The dry run opens eagerly: an overlapping, offset-into-CD or Zip64-spoofed archive is refused before any plan is returned. Prefer read_zip_entry for a single file.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "emptyDirectories": {
+    "default": false,
+    "description": "file mode: also create explicit directory entries (with a safe name) that hold no file.",
+    "type": "boolean"
+   },
+   "fields": {
+    "description": "Dot-path projection applied after verbosity (e.g. ['entryCount', 'entries.name']); array segments map over elements; unmatched paths are reported in _meta.unmatchedFields.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "filter": {
+    "additionalProperties": false,
+    "description": "Select entries by name. `names` (exact, case-sensitive), `prefix` (path prefix) and `glob` (patterns: `*` within a segment, `**` across segments, `?` one character; a pattern without `/` matches at any depth, a trailing `/` matches a whole subtree) are ANDed when several are given; `includeDirectories` (default false) keeps explicit directory entries.",
+    "properties": {
+     "glob": {
+      "description": "Glob patterns; an entry matching ANY pattern is kept (e.g. ['**/*.json', 'docs/']).",
+      "items": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+     },
+     "includeDirectories": {
+      "default": false,
+      "description": "Keep explicit directory entries (names ending in `/`).",
+      "type": "boolean"
+     },
+     "names": {
+      "description": "Exact entry names to keep (case-sensitive; every duplicate of a name is kept).",
+      "items": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 1000,
+      "type": "array"
+     },
+     "prefix": {
+      "description": "Keep entries whose name starts with this prefix (e.g. 'src/').",
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "includeData": {
+    "default": true,
+    "description": "base64 mode: false = dry run \u2014 list what WOULD be extracted (paths, sizes) without decompressing or returning bytes.",
+    "type": "boolean"
+   },
+   "limits": {
+    "additionalProperties": false,
+    "description": "Override zipnative's named security bounds for this call (CWE-400 / CWE-409 guards). Every key is optional; absent keys keep the engine defaults (maxEntries 100000, maxEntryUncompressedSize 1 GiB, maxTotalUncompressedSize 8 GiB, maxCompressionRatio 1024, maxNameBytes 4096, maxExtraFieldBytes 65535, maxCommentBytes 65535, maxCentralDirectoryBytes 256 MiB). Values above the operator ceilings (ZIPNATIVE_MCP_MAX_UNCOMPRESSED_BYTES, ZIPNATIVE_MCP_MAX_ENTRIES) are refused with LIMIT_CEILING_EXCEEDED. Raise a bound for trusted input only.",
+    "properties": {
+     "maxCentralDirectoryBytes": {
+      "description": "Maximum central-directory size in bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCommentBytes": {
+      "description": "Maximum comment length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCompressionRatio": {
+      "description": "Maximum declared uncompressed/compressed ratio for entries >= 1 KiB compressed (zip-bomb guard).",
+      "minimum": 1,
+      "type": "number"
+     },
+     "maxEntries": {
+      "description": "Maximum central-directory entry count.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxEntryUncompressedSize": {
+      "description": "Maximum decompressed size of one entry, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxExtraFieldBytes": {
+      "description": "Maximum extra-field block length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxNameBytes": {
+      "description": "Maximum entry-name length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxTotalUncompressedSize": {
+      "description": "Maximum total decompressed size across an extraction, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "onDuplicate": {
+    "default": "error",
+    "description": "Two entries mapping to the same sanitized path: 'error' (default, ZIP_EXTRACT_DUPLICATE_PATH), keep the 'first', or keep the 'last'.",
+    "enum": [
+     "error",
+     "first",
+     "last"
+    ],
+    "type": "string"
+   },
+   "outputDir": {
+    "description": "Relative directory inside the sandbox to extract into (file mode; created if absent; no absolute paths, no '..').",
+    "minLength": 1,
+    "type": "string"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default): files inline (\u2264 16777216 bytes each, \u2264 33554432 bytes total). 'file': stream every file under outputDir inside ZIPNATIVE_MCP_OUTPUT_DIR (never overwrites) and return resource links.",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "rejectSymlinks": {
+    "default": true,
+    "description": "true (default): a symlink entry fails the call with ZIP_SYMLINK_REJECTED. false: its target text is extracted as ordinary data (never materialised as a link).",
+    "type": "boolean"
+   },
+   "rejectTraversal": {
+    "default": true,
+    "description": "true (default): an entry whose name escapes the root (zip-slip, absolute, drive/UNC, NUL, ADS, Windows device name) fails the call with ZIP_PATH_TRAVERSAL. false: such entries are SKIPPED and listed in `skipped` \u2014 an unsafe path is never emitted either way.",
+    "type": "boolean"
+   },
+   "strict": {
+    "default": false,
+    "description": "Escalate the first engine diagnostic (prepended data, duplicate name, name mismatch, \u2026) to a ZIP_STRICT_DIAGNOSTIC error instead of reporting it.",
+    "type": "boolean"
+   },
+   "verbosity": {
+    "default": "full",
+    "description": "'summary' returns only the scalar verdict fields (drops arrays and payloads) \u2014 the token-frugal form.",
+    "enum": [
+     "full",
+     "summary"
+    ],
+    "type": "string"
+   },
+   "zipBase64": {
+    "description": "The archive bytes as base64 (exactly once; a data: URI prefix is tolerated). Exclusive with zipPath. Decoded size \u2264 128 MiB.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "zipPath": {
+    "description": "Relative path of an archive inside the ZIPNATIVE_MCP_OUTPUT_DIR sandbox (no absolute paths, no '..'; container extensions only: .zip .jar .docx .epub \u2026). Exclusive with zipBase64. Lets a create/modify \u2192 verify/extract chain avoid re-sending the bytes.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "extract_zip",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Extraction result (inline files, a dry-run plan, or written files). Every property is optional because the result can be projected: verbosity:'summary' returns only the scalar summary fields, fields:[...] keeps a dot-path subset. Defaults return the full shape.",
+  "properties": {
+   "diagnosticCount": {
+    "description": "summary only: number of distinct diagnostics.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "diagnosticCounts": {
+    "additionalProperties": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "description": "Number of diagnostics received per code (counts every occurrence, including de-duplicated ones).",
+    "type": "object"
+   },
+   "diagnostics": {
+    "description": "Non-fatal conformance concerns the engine raised while parsing or writing (de-duplicated by code + entry, at most 200). Empty for a clean archive. Codes: ZIP_PREPENDED_DATA, ZIP_MULTIPLE_EOCD, ZIP_NAME_MISMATCH, ZIP_UNICODE_PATH_CONFLICT, ZIP_INVALID_UTF8_NAME, ZIP_DUPLICATE_NAME, ZIP_EXTRA_FIELD_MALFORMED, ZIP_ZIP64_EXTRA_IGNORED, ZIP_TIMESTAMP_NOT_PINNED, ZIP_NONDETERMINISTIC_CODEC, ZIP_DEAD_BYTES_RATIO.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "entryName": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning",
+        "info"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "diagnosticsTruncated": {
+    "description": "Present (true) when more than 200 distinct diagnostics were dropped from `diagnostics`.",
+    "type": "boolean"
+   },
+   "directoriesCreated": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "dryRun": {
+    "description": "true when includeData was false: nothing was decompressed.",
+    "type": "boolean"
+   },
+   "entries": {
+    "description": "One row per extracted file, in central-directory order. base64 mode carries dataBase64 (unless dryRun); file mode carries filePath.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "crc32": {
+       "type": "string"
+      },
+      "dataBase64": {
+       "type": "string"
+      },
+      "entryName": {
+       "type": "string"
+      },
+      "filePath": {
+       "type": "string"
+      },
+      "index": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "method": {
+       "type": "string"
+      },
+      "path": {
+       "description": "Sanitized '/'-relative path.",
+       "type": "string"
+      },
+      "sizeBytes": {
+       "minimum": 0,
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "fileCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputDir": {
+    "description": "Absolute sandbox directory (file mode).",
+    "type": "string"
+   },
+   "paths": {
+    "description": "summary only: the extracted paths.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "skipped": {
+    "description": "Entries skipped because their name is unsafe (only with rejectTraversal:false).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "entryName": {
+       "type": "string"
+      },
+      "reason": {
+       "enum": [
+        "unsafe-path"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "skippedCount": {
+    "description": "summary only: number of skipped (unsafe-path) entries.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "totalBytes": {
+    "description": "Sum of the extracted (or planned) uncompressed sizes.",
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Extract (secure by default)"
+}

@@ -1,0 +1,266 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Get the weather forecast for a US location. Returns either named 12-hour periods (default) or hourly breakdowns.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cursor": {
+    "description": "Opaque continuation token from a previous response's nextCursor, to retrieve the next 48 periods. Omit for the first page. Every call re-fetches the forecast, so consecutive periods are contiguous within one response; NWS reissues forecasts through the day, so a later call can window a regenerated period array.",
+    "type": "string"
+   },
+   "hourly": {
+    "default": false,
+    "description": "If true, returns hourly forecast (48 one-hour periods per page, ~156 available) instead of 12-hour named periods (14 periods). Hourly includes dewpoint and relative humidity.",
+    "type": "boolean"
+   },
+   "latitude": {
+    "description": "Latitude in decimal degrees (e.g., 47.6062).",
+    "maximum": 90,
+    "minimum": -90,
+    "type": "number"
+   },
+   "longitude": {
+    "description": "Longitude in decimal degrees (e.g., -122.3321).",
+    "maximum": 180,
+    "minimum": -180,
+    "type": "number"
+   }
+  },
+  "required": [
+   "latitude",
+   "longitude"
+  ],
+  "type": "object"
+ },
+ "name": "nws_get_forecast",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "location",
+     "generatedAt",
+     "periods",
+     "totalCount",
+     "shown",
+     "mode"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `out_of_scope`: Coordinates fall outside US National Weather Service coverage. `marine_forecast_unsupported`: Coordinates fall in a marine area, where NWS publishes no point forecast. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "out_of_scope",
+         "marine_forecast_unsupported"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "generatedAt": {
+    "description": "When the forecast was generated (ISO 8601)",
+    "type": "string"
+   },
+   "location": {
+    "additionalProperties": false,
+    "description": "Resolved location metadata",
+    "properties": {
+     "city": {
+      "description": "City name",
+      "type": "string"
+     },
+     "county": {
+      "description": "County zone code for chaining to nws_search_alerts",
+      "type": "string"
+     },
+     "forecastZone": {
+      "description": "Forecast zone code for chaining to nws_search_alerts",
+      "type": "string"
+     },
+     "office": {
+      "description": "NWS Weather Forecast Office code",
+      "type": "string"
+     },
+     "state": {
+      "description": "State name",
+      "type": "string"
+     },
+     "timeZone": {
+      "description": "IANA time zone",
+      "type": "string"
+     }
+    },
+    "required": [
+     "city",
+     "state",
+     "office",
+     "timeZone",
+     "forecastZone",
+     "county"
+    ],
+    "type": "object"
+   },
+   "mode": {
+    "description": "Forecast mode: \"hourly\" or \"7-day\"",
+    "type": "string"
+   },
+   "nextCursor": {
+    "description": "Opaque token for the next page of periods \u2014 pass it back as `cursor`. Omitted when this is the last page.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Set when periods remain beyond this page, or when the supplied cursor points past the end of the period array.",
+    "type": "string"
+   },
+   "periods": {
+    "description": "Forecast periods",
+    "items": {
+     "additionalProperties": false,
+     "description": "Single forecast period with time range, conditions, and narrative",
+     "properties": {
+      "detailedForecast": {
+       "description": "Full narrative forecast",
+       "type": "string"
+      },
+      "dewpointC": {
+       "description": "Dewpoint in Celsius (hourly only)",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "endTime": {
+       "description": "Period end (ISO 8601)",
+       "type": "string"
+      },
+      "name": {
+       "description": "Period name (e.g., \"Today\", \"Tonight\") or hour label",
+       "type": "string"
+      },
+      "precipChancePct": {
+       "description": "Probability of precipitation in percent (0-100)",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "relativeHumidityPct": {
+       "description": "Relative humidity in percent (0-100, hourly only)",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "shortForecast": {
+       "description": "Brief forecast (e.g., \"Mostly Sunny\")",
+       "type": "string"
+      },
+      "startTime": {
+       "description": "Period start (ISO 8601)",
+       "type": "string"
+      },
+      "temperature": {
+       "description": "Temperature value",
+       "type": "number"
+      },
+      "temperatureUnit": {
+       "description": "Temperature unit (F or C)",
+       "type": "string"
+      },
+      "windDirection": {
+       "description": "Wind direction (e.g., \"NW\")",
+       "type": "string"
+      },
+      "windSpeed": {
+       "description": "Wind speed (e.g., \"10 mph\")",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "startTime",
+      "endTime",
+      "temperature",
+      "temperatureUnit",
+      "windSpeed",
+      "windDirection",
+      "shortForecast",
+      "detailedForecast",
+      "precipChancePct",
+      "dewpointC",
+      "relativeHumidityPct"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Number of forecast periods in this page (at most 48).",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Total forecast periods available upstream before the page window was applied \u2014 NOT the number in this page, which is shown. Compare it against shown to tell whether periods were withheld.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Nws Get Forecast"
+}

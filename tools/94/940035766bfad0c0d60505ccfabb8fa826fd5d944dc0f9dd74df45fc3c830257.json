@@ -1,0 +1,20 @@
+{
+ "description": "Turn one Forge signal into a concrete order plan for YOUR OWN mirrored account (docs/pm/SIGNAL_MIRRORING.md \u00a72.2). Requires signal_id and an active mirror on that vault (consent first via POST /forge/vaults/{id}/mirrors \u2014 no MCP tool for that step yet); pass account_address only if you have more than one active mirror on that vault. Planning a LIVE signal costs the same 10\ud83c\udf52/$0.10 as reading it (free tier -> Cherry -> x402) \u2014 free if you already paid to read this exact signal; a plan against a signal older than 24h is always free. The response's `charged` field says whether THIS call was the one that paid, and `historical` says whether the signal itself is no longer live (a plan against history is still fully computed, but is not a current instruction). Sizes the order to your account's own NAV at the current mark, checks it against your own caps and the vault's mandate, and refuses it with a reason if it would breach either \u2014 including when the vault's own book is currently mirroring_paused (a charge, if any, still happens even when the plan comes back refused this way \u2014 see `charged`; a refusal because a later signal has superseded this one is the one exception and is never charged). This call NEVER places an order; execute the returned plan yourself with your own trade-only agent key, then report the fill with POST /forge/signals/{signal_id}/fills (account_address, filled_at, price, qty, side, and venue_order_id if you have one) \u2014 a plain write, no charge, no flag, works for any follower mirroring in their OWN account, and shows up in GET /forge/vaults/{id}/mirrors/me with source:'self_report'. The Torii-linked path (POST /torii/order with sign_mode:'client', then POST /torii/order/record with confirm_id/outcome/this signal's id) is an optional alternative that works ONLY for NightWatch's own single configured operator account (needs NW_TORII_LIVE_ENABLED and that account's own allowlisted key) \u2014 an outside follower's own account cannot authenticate to it at all; use the fills endpoint above instead. R78 liquidity safety: for an HL perp market, the plan also refuses new exposure below NW Grade C, caps a single order by both 24h volume and order-book depth (scaling it down, never up), and gates a stock-underlying perp (trade.xyz) to its cash market's hours when its grade is C or provisional. A trim or delisting-close exit signal is evaluated as a REDUCTION \u2014 exempt from the grade floor and the session gate \u2014 only when your own live position on that market opposes the order and can be read; otherwise ordinary new-exposure rules apply and the exit can be refused too. The response's `grade`, `provisional`, `capped_notional_usd`, `impact_bps`, `session` (with `next_open` when closed), and `disposition`/`retry_at` say which and why. A session-deferred plan (disposition:'deferred') is NOT retried for you \u2014 that automatic retry is the maker's own passive engine acting on the maker's own legs; call this tool again yourself at `session.next_open`.",
+ "inputSchema": {
+  "properties": {
+   "account_address": {
+    "description": "0x... \u2014 only needed to disambiguate when you have more than one active mirror on this signal's vault",
+    "type": "string"
+   },
+   "signal_id": {
+    "description": "Forge signal id (from forge_signals)",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "signal_id"
+  ],
+  "type": "object"
+ },
+ "name": "forge_signal_plan"
+}

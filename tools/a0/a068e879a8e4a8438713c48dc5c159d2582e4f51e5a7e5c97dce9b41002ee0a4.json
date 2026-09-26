@@ -1,0 +1,160 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "pdfBase64": "<base64>"
+    },
+    "title": "Extract all pages"
+   },
+   {
+    "input": {
+     "pages": [
+      0
+     ],
+     "pdfBase64": "<base64>"
+    },
+    "title": "Extract a single page (first page only)"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Plain-text extraction: decodes Tj/TJ operands through each font's /ToUnicode CMap, /Encoding /Differences or base encoding and returns pages[] + fullText (positioned runs with includeRuns:true; `pages` selects 0-based pages). `extractable` is false only when a page decoded ENTIRELY to U+FFFD (a font with no usable mapping \u2014 expected for some subset fonts, not an error; extractableReason explains). Tagged content carrying /ActualText (every pdfA document this server writes) returns that SOURCE text, in logical order; untagged right-to-left and Indic runs come back in the order their glyphs were drawn \u2014 generate with pdfA when faithful extraction of complex scripts matters. Encrypted sources: pass `password` (PASSWORD_REQUIRED / PASSWORD_INVALID otherwise). Token-frugal: verbosity:'summary', fields:[\u2026].",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "fields": {
+    "description": "Optional dot-path projection applied to the structured result (e.g. ['fullText'] or ['extractable']). Composes after verbosity. Unknown paths are omitted.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "includeRuns": {
+    "default": false,
+    "description": "When true, each page also carries `runs[]` \u2014 positioned text-showing operations `{ text, x, y, fontSize, fontName }` in device space (content-stream order). Useful for layout-aware extraction; larger responses.",
+    "type": "boolean"
+   },
+   "maxTextLength": {
+    "description": "Hard cap on total extracted characters across all pages (memory bound for adversarial input). Default 16000000. Exceeding it fails with OUTPUT_TOO_LARGE.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "pages": {
+    "description": "Optional 0-based page indices to extract. When omitted, every page is extracted.",
+    "items": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "maxItems": 1000,
+    "type": "array"
+   },
+   "password": {
+    "description": "Password (user or owner) of an encrypted source. Never logged or echoed.",
+    "maxLength": 4096,
+    "minLength": 1,
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded PDF bytes.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "verbosity": {
+    "default": "full",
+    "description": "Response verbosity. 'full' (default) returns the per-page pages[] array and fullText; 'summary' returns a token-frugal { pageCount, extractedPageCount, extractable, charCount } and drops the text payloads.",
+    "enum": [
+     "summary",
+     "full"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "pdfBase64"
+  ],
+  "type": "object"
+ },
+ "name": "extract_text",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Structured text-extraction result. Every property is optional because the result can be projected: verbosity:'summary' returns only the scalar summary fields, fields:[...] keeps a dot-path subset. Defaults return the full shape.",
+  "properties": {
+   "charCount": {
+    "description": "summary only: length of fullText.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "extractable": {
+    "description": "False when one or more requested pages produced text that is entirely U+FFFD replacement characters \u2014 a font with no usable /ToUnicode CMap or base encoding. Blank pages are still considered extractable.",
+    "type": "boolean"
+   },
+   "extractableReason": {
+    "description": "Present when extractable is false: why no text could be decoded.",
+    "type": "string"
+   },
+   "extractedPageCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "fullText": {
+    "type": "string"
+   },
+   "pageCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "pages": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "index": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "runs": {
+       "description": "Positioned text runs (present only when includeRuns is true).",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "fontName": {
+          "type": "string"
+         },
+         "fontSize": {
+          "type": "number"
+         },
+         "text": {
+          "type": "string"
+         },
+         "x": {
+          "type": "number"
+         },
+         "y": {
+          "type": "number"
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "text": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Extract plain text from PDF"
+}

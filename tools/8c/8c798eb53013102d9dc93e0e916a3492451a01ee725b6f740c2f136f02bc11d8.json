@@ -1,0 +1,299 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Find USGS water monitoring sites by bounding box, state, county, or HUC watershed code, filtered by site type and parameter availability. Returns site numbers, names, coordinates, types, altitude, and (in expanded mode) drainage area. Call this first \u2014 water_get_readings, water_get_series, and water_get_conditions all require a site number. Supply exactly one major filter \u2014 bbox, stateCd, countyCd, or huc; siteType, parameterCd, and hasDataTypeCd only narrow within it and cannot stand alone. Page through matches with limit/offset (500 per page); truncated=true means matches remain after the returned window and upstreamTotal holds the full count. When the match set exceeds 500 and DataCanvas is enabled, the complete set also stages to a canvas (canvas_id/table_name) \u2014 inspect it with water_dataframe_describe, then retrieve it with water_dataframe_query.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "bbox": {
+    "description": "Bounding box as \"west,south,east,north\" in decimal degrees (e.g. \"-77.5,38.5,-76.5,39.5\" for the DC metro area). One of the four major filters \u2014 bbox, stateCd, countyCd, and huc are mutually exclusive with each other, and exactly one must be supplied.",
+    "pattern": "^-?\\d+(\\.\\d+)?(,-?\\d+(\\.\\d+)?){3}$",
+    "type": "string"
+   },
+   "canvas_id": {
+    "description": "Canvas ID from a prior call to add this match set as a table on an existing canvas rather than creating a new one. Each distinct filter set gets its own table name, so re-running the identical query replaces its own table while a different query adds another alongside it. Applies only when the match set exceeds the inline cap and DataCanvas is enabled. Omit to start a fresh canvas.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   },
+   "countyCd": {
+    "description": "FIPS county code(s) as bare 5-digit numbers \u2014 state and county digits concatenated, no separator (e.g. \"51013\" for Arlington, VA). Comma-separate up to 20 (e.g. \"51059,51061\"). The 5 digits already encode the state, so the code stands alone. Major filter \u2014 supply exactly one of bbox, stateCd, countyCd, huc.",
+    "pattern": "^\\d{5}(,\\d{5}){0,19}$",
+    "type": "string"
+   },
+   "hasDataTypeCd": {
+    "description": "Require sites with data of this type. Common values: \"iv\" (real-time/instantaneous), \"dv\" (daily values), \"gw\" (groundwater). Comma-separate multiple types.",
+    "type": "string"
+   },
+   "huc": {
+    "description": "Hydrologic Unit Code (HUC) scoping results to a watershed. Either a 2-digit major HUC (e.g. \"02\" for the Mid-Atlantic region) or an 8-digit minor HUC (e.g. \"02070008\" for the Middle Potomac). NWIS accepts no other lengths. Major filter \u2014 supply exactly one of bbox, stateCd, countyCd, huc.",
+    "pattern": "^(\\d{2}|\\d{8})$",
+    "type": "string"
+   },
+   "limit": {
+    "default": 500,
+    "description": "Maximum sites to return inline, 1\u2013500. Default 500 (the inline cap).",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Number of matching sites to skip before returning results. Page through matches beyond the inline cap by advancing offset by limit. Default 0.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "parameterCd": {
+    "description": "5-digit parameter code to require at each returned site (e.g. \"00060\" for discharge). Use water_list_parameters to discover codes. Comma-separate multiple codes with no spaces (e.g. \"00060,00065\").",
+    "pattern": "^\\d{5}(,\\d{5})*$",
+    "type": "string"
+   },
+   "siteOutput": {
+    "default": "basic",
+    "description": "\"basic\" returns core identification fields. \"expanded\" adds drainage area, altitude, contributing area, and other metadata.",
+    "enum": [
+     "basic",
+     "expanded"
+    ],
+    "type": "string"
+   },
+   "siteType": {
+    "description": "Site type filter. Common codes: \"ST\" (stream), \"GW\" (groundwater well), \"LK\" (lake/reservoir), \"SP\" (spring), \"AT\" (atmosphere), \"OC\" (ocean), \"ES\" (estuary). Comma-separate multiple types (e.g. \"ST,GW\").",
+    "type": "string"
+   },
+   "stateCd": {
+    "description": "2-character US state abbreviation (e.g. \"VA\", \"WA\"). Returns all sites in the state for the given filters. Major filter \u2014 supply exactly one of bbox, stateCd, countyCd, huc.",
+    "pattern": "^[A-Za-z]{2}$",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "water_find_sites",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "sites",
+     "total",
+     "truncated",
+     "upstreamTotal",
+     "filters"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "canvas_id": {
+    "description": "Canvas ID for the DataCanvas holding the full, uncapped match set. Present only when the match set exceeded the 500-site cap and DataCanvas is enabled. Pass to water_dataframe_describe then water_dataframe_query to retrieve sites beyond the inline cap.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_sites_found`: No sites match the given geographic and filter criteria. `missing_major_filter`: None of bbox, stateCd, countyCd, or huc was supplied. NWIS scopes every site query by exactly one of them; siteType, parameterCd, and hasDataTypeCd only narrow within that scope. `conflicting_major_filters`: More than one of bbox, stateCd, countyCd, and huc was supplied. NWIS accepts exactly one per request. `invalid_request`: NWIS rejected the request. Filter formats are pattern-validated and the major-filter rule is enforced before the call, so this surfaces a well-formed value NWIS still refused \u2014 an unknown state, county, HUC, parameter, or site-type code. `upstream_error`: NWIS returned a 5xx error or the request timed out. `canvas_not_found`: The supplied canvas_id names a canvas that never existed or has expired. Raised before the NWIS request, so no upstream call is spent on it. `canvas_capacity_exhausted`: canvas_id was omitted and a fresh canvas was needed to stage the match set, but this tenant already holds the maximum number of active canvases. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_sites_found",
+         "missing_major_filter",
+         "conflicting_major_filters",
+         "invalid_request",
+         "upstream_error",
+         "canvas_not_found",
+         "canvas_capacity_exhausted"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "filters": {
+    "additionalProperties": false,
+    "description": "Filters applied to this query.",
+    "properties": {
+     "bbox": {
+      "description": "Bounding box filter applied, if any.",
+      "type": "string"
+     },
+     "countyCd": {
+      "description": "County FIPS filter applied, if any.",
+      "type": "string"
+     },
+     "hasDataTypeCd": {
+      "description": "Data type filter applied, if any.",
+      "type": "string"
+     },
+     "huc": {
+      "description": "HUC watershed filter applied, if any.",
+      "type": "string"
+     },
+     "parameterCd": {
+      "description": "Parameter code filter applied, if any.",
+      "type": "string"
+     },
+     "siteOutput": {
+      "description": "Site output mode used (basic or expanded).",
+      "enum": [
+       "basic",
+       "expanded"
+      ],
+      "type": "string"
+     },
+     "siteType": {
+      "description": "Site type filter applied, if any.",
+      "type": "string"
+     },
+     "stateCd": {
+      "description": "State filter applied, if any.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "siteOutput"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Advisory about the returned window: the staged canvas and how to read it, the filters to narrow by, the window actually returned, the valid offset range when the request landed past the end of the match set, or the fact that a supplied canvas_id went unused because nothing was staged.",
+    "type": "string"
+   },
+   "sites": {
+    "description": "The requested window of matching USGS monitoring sites \u2014 the slice starting at offset, at most limit long (500 max). upstreamTotal holds the full match count; canvas_id/table_name point to the staged full set when it exceeded the cap and DataCanvas is enabled.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A USGS monitoring site with location, type, and available data.",
+     "properties": {
+      "altitude": {
+       "description": "Altitude of the gage datum in feet above sea level (NAVD 88 or NGVD 29). Present in both basic and expanded modes when USGS records an altitude for the site.",
+       "type": "number"
+      },
+      "contributingArea": {
+       "description": "Contributing drainage area in square miles (may differ from drainageArea for regulated basins). Populated only when siteOutput=\"expanded\"; absent in basic mode.",
+       "type": "number"
+      },
+      "countyCd": {
+       "description": "3-digit FIPS county code within the state (zero-padded, e.g. \"013\"). Populated only when siteOutput=\"expanded\"; absent in basic mode.",
+       "type": "string"
+      },
+      "drainageArea": {
+       "description": "Total drainage area in square miles. Populated only when siteOutput=\"expanded\"; absent in basic mode.",
+       "type": "number"
+      },
+      "hucCd": {
+       "description": "Hydrologic Unit Code of the watershed containing this site; width varies (8-digit HUC8 and 12-digit HUC12, e.g. \"020700081005\", are both common \u2014 do not assume a fixed width), and absent when NWIS assigns none. Do not pass it straight back to the huc filter (which takes 2 or 8 digits); HUCs nest, so its first 8 digits are the containing HUC8 that filter accepts.",
+       "type": "string"
+      },
+      "latitude": {
+       "description": "Decimal latitude in WGS 84.",
+       "type": "number"
+      },
+      "longitude": {
+       "description": "Decimal longitude in WGS 84.",
+       "type": "number"
+      },
+      "siteName": {
+       "description": "Human-readable USGS site name (e.g. \"POTOMAC RIVER AT LITTLE FALLS, MD\").",
+       "type": "string"
+      },
+      "siteNumber": {
+       "description": "USGS site number (8\u201315 digits). Used by all other water tools.",
+       "type": "string"
+      },
+      "siteType": {
+       "description": "USGS site type code (e.g. \"ST\"=stream, \"GW\"=groundwater well, \"LK\"=lake/reservoir).",
+       "type": "string"
+      },
+      "stateCd": {
+       "description": "2-digit FIPS state code (e.g. \"51\" for Virginia). Populated only when siteOutput=\"expanded\"; absent in basic mode.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "siteNumber",
+      "siteName",
+      "siteType",
+      "latitude",
+      "longitude"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "table_name": {
+    "description": "DuckDB table name in the canvas holding all matching sites. Present when canvas_id is present. Use as the FROM target in water_dataframe_query SQL.",
+    "type": "string"
+   },
+   "total": {
+    "description": "Number of sites returned inline in this response \u2014 at most limit, and 0 when offset is at or past upstreamTotal.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "truncated": {
+    "description": "True when matches remain after the returned window (offset + total < upstreamTotal) \u2014 false on the last page, and false for a window starting past the end of the match set, where the notice names the valid offset range instead. Advance offset by limit for the next page, narrow filters (add bbox, countyCd, huc, siteType, parameterCd, or hasDataTypeCd), or when canvas_id is present read the staged set with water_dataframe_describe then water_dataframe_query.",
+    "type": "boolean"
+   },
+   "upstreamTotal": {
+    "description": "Total number of sites matching the query upstream, before limit/offset windowing. Equals total when the whole match set fits in one window.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Water Find Sites"
+}

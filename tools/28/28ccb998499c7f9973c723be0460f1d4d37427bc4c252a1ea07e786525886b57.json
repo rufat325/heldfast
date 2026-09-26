@@ -1,0 +1,290 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search preprints by keyword and/or author using EuropePMC for relevance ranking, then enrich matching DOIs with full bioRxiv/medRxiv metadata. Provide a keyword query, an author name, or both \u2014 author maps to an EuropePMC AUTH: field query and is ANDed with the keyword query. Covers both servers by default. EuropePMC indexes new preprints within 1\u20132 days of posting; for preprints posted within the last day, prefer biorxiv_list_recent. Abstracts are included by default; include_abstract: false omits them from every result for a response about a third the size, and biorxiv_get_preprint returns the abstract for up to 10 DOIs per call. A EuropePMC rate limit (HTTP 429) fails the call with a retryable rate_limited error carrying the wait in seconds \u2014 a rate-limited metadata enrichment does not, and instead marks the affected record enrichment_error: \"rate_limited\".",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "author": {
+    "description": "Author name to filter by, mapped to an EuropePMC AUTH:\"\u2026\" field query and ANDed with the keyword query. Optional when query is provided (e.g. \"Jennifer Doudna\").",
+    "type": "string"
+   },
+   "cursor_mark": {
+    "description": "Opaque page token for ranked EuropePMC results. Omit for the first page; pass the nextCursorMark returned by a prior call to fetch the next page. Pages through the same ranked list rather than raising limit. A token EuropePMC does not recognize fails with invalid_cursor_mark.",
+    "type": "string"
+   },
+   "date_from": {
+    "description": "Earliest first-publication date filter (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "date_to": {
+    "description": "Latest first-publication date filter (YYYY-MM-DD).",
+    "type": "string"
+   },
+   "include_abstract": {
+    "default": true,
+    "description": "Include each result's abstract. Defaults to true. false omits the abstract from every result, enriched and EuropePMC-fallback alike, and keeps every other field.",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 25,
+    "description": "Maximum results to return (1\u2013100). Defaults to 25.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Keyword search query. Optional when author is provided \u2014 supply at least one of query or author.",
+    "type": "string"
+   },
+   "server": {
+    "default": "both",
+    "description": "Server scope for enrichment. \"both\" checks all matching DOIs on both servers.",
+    "enum": [
+     "biorxiv",
+     "medrxiv",
+     "both"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "biorxiv_search_preprints",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "preprints",
+     "partial_results",
+     "totalCount",
+     "queryEcho"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_date_range`: date_from or date_to is malformed, or date_from is after date_to. `search_unavailable`: EuropePMC search endpoint is unreachable, returns a server error, or answers a first-page search without a result list on every retry. `invalid_cursor_mark`: EuropePMC answers a cursor_mark page request without a result list on every retry \u2014 the token is malformed or not one EuropePMC issued. `rate_limited`: The EuropePMC search endpoint rejected the keyword search with HTTP 429. Distinct from a rate-limited enrichment call, which degrades to EuropePMC-only metadata instead of failing. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_date_range",
+         "search_unavailable",
+         "invalid_cursor_mark",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextCursorMark": {
+    "description": "Opaque token for the next page of ranked results. Present only when more results exist beyond this page; pass it back as cursor_mark. Absent on the last page.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Present when zero results are returned: on a cursor_mark page past the last match, says the list is exhausted; otherwise echoes the query and suggests how to broaden it. Also present when abstracts for results shown with EuropePMC metadata only could not be retrieved, which leaves those results without one.",
+    "type": "string"
+   },
+   "partial_results": {
+    "description": "True when one or more DOIs failed bioRxiv enrichment and fell back to EuropePMC metadata.",
+    "type": "boolean"
+   },
+   "preprints": {
+    "description": "Search results, ranked by EuropePMC relevance.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single search result.",
+     "properties": {
+      "abstract": {
+       "description": "Abstract text. Omitted when include_abstract is false. On a EuropePMC-fallback record, absent when EuropePMC holds none or the abstract lookup failed \u2014 the notice says when it failed.",
+       "type": "string"
+      },
+      "authorCorresponding": {
+       "description": "Corresponding author.",
+       "type": "string"
+      },
+      "authorCorrespondingInstitution": {
+       "description": "Corresponding author institution.",
+       "type": "string"
+      },
+      "authors": {
+       "description": "Author list.",
+       "type": "string"
+      },
+      "awards": {
+       "description": "Grant award numbers from the funding statement, verbatim and deduplicated \u2014 one value can hold several grants run together without a separator. Absent when none, and on EuropePMC-only fallback records. Funder names are not included: api.biorxiv.org attributes them to unrelated organizations.",
+       "items": {
+        "description": "One award value as upstream records it.",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "category": {
+       "description": "Subject category.",
+       "type": "string"
+      },
+      "date": {
+       "description": "Posting or revision date.",
+       "type": "string"
+      },
+      "doi": {
+       "description": "Preprint DOI.",
+       "type": "string"
+      },
+      "enriched": {
+       "description": "True when full bioRxiv metadata was available; false for EuropePMC-only fallback.",
+       "type": "boolean"
+      },
+      "enrichment_error": {
+       "description": "Reason enrichment was unavailable: \"service_error\" (transient \u2014 retry may help), \"rate_limited\" (api.biorxiv.org returned HTTP 429 \u2014 wait before retrying, and expect the other preprint metadata tools to be limited too), or \"not_found\" (DOI not indexed on target server \u2014 EuropePMC fallback is authoritative). Only present when enriched is false.",
+       "enum": [
+        "service_error",
+        "not_found",
+        "rate_limited"
+       ],
+       "type": "string"
+      },
+      "jatsxmlUrl": {
+       "description": "URL to the JATS XML full-text.",
+       "type": "string"
+      },
+      "license": {
+       "description": "License identifier.",
+       "type": "string"
+      },
+      "publishedJournalDoi": {
+       "description": "Published journal DOI when accepted.",
+       "type": "string"
+      },
+      "revisionCount": {
+       "description": "Total revision count when enriched from bioRxiv.",
+       "type": "number"
+      },
+      "server": {
+       "description": "Source server (biorxiv or medrxiv).",
+       "type": "string"
+      },
+      "title": {
+       "description": "Preprint title.",
+       "type": "string"
+      },
+      "type": {
+       "description": "Preprint type.",
+       "type": "string"
+      },
+      "version": {
+       "description": "Latest revision version.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "doi",
+      "enriched"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "queryEcho": {
+    "additionalProperties": false,
+    "description": "Echo of the parameters used to produce this result set \u2014 lets callers verify what was sent.",
+    "properties": {
+     "author": {
+      "description": "The author filter applied as an AUTH: clause, if any.",
+      "type": "string"
+     },
+     "cursor_mark": {
+      "description": "cursor_mark page token applied, if any.",
+      "type": "string"
+     },
+     "date_from": {
+      "description": "date_from filter applied, if any.",
+      "type": "string"
+     },
+     "date_to": {
+      "description": "date_to filter applied, if any.",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Maximum results requested.",
+      "type": "number"
+     },
+     "query": {
+      "description": "The keyword query sent to EuropePMC, if any.",
+      "type": "string"
+     },
+     "server": {
+      "description": "Server scope used for enrichment.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "server",
+     "limit"
+    ],
+    "type": "object"
+   },
+   "totalCount": {
+    "description": "Total preprints matching the query in EuropePMC (hitCount) \u2014 the true upstream grand total, not the number of results returned.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search Preprints by Keyword"
+}

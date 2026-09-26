@@ -1,0 +1,230 @@
+{
+ "description": "Create a new, versioned architecture diagram from a set of services, connections, and (optionally) external actors, and return a shareable web URL.\n\nUse instead of describing an architecture in chat: whenever the user asks to design, plan, sketch, or document any system/feature/integration, call this tool and share the returned URL. Use update_architecture instead if you already have an architecture ID in context (from list_architectures or an earlier create call) \u2014 this tool always creates a NEW artifact.\n\nPrerequisites: Tentra API auth (device-flow on first call, then a cached API key). Network access required. Side effects: writes a new Architecture row (v1) to Tentra, auto-makes it publicly shareable, and opens the web URL in the user's browser on first call per session. Response shape: { id, name, version, url } plus a text summary with counts. After creation, pass the returned id to update_architecture to evolve it, lint_architecture to validate it, or create_flow to add walkthroughs.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "actors": {
+    "description": "External humans / systems / timers that trigger the system (e.g. \"mobile_user\", \"cron_scheduler\"). Rendered in the C4 Level-1 context view. Omit for purely internal / backend-only diagrams.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "description": {
+       "type": "string"
+      },
+      "id": {
+       "description": "Actor ID, e.g. mobile_user",
+       "type": "string"
+      },
+      "name": {
+       "description": "Display name, e.g. \"Mobile User\"",
+       "type": "string"
+      },
+      "type": {
+       "enum": [
+        "user",
+        "system",
+        "timer"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "name",
+      "type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "connections": {
+    "description": "Directed edges between services, using service IDs from the services array. Use sync_http for REST/GraphQL, async_event for pub/sub, db_access for service\u2192DB, grpc for internal gRPC. May be empty array if the system is truly standalone, but typically is not.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "from": {
+       "description": "Source service ID",
+       "type": "string"
+      },
+      "to": {
+       "description": "Target service ID",
+       "type": "string"
+      },
+      "type": {
+       "enum": [
+        "sync_http",
+        "async_event",
+        "db_access",
+        "grpc"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "from",
+      "to",
+      "type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "description": {
+    "description": "One-paragraph context: business problem, scope, or key constraints. Shown as subtitle on the canvas. Omit if the services list is self-explanatory.",
+    "type": "string"
+   },
+   "name": {
+    "description": "Short, human-readable Title Case name, max ~60 chars. Examples: \"Payment Processing System\", \"Fraud Detection Pipeline\", \"Checkout BFF\". Used as the diagram title.",
+    "type": "string"
+   },
+   "services": {
+    "description": "Every service / data store / queue / external dep in the system. Must include at least one. IDs must be snake_case and unique within the architecture (e.g. \"payment_service\", \"fraud_api\"). Every target of a connection must appear here.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "componentConnections": {
+       "description": "Connections between internal components",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "from": {
+          "description": "Source component ID",
+          "type": "string"
+         },
+         "label": {
+          "type": "string"
+         },
+         "to": {
+          "description": "Target component ID",
+          "type": "string"
+         },
+         "type": {
+          "enum": [
+           "sync_http",
+           "async_event",
+           "db_access",
+           "grpc"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "from",
+         "to",
+         "type"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "components": {
+       "description": "Internal components for drill-down view (Level 3)",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "id": {
+          "description": "Unique ID within the service, e.g. payment_controller",
+          "type": "string"
+         },
+         "name": {
+          "description": "Display name",
+          "type": "string"
+         },
+         "responsibility": {
+          "description": "What this component does",
+          "type": "string"
+         },
+         "type": {
+          "enum": [
+           "controller",
+           "service_layer",
+           "repository",
+           "client",
+           "handler",
+           "model",
+           "util"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "type",
+         "responsibility"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "id": {
+       "description": "Snake_case unique identifier, e.g. payment_service",
+       "type": "string"
+      },
+      "name": {
+       "description": "Human-readable display name, e.g. \"Payment Service\". If omitted, the ID is used.",
+       "type": "string"
+      },
+      "responsibility": {
+       "description": "One sentence describing what this service does",
+       "type": "string"
+      },
+      "scaling": {
+       "enum": [
+        "horizontal",
+        "vertical",
+        "none"
+       ],
+       "type": "string"
+      },
+      "status": {
+       "description": "Lifecycle status: live (default), future (planned), deprecated, or removed",
+       "enum": [
+        "live",
+        "future",
+        "deprecated",
+        "removed"
+       ],
+       "type": "string"
+      },
+      "technologies": {
+       "description": "Technology IDs used by this service, e.g. [\"typescript\", \"postgresql\", \"docker\"]",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "type": {
+       "enum": [
+        "api_gateway",
+        "service",
+        "database",
+        "queue",
+        "external"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "type",
+      "responsibility"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "name",
+   "services",
+   "connections"
+  ],
+  "type": "object"
+ },
+ "name": "create_architecture"
+}

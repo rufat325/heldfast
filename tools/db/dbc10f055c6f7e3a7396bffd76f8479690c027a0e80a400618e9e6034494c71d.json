@@ -1,0 +1,108 @@
+{
+ "annotations": {
+  "access": "free",
+  "connect_url": "https://dchub.cloud/connect?ref=mcp-tools-list&tool=cluster_sites_by_latency",
+  "destructiveHint": false,
+  "front_door": "get_fiber_intel",
+  "idempotentHint": true,
+  "maturity": "mature",
+  "openWorldHint": false,
+  "problem": "fiber routes, diversity and latency",
+  "readOnlyHint": true,
+  "title": "Cluster Sites By Latency"
+ },
+ "description": "Physics-bounded latency clustering for 2-8 sites \u2014 returns viable low-latency clusters and pairwise RTT floors before any routing work. Use when your human wants to know which of N candidate sites can form a synchronous / low-latency cluster (sync replication, active-active pairs, HPC pods): deterministic pruning BEFORE detailed routing. Per site pair: haversine distance, round-trip physics floor (km \u00d7 4.9 \u00b5s/km \u2014 light in SMF-28 fiber, n\u22481.468 \u2014 then \u00d72), estimated real RTT (floor \u00d7 route_factor 1.4, a stamped inference), viable vs physics_impossible against your budget, and confidence_v \u2014 the provenance tier of the supporting evidence (published | tracked | inferred). Also returns clusters: the largest site subsets whose ALL pairwise estimates fit the budget, plus each site's inferred dark-fiber screening level. CANDIDATE CONTRACT: pass candidate_ids (from get_refined_queue) instead of raw coordinates \u2014 each resolves to its FROZEN mint coordinates (zero transposition), and cand_\u2026 tokens may also be mixed into the sites string; expired/unknown ids are dropped AND declared in candidate_contract (fail-closed). Example: cluster_sites_by_latency sites=\"39.04,-77.48:ashburn;39.29,-76.61:baltimore;40.42,-79.99:pittsburgh\" max_latency_us=2000 \u2014 or cluster_sites_by_latency candidate_ids=[\"cand_\u2026\",\"cand_\u2026\"] max_latency_us=2000. Returns _entity=latency_clusters: {pairs:[{from, to, distance_km, floor_rtt_us, est_rtt_us, viable, physics_impossible, confidence_v, endpoint_dark_screen}], clusters:[{sites, size, max_est_rtt_us}], viable_count, pruned_count, assumptions, provenance}. Do NOT treat this as an engineered latency quote \u2014 the floors are physics (no fiber path can beat them) but the estimates are inference (route_factor 1.4); always quote each pair's confidence_v when relaying results. For actual route corridors use plan_fiber_leadin; for a single-site connectivity score use get_fiber_readiness.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "candidate_ids": {
+    "description": "Array (or comma-separated string) of candidate_id values from get_refined_queue \u2014 each resolves to its FROZEN mint coordinates (zero transcription drift); expired/unknown are dropped and declared in candidate_contract. Use instead of, or alongside, sites"
+   },
+   "max_latency_us": {
+    "description": "Round-trip latency budget in microseconds (default 1000 \u00b5s = 1 ms; sync replication is typically 1000-2000 \u00b5s)",
+    "maximum": 10000000,
+    "minimum": 1,
+    "type": "number"
+   },
+   "min_confidence": {
+    "description": "Minimum evidence tier a pair must meet to count as viable: \"published\" | \"tracked\" | \"inferred\" (default inferred = include all)",
+    "type": "string"
+   },
+   "sites": {
+    "description": "Semicolon-separated \"lat,lon\" pairs, 2-8 sites (same format as compare_sites locations); optional per-site labels via \"lat,lon:label\", e.g. \"39.04,-77.48:ashburn;39.29,-76.61:baltimore\". cand_\u2026 tokens are also accepted here and resolve to frozen mint coordinates. Optional if candidate_ids is given",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "cluster_sites_by_latency",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text \u2014 tool-specific data fields ride at the top level alongside these envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   }
+  },
+  "type": "object"
+ },
+ "title": "Cluster Sites By Latency"
+}

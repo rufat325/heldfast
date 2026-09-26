@@ -1,0 +1,77 @@
+{
+ "description": "[Merchant] Simulate callback scenarios for testing webhook handling.\n\nGenerates the payload a merchant's `callbackUrl` actually receives, so a handler can be built and\ntested against the real shape. Four properties of that shape are easy to get wrong:\n\n**1. Absent means absent, not zero.** The payload omits properties with no value rather than sending\n`null` or `0`. `statusMessage`, `passbackParams`, `fee`, `feeFixed` and `feeRate` are all simply\nmissing when they do not apply. A missing `fee` means the fee is *unknown* for that transaction - it\ndoes not mean the transaction was free. Do not write a handler that reads `payload.fee` as a number\nwithout checking it is there.\n\n**2. `finalized` is absent on EXPIRED.** An expired transaction is closed by the platform's expiry\nsweep, which sets no finalization moment. Every other status carries one.\n\n**3. `EXPIRED` is a non-payment, not a failure.** The payer never paid within `timeToLive`. Release\nthe order or the stock, as you would for a cancellation - do not treat it as an error to retry.\n\n**4. Deduplicate on `(transactionId, callbackType)`.** payware retries a callback once a second, up\nto 15 times, until the endpoint answers 200. That pair is stable across every retry of the same\nevent, and it is the key payware guarantees. A handler that does not deduplicate will eventually\nprocess one payment twice.\n\n**Not on this payload:** `deliveryAddress` (removed 2026-08-07 - fetch it from\n`payware_operations_get_transaction_history`, which is authenticated and tenant-scoped),\n`producerPartnerId`, `transactionType` and `initiatedBy` (the last two are carried on\nTRANSACTION_PROCESSED, which merchants do not receive).",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "amount": {
+    "default": "57.60",
+    "description": "Transaction amount (e.g., '57.60')",
+    "type": "string"
+   },
+   "callbackUrl": {
+    "description": "URL where callback would be sent (for simulation only)",
+    "format": "uri",
+    "type": "string"
+   },
+   "currency": {
+    "default": "EUR",
+    "description": "Transaction currency",
+    "enum": [
+     "EUR",
+     "USD",
+     "GBP"
+    ],
+    "type": "string"
+   },
+   "fee": {
+    "description": "The payware fee on this transaction, at the currency's smallest payable unit (e.g. '0.29'). Not always two decimals - it follows the currency. Pass null to model the anomaly case, where a transaction has no recorded fee and the server OMITS the property entirely; that is deliberately distinguishable from a genuine '0.00'.",
+    "type": "string"
+   },
+   "feeFixed": {
+    "default": "0.1000",
+    "description": "Fixed fee component of the applicable fee configuration, e.g. '0.1000'. Informational, for reconciliation. Present on FINALIZED callbacks since 2026-08-21 - before that a merchant got the total fee but not the breakdown that produced it. Pass null to model a transaction with no fee configuration, where it is omitted.",
+    "type": "string"
+   },
+   "feeRate": {
+    "default": "0.0150",
+    "description": "Variable rate of the applicable fee configuration, e.g. '0.0150' = 1.5%. Informational, same as feeFixed. Pass null to model a transaction with no fee configuration.",
+    "type": "string"
+   },
+   "paymentMethod": {
+    "description": "Payment method chosen by customer. A2A = direct transfer. CARD_FUNDED = card-linked account. BNPL = buy now pay later. INSTANT_CREDIT = credit line.",
+    "enum": [
+     "A2A",
+     "CARD_FUNDED",
+     "BNPL",
+     "INSTANT_CREDIT"
+    ],
+    "type": "string"
+   },
+   "status": {
+    "default": "CONFIRMED",
+    "description": "Transaction status to simulate",
+    "enum": [
+     "CONFIRMED",
+     "DECLINED",
+     "FAILED",
+     "EXPIRED",
+     "CANCELLED"
+    ],
+    "type": "string"
+   },
+   "statusMessage": {
+    "description": "Custom status message for the transaction callback",
+    "type": "string"
+   },
+   "transactionId": {
+    "description": "Transaction ID to simulate callback for",
+    "type": "string"
+   }
+  },
+  "required": [
+   "transactionId"
+  ],
+  "type": "object"
+ },
+ "name": "payware_operations_simulate_callback"
+}

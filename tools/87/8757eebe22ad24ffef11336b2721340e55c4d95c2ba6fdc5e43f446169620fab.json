@@ -1,0 +1,294 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Find companies and retrieve entity info with optional recent filings. Entry point for most EDGAR workflows \u2014 resolves tickers, names, or CIKs to entity details, with accession numbers in the result feeding secedgar_get_filing for document content. When a date or form filter carries the scan past the recent submissions window, the full filtered filing history is also staged as df_<id> \u2014 inspect it with secedgar_dataframe_describe, then analyze it with secedgar_dataframe_query.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "filed_after": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Only include filings filed on or after this date (YYYY-MM-DD). A date filter routes the scan into the older submissions archive pages, so it reaches filings that predate the recent window \u2014 the last year or 1,000 filings, whichever holds more (e.g. a company's 2005 10-K)."
+   },
+   "filed_before": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Only include filings filed on or before this date (YYYY-MM-DD). Use alone or with filed_after; together they bound the archive-page scan."
+   },
+   "filing_limit": {
+    "default": 10,
+    "description": "Maximum number of filings to return in the inline list.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "forms": {
+    "description": "Filter filings to specific form types (e.g., [\"10-K\", \"10-Q\", \"8-K\"]), matched exactly (case-insensitive) \u2014 list an amendment such as \"10-K/A\" to include it. Without this, returns all form types.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "include_filings": {
+    "default": true,
+    "description": "Include recent filings in the response. Set to false for entity-info-only lookups.",
+    "type": "boolean"
+   },
+   "query": {
+    "description": "Company ticker symbol (e.g., \"AAPL\", \"VOO\"), name (e.g., \"Apple\"), or CIK number (e.g., \"320193\"). Ticker is the fastest lookup and works for equities, ETFs, and mutual funds; a multi-class share ticker resolves in either form (\"BRK-B\" or \"BRK.B\"). Name search matches current and former names, and the corporate suffix does not have to match the registry's form (\"Beacon Financial Corporation\" finds \"Beacon Financial Corp\") \u2014 but Corp, Inc, Co, and Ltd stay distinct from each other, since separate registrants differ only by which one they use.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_company_search",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "cik",
+     "name",
+     "tickers",
+     "exchanges",
+     "sic",
+     "sic_description"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The `filing_limit` that was applied.",
+    "type": "number"
+   },
+   "cik": {
+    "description": "Central Index Key, zero-padded to 10 digits.",
+    "type": "string"
+   },
+   "class_id": {
+    "description": "SEC fund class ID (e.g. \"C000092055\"). Present when the query resolved via a fund ticker (ETF or mutual fund).",
+    "type": "string"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe holding the full filtered filing history (recent + archive pages), registered only when the scan reached beyond the recent window and the history exceeds filing_limit. Query the complete history \u2014 filings by form by year \u2014 with secedgar_dataframe_query; the inline `filings` list stays capped at filing_limit.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     },
+     "truncated": {
+      "description": "True when the archive scan hit its page cap before exhausting the manifest \u2014 older matching filings exist beyond the dataframe.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at",
+     "truncated"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_match`: No company matches the query. `multiple_matches`: Query is ambiguous and matches several companies. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_match",
+         "multiple_matches",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "exchanges": {
+    "description": "Exchanges where listed.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "filings": {
+    "description": "Recent filings, filtered by forms if specified.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One filing record with form type, dates, and primary document.",
+     "properties": {
+      "accession_number": {
+       "description": "Filing accession number, dash format (e.g., 0000320193-23-000106). Pass to secedgar_get_filing.",
+       "type": "string"
+      },
+      "description": {
+       "description": "SEC-provided filing description. Absent when SEC published none.",
+       "type": "string"
+      },
+      "filing_date": {
+       "description": "Date the filing was submitted (YYYY-MM-DD).",
+       "type": "string"
+      },
+      "form": {
+       "description": "Form type (e.g., 10-K).",
+       "type": "string"
+      },
+      "primary_document": {
+       "description": "Primary document filename.",
+       "type": "string"
+      },
+      "report_date": {
+       "description": "Period of report (YYYY-MM-DD). Absent for filings without a reporting period (proxy statements, ownership reports).",
+       "type": "string"
+      }
+     },
+     "required": [
+      "accession_number",
+      "form",
+      "filing_date",
+      "primary_document"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "fiscal_year_end": {
+    "description": "Fiscal year end (MM-DD format, e.g., \"09-26\"). Absent for filers SEC records no fiscal year end for (e.g. private or pre-IPO entities).",
+    "type": "string"
+   },
+   "history_scanned_through": {
+    "description": "Oldest filing date reached by the scan (YYYY-MM-DD). Filings older than this were not examined: the recent window holds the last year or 1,000 filings, whichever is more, and older filings live in archive pages fetched only when a date filter or an under-filled form filter requires them. Absent when no filings were scanned.",
+    "type": "string"
+   },
+   "name": {
+    "description": "SEC-conformed company name.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when include_filings=true but no filings matched the forms filter, or when filing_limit withheld some.",
+    "type": "string"
+   },
+   "series_id": {
+    "description": "SEC fund series ID (e.g. \"S000002839\"). Present when the query resolved via a fund ticker (ETF or mutual fund).",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of filings returned inline.",
+    "type": "number"
+   },
+   "sic": {
+    "description": "SIC industry code.",
+    "type": "string"
+   },
+   "sic_description": {
+    "description": "Human-readable SIC description.",
+    "type": "string"
+   },
+   "state_of_incorporation": {
+    "description": "State of incorporation (US two-letter code, e.g. \"DE\"). Omitted for some entities, including many foreign filers and individuals.",
+    "type": "string"
+   },
+   "tickers": {
+    "description": "Associated ticker symbols.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "total_filings": {
+    "description": "Total filings matching the filter across everything scanned (recent window + any archive pages), which may exceed filing_limit and the inline list.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when more filings matched than `filing_limit` allowed into the inline list.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Secedgar Company Search"
+}

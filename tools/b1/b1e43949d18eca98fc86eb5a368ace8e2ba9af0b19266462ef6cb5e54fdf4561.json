@@ -1,0 +1,54 @@
+{
+ "_meta": {
+  "anthropic/searchHint": "grant deny reset revoke app permissions privacy camera microphone location settings"
+ },
+ "description": "Grant, deny, or reset a runtime permission for an app without navigating the system Settings UI. Use during test setup to pre-authorize (or explicitly deny) a service before the app asks, or `reset` so the permission dialog appears again on next use. Always per-app: bundleId is required.\nPermissions: camera, microphone, photos, contacts, notifications, calendar, location, location-always, media-library, motion, reminders.\niOS simulator: edits the simulator's TCC store, always per-app. `notifications` is not supported (no iOS equivalent). `reset` is per-app \u2014 a device-wide reset is a no-op for existing grants on recent iOS, so it is not offered. `grant location`/`location-always` needs the app already installed (location auth isn't stored in TCC and isn't applied to a bundle id until the app exists) \u2014 enforced on local simulators; a remote simulator can't be probed for install state, so ensure the app is installed there first. Other services can be granted before install.\nAndroid: changes the mapped `android.permission.*` runtime permissions (reset also best-effort clears the user-set permission flags). The app must be installed and declare them in its manifest; `reminders` has no Android equivalent.\nSome permission changes terminate the app if it is running (system behavior on both platforms) \u2014 set permissions before launching, or relaunch after.\nReturns { action, permission, bundleId, applied, skipped? }: `applied` lists the platform-level services/permissions actually changed; `skipped` (Android) lists mapped permissions the package manager rejected, e.g. ones the manifest doesn't declare. Fails if nothing could be applied.",
+ "inputSchema": {
+  "properties": {
+   "action": {
+    "description": "`grant` pre-authorizes the permission, `deny` refuses it, `reset` returns it to the not-yet-asked state so the app prompts on next use.",
+    "enum": [
+     "grant",
+     "deny",
+     "reset"
+    ],
+    "type": "string"
+   },
+   "bundleId": {
+    "description": "App to change the permission for \u2014 required for every action. iOS: bundle id (e.g. com.example.app). Android: package name. `reset` is per-app too: simctl's device-wide reset (no bundleId) silently leaves existing per-app grants untouched on recent iOS, so the permission is always reset for this one app.",
+    "pattern": "^[A-Za-z0-9_][A-Za-z0-9._-]*$",
+    "type": "string"
+   },
+   "permission": {
+    "description": "The permission to change. `notifications` is Android-only (iOS has no simctl service for it); `reminders` is iOS-only; `camera` works on Android and on iOS only when the target simulator's runtime models the service (varies by simruntime, not by the installed Xcode).",
+    "enum": [
+     "camera",
+     "microphone",
+     "photos",
+     "contacts",
+     "notifications",
+     "calendar",
+     "location",
+     "location-always",
+     "media-library",
+     "motion",
+     "reminders"
+    ],
+    "type": "string"
+   },
+   "udid": {
+    "description": "Target device id from `list-devices` (iOS simulator UDID or Android serial).",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "udid",
+   "action",
+   "permission",
+   "bundleId"
+  ],
+  "type": "object"
+ },
+ "name": "settings-permissions"
+}

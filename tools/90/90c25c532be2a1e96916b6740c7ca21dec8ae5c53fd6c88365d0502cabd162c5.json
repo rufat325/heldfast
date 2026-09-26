@@ -1,0 +1,138 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Save an immutable reviewed deployment configuration from a retained-upload plan option. Uses real deployment validation without creating an app, queue job or DNS record. Freezes source/build/server/runtime settings and encrypts environment values; summaries return variable names only. At most 20 pending records, expiring no later than the source plan (24 hours maximum). Review the returned configuration and configuration_digest, then call impreza_apply_project_deployment. Does not reserve domains, ports or capacity. Requires deploy scope and account credentials without resource restrictions.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "agent_id": {
+    "description": "Target VPS agent_id (from impreza_list_servers).",
+    "type": "string"
+   },
+   "build_secrets": {
+    "additionalProperties": {
+     "maxLength": 65536,
+     "type": "string"
+    },
+    "maxProperties": 16,
+    "type": "object"
+   },
+   "cpus": {
+    "description": "CPU limit (cores; 1.0 = one core). Default 1.0.",
+    "exclusiveMinimum": 0,
+    "maximum": 64,
+    "type": "number"
+   },
+   "domain": {
+    "description": "Hostname to use, or omit to propose a managed subdomain. No DNS record is created until apply. Omit with onion=true for onion-only.",
+    "type": "string"
+   },
+   "healthcheck_path": {
+    "description": "node_npm, python_pip or php_composer only. Optional HTTP path such as /health (200 ASCII characters max). Checks 127.0.0.1 on target_port and requires 2xx without redirects. Omit for /: Python/PHP require 2xx; legacy Node accepts status below 500. Saved at creation; previews and redeploys retain it. A failed replacement recovers a verified healthy previous release; first installs keep the agent startup warning policy.",
+    "maxLength": 200,
+    "minLength": 1,
+    "pattern": "^/(?:[A-Za-z0-9_-][A-Za-z0-9._~-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._~-]*)*/?)?$",
+    "type": "string"
+   },
+   "memory_mb": {
+    "description": "Memory limit in MB. Default 512.",
+    "maximum": 524288,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "name": {
+    "description": "Per-account-unique deploy name (3-100 chars, [a-z0-9_-]).",
+    "type": "string"
+   },
+   "onion": {
+    "description": "Also publish a Tor v3 hidden service. Default false.",
+    "type": "boolean"
+   },
+   "onion_import": {
+    "additionalProperties": false,
+    "description": "BYO hidden-service key pair: BOTH C Tor key files from the hidden service's data directory, base64 each. Requires onion: true; keeps your existing .onion address. Deploy-time only.",
+    "properties": {
+     "public_key_b64": {
+      "description": "Base64 of the hs_ed25519_public_key file (64 bytes).",
+      "type": "string"
+     },
+     "secret_key_b64": {
+      "description": "Base64 of the hs_ed25519_secret_key file (96 bytes).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "secret_key_b64",
+     "public_key_b64"
+    ],
+    "type": "object"
+   },
+   "onion_profile": {
+    "description": "Hardening tier of the hidden service (requires onion: true): standard = intro-point rate limiting; hardened = tighter limits + max streams; max = + experimental proof-of-work. Default standard.",
+    "enum": [
+     "standard",
+     "hardened",
+     "max"
+    ],
+    "type": "string"
+   },
+   "option_index": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "plan_id": {
+    "description": "Saved plan ID belonging to this account.",
+    "pattern": "^plan_[a-f0-9]{24}$",
+    "type": "string"
+   },
+   "require_healthy_start": {
+    "description": "node_npm, python_pip or php_composer only. Require an explicit healthcheck_path to become healthy before deployment succeeds, including the first install. Requires agent 0.6.3+. Failed first installs remove containers and preserve volumes; eligible previous releases recover. Omit or false keeps legacy behavior. Saved at creation and inherited by previews/redeploys.",
+    "type": "boolean"
+   },
+   "startup_timeout_seconds": {
+    "description": "Required healthy start only: startup observation budget in seconds, default 60. Separate from source/build and recovery time.",
+    "maximum": 600,
+    "minimum": 30,
+    "type": "integer"
+   },
+   "target_port": {
+    "description": "HTTP port. Omit to use the selected saved option; review the returned effective target_port.",
+    "maximum": 65535,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "tor_egress": {
+    "description": "Opt in to isolated runtime egress through Tor (SOCKS5-aware applications only). Requires an agent advertising tor-egress-v1. Custom image/source modes only; build and source retrieval are not anonymized. No direct fallback.",
+    "type": "boolean"
+   },
+   "vars": {
+    "additionalProperties": {
+     "maxLength": 32768,
+     "type": "string"
+    },
+    "description": "Runtime environment values, encrypted in the prepared record. Do not use reserved system/routing names. Summaries show names only.",
+    "maxProperties": 100,
+    "type": "object"
+   },
+   "volumes": {
+    "description": "Absolute container paths to persist as named Docker volumes (data survives redeploys), e.g. [\"/var/lib/app/data\",\"/app/uploads\"].",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "plan_id",
+   "option_index",
+   "name",
+   "agent_id"
+  ],
+  "type": "object"
+ },
+ "name": "impreza_prepare_project_deployment"
+}

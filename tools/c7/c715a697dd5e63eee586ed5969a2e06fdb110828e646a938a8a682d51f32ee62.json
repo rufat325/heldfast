@@ -1,0 +1,360 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Query analytics data"
+ },
+ "description": "Query event marketing analytics. Supports dimensions, metrics, time ranges, and filters across campaigns, purchases, fans (user_tenants), and more. MANDATORY RULES: (1) ALWAYS call nevent_analytics_table_schema BEFORE querying to discover exact field names. NEVER guess field names. (2) For BOOLEAN fields, use operator \"eq\" (or \"neq\") with the boolean value true or false; \"is_true\"/\"is_false\" are segmentation operators and analytics rejects them. (3) For enum fields (state, status), check the field description for valid values. Common values: purchases.state = SUCCEEDED|COMPLETE|PENDING|FAILED; campaigns.status = EXECUTED|DRAFT|PAUSED|STOPPED.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "collection": {
+    "description": "Collection name, e.g. \"purchases\", \"tickets\", \"campaigns\"",
+    "type": "string"
+   },
+   "compareDimensions": {
+    "additionalProperties": false,
+    "description": "Comparative dimension analysis configuration",
+    "properties": {
+     "active": {
+      "description": "Enable comparative analysis",
+      "type": "boolean"
+     },
+     "dimensions": {
+      "description": "Dimension values to compare against each other",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "field": {
+         "description": "Dimension field name",
+         "type": "string"
+        },
+        "name": {
+         "description": "Display name for the comparison group",
+         "type": "string"
+        },
+        "value": {
+         "description": "Dimension field value to compare",
+         "type": "string"
+        }
+       },
+       "required": [
+        "field",
+        "value",
+        "name"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "active",
+     "dimensions"
+    ],
+    "type": "object"
+   },
+   "comparePeriods": {
+    "additionalProperties": false,
+    "description": "Period-over-period comparison (YoY, MoM, etc.) \u2014 v3.19.0+",
+    "properties": {
+     "active": {
+      "description": "Enable period-over-period comparison",
+      "type": "boolean"
+     },
+     "current": {
+      "additionalProperties": false,
+      "description": "The reference (current) time period",
+      "properties": {
+       "end": {
+        "description": "ISO 8601 end date, e.g. \"2024-12-31\"",
+        "type": "string"
+       },
+       "start": {
+        "description": "ISO 8601 start date, e.g. \"2024-01-01\"",
+        "type": "string"
+       }
+      },
+      "required": [
+       "start",
+       "end"
+      ],
+      "type": "object"
+     },
+     "previous": {
+      "additionalProperties": false,
+      "description": "The baseline (previous) time period to compare against",
+      "properties": {
+       "end": {
+        "$ref": "#/properties/comparePeriods/properties/current/properties/end"
+       },
+       "start": {
+        "$ref": "#/properties/comparePeriods/properties/current/properties/start"
+       }
+      },
+      "required": [
+       "start",
+       "end"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "active",
+     "current",
+     "previous"
+    ],
+    "type": "object"
+   },
+   "ctes": {
+    "description": "CTE (Common Table Expression) sub-queries \u2014 v3.19.0+",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "collection": {
+       "description": "Source collection for this CTE",
+       "type": "string"
+      },
+      "dimensions": {
+       "description": "Dimensions to select in the CTE",
+       "items": {
+        "$ref": "#/properties/dimensions/items"
+       },
+       "type": "array"
+      },
+      "filters": {
+       "description": "Filters to apply in the CTE",
+       "items": {
+        "$ref": "#/properties/filters/items"
+       },
+       "type": "array"
+      },
+      "limit": {
+       "description": "Row limit for the CTE",
+       "maximum": 10000,
+       "type": "number"
+      },
+      "metrics": {
+       "description": "Metrics to compute in the CTE",
+       "items": {
+        "$ref": "#/properties/metrics/items"
+       },
+       "type": "array"
+      },
+      "name": {
+       "description": "Name used to reference this CTE via the sourceTable field",
+       "type": "string"
+      },
+      "sort": {
+       "$ref": "#/properties/sort",
+       "description": "Sort order for the CTE"
+      },
+      "timeRange": {
+       "$ref": "#/properties/timeRange",
+       "description": "Time range filter for the CTE"
+      }
+     },
+     "required": [
+      "name",
+      "collection"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "dimensions": {
+    "description": "Fields to group by (SELECT dimensions). Omit for aggregate-only queries.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "alias": {
+       "description": "Alias for the column in results",
+       "type": "string"
+      },
+      "field": {
+       "description": "Field name",
+       "type": "string"
+      }
+     },
+     "required": [
+      "field"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "distinct": {
+    "description": "Add SELECT DISTINCT to deduplicate result rows (v3.19.0+)",
+    "type": "boolean"
+   },
+   "dryRun": {
+    "description": "Dry-run mode: estimate query cost without executing (v3.19.0+). Response includes estimatedBytes in metadata.",
+    "type": "boolean"
+   },
+   "filters": {
+    "description": "WHERE clause filters to apply before aggregation",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "field": {
+       "description": "Field name to filter on",
+       "type": "string"
+      },
+      "operator": {
+       "description": "Comparison operator. Valid values depend on the field type (nevent_analytics_capabilities lists them): eq | neq | gt | gte | lt | lte | in | nin | contains | not_contains | starts_with | ends_with | regex | regex_i | before | after | between | in_range | not_in_range | is_empty | is_not_empty | exists. BOOLEAN fields: eq or neq with true/false.",
+       "type": "string"
+      },
+      "value": {
+       "description": "Filter value; use array for \"in\" / \"not_in\" / \"between\" operators"
+      }
+     },
+     "required": [
+      "field",
+      "operator"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "groupBy": {
+    "description": "Calendar-based group-by fields (v3.19.0+). Known values: dayOfWeek | weekOfYear | hourOfDay | minuteOfHour | month | quarter | year",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "having": {
+    "description": "HAVING clause filters to apply after aggregation",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "field": {
+       "description": "Aggregated field name",
+       "type": "string"
+      },
+      "operator": {
+       "description": "Comparison operator (e.g. \"gt\", \"gte\")",
+       "type": "string"
+      },
+      "value": {
+       "description": "HAVING threshold value"
+      }
+     },
+     "required": [
+      "field",
+      "operator"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "limit": {
+    "default": 100,
+    "description": "Maximum rows to return (max 1000, default 100)",
+    "maximum": 1000,
+    "type": "number"
+   },
+   "metrics": {
+    "description": "Aggregated metrics to compute (SUM, COUNT, etc.)",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "alias": {
+       "description": "Alias for the aggregated column in results",
+       "type": "string"
+      },
+      "field": {
+       "description": "Field name to aggregate",
+       "type": "string"
+      },
+      "operation": {
+       "description": "Aggregation function. Known values: sum | count | avg | min | max | count_distinct | median | percentile | stddev | variance | date_diff",
+       "type": "string"
+      }
+     },
+     "required": [
+      "field",
+      "operation"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "sort": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "field": {
+        "description": "Field to sort by",
+        "type": "string"
+       },
+       "order": {
+        "description": "Sort direction: asc | desc",
+        "enum": [
+         "asc",
+         "desc"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "field",
+       "order"
+      ],
+      "type": "object"
+     },
+     {
+      "items": {
+       "$ref": "#/properties/sort/anyOf/0"
+      },
+      "minItems": 1,
+      "type": "array"
+     }
+    ],
+    "description": "Sort the result rows. Accepts a single { field, order } object or an array for multi-field sorting."
+   },
+   "sourceTable": {
+    "description": "CTE name to use as source instead of a raw collection \u2014 v3.19.0+",
+    "type": "string"
+   },
+   "timeGranularity": {
+    "description": "Time granularity for bucketing (v3.19.0+). Known values: day | week | month | quarter | year | hour | minute | fiscalQuarter | fiscalYear",
+    "type": "string"
+   },
+   "timeRange": {
+    "additionalProperties": false,
+    "description": "Time range filter with optional granularity for trend analysis",
+    "properties": {
+     "end": {
+      "description": "End date in ISO 8601 format, e.g. \"2024-12-31\"",
+      "type": "string"
+     },
+     "granularity": {
+      "description": "Time bucket granularity (deprecated: use top-level timeGranularity)",
+      "type": "string"
+     },
+     "start": {
+      "description": "Start date in ISO 8601 format, e.g. \"2024-01-01\"",
+      "type": "string"
+     }
+    },
+    "required": [
+     "start",
+     "end"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "collection"
+  ],
+  "type": "object"
+ },
+ "name": "nevent_analytics_query"
+}

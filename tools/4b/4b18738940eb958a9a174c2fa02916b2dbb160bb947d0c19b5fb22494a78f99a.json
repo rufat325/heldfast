@@ -1,0 +1,56 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "R\u00e9cup\u00e8re le d\u00e9tail d'un Centre de Sant\u00e9 (CDS) par son num\u00e9ro FINESS. Diff\u00e9renciateur m\u00e9tier vs `etablissement_by_finess` : expose **carte_vitale**, **APCV**, et **sp\u00e9cialit\u00e9s exerc\u00e9es sur place** (Annexe A CNAM). Retourne un `LookupResult` discrimin\u00e9 par `found`.\n\n`found: true` \u2192 payload CDS complet (raison sociale, accepte_carte_vitale/apcv, specialites.codes/libelles align\u00e9s, type_etab 124/125, adresse, coords centro\u00efde commune, telephone). `found: false` \u2192 `{found: false, key, lookupStatus: 'not_found', message}` quand le num\u00e9ro FINESS pointe vers une structure non-CDS (h\u00f4pital, EHPAD, labo) ou un CDS tr\u00e8s r\u00e9cent (CNAM latence ~1 sem).\n\nSource : Annuaire sant\u00e9 Ameli, Assurance Maladie (sync hebdomadaire CNAM, mention obligatoire L.1461-2 CSP). Pour les structures non-CDS, utiliser `etablissement_by_finess`.\n\nAlias accept\u00e9s : `numFiness`/`finess`/`etab_finess` \u2192 `num_finess`.",
+ "inputSchema": {
+  "properties": {
+   "include_freshness": {
+    "default": false,
+    "description": "Si true, ajoute un champ `data_freshness` au payload (dans `query_metadata` si pr\u00e9sent, sinon \u00e0 la racine) listant, par source (FINESS, Ameli, RPPS, CDS, IRIS), la derni\u00e8re ingestion r\u00e9ussie (`last_success_at`, `staleness_days`) ET la derni\u00e8re fois que la donn\u00e9e a r\u00e9ellement chang\u00e9 (`last_data_change_at`, `data_age_days` \u2014 un run court-circuit\u00e9 \u00ab fichier amont identique \u00bb compte comme succ\u00e8s mais ne rajeunit pas la donn\u00e9e ; c'est `data_age_days` qui dit l'\u00e2ge r\u00e9el de ce qui est servi). Opt-in pour ne pas alourdir les payloads par d\u00e9faut. Cache 5min c\u00f4t\u00e9 serveur \u2014 co\u00fbt n\u00e9gligeable.",
+    "type": "boolean"
+   },
+   "num_finess": {
+    "description": "Num\u00e9ro FINESS exact 9 chiffres. Ex: '750000123'.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "num_finess"
+  ],
+  "type": "object"
+ },
+ "name": "centres_sante_by_finess",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

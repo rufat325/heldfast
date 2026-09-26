@@ -1,0 +1,60 @@
+{
+ "_meta": {
+  "anthropic/alwaysLoad": true,
+  "anthropic/searchHint": "boot start launch simulator emulator avd device session ios android vega vvd firetv cold hot"
+ },
+ "description": "Start an iOS simulator, launch an Android emulator, start a Vega (Fire TV) Virtual Device, or spawn an Electron app and wait until it is ready to accept interactions.\nPick the platform by which argument you pass: 'udid' for an iOS simulator from list-devices, 'avdName' for an Android AVD (a serial is assigned automatically), 'vvdImage' for a Vega VVD (the 'vvdImage' of a vega device from list-devices, e.g. 'tv'), or 'electronAppPath' for an Electron app (a CDP remote-debugging port is picked automatically, or pass 'electronPort' to fix one).\nUse at the start of a session once you have picked a target.\nReturns a tagged payload: { platform: 'ios', udid, booted } or { platform: 'android', serial, avdName, booted } or { platform: 'vega', serial, vvdImage, booted } or { platform: 'chromium', id, port, pid, booted } (an Electron app boots as a Chromium/CDP device).\nAndroid boots take 2\u201310 minutes depending on machine and cold/warm state; the tool transparently hot-boots from the AVD's default_boot snapshot when usable and falls back to cold boot otherwise. Vega starts the single SDK-managed VVD via the vega CLI (~10s) and returns once it reports running. If an Android/Electron boot stage fails, the tool terminates the device it spawned so the next retry starts clean.",
+ "inputSchema": {
+  "properties": {
+   "avdName": {
+    "description": "Android: AVD name to launch a new emulator from (from `list-devices` \u2192 `avds[].name`). Provide exactly one of `udid`, `avdName`, `vvdImage`, or `electronAppPath`.",
+    "type": "string"
+   },
+   "bootTimeoutMs": {
+    "description": "Android/Vega: overall budget for the boot sequence. Default 480000 (8 min) on Android, 120000 (2 min) on Vega. Clamped to [30s, 15min]. Ignored on iOS.",
+    "maximum": 900000,
+    "minimum": 30000,
+    "type": "integer"
+   },
+   "electronAppPath": {
+    "description": "Electron: path to the Electron app to launch. Either a packaged .app bundle / executable, or a project directory whose package.json points the Electron binary at the entry script. Mutually exclusive with udid/avdName.",
+    "type": "string"
+   },
+   "electronArgs": {
+    "description": "Electron-only: extra CLI arguments forwarded to the Electron binary after the app path.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "electronPort": {
+    "description": "Electron-only: CDP remote-debugging port to expose. Defaults to a free port; the resulting device id is `chromium-cdp-<port>`.",
+    "maximum": 65535,
+    "minimum": 1024,
+    "type": "integer"
+   },
+   "force": {
+    "description": "Shut down and re-boot the device even if already running.",
+    "type": "boolean"
+   },
+   "headless": {
+    "description": "iOS only: boot the simulator core WITHOUT opening its GUI window (Simulator.app, or Device Hub on Xcode 27+). The device still streams via simulator-server; used by Argent Lens. Set the `ARGENT_SIMULATOR_NO_WINDOW` env var (1/true/yes) to force this host-wide without passing the flag per call (the iOS analog of `ARGENT_EMULATOR_NO_WINDOW`). Ignored on Android/Vega/Electron, which have no equivalent GUI step.",
+    "type": "boolean"
+   },
+   "sound": {
+    "description": "Android only: boot the emulator with audio output enabled. Defaults to false \u2014 argent boots emulators MUTED so several agent-driven devices don't all play sound on the host machine; pass `true` when the task involves playing, hearing, or testing audio. Takes effect at boot: if the emulator is already running muted, add `force: true` to reboot it with sound. A boot snapshot saved in the other audio mode can't be reused, so the first boot after toggling is a slower cold boot. The `boot-sound` argent flag flips this default to true. Ignored on iOS/Vega/Electron, which argent never mutes.",
+    "type": "boolean"
+   },
+   "udid": {
+    "description": "iOS: simulator UDID to boot (from `list-devices`). Provide exactly one of `udid`, `avdName`, `vvdImage`, or `electronAppPath`.",
+    "type": "string"
+   },
+   "vvdImage": {
+    "description": "Vega (Fire TV): VVD image to boot \u2014 the `vvdImage` of a Vega device from `list-devices` (e.g. `tv`). Starts the single SDK-managed Vega Virtual Device. Provide exactly one of `udid`, `avdName`, `vvdImage`, or `electronAppPath`.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "boot-device"
+}

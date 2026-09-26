@@ -1,0 +1,191 @@
+{
+ "description": "Modify an existing note. Supports six edit modes: append (add to end; defensively inserts a leading newline if the source didn't end with one), prepend (insert after frontmatter if present, otherwise at file start), replace_window (find a block of text and replace it \u2014 optionally fuzzy; fuzzy extends match to consume trailing .?! so the replacement has no doubled punctuation), patch_heading (insert or replace content under a specific heading; `headingOp: 'before' | 'after'` inserts immediately before/after the heading line \u2014 use `before` on the NEXT heading to append to a section's end; `headingOp: 'replace'` with `scope: 'section'` (default) replaces to the next same-or-higher heading or EOF \u2014 CAREFUL on the LAST heading, this consumes everything below including content separated by blank lines \u2014 pass `scope: 'body'` to stop at the first blank line after the body; if the target heading text appears MORE THAN ONCE the call throws MultipleMatches listing each occurrence with its line number \u2014 pass `headingIndex: 0 | 1 | ...` (0-indexed, top-to-bottom) to pick one), patch_frontmatter (set a single YAML key; pass `value: null` to clear \u2014 or from XML-stringifying clients use `valueJson: 'null'` for true null, `valueJson: 'true'` for a real boolean, `valueJson: '42'` for a number, `valueJson: '[\"a\"]'` for an array; `valueJson` wins over `value` when both are set), at_line (insert or replace at a 1-indexed line number that counts from file start including frontmatter lines). Pass `edits` (array) to apply multiple edits atomically \u2014 all succeed or none are written.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "content": {
+    "description": "New content to insert or replace (meaning is mode-dependent).",
+    "type": "string"
+   },
+   "dryRun": {
+    "description": "If true, return a unified-diff preview without writing. Pass the returned previewId to apply_edit_preview to commit.",
+    "type": "boolean"
+   },
+   "edits": {
+    "description": "Array of edits to apply atomically to a single file. If any edit fails, no edit is written. Applied in order against the accumulated state (each edit sees the result of previous edits in the batch). Use replace_window / patch_heading for content-anchored edits; at_line references the accumulated state, not the original file.",
+    "items": {
+     "properties": {
+      "content": {
+       "type": "string"
+      },
+      "fuzzy": {
+       "type": "boolean"
+      },
+      "fuzzyThreshold": {
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "heading": {
+       "type": "string"
+      },
+      "headingIndex": {
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "headingOp": {
+       "enum": [
+        "replace",
+        "before",
+        "after"
+       ],
+       "type": "string"
+      },
+      "key": {
+       "type": "string"
+      },
+      "line": {
+       "exclusiveMinimum": 0,
+       "maximum": 9007199254740991,
+       "type": "integer"
+      },
+      "lineOp": {
+       "enum": [
+        "before",
+        "after",
+        "replace"
+       ],
+       "type": "string"
+      },
+      "mode": {
+       "enum": [
+        "append",
+        "prepend",
+        "replace_window",
+        "patch_heading",
+        "patch_frontmatter",
+        "at_line"
+       ],
+       "type": "string"
+      },
+      "scope": {
+       "enum": [
+        "section",
+        "body"
+       ],
+       "type": "string"
+      },
+      "search": {
+       "type": "string"
+      },
+      "value": {},
+      "valueJson": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "mode"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "from_buffer": {
+    "description": "If true, retry a previously failed replace_window edit using the cached content + search with fuzzy: true, fuzzyThreshold: 0.5. Use when the prior edit failed with NoMatch. Cleared on success.",
+    "type": "boolean"
+   },
+   "fuzzy": {
+    "description": "For `replace_window`: tolerate whitespace and trailing-punctuation drift.",
+    "type": "boolean"
+   },
+   "fuzzyThreshold": {
+    "description": "Similarity threshold for fuzzy replace_window matches (0-1, default 0.7). Higher = stricter. 0.9 is recommended for typo-tolerant matching of known-good text.",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "heading": {
+    "description": "Target heading text for `patch_heading` mode.",
+    "type": "string"
+   },
+   "headingIndex": {
+    "description": "For `patch_heading` when the heading appears more than once \u2014 0-indexed top-to-bottom picker.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "headingOp": {
+    "description": "For `patch_heading`. `replace` (default) replaces section; `before`/`after` inserts adjacent to the heading line.",
+    "enum": [
+     "replace",
+     "before",
+     "after"
+    ],
+    "type": "string"
+   },
+   "key": {
+    "description": "For `patch_frontmatter`: the YAML key to set.",
+    "type": "string"
+   },
+   "line": {
+    "description": "For `at_line`: 1-indexed line number (counts from file start including frontmatter).",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "lineOp": {
+    "description": "For `at_line`: insert before/after the target line, or replace it. Default `replace`.",
+    "enum": [
+     "before",
+     "after",
+     "replace"
+    ],
+    "type": "string"
+   },
+   "mode": {
+    "description": "Edit mode. Required unless `edits` array is provided.",
+    "enum": [
+     "append",
+     "prepend",
+     "replace_window",
+     "patch_heading",
+     "patch_frontmatter",
+     "at_line"
+    ],
+    "type": "string"
+   },
+   "name": {
+    "description": "Path or fuzzy match of the note to edit.",
+    "type": "string"
+   },
+   "scope": {
+    "description": "For `patch_heading replace`: `section` (default) consumes to next same-or-higher heading; `body` stops at first blank line.",
+    "enum": [
+     "section",
+     "body"
+    ],
+    "type": "string"
+   },
+   "search": {
+    "description": "For `replace_window`: the block of text to locate and replace.",
+    "type": "string"
+   },
+   "value": {
+    "description": "For `patch_frontmatter`: value to set. Use `null` to clear a key. Prefer `valueJson` from clients that stringify params."
+   },
+   "valueJson": {
+    "description": "For `patch_frontmatter`: JSON-encoded value (wins over `value`). Use `\"null\"` to clear, `\"true\"` for boolean, `\"42\"` for number.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "name"
+  ],
+  "type": "object"
+ },
+ "name": "edit_note"
+}

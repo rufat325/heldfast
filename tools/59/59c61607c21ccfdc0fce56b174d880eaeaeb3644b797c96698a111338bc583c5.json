@@ -1,0 +1,94 @@
+{
+ "description": "Search the indexed codebase. Returns matching code chunks with file paths, line numbers, and relevance scores. Modes: keyword (FTS5), semantic (vector), hybrid (RRF fusion), auto (heuristic when SEARCH_AUTO_ROUTE), symbol (SQLite symbol index by identifier), regex (pattern matching with /pattern/flags). Results are cached (LRU, 5min TTL) for non-regex modes. Filter by symbol_kind to only see files with functions, classes, etc. Enable fuzzy:true to boost results with approximate string matching (Levenshtein) \u2014 useful for misspelled queries. Post-retrieval ordering: if RERANK_URL is set, the server POSTs {query, documents} for optional cross-encoder-style scores; if not set, results are still reordered by Qdrant semantic similarity (no extra service). Ollama (OLLAMA_URL + OLLAMA_MODEL) is only for embeddings at index/query time\u2014not the same as RERANK_URL. Agents: you do not need to \"enable\" rerank manually unless the user asks to skip it (use rerank:false) or tune env; default behavior is already optimal for most tasks. Prefer a narrow file_pattern and a small limit on the first pass.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "content_mode": {
+    "description": "Snippet length: compact (default) or full chunk text",
+    "enum": [
+     "full",
+     "compact"
+    ],
+    "type": "string"
+   },
+   "dedupe_by_file": {
+    "default": true,
+    "description": "If true, at most one chunk per file (best score). Set false to allow multiple chunks from the same file.",
+    "type": "boolean"
+   },
+   "deprioritize_generated_paths": {
+    "description": "Down-rank generated/vendor paths (default true)",
+    "type": "boolean"
+   },
+   "expand_context": {
+    "default": 0,
+    "description": "Number of adjacent chunks to include before/after each result for more context (0 = no expansion)",
+    "maximum": 5,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "explain": {
+    "description": "Include score breakdown in output",
+    "type": "boolean"
+   },
+   "fuzzy": {
+    "description": "Enable fuzzy search re-ranking \u2014 boosts results with high Levenshtein similarity to query terms. Useful for misspelled queries or approximate matching. Default follows SEARCH_FUZZY_ENABLED env var (false).",
+    "type": "boolean"
+   },
+   "language": {
+    "description": "Filter by language (e.g., \"typescript\", \"python\", \"go\")",
+    "type": "string"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Maximum number of results to return",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "max_content_chars": {
+    "description": "Max characters per chunk body when content_mode is compact",
+    "type": "integer"
+   },
+   "mode": {
+    "default": "hybrid",
+    "description": "keyword | semantic | hybrid | auto (needs SEARCH_AUTO_ROUTE) | symbol (lookup by symbol name) | regex (pattern matching with /pattern/flags syntax)",
+    "enum": [
+     "keyword",
+     "semantic",
+     "hybrid",
+     "auto",
+     "symbol",
+     "regex"
+    ],
+    "type": "string"
+   },
+   "project_name": {
+    "description": "Project to search in",
+    "type": "string"
+   },
+   "query": {
+    "description": "Search query \u2014 natural language, keywords, or a symbol name when mode is symbol",
+    "type": "string"
+   },
+   "rerank": {
+    "description": "When false, skip post-retrieval reorder (HTTP rerank if RERANK_URL is set, else semantic reorder by Qdrant scores). Default follows SEARCH_RERANK. Use false for speed or when raw hybrid/semantic order is preferred.",
+    "type": "boolean"
+   },
+   "symbol_kind": {
+    "description": "Filter results to only files containing symbols of this kind: function, class, method, interface, type, variable, enum, or export",
+    "type": "string"
+   }
+  },
+  "required": [
+   "query",
+   "project_name"
+  ],
+  "type": "object"
+ },
+ "name": "search"
+}

@@ -1,0 +1,378 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "UK Duty & VAT Calculator"
+ },
+ "description": "Estimate UK import duty and VAT for a commodity code using the LIVE GOV.UK Trade Tariff \u2014 rates are fetched per request, not from a static table. The CIF value is composed from customs_value + freight_cost + insurance_cost; duty = CIF x the duty rate for the origin country; VAT (typically 20%) applies on the duty-inclusive value.\n\nProvide commodity_code (6-10 digits), origin_country (ISO-2) and customs_value in GBP; freight_cost, insurance_cost and incoterm are optional refinements.\n\nBehavior: live lookup plus deterministic arithmetic on the returned rate; an unknown or non-declarable commodity code errors with HMRC's message (a 6-digit code may need extending to its 8/10-digit declarable line); origin-dependent measures the tariff cannot resolve automatically surface in warnings. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: commodity_code and description, origin country, cif_value, duty_rate (+ percent), duty_amount, vat_rate, vat_amount, total_import_taxes, total_landed_cost and warnings under result; validity.as_of marks the live-rate timestamp; plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: an estimate, not a customs ruling \u2014 excise, quotas, anti-dumping measures, reliefs and origin-proof requirements can change the outcome; confirm with a customs broker or HMRC before relying on it.\n\nRelated: hs_code_lookup (find the 6-digit code first), incoterms_lookup (who actually pays these costs).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "commodity_code": {
+    "description": "HS/UK tariff code, 6-10 digits. Example: \"8471300000\" (portable computers). 6-digit codes may need the declarable 8/10-digit line.",
+    "pattern": "^\\d{6,10}$",
+    "type": "string"
+   },
+   "customs_value": {
+    "description": "Goods value in GBP. Example: 1000.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "freight_cost": {
+    "description": "Freight cost in GBP \u2014 added to the CIF value. Default: 0.",
+    "type": "number"
+   },
+   "incoterm": {
+    "description": "Incoterms 2020 basis of the customs_value \u2014 documents which costs are already included.",
+    "enum": [
+     "EXW",
+     "FCA",
+     "FAS",
+     "FOB",
+     "CFR",
+     "CIF",
+     "CPT",
+     "CIP",
+     "DAP",
+     "DPU",
+     "DDP"
+    ],
+    "type": "string"
+   },
+   "insurance_cost": {
+    "description": "Insurance cost in GBP \u2014 added to the CIF value. Default: 0.",
+    "type": "number"
+   },
+   "origin_country": {
+    "description": "ISO 2-letter country of origin. Examples: \"CN\", \"DE\", \"US\".",
+    "pattern": "^[A-Za-z]{2}$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "commodity_code",
+   "origin_country",
+   "customs_value"
+  ],
+  "type": "object"
+ },
+ "name": "uk_duty_calculator",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "cif_value": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "commodity_code": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "commodity_description": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "disclaimer": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "duty_amount": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "duty_rate": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "duty_rate_percent": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "origin_country": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "origin_country_name": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "source": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "total_import_taxes": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "total_landed_cost": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "vat_amount": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "vat_rate": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "vat_rate_percent": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "warnings": {
+        "anyOf": [
+         {
+          "items": {},
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

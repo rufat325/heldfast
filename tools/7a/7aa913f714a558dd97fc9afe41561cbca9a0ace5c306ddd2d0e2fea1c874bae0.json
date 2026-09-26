@@ -1,0 +1,159 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Resolve a coin name or ticker symbol to a CoinGecko ID (slug). The required first step before any ID-keyed tool \u2014 CoinGecko keys data by slug (bitcoin, ethereum), not ticker (BTC, ETH), and tickers are not unique (many coins share ETH/USDC). Returns ranked matches with id, symbol, name, and market_cap_rank to disambiguate; pick the intended coin from the ranked candidates.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "query": {
+    "description": "Coin name or ticker symbol to resolve (e.g. \"bitcoin\", \"ETH\", \"solana\").",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "coingecko_search_coins",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "coins",
+     "attribution"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "attribution": {
+    "description": "Required data-source attribution.",
+    "type": "string"
+   },
+   "cap": {
+    "description": "The cap applied to the candidate list. Present only when capped.",
+    "type": "number"
+   },
+   "coins": {
+    "description": "Ranked slug candidates (top 25 by relevance). Data provided by CoinGecko.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A ranked slug candidate.",
+     "properties": {
+      "id": {
+       "description": "CoinGecko slug \u2014 the id to chain into every other tool (e.g. \"ethereum\").",
+       "type": "string"
+      },
+      "marketCapRank": {
+       "description": "Market-cap rank when known \u2014 lower is larger; aids disambiguation. Omitted when unranked.",
+       "type": "number"
+      },
+      "name": {
+       "description": "Display name (e.g. \"Ethereum\").",
+       "type": "string"
+      },
+      "symbol": {
+       "description": "Ticker symbol (not unique across coins; e.g. \"eth\").",
+       "type": "string"
+      },
+      "thumb": {
+       "description": "Thumbnail icon URL when provided by upstream.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "symbol",
+      "name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: CoinGecko returned HTTP 429 \u2014 the shared keyless pool is throttled, or the Demo-tier quota was hit. `upstream_unreachable`: CoinGecko was unreachable or returned a 5xx/HTML error after all retry attempts. `invalid_response`: CoinGecko returned a body that could not be parsed as JSON. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_unreachable",
+         "invalid_response"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when nothing matched \u2014 echoes the query and suggests how to broaden.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of candidates returned. Present only when capped.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the candidate list was capped at the limit. Present only when capped.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "coingecko-mcp-server: search coins"
+}

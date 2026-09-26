@@ -1,0 +1,183 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Look up USGS parameter codes \u2014 the 5-digit codes every other tool's parameterCd takes. With no query, lists a curated set of well-known codes with names, units, and thematic group, from a built-in table (no network call): 00060 = \"Discharge\" (ft\u00b3/s), 00065 = \"Gage height\" (ft), 00010 = \"Temperature, water\" (\u00b0C), 72019 = \"Depth to water level\" (ft), and others; filter it with group. For anything else \u2014 turbidity, nitrate, chlorophyll, suspended sediment, salinity \u2014 pass query to search the full USGS parameter-code catalog (~19,600 codes) by name and description, or pass a 5-digit code to look it up. A query returns at most 25 entries, matching curated codes first, with total counting every match.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "group": {
+    "default": "all",
+    "description": "Filter the curated list by thematic domain: \"streamflow\", \"groundwater\", \"temperature\", \"meteorological\", \"water-quality\", or \"all\" (default). Applies to the curated list only \u2014 leave it \"all\" when passing query.",
+    "enum": [
+     "streamflow",
+     "groundwater",
+     "temperature",
+     "meteorological",
+     "water-quality",
+     "all"
+    ],
+    "type": "string"
+   },
+   "query": {
+    "description": "Search the full USGS parameter-code catalog. Case-insensitive; every word must start a word in the parameter name or description (e.g. \"turbidity\", \"nitrate filtered\", \"dissolved oxygen\"). A bare 5-digit code (e.g. \"63680\") returns that code. Omit to list the curated codes.",
+    "maxLength": 200,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "water_list_parameters",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "parameters",
+     "total",
+     "truncated"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `query_with_group`: query was combined with a group other than \"all\". group filters the curated list only; the USGS catalog carries no matching grouping. `upstream_error`: The USGS parameter-code catalog could not be read \u2014 the request failed, timed out, or returned something other than a catalog page. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "query_with_group",
+         "upstream_error"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "note": {
+    "description": "Guidance when a query matched nothing or was truncated. Absent otherwise.",
+    "type": "string"
+   },
+   "parameters": {
+    "description": "Matching parameter entries. Without query: the curated codes. With query: matching curated codes first (each once, as its curated entry), then catalog records whose name holds every query word, then those matched through the description, each by code \u2014 at most 25.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A USGS parameter code entry.",
+     "properties": {
+      "code": {
+       "description": "5-digit USGS parameter code (e.g. \"00060\").",
+       "type": "string"
+      },
+      "description": {
+       "description": "USGS catalog description, naming the medium, fraction, and method (e.g. \"Turbidity, water, unfiltered, \u2026 formazin nephelometric units (FNU)\"). Present on usgs-catalog entries only.",
+       "type": "string"
+      },
+      "group": {
+       "description": "Thematic domain of a curated entry. Absent on usgs-catalog entries.",
+       "enum": [
+        "streamflow",
+        "groundwater",
+        "temperature",
+        "meteorological",
+        "water-quality"
+       ],
+       "type": "string"
+      },
+      "name": {
+       "description": "Human-readable parameter name (e.g. \"Discharge\").",
+       "type": "string"
+      },
+      "source": {
+       "description": "\"curated\": one of the well-known codes this server lists by default. \"usgs-catalog\": a record from the full USGS parameter-code catalog.",
+       "enum": [
+        "curated",
+        "usgs-catalog"
+       ],
+       "type": "string"
+      },
+      "unit": {
+       "description": "Unit of measure (e.g. \"ft\u00b3/s\", \"ft\", \"\u00b0C\", \"FNU\").",
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "name",
+      "unit",
+      "source"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "query": {
+    "description": "The catalog query searched, trimmed. Absent when listing the curated codes.",
+    "type": "string"
+   },
+   "total": {
+    "description": "Number of entries that matched, before the 25-entry cap.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "truncated": {
+    "description": "True when a query matched more than 25 entries and only the first 25 are listed \u2014 add words to narrow it.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Water List Parameters"
+}

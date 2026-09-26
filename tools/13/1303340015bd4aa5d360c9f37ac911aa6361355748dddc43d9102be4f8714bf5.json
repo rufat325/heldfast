@@ -1,0 +1,365 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Searches the Crossref works index (~155M records) by free text and/or structured filters. The generic query matches loosely across all fields; scope precisely with the field-specific parameters queryTitle, queryAuthor, and queryContainerTitle, or resolve a known citation to its DOI with queryBibliographic \u2014 all combine with each other and with query. Use the filter parameter for structured filtering (object with hyphen-separated Crossref keys). Sort options: relevance, score, is-referenced-by-count, published, deposited, indexed. Each work returns at most authorLimit authors (25 by default) with authorCount reporting the full deposited total, since a single page of large-collaboration papers can carry tens of thousands of author entries; crossref_get_work pages the whole author list for any DOI whose list was cut. Offset-based paging is capped at ~10K results; use cursor=\"*\" to start cursor-based deep paging, then pass the nextCursor value from each response to continue. The walk ends on the page where nextCursor is absent \u2014 that page also carries a notice saying the list is exhausted. Cursor and offset cannot be combined.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "authorLimit": {
+    "default": 25,
+    "description": "Maximum number of authors to return per work (1\u2013500, default 25). Ordinary records fit under the default; large-collaboration papers deposit thousands, and a page of them is large enough to exhaust a client context. Each work reports its full deposited total as authorCount \u2014 call crossref_get_work with that work doi to page the authors this cap left out.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "cursor": {
+    "description": "Cursor token for deep paging. Pass \"*\" to start cursor-based paging (required past ~10K results), then pass the nextCursor value from each response until a response omits it, which means the list is exhausted. Cannot be combined with offset, or with a publication-date sort (published, published-print, published-online), which Crossref does not walk by cursor.",
+    "type": "string"
+   },
+   "fields": {
+    "description": "Fields to return (reduces payload). Names are case-sensitive, and each fills one output field: DOI \u2192 doi, title \u2192 title, type \u2192 type, author \u2192 authors and authorCount, published / published-print / published-online \u2192 published, container-title \u2192 containerTitle, publisher \u2192 publisher, is-referenced-by-count \u2192 isReferencedByCount, score \u2192 score, abstract \u2192 abstract, volume \u2192 volume, issue \u2192 issue, page \u2192 page, article-number \u2192 articleNumber, ISSN \u2192 issn. A selected field absent from a work means the record does not deposit it. DOI is always returned whether or not it is listed here, so every result stays resolvable by crossref_get_work, which also returns the fields this list does not cover (license, funder, references, and the rest of the record).",
+    "items": {
+     "description": "Crossref select name",
+     "enum": [
+      "DOI",
+      "title",
+      "type",
+      "author",
+      "published",
+      "published-print",
+      "published-online",
+      "container-title",
+      "publisher",
+      "is-referenced-by-count",
+      "score",
+      "abstract",
+      "volume",
+      "issue",
+      "page",
+      "article-number",
+      "ISSN"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "filter": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Structured filter object using Crossref hyphen-separated keys. All values must be strings. Boolean flag keys (has-abstract, has-references, has-full-text) require string values \"true\" or \"false\". Example: {\"type\":\"journal-article\",\"has-abstract\":\"true\",\"from-pub-date\":\"2023-01-01\"}",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "offset": {
+    "description": "Zero-based result offset for offset-based paging. Cannot be used with cursor. Capped at ~10K; use cursor for deeper paging.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "order": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Sort direction",
+      "enum": [
+       "asc",
+       "desc"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "Sort direction (asc or desc)"
+   },
+   "query": {
+    "description": "Free-text search query, e.g. \"CRISPR gene editing\" or \"climate change adaptation\"",
+    "type": "string"
+   },
+   "queryAuthor": {
+    "description": "Match against author names only, e.g. \"Charles R. Harris\".",
+    "type": "string"
+   },
+   "queryBibliographic": {
+    "description": "Whole-citation match to resolve a known reference to its DOI. Combine title, author, year, and container into one string, e.g. \"Watson Crick molecular structure of nucleic acids Nature 1953\".",
+    "type": "string"
+   },
+   "queryContainerTitle": {
+    "description": "Match against the container title (journal or book name) only, e.g. \"Nature\".",
+    "type": "string"
+   },
+   "queryTitle": {
+    "description": "Match against work titles only, e.g. \"Array programming with NumPy\".",
+    "type": "string"
+   },
+   "rows": {
+    "default": 20,
+    "description": "Number of results to return per page (1\u2013100, default 20)",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "sort": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Crossref sort field",
+      "enum": [
+       "relevance",
+       "score",
+       "is-referenced-by-count",
+       "published",
+       "published-print",
+       "published-online",
+       "deposited",
+       "indexed",
+       "created",
+       "updated",
+       "references-count"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "Sort field. The publication-date sorts (published, published-print, published-online) work with offset paging only \u2014 Crossref refuses them alongside cursor; every other sort works with either."
+   }
+  },
+  "type": "object"
+ },
+ "name": "crossref_search_works",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "works",
+     "totalResults",
+     "returned"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The per-work author cap applied to this page. Absent when no list was cut.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: Crossref answered HTTP 429 and the limit did not clear inside the retry budget. `upstream_unavailable`: Crossref was unreachable, returned a 5xx status, or served an HTML error page instead of JSON. `malformed_response`: Crossref returned HTTP 200 with a body that is not valid JSON. `request_timeout`: Crossref did not respond within CROSSREF_TIMEOUT_MS, or answered HTTP 408/504. `unknown_filter`: Crossref rejected a filter key it does not recognize (filter-not-available). `sort_cursor_conflict`: A publication-date sort (published, published-print, published-online) was combined with cursor paging, which Crossref refuses. `invalid_cursor`: Crossref did not recognize the cursor token (HTTP 404 cursor-invalid). `invalid_parameter`: Crossref rejected a parameter value (a filter value of the wrong type or form), or answered HTTP 400 with a body that did not parse. `cursor_offset_conflict`: Both cursor and offset were supplied in the same request. `offset_too_large`: The requested offset exceeds the ~10K Crossref limit for offset-based paging. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_unavailable",
+         "malformed_response",
+         "request_timeout",
+         "unknown_filter",
+         "sort_cursor_conflict",
+         "invalid_cursor",
+         "invalid_parameter",
+         "cursor_offset_conflict",
+         "offset_too_large"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextCursor": {
+    "description": "Cursor token to pass as cursor on the next call to continue a cursor walk. Present only on a page requested with cursor, and absent once the walk reaches the end of the list.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance on an empty page, naming which of its three causes applies: a query nothing matched, an offset past the end of a list that did match, or a cursor walk that has reached the end of the list. On a page carrying records, present when authorLimit cut at least one work list, naming how many and the route to the rest, or when every query term and filter value was supplied blank, so the page lists the whole index unfiltered. A page needing more than one caveat carries them all in this one string.",
+    "type": "string"
+   },
+   "returned": {
+    "description": "Number of records returned in this response",
+    "type": "number"
+   },
+   "totalResults": {
+    "description": "Total matching records in Crossref",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when at least one work on this page had its author list cut by authorLimit. Absent when every work on the page carries its full deposited author list.",
+    "type": "boolean"
+   },
+   "works": {
+    "description": "Matching works. Empty when nothing matched the query, when an offset runs past the end of the results, or on the page that ends a cursor walk \u2014 the notice enrichment says which.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Work summary",
+     "properties": {
+      "abstract": {
+       "description": "Abstract when present in the indexed record \u2014 the text of the publisher\u2019s JATS deposit, with markup removed and character references decoded; a link keeps its tag only where its href holds an address the text it wraps does not already carry, and each formula appears once \u2014 MathML as the TeX annotation it carries, otherwise written out linearly (x_i, A^{\u22121}, \u221a(m), (a+b)/c), and TeX deposited beside MathML in whichever notation comes first",
+       "type": "string"
+      },
+      "articleNumber": {
+       "description": "Article number, deposited by journals that number articles instead of paging them",
+       "type": "string"
+      },
+      "authorCount": {
+       "description": "Total number of authors deposited for this work, before the authorLimit cap. Greater than the length of authors when the cap cut the list; pass the doi of this work to crossref_get_work to page the whole list.",
+       "type": "number"
+      },
+      "authors": {
+       "description": "Author list for this work, capped at authorLimit. Omitted when the record deposits no author field.",
+       "items": {
+        "additionalProperties": false,
+        "description": "Author",
+        "properties": {
+         "family": {
+          "description": "Family name",
+          "type": "string"
+         },
+         "given": {
+          "description": "Given name",
+          "type": "string"
+         },
+         "name": {
+          "description": "Name when no given/family split is available",
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "containerTitle": {
+       "description": "Journal or container name",
+       "type": "string"
+      },
+      "doi": {
+       "description": "Canonical DOI",
+       "type": "string"
+      },
+      "isReferencedByCount": {
+       "description": "Incoming citation count",
+       "type": "number"
+      },
+      "issn": {
+       "description": "ISSN(s) of the containing journal",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "issue": {
+       "description": "Issue of the container the work appears in",
+       "type": "string"
+      },
+      "page": {
+       "description": "Page range as deposited, e.g. \"357-362\"",
+       "type": "string"
+      },
+      "published": {
+       "additionalProperties": false,
+       "description": "Publication date \u2014 the first of published, published-print, and published-online that names one. A component Crossref records as unknown is omitted, and so is every component below it.",
+       "properties": {
+        "day": {
+         "description": "Day",
+         "type": "number"
+        },
+        "month": {
+         "description": "Month",
+         "type": "number"
+        },
+        "year": {
+         "description": "Year",
+         "type": "number"
+        }
+       },
+       "type": "object"
+      },
+      "publisher": {
+       "description": "Publisher name",
+       "type": "string"
+      },
+      "score": {
+       "description": "Relevance score assigned by Crossref",
+       "type": "number"
+      },
+      "title": {
+       "description": "Work title",
+       "type": "string"
+      },
+      "type": {
+       "description": "Work type",
+       "type": "string"
+      },
+      "volume": {
+       "description": "Volume of the container the work appears in",
+       "type": "string"
+      }
+     },
+     "required": [
+      "doi"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search Works"
+}

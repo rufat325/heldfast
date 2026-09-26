@@ -1,0 +1,66 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Build an SPF (Sender Policy Framework) record \u2014 the DNS TXT record that lists which servers may send mail for a domain. Pass the senders as `mechanisms`: `include` for a provider's own SPF (Google Workspace is `_spf.google.com`, Microsoft 365 is `spf.protection.outlook.com`, SendGrid is `sendgrid.net`), `ip4`/`ip6` for your own servers, plus `useMx`/`useA` to authorise the domain's own MX or A records. The `policy` decides what receivers do with mail from anywhere else: 'fail' (-all, the production choice), 'softfail' (~all, for testing), 'neutral', or 'pass' (+all, which authorises the entire internet and should never be published). SPF is limited to ten DNS-triggering terms during recursive evaluation. This pure builder counts direct mechanisms; include and redirect targets can add nested lookups, so validate the published record with check_spf before treating the count as final. Returns the record, direct lookup count, whether that direct count or the 255-character limit is exceeded, plain-language warnings, and the DNS entry to publish. Use check_spf to resolve and validate a live record, and flatten_spf only when an existing record is over the limit. Nothing is looked up or stored \u2014 this is computation only.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "mechanisms": {
+    "description": "Senders to authorise, in the order they should appear in the record",
+    "items": {
+     "properties": {
+      "type": {
+       "enum": [
+        "ip4",
+        "ip6",
+        "include",
+        "a",
+        "mx",
+        "exists",
+        "redirect"
+       ],
+       "type": "string"
+      },
+      "value": {
+       "description": "The value after the colon, e.g. '_spf.google.com' for an include or '203.0.113.5' for ip4",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "value"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "policy": {
+    "description": "What receivers do with everything else: fail (-all) for production, softfail (~all) while testing. Defaults to fail.",
+    "enum": [
+     "fail",
+     "softfail",
+     "neutral",
+     "pass"
+    ],
+    "type": "string"
+   },
+   "useA": {
+    "description": "Authorise the domain's own A/AAAA records. Costs one DNS lookup.",
+    "type": "boolean"
+   },
+   "useMx": {
+    "description": "Authorise the domain's MX hosts. Costs one DNS lookup.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "name": "generate_spf"
+}

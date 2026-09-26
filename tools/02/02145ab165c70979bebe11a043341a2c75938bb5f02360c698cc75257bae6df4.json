@@ -1,0 +1,141 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "WHAT: Computes ONE of the 10 end-invoices (or the 49 \u20ac mount add-on). NOT a booking, NOT a PDF. FIRST classify via get_prices.composition.routes: locked_out+slam+no cylinder \u2192 opening_slam; locked_out+locked+no cylinder \u2192 opening_locked; +cylinder same trip \u2192 pkg_key_slam / pkg_key_locked; door open \u2192 cylinder_only; mount after paid opening \u2192 cylinder_mount (not an end-invoice). THEN whenKey from get_ort_datetime (day|night|now). Night/WE/holiday is NOT +49 \u2014 49 is only cylinder_mount. Do not invent euro. Do not add 49 on top of pkg_key_*. REQUIRED situationKey. Aliases: zugefallen\u2192opening_slam, abgeschlossen\u2192opening_locked, schluessel_weg_zugefallen\u2192pkg_key_slam. breakdown=true splits combo into opening+49, totalEur unchanged. RETURNS totalEur + composition + contactOption. NEXT: compose_whatsapp or compose_mailto with that contactOption. No VAT.",
+ "inputSchema": {
+  "properties": {
+   "at": {
+    "description": "Optional. Same formats as get_ort_datetime.at. Only used when whenKey is now or omitted.",
+    "type": "string"
+   },
+   "breakdown": {
+    "default": false,
+    "description": "If true, pkg_key_slam / pkg_key_locked emit two rows (opening + cylinder_mount_same_trip) instead of one package row. Total euro unchanged.",
+    "type": "boolean"
+   },
+   "locale": {
+    "default": "de",
+    "description": "HTML locale for canonicalUrl and path prefixes. de = default, URLs have no prefix (https://www.ikeytz.com/preise). en|fr|ru|fa|ar|tr = prefix /{locale}/ (https://www.ikeytz.com/en/preise). Omit or empty = de. Does not change prices, phone numbers, or legal German names. Not a maps.ikeytz.com locale (maps is German-only).",
+    "enum": [
+     "de",
+     "en",
+     "fr",
+     "ru",
+     "fa",
+     "ar",
+     "tr"
+    ],
+    "type": "string"
+   },
+   "situationKey": {
+    "description": "Required. From composition.routes: opening_slam | opening_locked | pkg_key_slam | pkg_key_locked | cylinder_only | cylinder_mount. Aliases: zugefallen, abgeschlossen, schluessel_weg_zugefallen. pkg_slam_only = opening_slam same euro.",
+    "type": "string"
+   },
+   "whenKey": {
+    "description": "day = Mo\u2013Fr 08:00:00\u201317:59:59 Europe/Berlin except BW holidays. night = weekend, holiday, or 18:00\u201307:59. now or omit = live get_ort_datetime (or at=). Night is not +49 (49 is only cylinder_mount). Do not invent dusk/dawn.",
+    "enum": [
+     "day",
+     "night",
+     "now"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "situationKey"
+  ],
+  "type": "object"
+ },
+ "name": "get_invoice_line_items",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "Always the same envelope. tools/call returns content[0].text = summary (or JSON) AND structuredContent = this object. On success ok=true with summary + canonicalUrl + extra fields. On failure ok=false with error (snake_case code) and hint (recovery URL). Never writes, never submits forms, never calls /api/*. Attribution must be kept when quoting. Policy: ai-input yes with attribution; ai-train=no.",
+  "properties": {
+   "attribution": {
+    "description": "Required citation: 'Quelle: Schl\u00fcsseldienst Ludwigsburg ikeytz (ikeytz.com) \u00b7 ai-train=no \u00b7 https://www.ikeytz.com/.well-known/ai.txt'",
+    "type": "string"
+   },
+   "canonicalUrl": {
+    "description": "Best URL to show the user: https://www.ikeytz.com\u2026 page, or tel:+49\u2026, mailto:\u2026, https://wa.me/\u2026. Prefer this over constructing URLs.",
+    "type": "string"
+   },
+   "composition": {
+    "description": "Same SYSTEM as get_prices.composition \u2014 factors, routes, 10 invoices.",
+    "type": "object"
+   },
+   "contactOption": {
+    "description": "Prefab id for compose_whatsapp / compose_mailto (opening_slam_day \u2026 cylinder_only_night, or cylinder_mount).",
+    "type": "string"
+   },
+   "error": {
+    "description": "Present when ok=false. Codes include: unknown_tool, unknown_place, unknown_auswahl, unknown_ratgeber, unknown_doc, unknown_discovery, faq_not_found, wissen_not_found, serp_not_found, q_required, bad_datetime, bad_when_key, plus HTTP errors from fetch.",
+    "type": "string"
+   },
+   "hint": {
+    "description": "Present when ok=false. Absolute URL the agent should open or pass to get_ai_page / get_discovery.",
+    "type": "string"
+   },
+   "line_items": {
+    "description": "Invoice rows",
+    "type": "array"
+   },
+   "locale": {
+    "description": "Locale actually used for URLs (args.locale or de).",
+    "enum": [
+     "de",
+     "en",
+     "fr",
+     "ru",
+     "fa",
+     "ar",
+     "tr"
+    ],
+    "type": "string"
+   },
+   "ok": {
+    "description": "true = use summary, canonicalUrl, and extra keys. false = do not invent data; read error + hint and retry with valid args or open hint.",
+    "type": "boolean"
+   },
+   "related": {
+    "description": "Always includes https://www.ikeytz.com/llms.txt. Geo tools also include https://maps.ikeytz.com/llms.txt.",
+    "items": {
+     "format": "uri",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "situationKey": {
+    "description": "Resolved situation id",
+    "type": "string"
+   },
+   "situationLabelDe": {
+    "description": "German situation label",
+    "type": "string"
+   },
+   "summary": {
+    "description": "Primary text for the model. For discovery tools this is the file window (possibly thousands of characters). For list tools a compact one-liner. Quote with attribution.",
+    "type": "string"
+   },
+   "tool": {
+    "description": "Echo of the tool name that produced this object (e.g. get_service_area).",
+    "type": "string"
+   },
+   "totalEur": {
+    "description": "End-invoice euro. Do not add VAT or extra 49.",
+    "type": "number"
+   },
+   "whenKey": {
+    "description": "Resolved day|night",
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "tool",
+   "attribution"
+  ],
+  "type": "object"
+ },
+ "title": "Get Invoice Line Items"
+}

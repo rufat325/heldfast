@@ -1,0 +1,296 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search, filter, sort, or retrieve by ID. Covers all OpenAlex entity types (works, authors, sources, institutions, topics, keywords, publishers, funders). Pass `id` to retrieve a single entity. Otherwise, use `query` and/or `filters` for discovery. Supports keyword search with boolean operators, exact phrase matching, and AI semantic search. Use openalex_resolve_name to resolve names to IDs before filtering. Searches and ID lookups return a curated set of fields by default; pass `select` to override with specific fields, or `[\"*\"]` for the full record.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cursor": {
+    "description": "Pagination cursor from a previous response. Pass to get the next page. Omit it on the first call \u2014 an empty string is rejected, since a supplied-but-blank cursor is a caller mistake rather than a request for page 1. Keyword and exact modes only \u2014 semantic search walks its candidates with `page`, and a `cursor` sent with it is rejected.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "entity_type": {
+    "description": "Type of scholarly entity to search.",
+    "enum": [
+     "works",
+     "authors",
+     "sources",
+     "institutions",
+     "topics",
+     "keywords",
+     "publishers",
+     "funders"
+    ],
+    "type": "string"
+   },
+   "filters": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Filter criteria as field:value pairs. AND across fields (multiple keys). OR within field: pipe-separate (\"us|gb\"). NOT: prefix \"!\" (\"!us\"). Range: \"2020-2024\". Comparison: \">100\", \"<50\". AND within same field: \"+\"-separate. Two keys that resolve to the same upstream field (an alias and its canonical name, e.g. `year` and `publication_year`) are both applied and AND'd, so they narrow rather than override each other. Use OpenAlex IDs (not names) for entity filters \u2014 resolve names first. Common keys: `openalex` (filter by entity ID, e.g. {\"openalex\": \"W123|W456\"}), `cites` (works citing a given work), `publication_year` (range \"2020-2024\"), `authorships.author.id`, `type`, `is_oa`.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "id": {
+    "description": "Retrieve a single entity by ID. Supports: OpenAlex ID (\"W2741809807\"), DOI (\"10.1038/nature12373\"), ORCID (\"0000-0002-1825-0097\"), ROR (\"https://ror.org/00hx57361\"), PMID (\"12345678\" or \"https://pubmed.ncbi.nlm.nih.gov/12345678\"), ISSN (\"1234-5678\"). Keywords are identified by slug rather than a native ID \u2014 pass either the slug (\"groundwater\") or the URL a search returns (\"https://openalex.org/keywords/groundwater\"). A PMCID is recognized too, bare (\"PMC1234567\") or as a PubMed Central URL, but OpenAlex indexes no PMCIDs, so it resolves nothing \u2014 pass the work's PMID or DOI instead. When provided, `query`, `search_mode`, `filters`, `sort`, `sample`, and `seed` are not applied \u2014 the returned record is the entity at that ID regardless of them, and the response `notice` names any you passed. `select` still applies: the curated per-entity-type default is returned unless you pass `select` (use `[\"*\"]` for the complete record). To filter, drop `id` and search. Use openalex_resolve_name to find the ID if unknown.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "page": {
+    "description": "Page number (1-based) for semantic search, the one mode that paginates with `page` instead of `cursor`. Semantic search ranks a query-dependent candidate set whose size `meta.count` reports, so the last reachable page is ceil(meta.count / per_page) \u2014 e.g. page 14 for a count of 70 with per_page=5. Passing it under any other search_mode is rejected.",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "default": 25,
+    "description": "Results per page (1-100). Default 25. Semantic search caps at 50 \u2014 when search_mode=\"semantic\", set per_page \u2264 50 (also subject to a 1 req/sec rate limit upstream). The cap applies to searches only; an `id` lookup returns its one record regardless of both.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Text search query. Supports boolean operators (AND, OR, NOT), quoted phrases (\"exact match\"), wildcards (machin*), fuzzy matching (machin~1), and proximity (\"climate change\"~5). Omit for filter-only queries \u2014 an empty string is rejected, since a blank search is a mistake rather than a request for the whole catalog.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "sample": {
+    "description": "Return a random sample of this many entities matching the filters (1-100). Single page only \u2014 neither `cursor` nor `page` pagination applies to sampling, and a search that passes either alongside it is rejected. Keyword and exact modes only: OpenAlex does not sample a semantic search, so `sample` with search_mode \"semantic\" is rejected. Cannot be combined with `sort` \u2014 a sample has no order, and a search passing both is rejected. Overrides `per_page`. Useful for unbiased exploration: spot-checking filter correctness, stratified review prompts, or generating exploration sets without bias toward most-cited.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "search_mode": {
+    "default": "keyword",
+    "description": "Search strategy. \"keyword\": stemmed full-text (default). \"exact\": no stemming, matches individual words (use quoted phrases for multi-word exact match). \"semantic\": AI embedding similarity over a query-dependent candidate set whose size `meta.count` reports, at ~1 req/sec, up to 50 per page, and paginated with `page` rather than `cursor`.",
+    "enum": [
+     "keyword",
+     "exact",
+     "semantic"
+    ],
+    "type": "string"
+   },
+   "seed": {
+    "description": "Deterministic seed for `sample`. Same seed + same filters = same results \u2014 pass when reproducibility matters. Has no effect without `sample`, and a search that passes it alone is rejected.",
+    "type": "string"
+   },
+   "select": {
+    "description": "OpenAlex top-level field names to return. Always returned: `id`, `display_name` \u2014 additional fields you list are appended. A curated default per entity type applies to both searches and single-entity (`id`) lookups; pass field names to override it, or `[\"*\"]` to retrieve the complete record (every field). Only top-level fields project, so a nested value is requested by its parent object: bibliometrics (`h_index`, `i10_index`, `2yr_mean_citedness`) live under `summary_stats` on authors, sources, institutions, publishers, and funders, and naming a leaf returns that object. Invalid field names produce an error identifying the rejected field. Example: [\"doi\", \"authorships\", \"primary_topic\"].",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "sort": {
+    "description": "Sort field. Prefix with \"-\" for descending. Comma-separate for a multi-key sort, applied left to right, with the \"-\" prefix set per key (\"-publication_year,cited_by_count\" sorts by year descending, then citations ascending). Common: \"cited_by_count\", \"-publication_date\", \"-relevance_score\" (default when query present). Note: when combined with a keyword query, an explicit sort overrides relevance ranking entirely \u2014 top results may be highly cited but only tangentially on-topic. Use \"-relevance_score\" or omit sort to keep the most relevant results first. \"-relevance_score\" requires an active search via \"query\" or a \"filter:search\" filter \u2014 passing it without one will fail. Not combinable with `sample` \u2014 a search passing both is rejected.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "entity_type"
+  ],
+  "type": "object"
+ },
+ "name": "openalex_search_entities",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "meta",
+     "results",
+     "echo",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "budget": {
+    "additionalProperties": false,
+    "description": "What this call cost against the OpenAlex daily budget and what is left of it. Price a full traversal before committing to it: `totalCount` \u00f7 `per_page` \u00d7 `costUsd` against `remainingUsd`. Absent when OpenAlex omitted the accounting headers.",
+    "properties": {
+     "costUsd": {
+      "description": "USD this call spent. 0 for an `id` lookup \u2014 OpenAlex does not bill single-entity fetches, so batching known IDs beats paging a filtered list.",
+      "type": "number"
+     },
+     "prepaidRemainingUsd": {
+      "description": "USD left in the prepaid balance \u2014 a separate pool OpenAlex draws on only after the daily allowance runs out, and which the daily reset does not refill. Add it to `remainingUsd` for the full spendable amount. Absent when the account holds no prepaid balance.",
+      "type": "number"
+     },
+     "remainingUsd": {
+      "description": "USD left in today's OpenAlex budget after this call.",
+      "type": "number"
+     },
+     "resetsInSeconds": {
+      "description": "Seconds until the daily budget refills (midnight UTC).",
+      "type": "number"
+     }
+    },
+    "required": [
+     "costUsd",
+     "remainingUsd",
+     "resetsInSeconds"
+    ],
+    "type": "object"
+   },
+   "echo": {
+    "description": "Compact echo of the criteria that actually ran (entity_type, query, filters, sort, search_mode) \u2014 surfaces what was searched when results are empty. An `id` lookup echoes entity_type and id alone, because the search criteria are not applied on that path.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `semantic_per_page_cap`: A search (no `id`) set per_page above the semantic-search cap of 50. `semantic_without_query`: A search set search_mode to \"semantic\" without supplying the `query` it embeds. `semantic_with_cursor`: A search set search_mode to \"semantic\" and supplied `cursor`, which OpenAlex rejects on a semantic query. `page_without_semantic`: A search supplied `page` under a search_mode other than \"semantic\". `sample_with_cursor`: A search (no `id`) provided both `sample` and `cursor`. `sample_with_page`: A search (no `id`) provided both `sample` and `page`. `sample_with_semantic`: A search (no `id`) provided `sample` with search_mode \"semantic\", which OpenAlex does not sample \u2014 it returns the same ranked candidates under every seed. `sample_with_sort`: A search (no `id`) provided both `sample` and `sort`, which OpenAlex refuses together. `seed_without_sample`: A search (no `id`) provided `seed` without `sample`. `entity_not_found`: Lookup by id matched no OpenAlex entity. `rate_limited`: OpenAlex throttled the request for exceeding its per-second ceiling (HTTP 429). `upstream_budget_exhausted`: The OpenAlex daily usage budget is spent (HTTP 429). `upstream_timeout`: OpenAlex did not respond within the request deadline. `upstream_unavailable`: OpenAlex was unreachable or unusable \u2014 HTTP 503, a connection failure, or a body that was empty, HTML, or unparseable JSON. `upstream_unauthorized`: OpenAlex rejected the API key (HTTP 401). `upstream_forbidden`: OpenAlex denied access to the requested resource (HTTP 403). `comma_in_filter_value`: A filter value contains a comma, which collides with the OpenAlex filter separator. `upstream_invalid_params`: OpenAlex rejected an invalid filter, select, or sort field name (HTTP 400). `upstream_invalid_id_value`: An entity-ID filter received a value that is not an OpenAlex ID \u2014 usually a name (HTTP 400). `upstream_sort_requires_search`: sort=-relevance_score was used without an active search (HTTP 400). `query_too_long`: OpenAlex rejected `query` as longer than the search length it accepts (HTTP 400). `upstream_invalid_params_other`: OpenAlex rejected the request (HTTP 400) for a reason other than an invalid field name. `upstream_validation_failed`: OpenAlex rejected the request as semantically invalid (HTTP 422). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "semantic_per_page_cap",
+         "semantic_without_query",
+         "semantic_with_cursor",
+         "page_without_semantic",
+         "sample_with_cursor",
+         "sample_with_page",
+         "sample_with_semantic",
+         "sample_with_sort",
+         "seed_without_sample",
+         "entity_not_found",
+         "rate_limited",
+         "upstream_budget_exhausted",
+         "upstream_timeout",
+         "upstream_unavailable",
+         "upstream_unauthorized",
+         "upstream_forbidden",
+         "comma_in_filter_value",
+         "upstream_invalid_params",
+         "upstream_invalid_id_value",
+         "upstream_sort_requires_search",
+         "query_too_long",
+         "upstream_invalid_params_other",
+         "upstream_validation_failed"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "meta": {
+    "additionalProperties": false,
+    "description": "Result metadata including pagination.",
+    "properties": {
+     "count": {
+      "description": "Total results matching the query/filters. Under search_mode \"semantic\" it is instead the size of the ranked candidate set \u2014 the most results `page` can reach \u2014 not an exhaustive match total.",
+      "type": "number"
+     },
+     "next_cursor": {
+      "description": "Cursor for next page. null if no more results.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "per_page": {
+      "description": "Page size OpenAlex echoed for this request \u2014 the requested per_page, not the number of records returned. A short or exhausted page carries fewer records than this.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "count",
+     "per_page",
+     "next_cursor"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance notice. Set when a first call returns no results (echoes the criteria and suggests how to broaden), when a paginated call ran past its last page (says the traversal is finished instead of advising a broader query), when an `id` lookup was passed search criteria it does not apply (names them), and on every semantic search to disclose that `meta.count` is a candidate total rather than a match total. Absent otherwise.",
+    "type": "string"
+   },
+   "results": {
+    "description": "OpenAlex entity objects. Text values are plain text \u2014 HTML entities decoded, HTML/JATS/MathML markup removed \u2014 and an abstract arrives reconstructed as `abstract`. Additional fields depend on entity_type and select.",
+    "items": {
+     "additionalProperties": {},
+     "description": "A single OpenAlex entity record. `id` is always present and `display_name` is always returned (though it may be null); additional fields vary by entity_type and `select`.",
+     "properties": {
+      "display_name": {
+       "description": "Entity name or work title. null when OpenAlex holds no title for the record (paratext works and other untitled entries) \u2014 use `id` to identify it.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "id": {
+       "description": "OpenAlex ID (e.g., \"W2741809807\", \"A1234567890\").",
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "display_name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalCount": {
+    "description": "Total results matching the query/filters across all pages.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Openalex Search Entities"
+}

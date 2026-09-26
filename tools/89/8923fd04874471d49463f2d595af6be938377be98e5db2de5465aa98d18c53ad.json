@@ -1,0 +1,56 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "R\u00e9cup\u00e8re la fiche compl\u00e8te d'un PS par identifiant national (`rpps_id` / IDNPS, 11 ou 12 chiffres \u2014 IDs \u00e9mis depuis 2020 ont un pr\u00e9fixe `\"81\"` = 12 chars ; anciens IDs = 11 chars). Renvoie N entr\u00e9es quand le PS exerce sur plusieurs sites (1 par site, chacun avec sa propre `geo_precision` \u2014 un m\u00eame PS peut donc cumuler un site pr\u00e9cis FINESS et un site au centro\u00efde commune).\n\nChaque r\u00e9sultat g\u00e9olocalis\u00e9 porte `geo_precision` \u2208 {`\"adresse\"`, `\"etablissement_finess\"`, `\"centroide_commune\"`} \u2014 lire ce champ pour \u00e9valuer la fiabilit\u00e9 des `coords` (pr\u00e9cise BAN/FINESS au m pr\u00e8s vs centro\u00efde commune ~3 km, non discriminant intra-commune).\n\nFallback automatique sur l'API FHIR ANS live (`gateway.api.esante.gouv.fr/fhir/v2`) si non trouv\u00e9 en base locale (snapshot mensuel J-30 max). Le champ `source` distingue `db` (base locale) de `ans_fhir` (live). `include_freshness` n'affecte que `source: \"db\"`. Source : Annuaire Sant\u00e9, Agence du Num\u00e9rique en Sant\u00e9 (ANS) \u2014 Licence Ouverte v2.0",
+ "inputSchema": {
+  "properties": {
+   "include_freshness": {
+    "default": false,
+    "description": "Si true, ajoute un champ `data_freshness` au payload (dans `query_metadata` si pr\u00e9sent, sinon \u00e0 la racine) listant, par source (FINESS, Ameli, RPPS, CDS, IRIS), la derni\u00e8re ingestion r\u00e9ussie (`last_success_at`, `staleness_days`) ET la derni\u00e8re fois que la donn\u00e9e a r\u00e9ellement chang\u00e9 (`last_data_change_at`, `data_age_days` \u2014 un run court-circuit\u00e9 \u00ab fichier amont identique \u00bb compte comme succ\u00e8s mais ne rajeunit pas la donn\u00e9e ; c'est `data_age_days` qui dit l'\u00e2ge r\u00e9el de ce qui est servi). Opt-in pour ne pas alourdir les payloads par d\u00e9faut. Cache 5min c\u00f4t\u00e9 serveur \u2014 co\u00fbt n\u00e9gligeable.",
+    "type": "boolean"
+   },
+   "rpps_id": {
+    "pattern": "^\\s*\\d{11,12}\\s*$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "rpps_id"
+  ],
+  "type": "object"
+ },
+ "name": "professionnel_by_rpps",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

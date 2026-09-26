@@ -1,0 +1,387 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "ADR Dangerous Goods Lookup"
+ },
+ "description": "Look up European road dangerous-goods (ADR 2025) reference data for a substance: hazard class, classification code, packing group, labels, special provisions, limited/excepted quantities, transport category, tunnel restriction code and Kemler (hazard identification) number. Covers 2,939 entries across all 9 hazard classes, from UNECE ADR 2025 (ECE/TRANS/352).\n\nProvide exactly ONE of: un_number (exact lookup \u2014 returns every packing-group variant of that UN number), search (case-insensitive partial match on the proper shipping name), or hazard_class (all entries in a class or division). un_number is normalised \u2014 \"1203\", \"UN1203\" and \"un 1203\" are equivalent, and normalized_input reports the correction; explosives keep their leading zero (\"0004\").\n\nBehavior: read-only reference lookup; name searches return up to 50 entries, class filters up to 100. An unknown UN number or a search with no hits errors with the API's NOT_FOUND body and a retry hint. 28 Table A rows carry a scope remark instead of a packing group: those return packing_group null plus not_subject_to_adr (with conditions_ref, e.g. \"5.5.3\" for UN 1845 dry ice) or carriage_prohibited, and table_a_remark preserves the verbatim Table A text. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: count and results[] \u2014 per entry: un_number, proper_shipping_name, class, classification_code, packing_group, labels, special_provisions, limited_quantity, excepted_quantity, transport_category, tunnel_restriction_code, hazard_identification_number, variant_index/variant_count and, on scope-flagged rows, not_subject_to_adr/carriage_prohibited/conditions_ref/table_a_remark \u2014 under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: a factual compilation of the ADR table, not legal or compliance advice; classification remains the consignor's responsibility \u2014 verify against the current UNECE ADR text.\n\nRelated: adr_lq_eq_check (checks quantities against the LQ/EQ values returned here), adr_exemption_calculator (1.1.3.6 small-load points), consignment_calculator (flags dangerous-goods lines by UN number).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hazard_class": {
+    "description": "All entries in an ADR class or division. Examples: \"3\" (flammable liquids), \"6.1\" (toxic), \"1.4\" (an explosives division).",
+    "type": "string"
+   },
+   "search": {
+    "description": "Case-insensitive partial match on the proper shipping name (min 2 characters). Example: \"acetone\".",
+    "minLength": 2,
+    "type": "string"
+   },
+   "un_number": {
+    "description": "Exact UN number \u2014 4 digits, optionally \"UN\"-prefixed; explosives keep their leading zero. Examples: \"1203\", \"UN1203\", \"0004\".",
+    "pattern": "^(UN)?\\d{4}$",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "adr_lookup",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "count": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "meta": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "results": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": true,
+           "properties": {
+            "carriage_prohibited": {
+             "type": [
+              "boolean",
+              "null"
+             ]
+            },
+            "class": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "classification_code": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "conditions_ref": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "excepted_quantity": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "hazard_identification_number": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "labels": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "limited_quantity": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "not_subject_to_adr": {
+             "type": [
+              "boolean",
+              "null"
+             ]
+            },
+            "packing_group": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "proper_shipping_name": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "special_provisions": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "table_a_remark": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "transport_category": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "tunnel_restriction_code": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "un_number": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "variant_count": {
+             "type": [
+              "number",
+              "null"
+             ]
+            },
+            "variant_index": {
+             "type": [
+              "number",
+              "null"
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

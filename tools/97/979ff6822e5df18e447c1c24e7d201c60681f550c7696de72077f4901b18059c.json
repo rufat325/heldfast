@@ -1,0 +1,117 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Select eligible leads and attach them to a draft"
+ },
+ "description": "Deterministically select up to requested_count SMS-eligible leads matching the same filters search_leads accepts (nested under 'filters') and attach them to a DRAFT campaign this account owns \u2014 the same membership move add_leads_to_campaign performs, driven by a filter instead of an id list. SENDS NOTHING and never launches. Opted-out and suppressed leads are never selected; leads already in the target are skipped. best_eligible orders by score (highest first) then newest, so the same request against the same data selects the same leads; the response lists the exact ids attached, the eligible total, and an honest shortfall when fewer matched than requested. Attaching to a reviewed campaign makes its earlier approval stale (the launch step recounts recipients and refuses a token approved for a smaller audience), so review_campaign_readiness must run again \u2014 and then STOP for the human operator.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "campaign_id": {
+    "description": "The DRAFT campaign to attach to. Must be owned by this account and have status 'draft'.",
+    "type": "string"
+   },
+   "filters": {
+    "additionalProperties": false,
+    "description": "Same vocabulary as search_leads. filters.campaign_id = the source campaign/list to select FROM.",
+    "properties": {
+     "campaign_id": {
+      "description": "Only leads currently in this campaign/list (must be owned by this account).",
+      "type": "string"
+     },
+     "city": {
+      "description": "Exact city, case-insensitive.",
+      "type": "string"
+     },
+     "contact_status": {
+      "description": "never_contacted = no opening SMS ever claimed for the lead and no reply on record.",
+      "enum": [
+       "never_contacted",
+       "contacted_no_reply",
+       "replied"
+      ],
+      "type": "string"
+     },
+     "county": {
+      "description": "Exact county, case-insensitive.",
+      "type": "string"
+     },
+     "has_phone": {
+      "description": "Filter on having any phone at all.",
+      "type": "boolean"
+     },
+     "investor_type": {
+      "description": "Exact alias for lead_type \u2014 same field, same matching. Pass one or the other, not different values for both.",
+      "type": "string"
+     },
+     "lead_type": {
+      "description": "Matches the lead's lead_type/investor_type field.",
+      "type": "string"
+     },
+     "opted_out": {
+      "description": "Lead flag OR suppression-list match (phone-format tolerant).",
+      "type": "boolean"
+     },
+     "sms_eligible": {
+      "description": "Textable phone (cell, not landline-only), not opted out, not suppressed. Send-time compliance still re-checks.",
+      "type": "boolean"
+     },
+     "source": {
+      "description": "Exact source label, case-insensitive, e.g. 'PropStream export'.",
+      "type": "string"
+     },
+     "state": {
+      "description": "Exact state, case-insensitive, e.g. 'CA'.",
+      "type": "string"
+     },
+     "status": {
+      "description": "Lead status, e.g. 'new'.",
+      "type": "string"
+     },
+     "suppressed": {
+      "description": "do-not-contact / unsubscribed.",
+      "type": "boolean"
+     },
+     "tags": {
+      "description": "Leads carrying ANY of these tags.",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 25,
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "idempotency_key": {
+    "description": "Required. Retrying the same key returns the same selection instead of attaching twice; reusing it with different arguments is rejected.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "requested_count": {
+    "description": "Exactly this many leads when enough are eligible; fewer (with an honest shortfall report) when not.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "selection_strategy": {
+    "description": "Only 'best_eligible' (score desc, then newest; SMS-eligible only) is currently supported.",
+    "enum": [
+     "best_eligible"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "campaign_id",
+   "requested_count",
+   "idempotency_key"
+  ],
+  "type": "object"
+ },
+ "name": "select_and_attach_leads",
+ "title": "Select eligible leads and attach them to a draft"
+}

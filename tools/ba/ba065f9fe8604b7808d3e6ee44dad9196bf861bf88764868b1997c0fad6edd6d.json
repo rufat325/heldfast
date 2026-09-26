@@ -1,0 +1,125 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "pdfBase64": "<ltv-pdf-base64>"
+    },
+    "title": "Archive-timestamp a B-LT document"
+   },
+   {
+    "input": {
+     "pdfBase64": "<ltv-pdf-base64>",
+     "placeholderBytes": 24576
+    },
+    "title": "Re-timestamp with a larger token reservation"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "PAdES B-LTA: append an RFC 3161 document timestamp (/DocTimeStamp, ETSI.RFC3161) over the whole document. Ladder step 4 after add_ltv; re-run before the TSA certificate expires. fieldName omitted \u2192 DocTimeStamp1, 2, \u2026; a fieldName colliding with a signed field fails. Uses the OPERATOR TSA (PDFNATIVE_MCP_TSA_URL; TSA_NOT_CONFIGURED otherwise, no network without it). The token's status, imprint and nonce are checked before embedding (its own signature is verified by verify_pdf). Unencrypted PDFs only.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "fieldName": {
+    "description": "Signature field name for the timestamp. Omit it to get 'DocTimeStamp1', 'DocTimeStamp2', \u2026 auto-suffixed on each re-timestamp; an explicit name that collides with an existing signed field fails.",
+    "pattern": "^[A-Za-z0-9_.\\- ]{1,127}$",
+    "type": "string"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default) returns the PDF inline; 'file' writes it inside the PDFNATIVE_MCP_OUTPUT_DIR sandbox (SECURITY_VIOLATION when the sandbox is not configured).",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Relative path inside PDFNATIVE_MCP_OUTPUT_DIR (required when outputMode='file').",
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded PDF (unencrypted). Typically already signed (+ add_ltv) \u2014 a document timestamp on an unsigned PDF is allowed but proves only existence at that time.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "placeholderBytes": {
+    "description": "Room reserved for the TimeStampToken (default 12288). Raise it for TSAs that return large certificate chains.",
+    "maximum": 65536,
+    "minimum": 4096,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "pdfBase64"
+  ],
+  "type": "object"
+ },
+ "name": "timestamp_pdf",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Result of a PDF-producing tool. base64 mode: the PDF arrives as an embedded `resource` content block (not duplicated here); file mode: `filePath`.",
+  "properties": {
+   "diagnostics": {
+    "description": "Engine diagnostics (when includeDiagnostics=true).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "severity"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "filePath": {
+    "description": "Sandboxed absolute path (file mode).",
+    "type": "string"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "sizeBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "summary": {
+    "additionalProperties": true,
+    "description": "Tool-specific summary, when produced.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "sizeBytes"
+  ],
+  "type": "object"
+ },
+ "title": "Add a document timestamp (PAdES B-LTA)"
+}

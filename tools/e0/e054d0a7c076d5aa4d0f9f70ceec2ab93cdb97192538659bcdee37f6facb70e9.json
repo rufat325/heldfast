@@ -1,0 +1,499 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "PolyDoc: Generate E-Invoice"
+ },
+ "description": "Generate an EU electronic invoice as a hybrid PDF/A-3 (ZUGFeRD or Factur-X): a human-readable PDF with embedded structured invoice XML. Provide the visible document via one source (html, templateId, or url) and the structured data via the invoice object. For EN 16931 (profile en16931), include a dueDate or paymentTerms (rule BR-CO-25), a seller taxId when a line uses VAT category S, a taxSummary, and totals where totalNetAmount + totalTaxAmount = totalGrossAmount.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "advanced": {
+    "additionalProperties": {},
+    "description": "Raw fields deep-merged into the request body for any API option not exposed here (e.g. pdf.watermark, render, request).",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "delivery": {
+    "default": "download",
+    "description": "download writes the file locally; cloudStorage uploads to a presigned URL; webhook posts the file to a URL.",
+    "enum": [
+     "download",
+     "cloudStorage",
+     "webhook"
+    ],
+    "type": "string"
+   },
+   "filename": {
+    "description": "Output filename. Written under the configured output directory (basename only).",
+    "type": "string"
+   },
+   "html": {
+    "description": "Inline HTML to render. Provide exactly one of url, html, or templateId.",
+    "type": "string"
+   },
+   "invoice": {
+    "description": "Structured invoice data embedded as ZUGFeRD / Factur-X XML.",
+    "properties": {
+     "buyer": {
+      "properties": {
+       "address": {
+        "properties": {
+         "city": {
+          "type": "string"
+         },
+         "countryCode": {
+          "description": "ISO 3166-1 alpha-2, e.g. DE.",
+          "type": "string"
+         },
+         "line1": {
+          "type": "string"
+         },
+         "line2": {
+          "type": "string"
+         },
+         "postalCode": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "line1",
+         "city",
+         "postalCode",
+         "countryCode"
+        ],
+        "type": "object"
+       },
+       "contactName": {
+        "description": "Contact person (BT-41 seller, BT-56 buyer). Profile en16931 or extended only.",
+        "type": "string"
+       },
+       "electronicAddress": {
+        "description": "Electronic address the party receives invoices at (BT-34 seller, BT-49 buyer). Reaches the XML at every profile.",
+        "properties": {
+         "id": {
+          "description": "The address itself, e.g. a GLN or an email address.",
+          "type": "string"
+         },
+         "schemeId": {
+          "description": "CEF EAS code list value, e.g. \"0088\" (GLN), \"0204\" (Leitweg-ID), \"EM\" (email). An unlisted value is rejected with 422 (BR-CL-25).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "schemeId",
+         "id"
+        ],
+        "type": "object"
+       },
+       "email": {
+        "description": "Contact email (BT-43 seller, BT-58 buyer). Profile en16931 or extended only.",
+        "type": "string"
+       },
+       "name": {
+        "type": "string"
+       },
+       "phone": {
+        "description": "Contact phone (BT-42 seller, BT-57 buyer). Profile en16931 or extended only.",
+        "type": "string"
+       },
+       "taxId": {
+        "description": "VAT ID. Required for the seller when a line uses VAT category S.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "address"
+      ],
+      "type": "object"
+     },
+     "buyerReference": {
+      "description": "Buyer reference (BT-10), e.g. the Leitweg-ID for German public-sector invoices.",
+      "type": "string"
+     },
+     "currencyCode": {
+      "description": "ISO 4217, 3 letters, e.g. EUR.",
+      "type": "string"
+     },
+     "deliverTo": {
+      "description": "Where the goods or services are delivered, when that differs from the buyer (BG-13). Reaches the XML at every profile. An empty object writes nothing.",
+      "properties": {
+       "address": {
+        "description": "Deliver-to address (BG-15).",
+        "properties": {
+         "city": {
+          "description": "City (BT-77).",
+          "type": "string"
+         },
+         "countryCode": {
+          "description": "ISO 3166-1 alpha-2, e.g. DE (BT-80). Required whenever address is sent (BR-57).",
+          "type": "string"
+         },
+         "line1": {
+          "description": "Street and house number (BT-75).",
+          "type": "string"
+         },
+         "line2": {
+          "description": "Additional address line (BT-76).",
+          "type": "string"
+         },
+         "postalCode": {
+          "description": "Post code (BT-78).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "countryCode"
+        ],
+        "type": "object"
+       },
+       "name": {
+        "description": "Deliver-to party name (BT-70).",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "deliveryDate": {
+      "description": "Actual delivery date (BT-72), ISO date YYYY-MM-DD. When omitted, issueDate is written as the delivery date.",
+      "type": "string"
+     },
+     "dueDate": {
+      "description": "ISO date. EN 16931 needs dueDate or paymentTerms (rule BR-CO-25).",
+      "type": "string"
+     },
+     "issueDate": {
+      "description": "ISO date, YYYY-MM-DD.",
+      "type": "string"
+     },
+     "lines": {
+      "items": {
+       "properties": {
+        "buyerItemId": {
+         "description": "The buyer's own article number for this item (BT-156). Profile en16931 or extended only.",
+         "type": "string"
+        },
+        "description": {
+         "description": "Item name (BT-153).",
+         "type": "string"
+        },
+        "lineTotal": {
+         "type": "number"
+        },
+        "quantity": {
+         "type": "number"
+        },
+        "unitCode": {
+         "type": "string"
+        },
+        "unitPrice": {
+         "type": "number"
+        },
+        "vatCategoryCode": {
+         "description": "e.g. \"S\" for standard rate.",
+         "type": "string"
+        },
+        "vatRate": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "description",
+        "quantity",
+        "unitPrice",
+        "lineTotal"
+       ],
+       "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+     },
+     "note": {
+      "type": "string"
+     },
+     "number": {
+      "type": "string"
+     },
+     "orderReference": {
+      "description": "Purchase order number (BT-13).",
+      "type": "string"
+     },
+     "paymentMeans": {
+      "properties": {
+       "accountName": {
+        "type": "string"
+       },
+       "bic": {
+        "type": "string"
+       },
+       "iban": {
+        "type": "string"
+       },
+       "paymentReference": {
+        "type": "string"
+       },
+       "typeCode": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "typeCode"
+      ],
+      "type": "object"
+     },
+     "paymentTerms": {
+      "type": "string"
+     },
+     "seller": {
+      "properties": {
+       "address": {
+        "properties": {
+         "city": {
+          "type": "string"
+         },
+         "countryCode": {
+          "description": "ISO 3166-1 alpha-2, e.g. DE.",
+          "type": "string"
+         },
+         "line1": {
+          "type": "string"
+         },
+         "line2": {
+          "type": "string"
+         },
+         "postalCode": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "line1",
+         "city",
+         "postalCode",
+         "countryCode"
+        ],
+        "type": "object"
+       },
+       "contactName": {
+        "description": "Contact person (BT-41 seller, BT-56 buyer). Profile en16931 or extended only.",
+        "type": "string"
+       },
+       "electronicAddress": {
+        "description": "Electronic address the party receives invoices at (BT-34 seller, BT-49 buyer). Reaches the XML at every profile.",
+        "properties": {
+         "id": {
+          "description": "The address itself, e.g. a GLN or an email address.",
+          "type": "string"
+         },
+         "schemeId": {
+          "description": "CEF EAS code list value, e.g. \"0088\" (GLN), \"0204\" (Leitweg-ID), \"EM\" (email). An unlisted value is rejected with 422 (BR-CL-25).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "schemeId",
+         "id"
+        ],
+        "type": "object"
+       },
+       "email": {
+        "description": "Contact email (BT-43 seller, BT-58 buyer). Profile en16931 or extended only.",
+        "type": "string"
+       },
+       "name": {
+        "type": "string"
+       },
+       "phone": {
+        "description": "Contact phone (BT-42 seller, BT-57 buyer). Profile en16931 or extended only.",
+        "type": "string"
+       },
+       "taxId": {
+        "description": "VAT ID. Required for the seller when a line uses VAT category S.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "address"
+      ],
+      "type": "object"
+     },
+     "taxSummary": {
+      "description": "Recommended: VAT breakdown so totals validate.",
+      "items": {
+       "properties": {
+        "categoryCode": {
+         "type": "string"
+        },
+        "rate": {
+         "type": "number"
+        },
+        "taxAmount": {
+         "type": "number"
+        },
+        "taxableAmount": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "categoryCode",
+        "rate",
+        "taxableAmount",
+        "taxAmount"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "totalGrossAmount": {
+      "description": "Must equal totalNetAmount + totalTaxAmount.",
+      "type": "number"
+     },
+     "totalNetAmount": {
+      "type": "number"
+     },
+     "totalTaxAmount": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "number",
+     "issueDate",
+     "currencyCode",
+     "seller",
+     "buyer",
+     "lines",
+     "totalNetAmount",
+     "totalTaxAmount",
+     "totalGrossAmount"
+    ],
+    "type": "object"
+   },
+   "presignedUrl": {
+    "description": "Presigned PUT URL, required when delivery is cloudStorage.",
+    "type": "string"
+   },
+   "profile": {
+    "default": "en16931",
+    "enum": [
+     "basic",
+     "en16931",
+     "extended"
+    ],
+    "type": "string"
+   },
+   "returnBase64": {
+    "description": "Also return the file as base64 in structured output (heavy; for clients without a filesystem).",
+    "type": "boolean"
+   },
+   "sandbox": {
+    "description": "Override the server default for this call. Sandbox output is watermarked and rate-limited (about 5 requests/sec).",
+    "type": "boolean"
+   },
+   "standard": {
+    "default": "zugferd",
+    "enum": [
+     "zugferd",
+     "facturx"
+    ],
+    "type": "string"
+   },
+   "tag": {
+    "description": "Label for logging and analytics (max 30 chars).",
+    "type": "string"
+   },
+   "templateData": {
+    "additionalProperties": {},
+    "description": "Variables for the Liquid template (used with templateId).",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "templateId": {
+    "description": "ID of a saved PolyDoc template. Provide exactly one of url, html, or templateId.",
+    "type": "string"
+   },
+   "timeout": {
+    "description": "Conversion timeout in milliseconds.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "url": {
+    "description": "Public URL to render. Provide exactly one of url, html, or templateId.",
+    "type": "string"
+   },
+   "verify": {
+    "description": "Verify PDF/A-3 and e-invoice compliance; fails the request if invalid.",
+    "type": "boolean"
+   },
+   "webhook": {
+    "additionalProperties": {},
+    "description": "Webhook config, required when delivery is webhook. Shape: { url, async?, method?, headers?, retries? }.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "invoice"
+  ],
+  "type": "object"
+ },
+ "name": "polydoc_generate_einvoice",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "base64": {
+    "type": "string"
+   },
+   "contentType": {
+    "type": "string"
+   },
+   "conversionId": {
+    "type": "string"
+   },
+   "creditUsed": {
+    "type": "string"
+   },
+   "delivery": {
+    "enum": [
+     "download",
+     "cloudStorage",
+     "webhook"
+    ],
+    "type": "string"
+   },
+   "filePath": {
+    "description": "Absolute path of the written file (download).",
+    "type": "string"
+   },
+   "sandbox": {
+    "type": "boolean"
+   },
+   "sizeBytes": {
+    "type": "number"
+   },
+   "url": {
+    "description": "Delivery URL (cloudStorage / webhook).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "delivery",
+   "sandbox"
+  ],
+  "type": "object"
+ },
+ "title": "PolyDoc: Generate E-Invoice"
+}

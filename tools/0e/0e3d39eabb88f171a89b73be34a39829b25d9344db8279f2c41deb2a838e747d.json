@@ -1,0 +1,59 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Dynamique immobili\u00e8re et potentiel de croissance d'une zone (point + rayon). Combine 3 sources officielles : permis de construire (Sit@del/SDES, maille COMMUNE \u2014 logements autoris\u00e9s/commenc\u00e9s r\u00e9cents \u2192 habitants attendus), zones AU du PLU (G\u00e9oportail de l'Urbanisme/IGN \u2014 futurs quartiers r\u00e9serv\u00e9s, g\u00e9olocalis\u00e9s), ventes de terrains \u00e0 b\u00e2tir (DGFiP DVF, g\u00e9olocalis\u00e9es). Sortie en 2 registres : 'note' = VOLUME (logements autoris\u00e9s/commenc\u00e9s, nombre et imm\u00e9diatet\u00e9 des zones AU) destin\u00e9 au scoring de potentiel ; 'info' = quartiers concern\u00e9s (nomm\u00e9s), habitants attendus, prix indicatifs (contexte, hors score). En ville dense les permis-commune sont grossiers \u2192 s'appuyer sur zones AU + terrains (g\u00e9olocalis\u00e9s). Point c\u00f4tier/isol\u00e9 sans commune au g\u00e9ocodage inverse \u2192 `couverture.permis`='indisponible:commune_introuvable' et `meta.code_commune`=null, MAIS zones AU + terrains restent servis (calcul par rayon) \u2014 l'outil ne plante jamais pour \u00e7a. Paris/Lyon/Marseille : Sit@del ne descend pas \u00e0 l'arrondissement \u2192 les permis servis sont ceux de la VILLE ENTI\u00c8RE (`meta.code_commune_permis`, ex 75056), `couverture.permis`='partiel:ville_entiere_plm' et le `signal` ne s'appuie alors que sur les zones AU. Commune absente de Sit@del, ou sans aucune ann\u00e9e pleine \u2192 `couverture.permis`='indisponible:no_data' (les z\u00e9ros ne sont PAS une donn\u00e9e ; `info.permis.annee_en_cours` peut malgr\u00e9 tout \u00eatre servi pour une commune nouvelle). Les totaux permis ne somment que des ANN\u00c9ES PLEINES (`info.permis.annees_pleines`) ; l'ann\u00e9e en cours, incompl\u00e8te (le SDES publie avec ~2 mois de retard), est servie \u00e0 part dans `info.permis.annee_en_cours` avec ses `mois_couverts` \u2014 ne JAMAIS la comparer telle quelle \u00e0 une ann\u00e9e pleine ni l'ajouter aux totaux. Moins de 5 ann\u00e9es pleines en base \u2192 'partiel:fenetre_courte' ; une ann\u00e9e de la fen\u00eatre \u00e0 moins de 12 mois publi\u00e9s \u2192 'partiel:annees_incompletes' (total SERVI mais non comparable, non scor\u00e9 dans les deux cas). 'geojson' = polygones des zones AU pour la carte. Sources : SDES, IGN/GPU, DGFiP.",
+ "inputSchema": {
+  "properties": {
+   "lat": {
+    "description": "Latitude du centre (WGS84).",
+    "type": "number"
+   },
+   "lon": {
+    "description": "Longitude du centre (WGS84).",
+    "type": "number"
+   },
+   "rayon_km": {
+    "default": 3,
+    "description": "Rayon en km (0.1-10, d\u00e9faut 3).",
+    "maximum": 10,
+    "minimum": 0.1,
+    "type": "number"
+   }
+  },
+  "required": [
+   "lat",
+   "lon"
+  ],
+  "type": "object"
+ },
+ "name": "dynamique_immobiliere",
+ "outputSchema": {
+  "description": "R\u00e9sultat de dynamique immobili\u00e8re \u00e0 2 registres (note = scoring, info = contexte) + couverture de d\u00e9gradation par section.",
+  "properties": {
+   "couverture": {
+    "description": "Statut de d\u00e9gradation par section : 'ok' | 'partiel:<raison>' | 'indisponible:<raison>'. Un 'partiel:' signifie que le chiffre est SERVI mais NON comparable et NON scor\u00e9 ('partiel:ville_entiere_plm' = chiffre de la ville enti\u00e8re ; 'partiel:fenetre_courte' = moins de 5 ann\u00e9es pleines ; 'partiel:annees_incompletes' = une ann\u00e9e de la fen\u00eatre a moins de 12 mois publi\u00e9s ; 'partiel:lignes_illisibles'). Lire avant d'interpr\u00e9ter note/info.",
+    "type": "object"
+   },
+   "geojson": {
+    "description": "FeatureCollection GeoJSON des polygones des zones AU (pour la carte).",
+    "type": "object"
+   },
+   "info": {
+    "description": "Contexte non-scorable : habitants_attendus, permis { annees_pleines, annee_en_cours: { annee, mois_couverts, logements_autorises, logements_commences } | null }, quartiers_au (libell\u00e9s), prix_m2_median, terrains. Ne PAS int\u00e9grer \u00e0 une note d'attractivit\u00e9.",
+    "type": "object"
+   },
+   "note": {
+    "description": "Donn\u00e9es de VOLUME \u2014 \u00e0 utiliser pour le scoring LLM. logements_autorises_recent, logements_commences_recent, zones_au_nombre, zones_au_immediates, signal.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "couverture"
+  ],
+  "type": "object"
+ }
+}

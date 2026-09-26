@@ -1,0 +1,169 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Recherche de professionnels de sant\u00e9 lib\u00e9raux conventionn\u00e9s dans un rayon g\u00e9ographique. Pr\u00e9cision g\u00e9o HYBRIDE depuis le g\u00e9ocodage BAN (Chantier C) : ~77 % des PS sont g\u00e9olocalis\u00e9s \u00e0 l'adresse pr\u00e9cise (rue/b\u00e2timent, `distance_km` exacte au m pr\u00e8s), ~23 % restent au centro\u00efde commune (~3 km, repli pour adresses non g\u00e9ocodables \u2014 DROM, Monaco, CEDEX, lieux-dits). Lire `geo_precision` PAR r\u00e9sultat \u2014 ne pas pr\u00e9sumer une pr\u00e9cision uniforme. Codes type_ps Ameli pr\u00e9sents en base (3) : '1' m\u00e9decins, '2' auxiliaires m\u00e9dicaux (fourre-tout : IDE, kin\u00e9s, sages-femmes, podologues, orthophonistes, orthoptistes, IPA), '5' chirurgiens-dentistes. Pour cibler une profession pr\u00e9cise (ex: IDE seuls, kin\u00e9s seuls, podologues seuls), passer par `specialite_codes` plut\u00f4t que `type_ps_codes` qui ratisse plus large. Liste exhaustive des codes sp\u00e9cialit\u00e9 disponibles via le tool `lister_nomenclature(referentiel:'ameli_specialites')`. Multi-sites : par d\u00e9faut un PS exer\u00e7ant sur N adresses appara\u00eet N fois \u2014 utiliser `dedupe_by_ps=true` pour regrouper par praticien et lister les sites en sous-objet. Distance retourn\u00e9e en km vol d'oiseau (haversine PostGIS) \u2014 pour distance routi\u00e8re, croiser avec un service externe (OSRM, ORS). Chaque PS g\u00e9olocalis\u00e9 porte `geo_precision` \u2208 {`\"adresse\"`, `\"centroide_commune\"`} : `\"adresse\"` = coords BAN pr\u00e9cises, `distance_km` exacte, classement individuel fiable ; `\"centroide_commune\"` = ~3 km, `distance_km` IDENTIQUE pour tous les PS d'une m\u00eame commune (non discriminante intra-commune \u2014 filtre de zone uniquement, pas de classement/choix d'un PS individuel). **Param `precise_only`** (d\u00e9faut false) : \u00e0 true, exclut les PS au centro\u00efde commune et ne renvoie que les ~77 % g\u00e9ocod\u00e9s \u00e0 l'adresse BAN (`distance_km` exacte) \u2014 recommand\u00e9 pour les rayons courts (<3 km) et le classement intra-commune. P\u00c9RIM\u00c8TRE : lib\u00e9raux conventionn\u00e9s UNIQUEMENT. HORS P\u00c9RIM\u00c8TRE : m\u00e9decins exclusivement hospitaliers/salari\u00e9s, biologistes m\u00e9dicaux salari\u00e9s en LBM, anatomopathologistes hospitaliers, m\u00e9decins du travail, m\u00e9decine l\u00e9gale. Pour effectifs tous statuts, voir Annuaire Sant\u00e9 ANS (RPPS, esante.gouv.fr) \u2014 non couvert par ce serveur. Source : Annuaire sant\u00e9 Ameli (Assurance Maladie), MAJ hebdomadaire. R\u00e9utilisation soumise \u00e0 l'art. L.1461-2 CSP \u2014 citer la source et la date de sync.",
+ "inputSchema": {
+  "properties": {
+   "dedupe_by_ps": {
+    "default": false,
+    "description": "Regrouper les entr\u00e9es par praticien (nom + pr\u00e9nom + code sp\u00e9cialit\u00e9) et lister chaque adresse d'exercice dans `sites[]`. D\u00e9faut false (comportement V0.4 historique : un PS multi-sites = N entr\u00e9es).",
+    "type": "boolean"
+   },
+   "include_freshness": {
+    "default": false,
+    "description": "Si true, ajoute un champ `data_freshness` au payload (dans `query_metadata` si pr\u00e9sent, sinon \u00e0 la racine) listant, par source (FINESS, Ameli, RPPS, CDS, IRIS), la derni\u00e8re ingestion r\u00e9ussie (`last_success_at`, `staleness_days`) ET la derni\u00e8re fois que la donn\u00e9e a r\u00e9ellement chang\u00e9 (`last_data_change_at`, `data_age_days` \u2014 un run court-circuit\u00e9 \u00ab fichier amont identique \u00bb compte comme succ\u00e8s mais ne rajeunit pas la donn\u00e9e ; c'est `data_age_days` qui dit l'\u00e2ge r\u00e9el de ce qui est servi). Opt-in pour ne pas alourdir les payloads par d\u00e9faut. Cache 5min c\u00f4t\u00e9 serveur \u2014 co\u00fbt n\u00e9gligeable.",
+    "type": "boolean"
+   },
+   "lat": {
+    "description": "Latitude du centre (WGS84).",
+    "type": "number"
+   },
+   "limit": {
+    "default": 100,
+    "description": "Nombre max de r\u00e9sultats (1-500, d\u00e9faut 100). Appliqu\u00e9 AVANT d\u00e9duplication.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "number"
+   },
+   "lon": {
+    "description": "Longitude du centre (WGS84).",
+    "type": "number"
+   },
+   "precise_only": {
+    "default": false,
+    "description": "Si true, exclut les PS au centro\u00efde commune et ne renvoie que ceux g\u00e9ocod\u00e9s \u00e0 l'adresse BAN, \u00e0 `distance_km` exacte (cf. description du tool pour la s\u00e9mantique compl\u00e8te). D\u00e9faut false.",
+    "type": "boolean"
+   },
+   "radius_km": {
+    "default": 5,
+    "description": "Rayon en km (0.1-50, d\u00e9faut 5).",
+    "maximum": 50,
+    "minimum": 0.1,
+    "type": "number"
+   },
+   "specialite_codes": {
+    "description": "Liste de codes sp\u00e9cialit\u00e9 Ameli (ex: ['01'] MG, ['03'] cardio). Si omis, toutes sp\u00e9cialit\u00e9s.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "type_ps_codes": {
+    "description": "Liste de codes type PS Ameli (3 valeurs pr\u00e9sentes en base : '1' m\u00e9decins, '2' auxiliaires m\u00e9dicaux fourre-tout \u2014 IDE/kin\u00e9s/sages-femmes/podologues/orthophonistes/orthoptistes/IPA, '5' chirurgiens-dentistes). Pour cibler une seule profession, pr\u00e9f\u00e9rer `specialite_codes`. Si omis, tous types.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "lon",
+   "lat"
+  ],
+  "type": "object"
+ },
+ "name": "professionnels_in_radius",
+ "outputSchema": {
+  "description": "R\u00e9sultat de query avec metadata. `results` est tronqu\u00e9 \u00e0 `limit` c\u00f4t\u00e9 serveur (cf. `truncated` quand applicable).",
+  "properties": {
+   "activite_hebergee": {
+    "description": "Compte juxtapos\u00e9 des sites h\u00e9bergeant l'activit\u00e9 correspondant \u00e0 la famille filtr\u00e9e, sous une autre cat\u00e9gorie FINESS. Distinct du `count` principal \u2014 lire `note` pour comprendre la s\u00e9mantique et ne JAMAIS additionner les deux comptes sans pr\u00e9ciser leur nature.",
+    "properties": {
+     "activite": {
+      "type": "string"
+     },
+     "count": {
+      "type": "integer"
+     },
+     "densite_pour_100k_hab": {
+      "type": "number"
+     },
+     "note": {
+      "type": "string"
+     },
+     "sites_apercu": {
+      "items": {
+       "properties": {
+        "categorie_code": {
+         "type": "string"
+        },
+        "categorie_libelle": {
+         "type": "string"
+        },
+        "num_finess": {
+         "type": "string"
+        },
+        "raison_sociale": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "truncated": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "count": {
+    "description": "Nombre d'entr\u00e9es retourn\u00e9es dans `results` (post-troncature).",
+    "type": "number"
+   },
+   "freshness": {
+    "description": "Fra\u00eecheur des sources (pr\u00e9sent si `include_freshness: true`).",
+    "type": "object"
+   },
+   "perimetre": {
+    "description": "Lentille de la source : ce que le comptage inclut/exclut. Lire `completeness_note` et la restituer au lecteur final.",
+    "properties": {
+     "completeness_note": {
+      "type": "string"
+     },
+     "compte": {
+      "type": "string"
+     },
+     "exclut": {
+      "type": "string"
+     },
+     "lens": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "query_metadata": {
+    "description": "Metadata de la query (radius_km, departement, filtres appliqu\u00e9s, \u2026).",
+    "type": "object"
+   },
+   "results": {
+    "description": "Entr\u00e9es m\u00e9tier (shape sp\u00e9cifique au tool, cf. description du tool).",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "total": {
+    "description": "Effectif r\u00e9el avant troncature. Pr\u00e9sent sur les tools de nomenclature pagin\u00e9s (lister_*) : `count` = \u00e9chantillon, `total` = total r\u00e9el, re-appeler avec un `limit` sup\u00e9rieur si `truncated`.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "true si le total r\u00e9el d\u00e9passe `limit` (re-paginer via `offset` si support\u00e9, ou augmenter `limit` sur les lister_*). Optional sur les tools de listing exhaustif (lister_*).",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "count",
+   "results"
+  ],
+  "type": "object"
+ }
+}

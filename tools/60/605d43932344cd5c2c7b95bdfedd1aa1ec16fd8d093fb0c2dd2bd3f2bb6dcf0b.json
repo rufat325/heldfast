@@ -1,0 +1,213 @@
+{
+ "annotations": {
+  "cost": {
+   "all": 10
+  },
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "AUTHORITATIVE full XBRL fundamentals dump for a US public company. Send the company as `cik` \u2014 that argument takes a TICKER (\"NVDA\") or a CIK (\"320193\"), and `ticker` / `ticker_or_cik` are accepted as aliases for it. Returns every reported financial metric (hundreds of concepts: revenue, net income, assets, liabilities, EPS, cash flow lines, segment breakdowns) with annual and historical values pulled straight from the company's SEC filings \u2014 the official numbers, not estimates. Use when you need the complete fundamental picture vs. one metric (for one metric use edgar_company_concept). Leads with latest_annual \u2014 revenue, net income, assets, cash, EPS for the most recent fiscal year, resolved to whichever XBRL concept the filer currently reports under \u2014 and flags retired concepts (e.g. a pre-ASC-606 Revenues tag) as stale so a 2010 figure is never mistaken for current. Large payload; agents typically use this once to discover available concepts then narrow to edgar_company_concept for follow-up queries. For just the headline figures plus the recent filings list, edgar_company_snapshot is the smaller one-call answer.",
+ "inputSchema": {
+  "examples": [
+   {
+    "cik": "320193"
+   }
+  ],
+  "properties": {
+   "cik": {
+    "description": "REQUIRED (or one of its aliases `ticker` / `ticker_or_cik`). Ticker (\"NVDA\") or CIK number (\"320193\"). Tickers are auto-resolved to CIKs internally.",
+    "type": "string"
+   },
+   "ticker": {
+    "description": "Alias for `cik` \u2014 same thing, a ticker or a CIK. The spelling edgar_fund_holdings and edgar_ticker_to_cik use.",
+    "type": "string"
+   },
+   "ticker_or_cik": {
+    "description": "Alias for `cik` \u2014 the spelling edgar_company_filings, edgar_insider_transactions and edgar_product_revenue use.",
+    "type": "string"
+   }
+  },
+  "required": [],
+  "type": "object"
+ },
+ "name": "edgar_company_facts",
+ "outputSchema": {
+  "properties": {
+   "available_concepts": {
+    "description": "Total number of US-GAAP financial concepts available for this company",
+    "type": "number"
+   },
+   "cik": {
+    "description": "Company CIK number",
+    "type": "string"
+   },
+   "company_name": {
+    "description": "Official company name",
+    "type": "string"
+   },
+   "key_financials": {
+    "additionalProperties": {
+     "properties": {
+      "label": {
+       "description": "Human-readable label for the XBRL concept",
+       "type": "string"
+      },
+      "most_recent_annual": {
+       "description": "Most recent annual (10-K/20-F/40-F) value, or null when the filer reports no annual value for this concept",
+       "properties": {
+        "filed": {
+         "description": "Date the filing was submitted (YYYY-MM-DD)",
+         "type": "string"
+        },
+        "form": {
+         "description": "Annual-report form the value came from (10-K, 10-K/A, 20-F, 40-F)",
+         "type": "string"
+        },
+        "period_end": {
+         "description": "Period end / balance-sheet date (YYYY-MM-DD)",
+         "type": "string"
+        },
+        "period_start": {
+         "description": "Period start (YYYY-MM-DD); present for duration concepts such as revenue, absent for balance-sheet instants",
+         "type": "string"
+        },
+        "unit": {
+         "description": "XBRL unit: USD, USD/shares, shares, or pure",
+         "type": "string"
+        },
+        "value": {
+         "description": "Metric value in `unit`",
+         "type": "number"
+        },
+        "year": {
+         "description": "Fiscal year the reporting period ENDS in, derived from period_end (NOT the SEC fy filing-year field, which stamps prior-year comparatives with the restating filing's year)",
+         "type": "number"
+        }
+       },
+       "required": [
+        "year",
+        "value",
+        "filed",
+        "period_end",
+        "form",
+        "unit"
+       ],
+       "type": [
+        "object",
+        "null"
+       ]
+      },
+      "stale": {
+       "description": "true when this concept's latest annual period ends before the filer's latest annual report \u2014 the filer stopped reporting it (e.g. a pre-ASC-606 Revenues tag). Real history, not the current figure",
+       "type": "boolean"
+      },
+      "stale_note": {
+       "description": "Present when stale: which fiscal year the concept stops at, what the filer's latest report covers, and which current concept in latest_annual replaces it",
+       "type": "string"
+      }
+     },
+     "required": [
+      "label",
+      "most_recent_annual",
+      "stale"
+     ],
+     "type": "object"
+    },
+    "description": "Per-concept detail. Current concepts first, retired (stale) concepts last \u2014 a stale concept is kept because a historical series still needs it, never silently dropped",
+    "type": "object"
+   },
+   "latest_annual": {
+    "additionalProperties": {
+     "description": "Most recent annual (10-K/20-F/40-F) value, or null when the filer reports no annual value for this concept",
+     "properties": {
+      "concept": {
+       "description": "The us-gaap concept this value was read from \u2014 the one the filer currently reports this line under",
+       "type": "string"
+      },
+      "filed": {
+       "description": "Date the filing was submitted (YYYY-MM-DD)",
+       "type": "string"
+      },
+      "form": {
+       "description": "Annual-report form the value came from (10-K, 10-K/A, 20-F, 40-F)",
+       "type": "string"
+      },
+      "period_end": {
+       "description": "Period end / balance-sheet date (YYYY-MM-DD)",
+       "type": "string"
+      },
+      "period_start": {
+       "description": "Period start (YYYY-MM-DD); present for duration concepts such as revenue, absent for balance-sheet instants",
+       "type": "string"
+      },
+      "unit": {
+       "description": "XBRL unit: USD, USD/shares, shares, or pure",
+       "type": "string"
+      },
+      "value": {
+       "description": "Metric value in `unit`",
+       "type": "number"
+      },
+      "year": {
+       "description": "Fiscal year the reporting period ENDS in, derived from period_end (NOT the SEC fy filing-year field, which stamps prior-year comparatives with the restating filing's year)",
+       "type": "number"
+      }
+     },
+     "required": [
+      "year",
+      "value",
+      "filed",
+      "period_end",
+      "form",
+      "unit",
+      "concept"
+     ],
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "description": "Canonical line items for the most recent fiscal year \u2014 revenue, net_income, operating_income, gross_profit, total_assets, total_liabilities, stockholders_equity, cash_and_equivalents, eps_basic, eps_diluted, shares_outstanding, research_and_development \u2014 each resolved to whichever concept the filer currently reports under; null when the filer reports no current value",
+    "type": "object"
+   },
+   "latest_fiscal_year": {
+    "description": "Fiscal year of the filer's most recent annual report across every concept examined",
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "latest_period_end": {
+    "description": "Period end of that most recent annual report (YYYY-MM-DD)",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "stale_concepts": {
+    "description": "Concepts the filer has stopped reporting; present in key_financials flagged stale, never used in latest_annual",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "year_note": {
+    "description": "How `year` is derived",
+    "type": "string"
+   }
+  },
+  "required": [
+   "cik",
+   "company_name",
+   "latest_annual",
+   "key_financials",
+   "stale_concepts",
+   "available_concepts"
+  ],
+  "type": "object"
+ },
+ "title": "Edgar Company Facts",
+ "version": "v1.7abcecab"
+}

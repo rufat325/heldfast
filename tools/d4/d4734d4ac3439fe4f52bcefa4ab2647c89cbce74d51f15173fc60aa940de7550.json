@@ -1,0 +1,290 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Resolve and enumerate DNS records (A, AAAA, CNAME, MX, NS, TXT, CAA) for one or more hosts across multiple public resolvers, with optional reverse DNS (PTR) for resolved IPs. Reports per-resolver values so propagation gaps and split-horizon DNS are visible. Each host is checked against an SSRF guard; one failing host degrades to a per-host error rather than failing the whole call.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "hosts": {
+    "description": "Hosts to resolve (1\u201350).",
+    "items": {
+     "description": "Hostname to resolve (e.g. \"example.com\", \"www.example.com\").",
+     "type": "string"
+    },
+    "maxItems": 50,
+    "minItems": 1,
+    "type": "array"
+   },
+   "recordTypes": {
+    "description": "Record types to query. Omit for all of A/AAAA/CNAME/MX/NS/TXT/CAA.",
+    "items": {
+     "enum": [
+      "A",
+      "AAAA",
+      "CNAME",
+      "MX",
+      "NS",
+      "TXT",
+      "CAA"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "resolvers": {
+    "description": "Resolver IPs to query. Omit to use the server defaults (8.8.8.8, 1.1.1.1, 9.9.9.9). Private/loopback resolver IPs are rejected.",
+    "items": {
+     "description": "Public resolver IP (e.g. \"8.8.8.8\").",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "reverse": {
+    "default": false,
+    "description": "When true, also perform reverse DNS (PTR) on resolved A/AAAA addresses.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "hosts"
+  ],
+  "type": "object"
+ },
+ "name": "attacksurface_resolve_dns",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results",
+     "resolversUsed"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_host`: A supplied host is not a syntactically valid hostname or IP. `invalid_resolver`: A supplied resolver is not a valid IP address. `blocked_resolver`: A supplied resolver IP is in a private, loopback, or link-local range. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_host",
+         "invalid_resolver",
+         "blocked_resolver"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when no host resolved or all hosts errored.",
+    "type": "string"
+   },
+   "resolversUsed": {
+    "description": "Resolver IPs actually queried.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "results": {
+    "description": "Per-host DNS results.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Aggregate DNS result for one host across all queried resolvers.",
+     "properties": {
+      "host": {
+       "description": "Host queried.",
+       "type": "string"
+      },
+      "hostError": {
+       "description": "Host-level error (e.g. blocked target), or null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "propagationMismatches": {
+       "description": "Record types where resolvers disagreed (propagation gaps).",
+       "items": {
+        "enum": [
+         "A",
+         "AAAA",
+         "CNAME",
+         "MX",
+         "NS",
+         "TXT",
+         "CAA"
+        ],
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "records": {
+       "additionalProperties": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "description": "Canonical records (from the first resolver that answered), keyed by type.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "resolved": {
+       "description": "True when the host resolved to at least one A/AAAA address.",
+       "type": "boolean"
+      },
+      "resolverResults": {
+       "description": "Per-resolver breakdown.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One resolver's answer for a host.",
+        "properties": {
+         "latencyInMs": {
+          "description": "Round-trip latency for this resolver in milliseconds.",
+          "type": "number"
+         },
+         "queryError": {
+          "description": "Resolver-level error, or null when the query succeeded.",
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "records": {
+          "additionalProperties": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "description": "Records keyed by type (A/AAAA/CNAME/MX/NS/TXT/CAA); types with no answer are omitted.",
+          "propertyNames": {
+           "type": "string"
+          },
+          "type": "object"
+         },
+         "resolver": {
+          "description": "Resolver IP that produced this result.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "resolver",
+         "latencyInMs",
+         "records",
+         "queryError"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "reverse": {
+       "description": "Reverse-DNS (PTR) results for resolved IPs, when reverse was requested.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A reverse-DNS (PTR) result for one IP.",
+        "properties": {
+         "hostnames": {
+          "description": "PTR hostnames; empty when none exist.",
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "ip": {
+          "description": "IP that was reverse-resolved.",
+          "type": "string"
+         },
+         "lookupError": {
+          "description": "Reverse-lookup error, or null on success.",
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "required": [
+         "ip",
+         "hostnames",
+         "lookupError"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "host",
+      "resolved",
+      "records",
+      "resolverResults",
+      "propagationMismatches",
+      "hostError"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "attacksurface_resolve_dns"
+}

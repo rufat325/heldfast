@@ -1,0 +1,384 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Pallet Fitting Calculator"
+ },
+ "description": "Calculate how many identical boxes fit on a pallet: boxes per layer (trying 90-degree rotation when allowed), layer count within the max height, totals, volume utilisation and weight capping.\n\nBehavior: deterministic geometric packing of one box size in aligned rows and columns \u2014 it does not model interlocked or mixed-orientation patterns; weight_limited reports when max_payload_kg caps the count below the geometric fit; pallet_deck_height_cm defaults to 15. Missing or non-positive dimensions error naming the parameter. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: boxes_per_layer, layers, total_boxes, orientation, boxes_per_row/col, usable_height_cm, utilisation_percent, total_box_volume_cbm, wasted_space_cbm and the weight fields under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: a theoretical best-effort fit \u2014 real stacking obeys carton strength, overhang and load-stability rules it does not model.\n\nRelated: ldm_calculator (pallets into trailer length), vehicle_lookup (pallet capacity per vehicle), container_lookup (pallets into containers).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "allow_rotation": {
+    "description": "Try 90-degree box rotation for the best layer fit. Default: true.",
+    "type": "boolean"
+   },
+   "box_height_cm": {
+    "description": "Box height in cm.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "box_length_cm": {
+    "description": "Box length in cm.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "box_weight_kg": {
+    "description": "Weight per box in kg \u2014 enables the weight-capping check.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "box_width_cm": {
+    "description": "Box width in cm.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "max_payload_kg": {
+    "description": "Maximum pallet payload in kg. Example: 1000.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "pallet_deck_height_cm": {
+    "description": "Pallet deck height in cm. Default: 15.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "pallet_length_cm": {
+    "description": "Pallet length in cm. Example: 120 (euro pallet).",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "pallet_max_height_cm": {
+    "description": "Maximum stack height in cm INCLUDING the pallet deck. Example: 180.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "pallet_width_cm": {
+    "description": "Pallet width in cm. Example: 80 (euro pallet).",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   }
+  },
+  "required": [
+   "pallet_length_cm",
+   "pallet_width_cm",
+   "pallet_max_height_cm",
+   "box_length_cm",
+   "box_width_cm",
+   "box_height_cm"
+  ],
+  "type": "object"
+ },
+ "name": "pallet_fitting_calculator",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "boxes_per_col": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "boxes_per_layer": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "boxes_per_row": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "layers": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "meta": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "orientation": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "pallet_volume_cbm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "remaining_weight_capacity_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "total_box_volume_cbm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "total_boxes": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "total_weight_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "usable_height_cm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "utilisation_percent": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "wasted_space_cbm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "weight_limited": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

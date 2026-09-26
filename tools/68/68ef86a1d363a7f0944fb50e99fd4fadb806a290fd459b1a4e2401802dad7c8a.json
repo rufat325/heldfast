@@ -1,0 +1,72 @@
+{
+ "annotations": {
+  "audience": [
+   "user",
+   "assistant"
+  ],
+  "priority": 0.9,
+  "readOnlyHint": false
+ },
+ "description": "Replaces the active authorization policy that evaluate_fdia checks against. IMPACT: this is a full REPLACE, not a merge \u2014 any existing rule you don't include in this call is dropped, so resend the complete rule set rather than a partial delta. Propagation is eventually consistent, not atomic: this worker's in-memory policy updates immediately, and is best-effort persisted to KV for other edge instances to pick up, so a request routed to a different isolate may briefly see the old policy. REVERSIBLE: yes \u2014 call configure_policy again with the previous policy JSON to roll back; no automatic version history is kept, so save the current policy yourself before changing it if you may need to undo. PARAMETER A: each rule assigns a binary authorization gate via `assigned_A` \u2014 A=1 lets matching actions proceed to normal F=(D^I)*A scoring, A=0 hard-blocks them regardless of data quality (this is how you make a category of actions always fail evaluate_fdia). USE WHEN: onboarding a new action type, changing RBAC/role rules, or adjusting the safety threshold. DO NOT USE WHEN: you only need to check one action (use evaluate_fdia) or reason about a task (use rct_think) \u2014 and avoid calling it speculatively per-request, since every call replaces shared state other callers depend on.",
+ "inputSchema": {
+  "properties": {
+   "allowed_roles": {
+    "description": "Mapping of role names to permitted actions.",
+    "type": "object"
+   },
+   "blocked_action_patterns": {
+    "description": "List of forbidden action patterns or prefixes.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "custom_safety_threshold": {
+    "description": "Minimum safety score threshold for approval (default: 0.5000).",
+    "type": "number"
+   },
+   "policy_id": {
+    "description": "Unique alphanumeric identifier for the policy configuration.",
+    "type": "string"
+   },
+   "policy_name": {
+    "description": "Descriptive name for the policy rule.",
+    "type": "string"
+   },
+   "require_human_dual_signoff": {
+    "description": "List of critical actions requiring secondary verification.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "policy_id",
+   "policy_name"
+  ],
+  "type": "object"
+ },
+ "name": "configure_policy",
+ "outputSchema": {
+  "properties": {
+   "message": {
+    "description": "Descriptive confirmation message.",
+    "type": "string"
+   },
+   "policy": {
+    "description": "The active normalized enterprise policy structure.",
+    "type": "object"
+   },
+   "status": {
+    "description": "Update status (success or error).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "status",
+   "message"
+  ],
+  "type": "object"
+ }
+}

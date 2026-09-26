@@ -1,0 +1,265 @@
+{
+ "_meta": {
+  "openai/toolInvocation/invoked": "Available players ready",
+  "openai/toolInvocation/invoking": "Searching available players\u2026",
+  "securitySchemes": [
+   {
+    "scopes": [
+     "mcp:read"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get players available to acquire in the specified fantasy league, optionally filtered by position. This is fantasy-league availability, not professional-contract status. Pass a requested count exactly from 1 through 100; for more than 100, state the limit and ask the user to narrow the request or accept 100. Prefer the canonical fields: every response carries leagueId, seasonYear, position, count, ordering, capabilities, and ownershipScope; entries carry team (real-life club, null when none) and id (platform player id as a string, when supplied) on every platform, and ESPN entries add acquisitionState (\"free_agent\", \"waivers\", or null when the platform cannot determine the subtype) plus waiverClearsAt (ISO time); legacy platform fields remain alongside for compatibility and should not be re-explained. ownershipScope \"platform_global\" means percentOwned/percentStarted cover all leagues on that platform \u2014 never ownership within the selected league. An ESPN-wide started rate is never conditional on the player being rostered. Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate. Translate ownership scope silently into that provider-wide wording; never print the ownershipScope key, platform_global enum, or get_free_agents tool name. If capabilities marks rates unavailable, write \"[Provider] market ownership rate: not provided\"; do not print a missing response field name or null value, call get_players, or offer a lookup. When acquisitionState is null or not present, call rows \"available players,\" never specifically free agents or waivers, and do not promise an immediate add. A returned player is already confirmed available in that league. Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo. Use get_roster only when the current request separately asks who owns a player; never offer it after an available-player result. Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language. State acquisition status in plain language from acquisitionState (\"a free agent\", \"on waivers\"); never print raw codes \u2014 neither provider codes such as FREEAGENT or WAIVERS nor canonical values like free_agent verbatim. Use current web evidence before adding analysis or pickup recommendations. Use established session context (call get_user_session only if needed), then get_league_info for the selected league if this chat has not already loaded it; fan out once per league for comparisons. Requires authentication on ESPN/Yahoo; Sleeper uses the public API. Read-only. Current date is 2026-09-26. Hard stop: after satisfying a returned-list or field-explanation request, end the answer immediately after the requested facts. Remove every closing question or offer to do more work, including roster checks, lineup-fit checks, comparisons, rankings, recommendations, role or health analysis, trends, or outlooks; never append \"if you want\", \"tell me which player\", or a similar invitation unless the user's current request explicitly asks for that additional work.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "count": {
+    "description": "Maximum number of players to return (max: 100). Pass the user-requested number exactly; omit only when no number was requested (default: 25).",
+    "type": "number"
+   },
+   "league_id": {
+    "description": "League ID (get from get_user_session)",
+    "type": "string"
+   },
+   "platform": {
+    "description": "Fantasy platform \u2014 \"espn\", \"yahoo\", or \"sleeper\"",
+    "enum": [
+     "espn",
+     "yahoo",
+     "sleeper"
+    ],
+    "type": "string"
+   },
+   "position": {
+    "description": "Filter by position (e.g., \"QB\", \"RB\", \"SP\", \"C\"). Default: ALL",
+    "type": "string"
+   },
+   "season_year": {
+    "description": "Season start year \u2014 use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season. Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).",
+    "type": "number"
+   },
+   "sport": {
+    "description": "Sport type (e.g., \"football\", \"baseball\")",
+    "enum": [
+     "football",
+     "baseball",
+     "basketball",
+     "hockey"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "platform",
+   "sport",
+   "league_id",
+   "season_year"
+  ],
+  "type": "object"
+ },
+ "name": "get_free_agents",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "data": {
+    "additionalProperties": true,
+    "description": "Platform envelope. Field availability varies by platform (ESPN, Yahoo, Sleeper); absent fields are not provided by that platform.",
+    "properties": {
+     "capabilities": {
+      "additionalProperties": true,
+      "description": "Platform capability flags; per-entry canonical fields are omitted where false",
+      "properties": {
+       "acquisitionState": {
+        "type": "boolean"
+       },
+       "rosteredRate": {
+        "type": "boolean"
+       },
+       "startedRate": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "acquisitionState",
+       "rosteredRate",
+       "startedRate"
+      ],
+      "type": "object"
+     },
+     "count": {
+      "type": "number"
+     },
+     "freeAgents": {
+      "description": "ESPN/Yahoo available-player entries",
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "acquisitionState": {
+         "anyOf": [
+          {
+           "enum": [
+            "free_agent",
+            "waivers"
+           ],
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Canonical acquisition state, present only where capabilities.acquisitionState is true (ESPN): \"free_agent\", \"waivers\", or null when the platform could not determine the subtype; absent entirely on platforms without the capability"
+        },
+        "id": {
+         "description": "Platform-local player id as a string",
+         "type": "string"
+        },
+        "percentOwned": {
+         "description": "ESPN-wide roster rate or Yahoo-wide market rate; null/absent when the provider reports none",
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "percentStarted": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "status": {
+         "description": "Legacy: ESPN acquisition enum (prefer acquisitionState); on Yahoo an unrelated player designation",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "team": {
+         "description": "Real-life club abbreviation, null when the platform lists none",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "waiverClearsAt": {
+         "description": "ISO 8601 waiver clear time (ESPN only, only on rows whose acquisitionState is \"waivers\" with a valid provider timestamp)",
+         "type": "string"
+        },
+        "waiverProcessDate": {
+         "anyOf": [
+          {
+           "type": [
+            "string",
+            "number"
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Legacy epoch-ms form of waiverClearsAt"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "leagueId": {
+      "description": "Canonical league identity for every platform",
+      "type": "string"
+     },
+     "leagueKey": {
+      "type": "string"
+     },
+     "leagueName": {
+      "type": "string"
+     },
+     "league_id": {
+      "type": "string"
+     },
+     "ordering": {
+      "description": "List ranking: \"platform_rostered_rate_desc\" (ESPN provider-side with draft-rank tiebreak; Yahoo locally, nulls last, name/id tiebreak) or \"alphabetical\" (Sleeper, name then id)",
+      "enum": [
+       "platform_rostered_rate_desc",
+       "alphabetical"
+      ],
+      "type": "string"
+     },
+     "ownershipScope": {
+      "description": "\"platform_global\": rates cover all leagues on the platform, never the selected league; \"unavailable\": the platform reports no rates",
+      "enum": [
+       "platform_global",
+       "unavailable"
+      ],
+      "type": "string"
+     },
+     "platform": {
+      "type": "string"
+     },
+     "players": {
+      "description": "Sleeper available-player entries",
+      "items": {
+       "$ref": "#/properties/data/properties/freeAgents/items"
+      },
+      "type": "array"
+     },
+     "position": {
+      "description": "Echoed position filter, ALL when unfiltered",
+      "type": "string"
+     },
+     "seasonYear": {
+      "type": "number"
+     },
+     "season_year": {
+      "type": "number"
+     },
+     "sport": {
+      "type": "string"
+     },
+     "warning": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "leagueId",
+     "seasonYear",
+     "position",
+     "count",
+     "ordering",
+     "capabilities",
+     "ownershipScope"
+    ],
+    "type": "object"
+   },
+   "success": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "success",
+   "data"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "mcp:read"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "Available Players"
+}

@@ -1,0 +1,176 @@
+{
+ "description": "[Merchant] Create a new payware transaction. Parameters map to the following API structure:\n\n\ud83d\udccb **ROOT LEVEL** (Transaction metadata):\n- shop, account, friendlyName, callbackUrl, passbackParams\n- producerPartnerId, terminalId, terminalManufacturer (POS terminal producer attribution - see below)\n\n\ud83d\udcb0 **TRANSACTION DATA** (trData object):\n- amount, currency, reasonL1, reasonL2\n\n\u2699\ufe0f **TRANSACTION OPTIONS** (trOptions object):\n- type, timeToLive\n\n\ud83d\udcf1 **QR OPTIONS** (qrOptions object - only when type=QR):\n- qrFormat, qrBorder, qrErrorCorrection, qrScale, qrVersion\n\n\ud83d\udd17 **BARCODE OPTIONS** (barOptions object - only when type=BARCODE):\n- barFormat, barModuleWidth, barBarHeight, barFontSize, barHumanReadableLocation\n\n\ud83d\udd10 **AUTHENTICATION** (not sent to API, used for JWT signing):\n- partnerId, privateKey\n\n**Actual API Request Structure:**\n```json\n{\n  \"shop\": \"...\",\n  \"account\": \"...\",\n  \"friendlyName\": \"...\",\n  \"callbackUrl\": \"...\",\n  \"passbackParams\": \"...\",\n  \"trData\": {\n    \"amount\": \"25.50\",\n    \"currency\": \"EUR\", \n    \"reasonL1\": \"...\",\n    \"reasonL2\": \"...\"\n  },\n  \"trOptions\": {\n    \"type\": \"QR\",\n    \"timeToLive\": 300\n  },\n  \"qrOptions\": { ... }\n}\n```\n\n\ud83c\udfed **POS TERMINAL PRODUCER ATTRIBUTION** (optional, root level)\n\nOnly relevant if the transaction originates on a POS terminal whose producer has a revenue-share\nagreement with payware. Three fields, all optional:\n\n- `producerPartnerId` - the 8-character partnerId payware issued to the terminal producer.\n  **An unrecognised value fails the transaction with a 400** (`ERR_INVALID_PRODUCER_ID`) - it is\n  deliberately not ignored, so that a terminal configured with the wrong id fails on its first sale\n  where an installer can see it. **Omit the field entirely when there is no producer arrangement;\n  never send an empty string.**\n- `terminalId` - the producer's own identifier for the physical terminal. Max 64 chars, no control\n  characters. payware records it and never interprets it: no format, no uniqueness enforcement, and\n  nothing about pricing or attribution depends on it.\n- `terminalManufacturer` - device manufacturer as the terminal reports it. Max 64 chars, no control\n  characters. Recorded for provenance; a mismatch is surfaced in settlement review, never blocked.\n\nTwo things worth knowing:\n1. **It never changes what the merchant is charged.** The producer's share comes out of payware's own\n   fee, not out of a higher price for the merchant, whose fee always follows the fee hierarchy.\n2. **None of the three is returned.** They do not appear in the create response, in `get_transaction_status`,\n   in transaction history, or in any callback. What a producer earned is visible on their own\n   dashboard and settlements - attribution is recorded against the fee, not against the transaction.\n\nIf an ISV's software made the call, the ISV is attributed and the producer is not, even when the\nISV's software is running on that producer's hardware.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "account": {
+    "description": "\ud83d\udccb ROOT LEVEL: Account identifier (if not supplied, determined from payware portal)",
+    "maxLength": 36,
+    "type": "string"
+   },
+   "amount": {
+    "description": "Amount as currency value (e.g., 25.50 for \u20ac25.50 or '15.75' for $15.75). Can be 0 for amount-flexible transactions. Max 36 chars including decimals",
+    "maximum": 9999999999999.99,
+    "minimum": 0,
+    "type": "number"
+   },
+   "barBarHeight": {
+    "description": "Barcode height in pixels (applies when type=BARCODE)",
+    "maximum": 200,
+    "minimum": 10,
+    "type": "number"
+   },
+   "barFontSize": {
+    "description": "Barcode text font size (applies when type=BARCODE)",
+    "maximum": 24,
+    "minimum": 8,
+    "type": "number"
+   },
+   "barFormat": {
+    "description": "\ud83d\udd17 BARCODE OPTIONS: Image format for barcode (only when type=BARCODE, default: SVG)",
+    "enum": [
+     "PNG",
+     "SVG",
+     "JPG"
+    ],
+    "type": "string"
+   },
+   "barHumanReadableLocation": {
+    "description": "Location of human readable text (applies when type=BARCODE)",
+    "enum": [
+     "TOP",
+     "BOTTOM",
+     "NONE"
+    ],
+    "type": "string"
+   },
+   "barModuleWidth": {
+    "description": "Barcode module width in pixels (applies when type=BARCODE)",
+    "maximum": 5,
+    "minimum": 1,
+    "type": "number"
+   },
+   "callbackUrl": {
+    "description": "\ud83d\udccb ROOT LEVEL: HTTPS URL to receive transaction status callbacks. Must be https://, must present a publicly-trusted TLS certificate, and must resolve to a public address - internal/private addresses are rejected (ERR_UNRESOLVABLE_CALLBACK_URL).",
+    "format": "uri",
+    "type": "string"
+   },
+   "currency": {
+    "description": "Transaction currency (ISO 3-character code)",
+    "pattern": "^[A-Z]{3}$",
+    "type": "string"
+   },
+   "friendlyName": {
+    "description": "\ud83d\udccb ROOT LEVEL: Account holder recognizable name (if not supplied, merchant alias is used)",
+    "maxLength": 100,
+    "type": "string"
+   },
+   "partnerId": {
+    "description": "\ud83d\udd10 AUTHENTICATION: Partner ID from payware dashboard (not sent in API request). Uses PAYWARE_PARTNER_ID env var as default.",
+    "type": "string"
+   },
+   "passbackParams": {
+    "description": "\ud83d\udccb ROOT LEVEL: Additional parameters passed back in callbacks (max 200 chars)",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "privateKey": {
+    "description": "\ud83d\udd10 AUTHENTICATION: RSA private key for JWT token creation (not sent in API request). Accepts PEM format with/without headers or raw base64 content. Uses environment-specific private key as default.",
+    "type": "string"
+   },
+   "producerPartnerId": {
+    "description": "\ud83c\udfed ROOT LEVEL: partnerId of the POS terminal producer whose terminal produced this transaction. Must be a partner registered with payware and flagged as a producer - an unrecognised value REJECTS the transaction (400 ERR_INVALID_PRODUCER_ID) rather than being ignored. Omit entirely when there is no producer arrangement; never send an empty string. Selects the producer's revenue share out of payware's own fee and never changes what the merchant is charged. Not returned in any response or callback.",
+    "type": "string"
+   },
+   "qrBorder": {
+    "description": "\ud83d\udcf1 QR OPTIONS: Border size in modules around QR code (only when type=QR, default: 4)",
+    "maximum": 10,
+    "minimum": 1,
+    "type": "number"
+   },
+   "qrErrorCorrection": {
+    "description": "\ud83d\udcf1 QR OPTIONS: Error correction level - LOW (7%), MEDIUM (15%), QUARTILE (25%), HIGH (30%) (only when type=QR, default: QUARTILE)",
+    "enum": [
+     "LOW",
+     "MEDIUM",
+     "QUARTILE",
+     "HIGH"
+    ],
+    "type": "string"
+   },
+   "qrFormat": {
+    "description": "\ud83d\udcf1 QR OPTIONS: Image format for QR code (only when type=QR, default: SVG)",
+    "enum": [
+     "PNG",
+     "JPEG",
+     "GIF",
+     "BMP",
+     "SVG"
+    ],
+    "type": "string"
+   },
+   "qrScale": {
+    "description": "\ud83d\udcf1 QR OPTIONS: Size of each module in pixels, irrelevant for SVG (only when type=QR, default: 16)",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "number"
+   },
+   "qrVersion": {
+    "description": "\ud83d\udcf1 QR OPTIONS: QR code version, higher versions can store more data (only when type=QR, default: 10)",
+    "maximum": 40,
+    "minimum": 1,
+    "type": "number"
+   },
+   "reasonL1": {
+    "description": "Transaction grounds description (required)",
+    "maxLength": 100,
+    "type": "string"
+   },
+   "reasonL2": {
+    "description": "Transaction grounds description continuation (optional)",
+    "maxLength": 100,
+    "type": "string"
+   },
+   "shop": {
+    "description": "\ud83d\udccb ROOT LEVEL: Shop code (if not supplied, default shop is used)",
+    "maxLength": 10,
+    "type": "string"
+   },
+   "terminalId": {
+    "description": "\ud83c\udfed ROOT LEVEL: Opaque identifier of the physical terminal, scoped to the producer's own estate. payware assumes no format and enforces no uniqueness; it is recorded for provenance and never affects attribution or pricing. Make it unique within your own estate anyway - that is what lets you answer 'which terminal produced this sale' later. Not returned in any response or callback.",
+    "maxLength": 64,
+    "type": "string"
+   },
+   "terminalManufacturer": {
+    "description": "\ud83c\udfed ROOT LEVEL: Device manufacturer as reported by the terminal. Recorded for provenance; a mismatch against the expected producer is surfaced in settlement review and never blocks the transaction. Not returned in any response or callback.",
+    "maxLength": 64,
+    "type": "string"
+   },
+   "timeToLive": {
+    "description": "\u2699\ufe0f TRANSACTION OPTIONS: Time allowed for payment initiation in seconds",
+    "maximum": 600,
+    "minimum": 60,
+    "type": "number"
+   },
+   "type": {
+    "description": "Transaction type",
+    "enum": [
+     "PLAIN",
+     "QR",
+     "BARCODE"
+    ],
+    "type": "string"
+   },
+   "useSandbox": {
+    "description": "Use sandbox environment for testing",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "currency",
+   "reasonL1"
+  ],
+  "type": "object"
+ },
+ "name": "payware_operations_create_transaction"
+}

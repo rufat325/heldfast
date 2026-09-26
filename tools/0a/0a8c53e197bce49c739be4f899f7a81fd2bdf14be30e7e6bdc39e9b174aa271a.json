@@ -1,0 +1,69 @@
+{
+ "_meta": {
+  "openai/outputTemplate": "ui://widgets/save.html",
+  "openai/toolInvocation/invoked": "Saved to memory",
+  "openai/toolInvocation/invoking": "Saving to your memory vault...",
+  "openai/widgetAccessible": true,
+  "openai/widgetDomain": "save.widgets.purmemo.ai"
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Save Conversation"
+ },
+ "description": "Save complete conversations as memory. REQUIRED: Send COMPLETE conversation in 'conversationContent' parameter (minimum 100 chars, should be thousands). Include EVERY message verbatim - NO summaries or partial content.\n\n    Intelligently tracks context, extracts project details, and routes to a single memory per conversation topic.\n\n    HOW SAVES TARGET MEMORIES:\n    - conversationId is auto-generated from title slug (e.g., \"MCP Tools\" \u2192 \"mcp-tools\")\n    - Same title (or explicit conversationId) \u2192 targets the existing memory\n    - The 'mode' parameter controls what happens to that existing memory:\n      \u2022 mode='replace' (default): overwrites the existing content with what you send\n      \u2022 mode='append': concatenates new content below existing with a timestamped separator\n        (\\n\\n--- UPDATE <ISO8601> ---\\n\\n) \u2014 preserves all prior history in the live row\n    - The /save skill sets mode='append' automatically for living-document use\n    - For one-shot snapshots, ad-hoc captures, or explicit overwrite: pass mode='replace'\n\n    PRIOR CONTENT IS NEVER LOST:\n    - Even with mode='replace', prior content is snapshotted to memory_events audit log on every update\n    - Recovery from overwrites requires a one-off script (out-of-band)\n    - Use mode='append' if you want history to remain visible inline in the live memory\n\n    INTELLIGENT EXTRACTION (independent of mode):\n    - Auto-extracts project context (name, component, feature being discussed)\n    - Detects work iteration and status (planning/in_progress/completed/blocked)\n    - Generates smart titles like \"Purmemo - Timeline View - Implementation\"\n    - Tracks technologies, tools used, identifies relationships/dependencies\n\n    SERVER AUTO-CHUNKING:\n    - Large conversations (>15K chars) automatically split into linked chunks\n    - Small conversations (<15K chars) saved directly as single memory\n    - You always send complete content \u2014 server handles chunking\n    - APPEND + CHUNKING: append mode works only for content <15K chars. Saves >15K\n      with mode='append' are rejected with a clear error \u2014 appending to chunked\n      storage would double each chunk's content on re-save. For long-running living\n      docs, send only the new delta since the last save (keep it <15K) or use\n      mode='replace' for full re-saves.\n    - KNOWN CAVEAT: a doc that is saved small (single memory) and later grows past 15K\n      transitions to chunked storage at a new conversation_id space \u2014 the original\n      single memory becomes orphaned. Tracked under ADR-038 (uniform namespace).\n\n    EXAMPLES:\n    User: \"Save progress\" via /save skill\n    \u2192 /save sets mode='append'; new content is appended below prior content\n\n    User: \"Save this snapshot\" (one-shot capture)\n    \u2192 mode='replace' default; current content overwrites any existing memory at this title\n\n    User: \"Save as conversation react-hooks-guide\" with explicit append\n    \u2192 save_conversation(conversationId=\"react-hooks-guide\", mode=\"append\")\n    \u2192 Appends to existing memory at that ID (or creates if new)\n\n    WHAT TO INCLUDE (COMPLETE CONVERSATION REQUIRED):\n    - EVERY user message (verbatim, not paraphrased)\n    - EVERY assistant response (complete, not summarized)\n    - ALL code blocks with full syntax\n    - ALL artifacts with complete content (not just titles/descriptions)\n    - ALL file paths, URLs, and references mentioned\n    - ALL system messages and tool outputs\n    - EXACT conversation flow and context\n    - Minimum 500 characters expected - should be THOUSANDS of characters\n\n    FORMAT REQUIRED:\n    === CONVERSATION START ===\n    [timestamp] USER: [complete user message 1]\n    [timestamp] ASSISTANT: [complete assistant response 1]\n    [timestamp] USER: [complete user message 2]\n    [timestamp] ASSISTANT: [complete assistant response 2]\n    ... [continue for ALL exchanges]\n    === ARTIFACTS ===\n    [Include ALL artifacts with full content]\n    === CODE BLOCKS ===\n    [Include ALL code with syntax highlighting]\n    === END ===\n\n    IMPORTANT: Do NOT send just \"save this conversation\" or summaries. If you send less than 500 chars, you're doing it wrong. Include the COMPLETE conversation with all details.\n\n    ARTIFACT PRESERVATION (ADR-025):\n    If this conversation produced artifacts (research reports, tables, frameworks, specs, design documents),\n    save them SEPARATELY using save_artifact after this call.\n    Flow: save_conversation first, then save_artifact for each artifact.\n    This ensures artifacts are preserved in full \u2014 do not try to embed large artifacts in conversationContent.",
+ "inputSchema": {
+  "properties": {
+   "conversationContent": {
+    "description": "COMPLETE conversation transcript - minimum 500 characters expected. Include EVERYTHING discussed.",
+    "minLength": 100,
+    "type": "string"
+   },
+   "conversationId": {
+    "description": "Optional unique identifier for living document pattern. If provided and memory exists with this conversationId, UPDATES that memory instead of creating new one. Use for maintaining single memory per conversation that updates over time.",
+    "type": "string"
+   },
+   "mode": {
+    "default": "replace",
+    "description": "How to handle a save that targets an existing memory (same title or conversationId). \"replace\" (default) overwrites the existing content with what you send. \"append\" concatenates new content below the existing content with a timestamped separator (\\n\\n--- UPDATE <ISO8601> ---\\n\\n). Use \"append\" for living documents you genuinely want to grow over time; use \"replace\" for one-shot snapshots and ad-hoc captures. The /save skill defaults to \"append\" automatically \u2014 you only need to pass this for explicit overrides.",
+    "enum": [
+     "replace",
+     "append"
+    ],
+    "type": "string"
+   },
+   "priority": {
+    "default": "medium",
+    "description": "Priority level for this memory",
+    "enum": [
+     "low",
+     "medium",
+     "high"
+    ],
+    "type": "string"
+   },
+   "tags": {
+    "default": [
+     "complete-conversation"
+    ],
+    "description": "Tags for categorization",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "title": {
+    "default": "Conversation 2026-09-26T04:48:03.187Z",
+    "description": "Title for this conversation memory",
+    "type": "string"
+   }
+  },
+  "required": [
+   "conversationContent"
+  ],
+  "type": "object"
+ },
+ "name": "save_conversation"
+}

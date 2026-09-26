@@ -1,0 +1,94 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Retry a failed scheduled post"
+ },
+ "description": "Send a post that FAILED again. A scheduled post fans out across its channels INDEPENDENTLY, so a failure is usually PARTIAL \u2014 LinkedIn 401s while Instagram published fine \u2014 and this re-fires ONLY the channels that did not succeed by default (list_scheduled reports them as `retryable`). It re-queues the same content as a NEW post that goes out RIGHT AWAY \u2014 the queue picks it up on its next pass, within seconds \u2014 and the original keeps its failure record so the history still shows what went wrong. Naming a channel that already published is REFUSED rather than quietly posting a second time. Two independent belts stop a double-post: a channel that genuinely published can only REPLAY (nothing is posted), and a channel whose outcome is UNRESOLVED \u2014 the platform timed out and may be holding the post \u2014 refuses with that reason instead of guessing. Retry after fixing the cause \u2014 and you can fix it IN THIS CALL: pass `boardId`, `pageId`, `linkedinOrganizationId`, `locationId`, `message` or `captions` to correct the value that failed, and the corrected post is re-validated exactly like a fresh schedule. That matters because the commonest cause is a field, not an outage: a Pin aimed at the wrong board fails identically however many times it is re-sent. Anything you do not name is copied from the original. To send the same thing again ON PURPOSE, use duplicate_scheduled.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "allowDuplicate": {
+    "description": "ONLY for a channel you have checked by hand and confirmed the post is genuinely NOT there. It bypasses the double-post protection and can publish a second public copy, so never set it to work around a refusal you have not investigated.",
+    "type": "boolean"
+   },
+   "at": {
+    "description": "hold the retry until a later time \u2014 ISO timestamp or epoch milliseconds. Leave it out to retry immediately, which is almost always what you want. A time you name here must be at least a minute from now, exactly like any other scheduled post.",
+    "type": "string"
+   },
+   "boardId": {
+    "description": "CORRECT THE BOARD on retry \u2014 the Pinterest board the Pin goes on, from list_pinterest_boards. A Pin aimed at a board Pinterest refuses fails the same way on every retry until this is changed.",
+    "type": "string"
+   },
+   "brand": {
+    "description": "WHICH BRAND this post is in \u2014 id or exact name from list_brands; needed when it is not the brand this connection is pinned to. A name that matches no brand, or two, is REFUSED.",
+    "type": "string"
+   },
+   "captions": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "CORRECT ONE CHANNEL\u2019S CAPTION on retry, e.g. { \"x\": \"...\" } when only that channel refused the text.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "channels": {
+    "description": "retry only these channels (default: every channel that did not publish)",
+    "items": {
+     "enum": [
+      "facebook",
+      "instagram",
+      "threads",
+      "tiktok",
+      "youtube",
+      "linkedin",
+      "x",
+      "pinterest",
+      "google_business",
+      "bluesky",
+      "telegram"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "chatId": {
+    "description": "CORRECT THE TELEGRAM DESTINATION on retry \u2014 the @username or numeric id of the chat. A post aimed at a chat the bot is not in fails every time it is retried until this changes.",
+    "type": "string"
+   },
+   "id": {
+    "description": "the scheduled post id from list_scheduled",
+    "type": "string"
+   },
+   "linkedinOrganizationId": {
+    "description": "CORRECT THE LINKEDIN AUTHOR on retry \u2014 the company Page id from list_linkedin_pages. Set it to an empty string to fall back to the personal profile.",
+    "type": "string"
+   },
+   "locationId": {
+    "description": "CORRECT THE LISTING on retry \u2014 which Google Business Profile location, e.g. \"locations/123\" from list_business_locations.",
+    "type": "string"
+   },
+   "message": {
+    "description": "CORRECT THE CAPTION on retry \u2014 use this when the original was refused for length or content. Anything not named here is copied from the original post.",
+    "type": "string"
+   },
+   "pageId": {
+    "description": "CORRECT THE PAGE on retry \u2014 which connected Facebook Page (and its linked Instagram/Threads) publishes, from list_meta_pages.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id"
+  ],
+  "type": "object"
+ },
+ "name": "retry_scheduled",
+ "title": "Retry a failed scheduled post"
+}

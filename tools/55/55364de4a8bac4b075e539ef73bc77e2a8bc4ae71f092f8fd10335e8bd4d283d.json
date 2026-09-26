@@ -1,0 +1,145 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Ensemble Multi-Model Consensus"
+ },
+ "description": "Combine 2+ model point predictions into one consensus using weighted voting, stacking, or Bayesian model averaging, weighting each model by its confidence or supplied historicalAccuracy. Use to fuse heterogeneous predictors (statistical, ML, and human forecasters) into a single number with an uncertainty estimate. Returns the consensus value and confidence, per-model weight share, Shannon entropy of the weights, a cross-model agreement score, epistemic/aleatoric/total uncertainty with a confidence interval, and per-model contributions. To score agreement on a single event probability instead, use score_convergence.",
+ "inputSchema": {
+  "properties": {
+   "method": {
+    "description": "Combination method (default: weighted-voting).",
+    "enum": [
+     "weighted-voting",
+     "stacking",
+     "bayesian-averaging"
+    ],
+    "type": "string"
+   },
+   "predictions": {
+    "description": "Predictions from each model (at least 2).",
+    "items": {
+     "properties": {
+      "confidence": {
+       "description": "Model-reported confidence [0,1].",
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "historicalAccuracy": {
+       "description": "Optional. Overrides confidence for weighting.",
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      },
+      "modelId": {
+       "description": "Stable model identifier.",
+       "type": "string"
+      },
+      "prediction": {
+       "description": "Point prediction (any numeric scale).",
+       "type": "number"
+      }
+     },
+     "required": [
+      "modelId",
+      "prediction",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "minItems": 2,
+    "type": "array"
+   }
+  },
+  "required": [
+   "predictions"
+  ],
+  "type": "object"
+ },
+ "name": "predict_ensemble",
+ "outputSchema": {
+  "properties": {
+   "agreement": {
+    "description": "Cross-model agreement score (1=all agree, 0=disagree).",
+    "type": "number"
+   },
+   "confidence": {
+    "description": "Aggregate confidence.",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+   },
+   "consensus": {
+    "description": "Combined point prediction.",
+    "type": "number"
+   },
+   "entropy": {
+    "description": "Shannon entropy of the weight distribution (higher = more diversified).",
+    "type": "number"
+   },
+   "method": {
+    "type": "string"
+   },
+   "modelContributions": {
+    "additionalProperties": {
+     "properties": {
+      "contribution": {
+       "type": "number"
+      },
+      "prediction": {
+       "type": "number"
+      },
+      "weight": {
+       "type": "number"
+      }
+     },
+     "type": "object"
+    },
+    "type": "object"
+   },
+   "uncertainty": {
+    "properties": {
+     "aleatoric": {
+      "description": "Irreducible noise.",
+      "type": "number"
+     },
+     "confidenceInterval": {
+      "properties": {
+       "lower": {
+        "type": "number"
+       },
+       "upper": {
+        "type": "number"
+       }
+      },
+      "type": "object"
+     },
+     "epistemic": {
+      "description": "Model uncertainty (reducible with more data).",
+      "type": "number"
+     },
+     "total": {
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "weights": {
+    "additionalProperties": {
+     "type": "number"
+    },
+    "description": "modelId \u2192 weight used.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "consensus",
+   "confidence",
+   "method"
+  ],
+  "type": "object"
+ }
+}

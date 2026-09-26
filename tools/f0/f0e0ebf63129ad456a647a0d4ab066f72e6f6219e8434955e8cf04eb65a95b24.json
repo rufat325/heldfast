@@ -1,0 +1,249 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Deploy a custom (non-catalog) app to an Impreza VPS. Four modes \u2014 pick exactly one:\n  \u2022 `mode: \"image\"` \u2014 public Docker image URL (`image: \"ghcr.io/user/app:tag\"`).\n  \u2022 `mode: \"dockerfile\"` \u2014 build from a Dockerfile, sourced from EITHER a local project directory (`dir: \"/abs/path/to/project\"`; the MCP tars + uploads it) OR a git repo (`git_url`). For a private repo set `git_auth_method`: `deploy_key` (SSH URL; the response returns `git_auth.public_key` to add to the repo as a read-only Deploy Key) or `pat` (https URL + `git_pat`).\n  \u2022 `mode: \"manifest\"` \u2014 a full docker-compose manifest object (advanced; same schema as catalog apps).\n  \u2022 `mode: \"compose\"` \u2014 reviewed Compose YAML using compose_yaml, web_service, target_port and compose_review_id from impreza_prepare_compose. Public images only; stored as a frozen manifest.\nAlways required: `name`, `agent_id`. Use `impreza_list_servers` to find a valid `agent_id`.\nWhen the customer says \"deploy this\" with a project open, Dockerfile mode is the right choice.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "agent_id": {
+    "description": "Target VPS agent_id (from impreza_list_servers).",
+    "type": "string"
+   },
+   "build_secrets": {
+    "additionalProperties": {
+     "maxLength": 65536,
+     "type": "string"
+    },
+    "description": "Private build-only credentials; encrypted, delivered just-in-time to an agent supporting build-secrets-v1. npmrc installs private npm packages; other names mount during build scripts. Build output withheld. Trusted source only. No automatic preview inheritance.",
+    "maxProperties": 16,
+    "type": "object"
+   },
+   "build_strategy": {
+    "description": "static_files serves the selected project folder as plain static files with unprivileged Nginx: no build step, requires a regular index.html, no symlinks, up to 10000 files and 256 MiB; static_spa=false (default) returns 404 for unknown paths, true serves index.html; the fixed health check probes /index.html. go_build compiles one static binary with the pinned Go 1.25 toolchain from go.mod in the project folder (go.sum required when the module declares dependencies; read-only module downloads; no toolchain downloads, vendoring, workspaces or cgo), then runs it as a non-root busybox user; go_package selects the main package folder (default .). Default port 8080 (1024-65535). php_composer uses PHP 8.4/Apache and Composer 2, composer.json plus a matching composer.lock, public HTTPS archive dependencies and php_document_root (default public, containing index.php). Non-root runtime, default port 8080 (1024-65535), strict 2xx health. No scripts/plugins, custom repositories, private credentials, asset builds, migrations or .htaccess overrides. python_pip uses Python 3.13, a flat requirements.txt of PyPI packages and an explicit start_command. Non-root build/runtime; default port 8000. No dependency options/includes/URLs/local projects, system package installation or private build credentials. Compose 2.17+ and BuildKit required. node_npm generates a Node 24 npm server recipe. node_npm_static builds dist/index.html with npm and serves it with unprivileged Nginx and SPA fallback; requires build instead of start. Static runtime variables do not change browser bundles. Both require package.json and the selected manager lockfile (package-lock.json for default npm) in project_dir, and Compose 2.17+ with BuildKit. node_npm requires a production start script; node_npm_static requires a build script. Select npm workspaces with npm_workspace. build_secrets supplies credentials and node_package_manager selects pinned standalone pnpm/Yarn. Dockerfile is the default.",
+    "enum": [
+     "dockerfile",
+     "node_npm",
+     "node_npm_static",
+     "python_pip",
+     "php_composer",
+     "static_files",
+     "go_build"
+    ],
+    "type": "string"
+   },
+   "compose_review_id": {
+    "description": "mode=compose: analysis_id from the exact YAML, HTTP service and port review.",
+    "type": "string"
+   },
+   "compose_yaml": {
+    "description": "mode=compose: self-contained YAML reviewed with impreza_prepare_compose.",
+    "maxLength": 65536,
+    "type": "string"
+   },
+   "context_id": {
+    "description": "mode=dockerfile: uploaded source ID, mutually exclusive with dir or git_url. Retained archives support redeploy.",
+    "type": "string"
+   },
+   "cpus": {
+    "description": "CPU limit (cores; 1.0 = one core). Default 1.0 server-side.",
+    "type": "number"
+   },
+   "dir": {
+    "description": "mode=dockerfile: absolute path to a local project dir (tar+uploaded). Use this OR git_url.",
+    "type": "string"
+   },
+   "dockerfile_path": {
+    "description": "Optional Dockerfile path relative to the dir/repo root (default \"Dockerfile\").",
+    "type": "string"
+   },
+   "domain": {
+    "description": "Public hostname. Omit when `onion: true` for an onion-only deploy.",
+    "type": "string"
+   },
+   "git_auth_method": {
+    "description": "Private-repo auth for git_url: none (default), deploy_key (SSH), or pat (token).",
+    "enum": [
+     "none",
+     "deploy_key",
+     "pat"
+    ],
+    "type": "string"
+   },
+   "git_pat": {
+    "description": "Fine-grained, repo-scoped, Contents:Read token (required with git_auth_method=pat).",
+    "type": "string"
+   },
+   "git_ref": {
+    "description": "Branch / tag / commit for git_url (default main).",
+    "type": "string"
+   },
+   "git_url": {
+    "description": "mode=dockerfile: git repo instead of a local dir. https (public, or private with git_auth_method=pat) or SSH like git@github.com:owner/repo.git (deploy_key).",
+    "type": "string"
+   },
+   "go_package": {
+    "description": "go_build only: main package folder relative to project_dir (default .), such as cmd/server. Up to 120 ASCII characters and five segments; no hidden or parent segments. Saved at creation and inherited by previews/redeploys.",
+    "maxLength": 120,
+    "type": "string"
+   },
+   "healthcheck_path": {
+    "description": "node_npm, python_pip, php_composer or go_build only. Optional HTTP path such as /health (200 ASCII characters max). Checks 127.0.0.1 on target_port and requires 2xx without redirects. Omit for /: Python/PHP require 2xx; legacy Node accepts status below 500. Saved at creation; previews and redeploys retain it. A failed replacement recovers a verified healthy previous release; first installs keep the agent startup warning policy.",
+    "maxLength": 200,
+    "minLength": 1,
+    "pattern": "^/(?:[A-Za-z0-9_-][A-Za-z0-9._~-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._~-]*)*/?)?$",
+    "type": "string"
+   },
+   "image": {
+    "description": "Required when mode=image. Public Docker image reference.",
+    "type": "string"
+   },
+   "manifest": {
+    "description": "Required when mode=manifest. Full app manifest object.",
+    "type": "object"
+   },
+   "memory_mb": {
+    "description": "Memory limit in MB. Default 512 server-side.",
+    "type": "number"
+   },
+   "mode": {
+    "description": "Source mode.",
+    "enum": [
+     "image",
+     "dockerfile",
+     "manifest",
+     "compose"
+    ],
+    "type": "string"
+   },
+   "name": {
+    "description": "Per-account-unique deploy name (3-100 chars, [a-z0-9_-]).",
+    "type": "string"
+   },
+   "node_package_manager": {
+    "description": "Exact pnpm@10/11/12.x.y or yarn@4.x.y pin matching package.json for standalone Node server/static recipes. Omit for npm. Immutable lockfile install; no npm_workspace or custom manager configuration/plugins.",
+    "maxLength": 40,
+    "type": "string"
+   },
+   "npm_workspace": {
+    "description": "Declared npm workspace relative to project_dir (npm root). Keeps root lockfile and sibling packages. Builds in workspace declaration order; starts selected app. Static output is relative to the workspace.",
+    "maxLength": 120,
+    "minLength": 1,
+    "type": "string"
+   },
+   "onion": {
+    "description": "Also publish a Tor v3 hidden service. Default false.",
+    "type": "boolean"
+   },
+   "onion_import": {
+    "additionalProperties": false,
+    "description": "BYO hidden-service key pair: BOTH C Tor key files, base64 each \u2014 the secret file does NOT contain the public key (its body is the expanded scalar), so both are required. They live in the hidden service's data directory (hs_ed25519_secret_key + hs_ed25519_public_key). The address derives from the public file. Requires onion: true; keeps your existing .onion address. Deploy-time only \u2014 impreza_add_onion refuses it.",
+    "properties": {
+     "public_key_b64": {
+      "description": "Base64 of the hs_ed25519_public_key file (64 bytes).",
+      "type": "string"
+     },
+     "secret_key_b64": {
+      "description": "Base64 of the hs_ed25519_secret_key file (96 bytes).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "secret_key_b64",
+     "public_key_b64"
+    ],
+    "type": "object"
+   },
+   "onion_profile": {
+    "description": "Hardening tier of the hidden service (requires onion: true). standard = intro-point rate limiting (safe upstream default); hardened = tighter limits + max streams; max = + experimental proof-of-work \u2014 one layer among several, never a guaranteed DDoS protection, and refused if the host's Tor lacks the PoW module. Default standard. The .onion address never changes.",
+    "enum": [
+     "standard",
+     "hardened",
+     "max"
+    ],
+    "type": "string"
+   },
+   "php_document_root": {
+    "description": "php_composer only: public subfolder relative to project_dir, containing index.php; default public. Up to 120 ASCII characters and five segments; no hidden/parent/vendor/node_modules segments or symlinks. Saved at creation and inherited by previews/redeploys.",
+    "maxLength": 120,
+    "type": "string"
+   },
+   "project_dir": {
+    "description": "Generated npm/Python/PHP recipes only: . (default) or relative app folder with its own package.json and lockfile, requirements.txt for Python, or composer.json/composer.lock for PHP. Use npm_workspace for shared npm roots. No hidden/parent/node_modules segments or symlink path components.",
+    "maxLength": 120,
+    "minLength": 1,
+    "type": "string"
+   },
+   "public_build_vars": {
+    "additionalProperties": {
+     "maxLength": 4096,
+     "type": "string"
+    },
+    "description": "Public values for npm run build only. Names start with VITE_, NEXT_PUBLIC_ or PUBLIC_; 20 keys max, 128 chars per key, 4 KiB per value, 16 KiB total. Values can appear in bundles/image metadata; never supply secrets. Saved at creation and inherited by previews/redeploys. Separate from runtime vars and npm install.",
+    "maxProperties": 20,
+    "type": "object"
+   },
+   "python_package_manager": {
+    "description": "Pinned uv with pyproject.toml and uv.lock under python_pip. Locked non-editable production install, public PyPI only, no uv workspaces or custom indexes. Omit for pip.",
+    "enum": [
+     "pip",
+     "uv@0.12.15"
+    ],
+    "type": "string"
+   },
+   "require_healthy_start": {
+    "description": "Generated recipes only (node_npm, python_pip, php_composer, static_files, go_build; static_files and go_build use their built-in probe when no path is set). Require an explicit healthcheck_path to become healthy before deployment succeeds, including the first install. Requires agent 0.6.3+. Failed first installs remove containers and preserve volumes; eligible previous releases recover. Omit or false keeps legacy behavior. Saved at creation and inherited by previews/redeploys.",
+    "type": "boolean"
+   },
+   "start_command": {
+    "description": "python_pip only, required: production shell command, one line up to 1000 UTF-8 bytes. Example: exec uvicorn app:app --host 0.0.0.0 --port 8000. PORT and HOST are runtime variables. Do not include credentials. Saved at creation and inherited by previews/redeploys.",
+    "maxLength": 1000,
+    "minLength": 1,
+    "type": "string"
+   },
+   "startup_timeout_seconds": {
+    "description": "Required healthy start only: 30-600 second startup observation budget, default 60; build/recovery time is separate.",
+    "maximum": 600,
+    "minimum": 30,
+    "type": "integer"
+   },
+   "static_output_dir": {
+    "description": "Static npm only: output folder relative to project_dir containing index.html (default dist). No hidden/parent/node_modules segments or symlinks.",
+    "maxLength": 120,
+    "minLength": 1,
+    "type": "string"
+   },
+   "static_spa": {
+    "description": "node_npm_static and static_files: true serves index.html for unknown routes; false returns 404. Default true for node_npm_static, false for static_files.",
+    "type": "boolean"
+   },
+   "target_port": {
+    "description": "Port the container listens on (default 80).",
+    "type": "number"
+   },
+   "tor_egress": {
+    "description": "Opt in to isolated runtime egress through Tor (SOCKS5-aware applications only). Requires an agent advertising tor-egress-v1. Custom image/source modes only; build and source retrieval are not anonymized. No direct fallback.",
+    "type": "boolean"
+   },
+   "vars": {
+    "description": "Environment variables to inject into the container.",
+    "type": "object"
+   },
+   "web_service": {
+    "description": "mode=compose: selected HTTP service; target_port is its integer container port.",
+    "maxLength": 63,
+    "type": "string"
+   }
+  },
+  "required": [
+   "name",
+   "agent_id",
+   "mode"
+  ],
+  "type": "object"
+ },
+ "name": "impreza_deploy_custom"
+}

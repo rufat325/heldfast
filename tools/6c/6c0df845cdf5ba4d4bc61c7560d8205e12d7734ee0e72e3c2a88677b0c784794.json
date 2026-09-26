@@ -1,0 +1,55 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Get odds"
+ },
+ "description": "Get live odds. If event_id is supplied, returns full per-event props for that event; otherwise returns bulk game-line odds for the whole sport. Pass markets as a comma-separated list (e.g. 'h2h,spreads,totals' or 'player_points,player_rebounds'). Response includes a bookmakers[] array across every book that carries the requested markets (currently up to 27: Bovada, DraftKings, FanDuel, Pinnacle, BetMGM, BetRivers, Unibet, BetUS, BetOnline.ag, LowVig.ag, MyBookie.ag, Fanatics, Marathon Bet, 1xBet, TAB, Underdog Fantasy, PrizePicks, Sleeper, Dabble, Betr Picks, ReBet, Kalshi, Polymarket, Matchbook, Smarkets, Novig, ProphetX \u2014 coverage varies by sport). Underdog Fantasy outcomes carry a payout_multiplier on EVERY outcome (1.0 = standard pick, e.g. 1.5 = boost, 0.75 = discount; null means the book is not Underdog) \u2014 keep only payout_multiplier == 1.0 when comparing DFS lines to sportsbook consensus, since filtering on non-null would drop every Underdog line. Each market carries suspended_at: null while on the board, set when that book pulled the market pregame (late scratch, dropped market type) \u2014 its outcomes are then the last quoted legs, not a live price. Treat a suspended market as unbettable and, if several books show it for one player, as a probable scratch. Each BOOKMAKER carries pregame_only: true when the event is live and that book does not price it in play, so its prices are the last pregame quote and will never move again this game. suspended_at cannot show this \u2014 a book with no in-play feed is never polled once the game starts, so nothing goes missing to flag. Exclude pregame_only books when reasoning about a live game; they are still returned because on DFS books that frozen line is what the bet settles against. Each market also carries team: the canonical event team name when the market is scoped to ONE team (a TEAM total), and null for the game total. Both ride the totals key, so NEVER compare totals on (market key, point) alone \u2014 a team total at 0.5 is not a game total at 0.5. Filter team == null for the game total; team matches home_team/away_team exactly. Always null outside totals. Each outcome carries side ('home'/'away'/'draw', null for Over/Under/Yes/No/player legs) so you can pair legs without matching team spellings. Each event carries is_outright (true for a tournament listing with no away side) and, on tennis, tournament + tour (ATP/WTA/Challenger/ITF/\u2026).",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "bookmakers": {
+    "description": "Comma-separated subset of book keys (bovada, draftkings, fanduel, pinnacle, betmgm, betrivers, unibet, betus, betonlineag, lowvig, mybookieag, fanatics, marathon, onexbet, tab_au, underdog, prizepicks, sleeper, dabble, betr, rebet, kalshi, polymarket, matchbook, smarkets, novig, prophetx). Default returns all available.",
+    "type": "string"
+   },
+   "event_id": {
+    "description": "Optional. If set, returns props for this event.",
+    "type": [
+     "string",
+     "number"
+    ]
+   },
+   "include_book_ids": {
+    "description": "When true, each bookmaker block carries book_event_id and each outcome carries book_outcome_id \u2014 that book's OWN ids for the event and the priced selection, for joining onto a book's native feed by id instead of matching team/player names and lines. Kalshi ships both (event ticker + per-contract market ticker, e.g. KXMLBGAME-26AUG08NYYBOS-NYY); most other books ship an event id; books without a stable id return null. NB a two-sided market can share ONE book_outcome_id across both legs \u2014 a Kalshi contract is binary, so Over/Under are its YES/NO sides; the outcome's name says which side.",
+    "type": "boolean"
+   },
+   "include_depth": {
+    "description": "When true, every outcome carries depth: up to three order-book levels beyond the served price, each {price (American), size (dollars)}. [] for books whose depth PropLine does not read (sportsbooks).",
+    "type": "boolean"
+   },
+   "include_links": {
+    "description": "When true, each bookmaker block carries a link \u2014 that book's public event-page URL for click-out (Bovada/DraftKings/FanDuel/BetMGM/Kalshi/Polymarket/Smarkets; others null). Plain navigation, no affiliate tagging. Also adds app_link \u2014 a mobile app-open deep link that opens the book's native app on the fixture (ProphetX only today, null elsewhere).",
+    "type": "boolean"
+   },
+   "markets": {
+    "description": "Comma-separated market keys. Defaults to h2h on bulk; h2h,spreads,totals on event. Pass an explicit list to fetch player props (sport-specific \u2014 e.g. player_points,player_rebounds for NBA; pitcher_strikeouts,batter_home_runs for MLB).",
+    "type": "string"
+   },
+   "period": {
+    "description": "Game-period filter. Omitted = full-game markets only. Canonical codes: q1..q4 (quarters), h1/h2 (halves), p1..p3 (hockey periods), i1..i9 (innings), f3/f5/f7 (first N innings). Comma-separated for multiple. 'all' = include every period alongside full-game.",
+    "type": "string"
+   },
+   "sport_key": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "sport_key"
+  ],
+  "type": "object"
+ },
+ "name": "propline_get_odds",
+ "title": "Get odds"
+}

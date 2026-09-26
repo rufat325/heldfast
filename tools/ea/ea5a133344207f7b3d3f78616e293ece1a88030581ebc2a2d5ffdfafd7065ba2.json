@@ -1,0 +1,128 @@
+{
+ "annotations": {
+  "idempotentHint": false
+ },
+ "description": "Manage the TracePass product catalogue. A product is the catalogue layer \u2014 one product can have many passports (one per serialised unit). Products are not billable on their own.\n\nActions (pass via `action`, with `args`):\n- list \u2014 args: { page?, limit? (\u2264100), category?, status?, search? }. Read-only.\n- get \u2014 args: { id }. Read-only.\n- create \u2014 args: { name, model, category, description? }. `category` is one of: battery, textile, electronics, construction, steel, detergents, paints-coatings, packaging, furniture, tyres, jewelry, toys, fmcg.\n- update \u2014 args: { id, name?, model?, description? }; pass at least one field to change.\n- create_batch \u2014 args: { products: [ { name, model, category, description? }, \u2026 ] }, up to 100. Partial-success: the response carries a per-item status, so some items can be created while others error. The whole batch consumes N writes upfront; if that would exceed the daily cap NOTHING is created (429).\n- archive \u2014 args: { id }. Soft-archive a product. Blocked with 409 while any non-archived passport still references it \u2014 archive those passports first. This is reversible and is NOT deletion.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "action": {
+    "description": "Which product operation to run: list | get | create | create_batch | update | archive.",
+    "enum": [
+     "list",
+     "get",
+     "create",
+     "create_batch",
+     "update",
+     "archive"
+    ],
+    "type": "string"
+   },
+   "args": {
+    "description": "Arguments for the chosen action; required fields depend on `action` (see each action above).",
+    "properties": {
+     "category": {
+      "description": "DPP category for create: battery | textile | electronics | construction | steel | detergents | paints-coatings | packaging | furniture | tyres | jewelry | toys | fmcg.",
+      "type": "string"
+     },
+     "description": {
+      "description": "Free-text product description (create/update).",
+      "type": "string"
+     },
+     "id": {
+      "description": "Product id. Required for get and update.",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Page size for list, max 100.",
+      "type": "number"
+     },
+     "model": {
+      "description": "Manufacturer model / SKU. Required for create; optional on update.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Product name. Required for create; optional on update.",
+      "type": "string"
+     },
+     "page": {
+      "description": "Page number for list (1-based).",
+      "type": "number"
+     },
+     "products": {
+      "description": "Products to create for create_batch: [{ name, model, category, description? }], max 100.",
+      "items": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "search": {
+      "description": "Filter list by a search term.",
+      "type": "string"
+     },
+     "status": {
+      "description": "Filter list by product status.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "action"
+  ],
+  "type": "object"
+ },
+ "name": "tracepass_products",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "error": {
+    "description": "Machine-readable error code, when the API rejected the request.",
+    "type": "string"
+   },
+   "id": {
+    "description": "The resource's TracePass id, when the response is a single entity.",
+    "type": "string"
+   },
+   "items": {
+    "description": "The page of results, when the action is a list.",
+    "items": {},
+    "type": "array"
+   },
+   "limit": {
+    "description": "Page size (list actions).",
+    "type": "number"
+   },
+   "message": {
+    "description": "Human-readable error or status detail, when present.",
+    "type": "string"
+   },
+   "page": {
+    "description": "Current page number (list actions).",
+    "type": "number"
+   },
+   "result": {
+    "description": "Wraps a non-object response body (e.g. a QR code string)."
+   },
+   "total": {
+    "description": "Total matching records across all pages (list actions).",
+    "type": "number"
+   },
+   "totalPages": {
+    "description": "Total number of pages (list actions).",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "TracePass products"
+}

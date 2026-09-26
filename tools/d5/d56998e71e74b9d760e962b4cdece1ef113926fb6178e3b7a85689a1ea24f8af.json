@@ -1,0 +1,70 @@
+{
+ "description": "Broad web search across the SearXNG instance's full enabled engine pool.\n\nUse this for general-purpose queries when you don't have a specific source preference. Returns a merged, deduplicated result list from across this instance's enabled engines \u2014 actual yield depends on which engines respond at query time.\n\nKnobs:\n  \u2022 pages=N (max 5) \u2014 fetch multiple pages and merge for more results in one call.\n  \u2022 format='full' \u2014 full result objects with metadata; default 'compact' is token-efficient.\n  \u2022 time_range \u2014 narrow to recent results (note: not all engines support this \u2014 see field doc).\n\nWhen to reach for a different tool:\n  \u2022 search_on_engines    \u2014 you want specific sources (e.g. just ArXiv + PubMed)\n  \u2022 search_by_category   \u2014 you want all engines in a category (e.g. all science)",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "format": {
+    "description": "'compact' (default) returns only url/title/content/engine for each result \u2014 typically much smaller, recommended for ranking and triage. 'full' adds: relevance score, publishedDate, the list of all engines that surfaced the result, and engine-specific metadata (authors, DOI, etc. for academic engines). Switch to 'full' only when you specifically need one of those fields.",
+    "enum": [
+     "full",
+     "compact"
+    ],
+    "type": "string"
+   },
+   "language": {
+    "description": "Language filter, e.g. 'en', 'fr', 'de', 'pt-BR', or 'all' to disable filtering. If omitted, the SearXNG instance's configured default applies (NOT autodetected from the query, despite what the name suggests).",
+    "type": "string"
+   },
+   "pageno": {
+    "description": "1-indexed starting page number. Default 1. Higher pages fetch additional results from each engine, deduplicated against earlier pages by URL. Per-page yield drops sharply after the first 1-2 pages as engines exhaust their result pools.",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "pages": {
+    "description": "Multi-page fanout: fetch this many consecutive pages in parallel and merge with URL-based dedup. Default 1. Combines with pageno: pageno=3 + pages=2 fetches pages 3 and 4. Diminishing returns past page 2 (engines exhaust their result pools); going wide may also rate-limit upstream engines. Capped at 5 to bound token cost.",
+    "maximum": 5,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Plain-language search query. Forwarded to each engine's native parser; engine-specific operators (e.g. site:, filetype:) are passed through unchanged.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "safe_search": {
+    "anyOf": [
+     {
+      "const": 0,
+      "type": "number"
+     },
+     {
+      "const": 1,
+      "type": "number"
+     },
+     {
+      "const": 2,
+      "type": "number"
+     }
+    ],
+    "description": "Safe-search level. 0 = off, 1 = moderate, 2 = strict. If omitted, the SearXNG instance's configured default applies (often 0 for self-hosted, but not guaranteed)."
+   },
+   "time_range": {
+    "description": "Filter to results published within this time window. WARNING: not all engines implement time-range filtering \u2014 some (notably academic engines) return ZERO results when this is set instead of ignoring it. Set time_range only when freshness genuinely matters; if a query returns 0 results with time_range set, retry without it.",
+    "enum": [
+     "day",
+     "week",
+     "month",
+     "year"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "search"
+}

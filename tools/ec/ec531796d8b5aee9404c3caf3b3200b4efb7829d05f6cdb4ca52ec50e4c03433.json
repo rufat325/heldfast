@@ -1,0 +1,202 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "pdfBase64": "<base64>",
+     "ranges": [
+      {
+       "start": 0
+      },
+      {
+       "end": 9,
+       "start": 1
+      }
+     ]
+    },
+    "title": "First page and the rest"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Split one PDF into several documents, one per `ranges[]` entry ({ start, end? }, 0-based inclusive; end defaults to start). Multi-output result: base64 mode returns one embedded resource per part; file mode writes indexed siblings ('out.pdf' \u2192 'out-1.pdf', 'out-2.pdf', \u2026). Same page-tree caveats as merge_pdfs (signatures/AcroForm/XMP dropped; boxes kept). Encrypted sources: `password`. Need ONE document from a page subset? Use extract_pages.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "dropAnnotations": {
+    "default": false,
+    "description": "When true, drop ALL annotations. Default keeps self-contained URI link annotations.",
+    "type": "boolean"
+   },
+   "encrypt": {
+    "additionalProperties": false,
+    "description": "Re-encrypt the output (Standard Security Handler; AES-128 default or AES-256; RC4 never emitted). Applied to every produced range.",
+    "properties": {
+     "algorithm": {
+      "default": "aes128",
+      "description": "aes128 (V4/R4, widest compatibility) or aes256 (V5/R6).",
+      "enum": [
+       "aes128",
+       "aes256"
+      ],
+      "type": "string"
+     },
+     "ownerPassword": {
+      "description": "Owner password (full access).",
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+     },
+     "permissions": {
+      "additionalProperties": false,
+      "description": "Permission flags; each defaults to allowed.",
+      "properties": {
+       "copy": {
+        "type": "boolean"
+       },
+       "extractText": {
+        "type": "boolean"
+       },
+       "modify": {
+        "type": "boolean"
+       },
+       "print": {
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "userPassword": {
+      "description": "Open password; omitted/empty = opens without a prompt.",
+      "maxLength": 4096,
+      "type": "string"
+     }
+    },
+    "required": [
+     "ownerPassword"
+    ],
+    "type": "object"
+   },
+   "maxOutputSizeBytes": {
+    "description": "Maximum size, in bytes, of each produced PDF. Defaults to 268435456 (256 MiB).",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default) returns the PDF inline; 'file' writes it inside the PDFNATIVE_MCP_OUTPUT_DIR sandbox (SECURITY_VIOLATION when the sandbox is not configured).",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Base output path (file mode). Each PDF is written to an indexed sibling: 'out.pdf' \u2192 'out-1.pdf', 'out-2.pdf', \u2026",
+    "type": "string"
+   },
+   "password": {
+    "description": "Password (user or owner) of an encrypted source. Never logged or echoed.",
+    "maxLength": 4096,
+    "minLength": 1,
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded source PDF. Pass `password` for an encrypted source.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "ranges": {
+    "description": "Page ranges to extract, one output PDF per range. 0-based, inclusive; `end` defaults to `start` (a single page).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "end": {
+       "description": "Last page index (0-based, inclusive). Defaults to start.",
+       "minimum": 0,
+       "type": "integer"
+      },
+      "start": {
+       "description": "First page index (0-based, inclusive).",
+       "minimum": 0,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "start"
+     ],
+     "type": "object"
+    },
+    "maxItems": 1000,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "pdfBase64",
+   "ranges"
+  ],
+  "type": "object"
+ },
+ "name": "split_pdf",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Structured result of a tool producing several PDFs. In base64 mode each PDF is delivered out-of-band as its own embedded `resource` content block (data: URI); `parts[]` here carries only the per-PDF size (and `filePath` in file mode) to stay token-frugal.",
+  "properties": {
+   "count": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "parts": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "filePath": {
+       "description": "Sandboxed absolute path (file mode).",
+       "type": "string"
+      },
+      "index": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "sizeBytes": {
+       "minimum": 0,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "index",
+      "sizeBytes"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "totalBytes": {
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "mode",
+   "count",
+   "totalBytes",
+   "parts"
+  ],
+  "type": "object"
+ },
+ "title": "Split PDF into ranges"
+}

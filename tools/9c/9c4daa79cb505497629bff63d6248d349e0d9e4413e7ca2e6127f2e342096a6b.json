@@ -1,0 +1,214 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Evaluate math expressions, simplify algebraic expressions, or compute symbolic derivatives. One expression per call. Supports arithmetic, trigonometry, statistics, matrices, complex numbers, units, and combinatorics.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "expression": {
+    "description": "One mathematical expression per call \u2014 neither `;` nor newlines separate statements. Inside matrices, `;` separates rows (e.g. `[1, 2; 3, 4]`). Supports arithmetic (+, -, *, /, ^, %), functions across arithmetic/trig (sin, cos, sqrt, log, abs, round), statistics (mean, median, std, variance \u2014 std and variance return the sample (n \u2212 1) form by default; pass \"uncorrected\" for the population form, e.g. `std([2, 4, 6], \"uncorrected\")`), combinatorics (factorial, permutations, combinations), and matrix (det, inv, transpose), plus constants (pi, e, phi, i), units (5 kg to lbs), and variables (when scope is provided). Standard notation `ln` and `arc*` (e.g. `arcsin`, `arctan`) is accepted alongside the math.js names `log` and `asin`/`atan`; common synonyms such as `stdev`, `permute`, `nCr`, and `length`/`len` resolve to their math.js names (`std`, `permutations`, `combinations`, `count`).",
+    "minLength": 1,
+    "type": "string"
+   },
+   "numericType": {
+    "default": "number",
+    "description": "Numeric type for evaluate. \"number\" (default): 64-bit IEEE 754 float \u2014 fastest, about 16 significant digits; a value past about 1.8e308 (171!, 2^1024, exp(1000)) overflows and fails with undefined_result. \"BigNumber\": decimal with 64 significant digits and a much wider exponent range, slower than \"number\" \u2014 retry an overflow with it; results are 64-digit approximations (10000!/9999! returns 9999.99\u202696, which precision: 16 rounds to 10000). Division by zero, 0/0, and log(0) are undefined in every numeric type, so another numeric type does not fix them. \"Fraction\": exact rational arithmetic (0.1 + 0.2 returns 3/10); fails with fraction_unsupported when the result has no exact rational value (sqrt(2), sin(1), log(3)), the expression calls a function Fraction mode cannot compute (sqrt(4), 5!, combinations(5, 2)), or it uses a value Fraction mode holds only as a rounded float (pi, e, 2^(1/2), a complex number with a non-integer part, number(x), random()) \u2014 use \"number\" or \"BigNumber\" for those. A unit conversion with an irrational factor (30 deg to rad) returns a close rational approximation, not an exact value. Ignored for symbolic operations (simplify, derivative).",
+    "enum": [
+     "number",
+     "BigNumber",
+     "Fraction"
+    ],
+    "type": "string"
+   },
+   "operation": {
+    "default": "evaluate",
+    "description": "Operation to perform. \"evaluate\" computes a numeric result (default). \"simplify\" reduces an algebraic expression symbolically (e.g., \"2x + 3x\" -> \"5 * x\"). Supports algebraic and trigonometric identities. When the simplifier cannot reduce the expression further (e.g. rational expressions requiring polynomial factoring), the result is returned unchanged and unchanged: true is set in the output. \"derivative\" computes the symbolic derivative (requires the variable parameter).",
+    "enum": [
+     "evaluate",
+     "simplify",
+     "derivative"
+    ],
+    "type": "string"
+   },
+   "precision": {
+    "anyOf": [
+     {
+      "const": "",
+      "description": "Empty string \u2014 treated as omitted.",
+      "type": "string"
+     },
+     {
+      "description": "Significant digits (integer, 1\u201316).",
+      "maximum": 16,
+      "minimum": 1,
+      "type": "integer"
+     }
+    ],
+    "description": "Significant digits (1\u201316) for numeric results. Omit for full precision. Empty string is treated as omitted. Fraction results always print exactly, and symbolic operations (simplify, derivative) ignore it."
+   },
+   "scope": {
+    "additionalProperties": {
+     "type": "number"
+    },
+    "description": "Variable assignments for evaluate; simplify and derivative ignore them. Example: { \"x\": 5, \"y\": 3 } makes \"x + y\" evaluate to 8.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "variable": {
+    "anyOf": [
+     {
+      "const": "",
+      "description": "Empty string \u2014 treated as omitted.",
+      "type": "string"
+     },
+     {
+      "description": "Variable identifier (alphanumeric and underscores, max 50 chars).",
+      "maxLength": 50,
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+      "type": "string"
+     }
+    ],
+    "description": "Variable to differentiate with respect to. Required when operation is \"derivative\". Empty string is treated as omitted. Example: \"x\"."
+   }
+  },
+  "required": [
+   "expression"
+  ],
+  "type": "object"
+ },
+ "name": "calculate",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "result",
+     "resultType",
+     "expression",
+     "operation"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `empty_expression`: Expression is empty or whitespace-only. `expression_too_long`: Expression exceeds the configured max length (CALC_MAX_EXPRESSION_LENGTH). `multiple_expressions`: Expression holds more than one statement \u2014 a `;` or newline at the top level, outside brackets, parentheses, and string literals. `reserved_scope_key`: Scope contains a reserved JS property name (`__proto__`, `constructor`, etc.). `disallowed_result_type`: The result is a function (e.g. a bare `sin`, or `f(x) = x^2`) or a help() object, or the expression converts a function to a string (e.g. `cos.toString()`) \u2014 security guard. `result_too_large`: The result exceeds the configured max size (CALC_MAX_RESULT_LENGTH), or the expression would build a matrix or string over the per-call limit (1,000,000 elements or characters), or more than 20,000,000 in total across one evaluation. `undefined_result`: The result is Infinity, -Infinity, or NaN anywhere in it (including matrix elements, unit magnitudes, and object values): an undefined operation such as 1/0, 0/0, or log(0), or a value that overflowed its numeric range (e.g. 171! or 2^1024 under numericType \"number\"). `fraction_unsupported`: numericType is \"Fraction\" and the result has no exact rational value (e.g. sqrt(2), sin(1), log(3)), the expression calls a function Fraction mode cannot compute, even for a rational result (e.g. sqrt(4), 5!, combinations(5, 2)), or it uses a value Fraction mode holds only as a rounded 64-bit float (e.g. pi, e, 2^(1/2), a complex number with a non-integer part, number(x), random()). `parse_failed`: mathjs could not parse the expression, or it names an undefined symbol, function, or unit, or calls a function disabled for security. `operation_as_function`: The expression calls `evaluate`, `simplify`, or `derivative` \u2014 those are operations, selected with the `operation` parameter. `type_mismatch`: An operand has the wrong type or unit for the operation \u2014 a bare number added to a unit, mismatched units, a unit in an exponent, a non-numeric string in arithmetic, or a function used as a value (`5 min`, where `min` is the minimum function; that case carries its own recovery hint). `evaluation_failed`: The expression parsed but could not be computed \u2014 wrong argument count, a value outside the function domain, a singular matrix, mismatched matrix dimensions, or an index out of range \u2014 or simplify/derivative cannot process part of it (e.g. a function with no derivative rule). `derivative_missing_variable`: `operation` is `derivative` but `variable` was not provided. `evaluation_timeout`: Expression evaluation exceeded the configured timeout (CALC_EVALUATION_TIMEOUT_MS). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "empty_expression",
+         "expression_too_long",
+         "multiple_expressions",
+         "reserved_scope_key",
+         "disallowed_result_type",
+         "result_too_large",
+         "undefined_result",
+         "fraction_unsupported",
+         "parse_failed",
+         "operation_as_function",
+         "type_mismatch",
+         "evaluation_failed",
+         "derivative_missing_variable",
+         "evaluation_timeout"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "expression": {
+    "description": "The original expression as received.",
+    "type": "string"
+   },
+   "operation": {
+    "description": "The operation that was applied.",
+    "enum": [
+     "evaluate",
+     "simplify",
+     "derivative"
+    ],
+    "type": "string"
+   },
+   "precisionUsed": {
+    "description": "The precision value supplied for evaluate. Fraction results print exactly regardless. Omitted when no precision was supplied or the operation is symbolic.",
+    "type": "number"
+   },
+   "result": {
+    "description": "The computed result as a string.",
+    "type": "string"
+   },
+   "resultType": {
+    "description": "Type of result as reported by math.js. Common values: number, BigNumber, Fraction, Complex, DenseMatrix, SparseMatrix, Array, Unit, string, boolean. Symbolic operations return \"string\".",
+    "type": "string"
+   },
+   "scopeVars": {
+    "description": "Keys from the scope that were active during evaluation. Omitted when no scope was provided and for symbolic operations, which ignore scope. Values are omitted to keep output compact.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "unchanged": {
+    "description": "Present only for simplify operations. true means the simplifier returned the expression unchanged \u2014 it could not reduce it further (e.g. rational expressions requiring polynomial factoring are beyond math.js's built-in simplifier). false means simplification made progress. Omitted for evaluate and derivative.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Calculate"
+}

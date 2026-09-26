@@ -1,0 +1,118 @@
+{
+ "description": "Would a grid bot have made money here? Simulate a GRID BOT (buy-low / sell-high ladder inside a fixed price range) on historical candles. Returns final value, return %, CAGR, trade count, fees paid and a Buy & Hold comparison. This is a different machine from the strategy backtester: grid bots earn from oscillation inside a range, not from trend \u2014 for signal-based strategies use arena_run_backtest instead. The result depends heavily on the range you choose (low_price / high_price); a range the price left early makes the bot idle, so treat range choice as part of the hypothesis, not a detail \u2014 arena_suggest_grid_range proposes a defensible range. Each run is saved to your account (the returned id is the run_id); publish a public snapshot page with arena_share_grid_backtest. grid_mode picks neutral (default) or long. Optional leverage (2/3/5, grid_mode long only, Pro) with funding_mode (conservative default / historical BTCUSDT / none): simulates an isolated-margin futures long grid \u2014 margin = total_investment, the grid trades margin \u00d7 leverage, funding accrues daily on the open position, liquidation is checked per candle at the low. It simulates, it does not recommend: the result can be a total loss of the margin. Free tier limited to BTCUSDT/ETHUSDT. Per-day quota: Free=5, Pro=50, Power=500. [Free / Pro / Power tier]",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "end_date": {
+    "description": "Simulation end, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "entry_price": {
+    "description": "Optional price at which the bot starts; default is the first close in the range.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "fee_rate": {
+    "description": "Per-trade fee fraction, e.g. 0.001 for 0.1% (Binance spot taker).",
+    "maximum": 0.01,
+    "minimum": 0,
+    "type": "number"
+   },
+   "funding_mode": {
+    "description": "Only with leverage > 1. 'conservative' (default): flat 0.05%/day on the open position. 'historical': recorded daily average of three exchanges, BTCUSDT from 2019-09-08 only \u2014 otherwise falls back to conservative and flags funding_fell_back_to_conservative. 'none': no funding (optimistic).",
+    "enum": [
+     "none",
+     "conservative",
+     "historical"
+    ],
+    "type": "string"
+   },
+   "grid_count": {
+    "description": "Number of grid levels between low_price and high_price (2\u2013200). More levels = more, smaller trades = more fees.",
+    "maximum": 200,
+    "minimum": 2,
+    "type": "integer"
+   },
+   "grid_mode": {
+    "description": "'neutral' (default): starts half in coins, buys and sells around the entry. 'long': starts 100% in cash, buys dips below the entry, sells on recovery \u2014 required for leverage.",
+    "enum": [
+     "neutral",
+     "long"
+    ],
+    "type": "string"
+   },
+   "grid_type": {
+    "description": "Level spacing: 'arithmetic' = equal price steps, 'geometric' = equal percentage steps (usually the better fit for crypto).",
+    "enum": [
+     "arithmetic",
+     "geometric"
+    ],
+    "type": "string"
+   },
+   "high_price": {
+    "description": "Upper bound of the grid range, in quote currency. Above it the bot is fully in cash and stops selling. Must exceed low_price.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "leverage": {
+    "description": "Optional, default 1 (spot grid, unchanged). 2/3/5 = isolated-margin long grid (grid_mode must be long; Pro). Adds liquidated, liquidation_time/price, funding_cost_usd and max_notional_exposure to the result; final_value/total_return are then on the margin.",
+    "enum": [
+     1,
+     2,
+     3,
+     5
+    ],
+    "type": "number"
+   },
+   "low_price": {
+    "description": "Lower bound of the grid range, in quote currency. Below it the bot is fully invested and stops buying.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "pair": {
+    "description": "Crypto pair symbol, e.g. BTCUSDT. Free tier: BTCUSDT or ETHUSDT only.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "start_date": {
+    "description": "Simulation start, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "stop_loss_price": {
+    "description": "Optional: liquidate the whole grid and stop once price falls to this level.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "take_profit_price": {
+    "description": "Optional: liquidate the whole grid and stop once price rises to this level.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "total_investment": {
+    "description": "Capital in USDT spread across the grid; min 100.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   }
+  },
+  "required": [
+   "pair",
+   "start_date",
+   "end_date",
+   "total_investment",
+   "low_price",
+   "high_price",
+   "grid_count",
+   "grid_type",
+   "fee_rate"
+  ],
+  "type": "object"
+ },
+ "name": "arena_run_grid_backtest",
+ "title": "Run a Grid-Trading Backtest"
+}

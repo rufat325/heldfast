@@ -1,0 +1,111 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "TYPED, DETERMINISTIC financial facts for a US public company for an EXPLICITLY NAMED reporting period \u2014 \"Apple revenue for fiscal 2023\", \"Walmart net income FY2026 Q3\", \"Microsoft cash at the end of fiscal 2024\". PREFER OVER entity_profile / get_company_financials whenever the period matters: those answer \"the most recent figures\" and will happily hand back FY2025 when you asked about FY2019, and neither separates a discrete quarter from a year-to-date figure. This one refuses instead \u2014 it NEVER substitutes the latest period for the period requested, NEVER returns 0 for missing data, NEVER lets a 9-month YTD number answer a quarterly question, and NEVER converts a currency. Every answer carries the exact us-gaap concept it came from, what that concept MEASURES (NetIncomeLoss excludes non-controlling interests, ProfitLoss includes them \u2014 not synonyms), the accession number and a link to the filing on sec.gov, the restatement trail of any superseded figures, and a contract + derivation version to pin against. Fiscal periods are the FILER'S OWN, anchored on their fiscal-year end, so Walmart's year ending 2026-01-31 is FY2026 and Apple's ending 2025-09-27 is FY2025. Attributes in v1: revenue, net_income, cash. Every non-answer is a named status \u2014 `unavailable` (the filer did not report it for that period; the periods that DO exist are listed, without values), `unsupported` (outside what v1 covers \u2014 a non-us-gaap filer, an unknown attribute, a non-USD unit), `ambiguous` (the company name matched two filers equally well; both are named), `conflicting` (two filings the same day disagree; both are returned and neither is picked), `partial` (a value with no accession behind it). Source: SEC EDGAR XBRL companyconcept, one publisher read once \u2014 see `corroboration`. Same response is served at POST https://gateway.pipeworx.io/v1/facts for non-MCP callers.",
+ "inputSchema": {
+  "examples": [
+   {
+    "attribute": "revenue",
+    "company": "AAPL",
+    "period": {
+     "fiscal_year": 2023,
+     "type": "annual"
+    }
+   }
+  ],
+  "properties": {
+   "as_of": {
+    "description": "Past ISO timestamp with timezone. Replay the latest answer actually recorded by that instant; no invented history or live fallback.",
+    "type": "string"
+   },
+   "attribute": {
+    "description": "Which figure. \"revenue\" = total consolidated revenue; \"net_income\" = net income (loss); \"cash\" = cash and cash equivalents at the period end.",
+    "enum": [
+     "revenue",
+     "net_income",
+     "cash"
+    ],
+    "type": "string"
+   },
+   "basis": {
+    "description": "Only \"consolidated\" in v1. Segment and product-level figures are XBRL-dimensioned and are not reachable through this contract at any concept.",
+    "enum": [
+     "consolidated"
+    ],
+    "type": "string"
+   },
+   "company": {
+    "description": "Ticker (\"AAPL\"), 10-digit CIK (\"0000320193\"), or company name. A name that matches two filers equally well returns status \"ambiguous\" with both named rather than guessing \u2014 pass a ticker or CIK to be certain.",
+    "type": "string"
+   },
+   "exclude_publishers": {
+    "description": "Publisher ids forbidden for fact retrieval: sec, fmp, alphavantage. Case and surrounding whitespace are normalized; unknown ids are refused. Excluding sec currently leaves no eligible fact source and returns unavailable/sources_excluded with the selection reasons. Identity and fiscal-calendar lookups may still use SEC; no excluded financial concept is fetched.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "freshness": {
+    "description": "cached (default) permits an eligible stored answer; fresh requires an upstream refresh and never silently falls back to stale data.",
+    "enum": [
+     "cached",
+     "fresh"
+    ],
+    "type": "string"
+   },
+   "max_age": {
+    "description": "Maximum age in seconds of the upstream publication, not our fetch. Older or undated facts are withheld.",
+    "maximum": 3155760000,
+    "minimum": 0,
+    "type": "number"
+   },
+   "period": {
+    "description": "The reporting period, stated explicitly. There is no default and no \"latest\" \u2014 that is the point of this tool.",
+    "properties": {
+     "fiscal_quarter": {
+      "description": "1-4. Required when type is \"quarterly\"; rejected when type is \"annual\".",
+      "type": "number"
+     },
+     "fiscal_year": {
+      "description": "The FILER'S fiscal year \u2014 the year the period ends in by their own calendar. Walmart's year ending 2026-01-31 is 2026.",
+      "type": "number"
+     },
+     "type": {
+      "description": "\"annual\" = the full fiscal year. \"quarterly\" = ONE discrete quarter, never a year-to-date figure.",
+      "enum": [
+       "annual",
+       "quarterly"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "fiscal_year"
+    ],
+    "type": "object"
+   },
+   "restatement": {
+    "description": "Default \"as_amended\" \u2014 the latest filed figure for the period, with everything it superseded listed. \"as_originally_reported\" takes the first filing instead.",
+    "enum": [
+     "as_amended",
+     "as_originally_reported"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "company",
+   "attribute",
+   "period"
+  ],
+  "type": "object"
+ },
+ "name": "company_facts",
+ "title": "Company Facts",
+ "version": "v1.8fefc207"
+}

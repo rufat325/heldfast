@@ -1,0 +1,45 @@
+{
+ "description": "Return a structured PATCH PLAN for renaming a symbol \u2014 definition site + every call site with exact file paths and line ranges \u2014 so the calling agent can apply the rewrite with its own Edit/MultiEdit tools. The canonical \"rename without breaking hidden callers\" tool.\n\nUnlike find_references (which only returns callers), safe_rename also returns the symbol's own declaration site (which the agent must also rewrite) and packages everything with a summary + warnings into a plan ready for programmatic application. Unlike a plain grep-and-replace, the call sites come from the resolved code graph \u2014 you won't accidentally rename \"log\" the method and \"log\" the string in one pass. The agent grep-replaces oldName \u2192 newName within each reference's startLine..endLine range (scoped to that caller's body), NOT a whole-file rename, so unrelated symbols sharing the same short name stay untouched.\n\nIMPORTANT \u2014 side effects: NONE. Tentra never writes files. This tool returns a plan only; the agent is responsible for applying the edits, which keeps the rewrite safe-by-default (dry-run, diff, rollback all stay in the agent's hands). If target.fanIn is above the god-node threshold, a warning fires so the agent double-checks before blasting out changes. If include_unresolved=true, best-effort short-name matches are included with a warning that they may not all be the target.\n\nPrerequisites: Tentra API auth + a symbol_id from query_symbols + the matching snapshot_id + a valid new identifier (letters / digits / underscores, cannot start with a digit \u2014 whitespace and special characters are rejected). Read-only. Response: { target: { id, qualifiedName, oldName, newName, fanIn, fanOut, isGodNode }, definition: { filePath, startLine, endLine } | null, references: [{ kind, edgeType, fromSymbolId, fromQualifiedName, fromKind, filePath, startLine, endLine, callCount, isTest }], summary: { totalReferences, distinctCallers, fileCount, warnings: string[] } }.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "include_tests": {
+    "default": true,
+    "description": "Include references from test/fixture files. Default true \u2014 safe renames almost always need to cover tests too, otherwise they break CI.",
+    "type": "boolean"
+   },
+   "include_unresolved": {
+    "default": false,
+    "description": "Also include best-effort short-name matches the call-graph resolver could not prove target this symbol. Default false \u2014 enable only if you want broader coverage and are willing to review each unresolved hit manually.",
+    "type": "boolean"
+   },
+   "new_name": {
+    "description": "New identifier for the symbol. Must be a valid identifier: letters, digits, underscores only, cannot start with a digit. Whitespace and special characters are rejected.",
+    "minLength": 1,
+    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+    "type": "string"
+   },
+   "snapshot_id": {
+    "description": "Snapshot the symbol lives in, from index_code / list_snapshots.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "symbol_id": {
+    "description": "Symbol ID to rename, from query_symbols. The target whose declaration AND every call site will be included in the plan.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "symbol_id",
+   "new_name",
+   "snapshot_id"
+  ],
+  "type": "object"
+ },
+ "name": "safe_rename"
+}

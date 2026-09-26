@@ -1,0 +1,136 @@
+{
+ "annotations": {
+  "access": "free",
+  "connect_url": "https://dchub.cloud/connect?ref=mcp-tools-list&tool=get_infra_projects",
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "maturity": "unknown",
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Get Infra Projects"
+ },
+ "description": "Use when a user asks what GAS PIPELINE or TRANSMISSION LINE PROJECTS are planned, proposed, approved or under construction \u2014 the forward build-out, not the existing network. e.g. \"which interstate gas pipelines are under construction into Louisiana?\", \"what 345 kV transmission projects does ERCOT plan by 2028?\", \"what new projects appeared since last month?\". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list (public domain) \u2014 operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from ERCOT's Transmission Project and Information Tracking list (TPIT) \u2014 ERCOT/TEXAS ONLY so far, no other ISO or utility \u2014 owner, from/to substation, county, kV, new and rebuilt miles, MVA, projected and actual in-service date, status (Planned, Conceptual, Under Construction, Completed, or dropped from the plan). Filter by type (gas_pipeline, transmission or all), state, status, min_capacity (gas MMcf/d), min_kv (transmission kV), an in-service window, new_since (projects first seen on or after a date, the initial backfill excluded) and include_delisted. Every row cites its source_url and license, and the summary counts every match by type, status and state with totals and an as_of date per source. Answers \"what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service\". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. Do NOT use for new POWER GENERATION projects (use get_power_pipeline), for EXISTING, already-built pipelines, lines and substations (use get_infrastructure or get_grid_intelligence), or for data-center construction (use get_pipeline).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "in_service_after": {
+    "description": "Only projects entering service on or after this date (YYYY-MM-DD or YYYY). Gas compares the in-service year; transmission the actual, else projected, in-service date",
+    "type": "string"
+   },
+   "in_service_before": {
+    "description": "Only projects entering service on or before this date (YYYY-MM-DD or YYYY)",
+    "type": "string"
+   },
+   "include_delisted": {
+    "description": "Also return projects the latest source release no longer lists (completed, withdrawn or dropped). Default false",
+    "type": "boolean"
+   },
+   "limit": {
+    "description": "Max results to return (1-500; default varies by tool)",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "min_capacity": {
+    "description": "Gas only: minimum pipeline capacity in million cubic feet per day (MMcf/d), e.g. 1000. With type=all it narrows to gas projects",
+    "type": "number"
+   },
+   "min_kv": {
+    "description": "Transmission only: minimum voltage in kilovolts (kV), e.g. 345. With type=all it narrows to transmission projects",
+    "type": "number"
+   },
+   "new_since": {
+    "description": "Only projects DC Hub first saw on or after this date (YYYY-MM-DD). The initial backfill is never counted as new",
+    "type": "string"
+   },
+   "state": {
+    "description": "US state abbreviation, e.g. TX or LA. Gas projects match any state they cross; transmission projects are all TX",
+    "type": "string"
+   },
+   "status": {
+    "description": "Status, case-insensitive; comma list allowed. Gas: Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed. Transmission: Planned, Conceptual, Under Construction, Completed, Cancelled",
+    "type": "string"
+   },
+   "type": {
+    "description": "Which project list: gas_pipeline (EIA, US-wide), transmission (ERCOT TPIT, Texas only) or all (default)",
+    "enum": [
+     "gas_pipeline",
+     "transmission",
+     "all"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_infra_projects",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text \u2014 tool-specific data fields ride at the top level alongside these envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Infra Projects"
+}

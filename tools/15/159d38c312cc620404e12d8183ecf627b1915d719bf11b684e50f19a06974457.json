@@ -1,0 +1,184 @@
+{
+ "_meta": {
+  "apiVersion": "1.0.0",
+  "examples": [
+   {
+    "input": {
+     "dataBase64": "y0jNyckHAA==",
+     "maxOutput": 1024
+    },
+    "title": "Inflate a small raw-deflate stream"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Decompress a raw DEFLATE (RFC 1951) stream \u2014 e.g. the payload from read_zip_entry mode:'raw' \u2014 with a MANDATORY `maxOutput` bound through zipnative's resumable inflater (constant memory, exact `bytesConsumed`, trailing bytes reported as `leftover`; ZIP_INFLATE_OUTPUT_OVERFLOW past the bound). method 'store' is a bounded pass-through; a numeric method id selects a registered codec (none beyond 0 / 8 in this server \u2192 ZIP_UNSUPPORTED_METHOD). Output base64 (\u2264 50 MiB) or a sandbox file. Use it only for a raw payload or a bare deflate stream; to read an entry's content prefer read_zip_entry mode:'data'.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "allowTrailing": {
+    "default": false,
+    "description": "Accept bytes after the end of the deflate stream silently (they are always reported as `leftover`).",
+    "type": "boolean"
+   },
+   "dataBase64": {
+    "description": "The compressed stream as base64 (e.g. the payload from read_zip_entry mode:\"raw\"). Exclusive with sourcePath.",
+    "type": "string"
+   },
+   "maxOutput": {
+    "description": "Mandatory output bound in bytes: decompression stops with ZIP_INFLATE_OUTPUT_OVERFLOW beyond it (zip-bomb guard). Inline results are further capped at 52428800 bytes, file results at 4294967296.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "method": {
+    "default": "deflate",
+    "description": "'deflate' (default, method 8), 'store' (method 0, bounded pass-through) or a numeric method id for a registered codec.",
+    "pattern": "^(?:deflate|store|[0-9]+)$",
+    "type": "string"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default) returns the bytes inline as an embedded resource (\u2264 50 MiB). 'file' writes them inside ZIPNATIVE_MCP_OUTPUT_DIR (never overwrites; \u2264 4 GiB, streamed) and returns a resource_link.",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Relative path inside the sandbox (only when outputMode='file'); must end in a container extension (.zip recommended).",
+    "type": "string"
+   },
+   "sourcePath": {
+    "description": "Relative path of a file inside the sandbox holding the compressed stream (streamed). Exclusive with dataBase64.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "maxOutput"
+  ],
+  "type": "object"
+ },
+ "name": "inflate_raw",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Result of an archive-producing tool. base64 mode: the archive arrives as an embedded `resource` content block (not duplicated here); file mode: `filePath` + a resource_link.",
+  "properties": {
+   "diagnosticCounts": {
+    "additionalProperties": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "description": "Number of diagnostics received per code (counts every occurrence, including de-duplicated ones).",
+    "type": "object"
+   },
+   "diagnostics": {
+    "description": "Non-fatal conformance concerns the engine raised while parsing or writing (de-duplicated by code + entry, at most 200). Empty for a clean archive. Codes: ZIP_PREPENDED_DATA, ZIP_MULTIPLE_EOCD, ZIP_NAME_MISMATCH, ZIP_UNICODE_PATH_CONFLICT, ZIP_INVALID_UTF8_NAME, ZIP_DUPLICATE_NAME, ZIP_EXTRA_FIELD_MALFORMED, ZIP_ZIP64_EXTRA_IGNORED, ZIP_TIMESTAMP_NOT_PINNED, ZIP_NONDETERMINISTIC_CODEC, ZIP_DEAD_BYTES_RATIO.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "entryName": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning",
+        "info"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "severity",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "diagnosticsTruncated": {
+    "description": "Present (true) when more than 200 distinct diagnostics were dropped from `diagnostics`.",
+    "type": "boolean"
+   },
+   "filePath": {
+    "description": "Sandboxed absolute path (file mode).",
+    "type": "string"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "sizeBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "summary": {
+    "additionalProperties": false,
+    "description": "inflate_raw summary (the produced bytes are application/octet-stream, not an archive).",
+    "properties": {
+     "bytesConsumed": {
+      "description": "Compressed bytes the deflate stream consumed (excludes leftover).",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "bytesIn": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "bytesOut": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "finished": {
+      "type": "boolean"
+     },
+     "leftover": {
+      "description": "Trailing bytes after the end of the stream.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "maxOutput": {
+      "description": "The effective output bound (maxOutput capped by the inline / file cap).",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "method": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "methodName": {
+      "type": "string"
+     },
+     "trailingWarning": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "sizeBytes",
+   "summary",
+   "diagnostics"
+  ],
+  "type": "object"
+ },
+ "title": "Inflate raw DEFLATE (bounded)"
+}

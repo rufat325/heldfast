@@ -1,0 +1,423 @@
+{
+ "_meta": {
+  "apiVersion": "1.0.0",
+  "examples": [
+   {
+    "input": {
+     "check": [
+      "deterministic",
+      "no-encryption",
+      "safe-names"
+     ],
+     "zipBase64": "<zip-base64>"
+    },
+    "title": "CI gate: reproducible, no encryption, safe names"
+   },
+   {
+    "input": {
+     "fields": [
+      "entryCount",
+      "deterministic"
+     ],
+     "verbosity": "summary",
+     "zipBase64": "<zip-base64>"
+    },
+    "title": "Token-frugal verdict"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Read-only archive report in ONE call: size, entry / file / directory counts, Zip64, comment, compressed vs uncompressed totals, per-method counts, encrypted / symlink / data-descriptor / Zip64 / cp437 / duplicate / unsafe-name counts, date range, a `determinism` verdict (epoch timestamps + canonical order + UTF-8 flags \u21d2 reproducible; `canonicalLayout` = no data descriptors) and every engine diagnostic (prepended SFX data, name mismatches, \u2026). Opens EAGERLY by default: every entry's real extent is checked up front \u2014 overlapping entries, entries reaching into the central directory or past EOF, and Zip64 spoofing \u2014 and refused with their ZIP_* code rather than summarised (a method / CRC / size divergence between central and local headers is caught by verify_zip and on read, not here). `check:[\u2026]` / `assert:{\u2026}` turn it into a CI gate \u2192 `checks[]` + `checksPassed`. Token-frugal: verbosity:'summary', fields:[\u2026]. Input: zipBase64 or zipPath (sandbox).",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "assert": {
+    "additionalProperties": false,
+    "description": "Parametrised assertions (each becomes a `checks[]` row).",
+    "properties": {
+     "has": {
+      "description": "Entry names that must be present (exact).",
+      "items": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 100,
+      "type": "array"
+     },
+     "maxEntries": {
+      "description": "The archive must hold at most this many entries.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "maxRatio": {
+      "description": "Worst per-entry uncompressed/compressed ratio allowed.",
+      "minimum": 1,
+      "type": "number"
+     },
+     "maxUncompressedBytes": {
+      "description": "Sum of the declared uncompressed sizes must not exceed this.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "method": {
+      "description": "Every entry must use this method.",
+      "enum": [
+       "store",
+       "deflate"
+      ],
+      "type": "string"
+     },
+     "minEntries": {
+      "description": "The archive must hold at least this many entries.",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "check": {
+    "description": "CI assertions evaluated over the report: deterministic, epoch-timestamps, canonical-order, utf8-names, no-data-descriptor, canonical-layout, no-zip64, zip64, no-encryption, no-symlinks, safe-names, no-duplicates, no-diagnostics, store-only, deflate-only. Result: `checks[]` + `checksPassed`.",
+    "items": {
+     "enum": [
+      "deterministic",
+      "epoch-timestamps",
+      "canonical-order",
+      "utf8-names",
+      "no-data-descriptor",
+      "canonical-layout",
+      "no-zip64",
+      "zip64",
+      "no-encryption",
+      "no-symlinks",
+      "safe-names",
+      "no-duplicates",
+      "no-diagnostics",
+      "store-only",
+      "deflate-only"
+     ],
+     "type": "string"
+    },
+    "maxItems": 15,
+    "type": "array"
+   },
+   "fields": {
+    "description": "Dot-path projection applied after verbosity (e.g. ['entryCount', 'entries.name']); array segments map over elements; unmatched paths are reported in _meta.unmatchedFields.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "limits": {
+    "additionalProperties": false,
+    "description": "Override zipnative's named security bounds for this call (CWE-400 / CWE-409 guards). Every key is optional; absent keys keep the engine defaults (maxEntries 100000, maxEntryUncompressedSize 1 GiB, maxTotalUncompressedSize 8 GiB, maxCompressionRatio 1024, maxNameBytes 4096, maxExtraFieldBytes 65535, maxCommentBytes 65535, maxCentralDirectoryBytes 256 MiB). Values above the operator ceilings (ZIPNATIVE_MCP_MAX_UNCOMPRESSED_BYTES, ZIPNATIVE_MCP_MAX_ENTRIES) are refused with LIMIT_CEILING_EXCEEDED. Raise a bound for trusted input only.",
+    "properties": {
+     "maxCentralDirectoryBytes": {
+      "description": "Maximum central-directory size in bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCommentBytes": {
+      "description": "Maximum comment length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCompressionRatio": {
+      "description": "Maximum declared uncompressed/compressed ratio for entries >= 1 KiB compressed (zip-bomb guard).",
+      "minimum": 1,
+      "type": "number"
+     },
+     "maxEntries": {
+      "description": "Maximum central-directory entry count.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxEntryUncompressedSize": {
+      "description": "Maximum decompressed size of one entry, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxExtraFieldBytes": {
+      "description": "Maximum extra-field block length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxNameBytes": {
+      "description": "Maximum entry-name length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxTotalUncompressedSize": {
+      "description": "Maximum total decompressed size across an extraction, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "strict": {
+    "default": false,
+    "description": "Escalate the first engine diagnostic (prepended data, duplicate name, name mismatch, \u2026) to a ZIP_STRICT_DIAGNOSTIC error instead of reporting it.",
+    "type": "boolean"
+   },
+   "validate": {
+    "default": "eager",
+    "description": "'eager' (default) cross-checks every local header and the overlap table up front \u2014 hostile shapes are refused here; 'lazy' defers to first read (cheaper on huge archives).",
+    "enum": [
+     "eager",
+     "lazy"
+    ],
+    "type": "string"
+   },
+   "verbosity": {
+    "default": "full",
+    "description": "'summary' returns only the scalar verdict fields (drops arrays and payloads) \u2014 the token-frugal form.",
+    "enum": [
+     "full",
+     "summary"
+    ],
+    "type": "string"
+   },
+   "zipBase64": {
+    "description": "The archive bytes as base64 (exactly once; a data: URI prefix is tolerated). Exclusive with zipPath. Decoded size \u2264 128 MiB.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "zipPath": {
+    "description": "Relative path of an archive inside the ZIPNATIVE_MCP_OUTPUT_DIR sandbox (no absolute paths, no '..'; container extensions only: .zip .jar .docx .epub \u2026). Exclusive with zipBase64. Lets a create/modify \u2192 verify/extract chain avoid re-sending the bytes.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "inspect_zip",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Structured archive report (the zipnative inspect --json shape). Every property is optional because the result can be projected: verbosity:'summary' returns only the scalar summary fields, fields:[...] keeps a dot-path subset. Defaults return the full shape.",
+  "properties": {
+   "archiveBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "canonicalLayout": {
+    "description": "summary only: buffered (no data descriptor) layout.",
+    "type": "boolean"
+   },
+   "checks": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "check": {
+       "type": "string"
+      },
+      "detail": {
+       "type": "string"
+      },
+      "ok": {
+       "type": "boolean"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "checksPassed": {
+    "description": "Present when check / assert was supplied: true when every assertion holds.",
+    "type": "boolean"
+   },
+   "comment": {
+    "description": "Archive comment (UTF-8, lossy).",
+    "type": "string"
+   },
+   "commentBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "commentHex": {
+    "type": "string"
+   },
+   "compressedBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "cp437NameCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "dataDescriptorCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "determinism": {
+    "additionalProperties": false,
+    "description": "`deterministic` = reproducible (epoch timestamps + canonical order + UTF-8 flags); `canonicalLayout` = the buffered layout (no data descriptors) \u2014 a streamed archive is reproducible but not canonical.",
+    "properties": {
+     "canonicalLayout": {
+      "type": "boolean"
+     },
+     "canonicalOrder": {
+      "type": "boolean"
+     },
+     "deterministic": {
+      "type": "boolean"
+     },
+     "epochTimestamps": {
+      "type": "boolean"
+     },
+     "noDataDescriptors": {
+      "type": "boolean"
+     },
+     "utf8Flags": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "deterministic": {
+    "description": "summary only: the determinism verdict.",
+    "type": "boolean"
+   },
+   "diagnosticCount": {
+    "description": "summary only: number of distinct diagnostics.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "diagnosticCounts": {
+    "additionalProperties": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "description": "Number of diagnostics received per code (counts every occurrence, including de-duplicated ones).",
+    "type": "object"
+   },
+   "diagnostics": {
+    "description": "Non-fatal conformance concerns the engine raised while parsing or writing (de-duplicated by code + entry, at most 200). Empty for a clean archive. Codes: ZIP_PREPENDED_DATA, ZIP_MULTIPLE_EOCD, ZIP_NAME_MISMATCH, ZIP_UNICODE_PATH_CONFLICT, ZIP_INVALID_UTF8_NAME, ZIP_DUPLICATE_NAME, ZIP_EXTRA_FIELD_MALFORMED, ZIP_ZIP64_EXTRA_IGNORED, ZIP_TIMESTAMP_NOT_PINNED, ZIP_NONDETERMINISTIC_CODEC, ZIP_DEAD_BYTES_RATIO.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "entryName": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning",
+        "info"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "diagnosticsTruncated": {
+    "description": "Present (true) when more than 200 distinct diagnostics were dropped from `diagnostics`.",
+    "type": "boolean"
+   },
+   "directoryCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "duplicateNameCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "earliestDate": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "encryptedCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "entryCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "fileCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "isZip64": {
+    "description": "A Zip64 end-of-central-directory record is present.",
+    "type": "boolean"
+   },
+   "latestDate": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "methods": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "count": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "id": {
+       "type": "integer"
+      },
+      "name": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "multipleEocd": {
+    "type": "boolean"
+   },
+   "prependedData": {
+    "description": "SFX-style prefix before the first local header (offsets shifted).",
+    "type": "boolean"
+   },
+   "ratio": {
+    "type": "string"
+   },
+   "symlinkCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "uncompressedBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "unsafeNameCount": {
+    "description": "Names sanitizeEntryPath() refuses (traversal, absolute, drive/UNC, NUL, ADS, device names).",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "utf8NameCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "zip64EntryCount": {
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Inspect archive (facts, determinism verdict, CI checks)"
+}

@@ -1,0 +1,398 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch public comments on a Federal Register document or a Regulations.gov docket \u2014 the unique corpus of what citizens and organizations actually submitted. Provide exactly one targeting parameter: docket_id (all comments in a docket, broadest), document_object_id (comments on one document, by its object ID or document ID), fr_document_number (convenience \u2014 resolves the FR number to the Regulations.gov document carrying it), or comment_id (one comment's full detail and attachments). A list narrows by comment text with search_term (each hit then carries the matching passages) and by posted date with posted_after/posted_before. The list endpoint returns no body text or attachment info \u2014 call with comment_id to read a comment's body. When a comment's real content is a PDF/DOCX attachment, the body is a stub and attachmentOnly is true; the attachment download URLs are returned. Requires REGULATIONS_GOV_API_KEY (free at https://api.data.gov/signup/).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "comment_id": {
+    "description": "Fetch one comment's full detail and attachments by its Regulations.gov comment ID (e.g. \"EPA-HQ-OAR-2025-0194-31102\"). Use to read a single comment's body after finding it in a list. Mutually exclusive with the other three targeting parameters \u2014 pass it alone, not alongside the docket it came from \u2014 and takes none of the list filters.",
+    "type": "string"
+   },
+   "docket_id": {
+    "description": "Fetch all comments in a docket by Regulations.gov docket ID (e.g. \"EPA-HQ-OAR-2025-0194\") \u2014 regulationsGovDocketId on a regulations_search_rules or regulations_list_open_comments row, or docketId from regulations_get_document, not an entry of the printed docketIds. Broadest scope. Exactly one of docket_id / document_object_id / fr_document_number / comment_id is required \u2014 supplying two is rejected, not resolved by precedence.",
+    "type": "string"
+   },
+   "document_object_id": {
+    "description": "Fetch comments on one specific Regulations.gov document, by either handle: its object ID, 16 hex characters (e.g. \"0900006485883ec6\", the objectId in regulations_get_docket's documents), or its document ID (e.g. \"EPA-HQ-OW-2022-0114-0027\", the regulationsGovDocumentId from regulations_get_document). Comments usually attach to the docket's primary (proposed-rule) document. Mutually exclusive with the other three targeting parameters.",
+    "type": "string"
+   },
+   "fr_document_number": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Federal Register document number (e.g. \"2023-05471\", \"E9-25990\").",
+      "pattern": "^[A-Za-z]?[0-9]{1,4}-[0-9]{1,6}(-[0-9]{1,6})?$",
+      "type": "string"
+     }
+    ],
+    "description": "Convenience: fetch comments on the Regulations.gov document carrying a Federal Register number (e.g. \"2023-05471\"; older numbers like \"E9-25990\" too). A Regulations.gov document ID (\"EPA-HQ-OW-2022-0114-0027\") is not an FR number; pass it as document_object_id. Saves a get_document \u2192 get_docket hop. A document that is not on Regulations.gov \u2014 a presidential document, for one \u2014 answers not_found. Mutually exclusive with the other three targeting parameters."
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number (1\u201340, default 1). Regulations.gov serves 40 pages, so a list reaches 40 \u00d7 per_page comments (10,000 at per_page 250); totalPages and nextPage in the response say how far this one goes. To reach past that, take the set one posted_after/posted_before window at a time.",
+    "maximum": 40,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "default": 25,
+    "description": "Comments per page (5\u2013250, default 25). Regulations.gov requires a minimum page size of 5.",
+    "maximum": 250,
+    "minimum": 5,
+    "type": "integer"
+   },
+   "posted_after": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "ISO 8601 date (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "List mode: earliest posted date, inclusive, ISO 8601 (YYYY-MM-DD), a real calendar day. Pair with posted_before to take a high-volume set one window at a time."
+   },
+   "posted_before": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "ISO 8601 date (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "List mode: latest posted date, inclusive, ISO 8601 (YYYY-MM-DD), a real calendar day. The same date as posted_after selects that one day."
+   },
+   "search_term": {
+    "description": "List mode: keep only comments whose text matches, as Regulations.gov full-text search reads it \u2014 stemmed, so \"flaring\" also matches \"flare\" and \"flares\". Each hit then carries highlightedContent, the passages that matched.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "regulations_find_comments",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "mode"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "attachmentOnly": {
+    "description": "True when attachments exist and the body is a stub/empty \u2014 the substance is in the attachment files (detail mode).",
+    "type": "boolean"
+   },
+   "attachments": {
+    "description": "Attachment files \u2014 substance lives here when attachmentOnly is true (detail mode).",
+    "items": {
+     "additionalProperties": false,
+     "description": "One attachment with its available formats.",
+     "properties": {
+      "formats": {
+       "description": "Available file formats for the attachment.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One downloadable file format.",
+        "properties": {
+         "fileUrl": {
+          "description": "Download URL.",
+          "type": "string"
+         },
+         "format": {
+          "description": "File format (e.g. \"pdf\").",
+          "type": "string"
+         },
+         "size": {
+          "description": "File size in bytes, or null.",
+          "type": [
+           "number",
+           "null"
+          ]
+         }
+        },
+        "required": [
+         "format",
+         "fileUrl",
+         "size"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "title": {
+       "description": "Attachment title.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "title",
+      "formats"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "bodyText": {
+    "description": "Comment body, HTML-stripped. A stub (\"See Attached\") when content is in attachments; null when empty (detail mode).",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "cap": {
+    "description": "The most comments 40 pages reach at this per_page (40 \u00d7 per_page); set with truncated (list mode).",
+    "type": "number"
+   },
+   "commentId": {
+    "description": "Comment ID (detail mode).",
+    "type": "string"
+   },
+   "commentOnDocumentId": {
+    "description": "Document the comment was filed on, or null (detail mode).",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "comments": {
+    "description": "Comments matching the target, this page (list mode). Bodies/attachments require comment_id detail mode.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One comment summary.",
+     "properties": {
+      "agencyId": {
+       "description": "Agency ID, or null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "commentId": {
+       "description": "Comment ID \u2014 chains into comment_id for full detail.",
+       "type": "string"
+      },
+      "documentType": {
+       "description": "Document type (e.g. \"Public Submission\").",
+       "type": "string"
+      },
+      "highlightedContent": {
+       "description": "The passages of the comment text that matched search_term, as plain text \u2014 present only when search_term was given.",
+       "type": "string"
+      },
+      "objectId": {
+       "description": "Comment object ID.",
+       "type": "string"
+      },
+      "postedDate": {
+       "description": "Posted date.",
+       "type": "string"
+      },
+      "title": {
+       "description": "Comment title (e.g. \"Comment from Gates, Andrew\").",
+       "type": "string"
+      },
+      "withdrawn": {
+       "description": "True when the comment was withdrawn.",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "commentId",
+      "title",
+      "documentType",
+      "postedDate",
+      "agencyId",
+      "objectId",
+      "withdrawn"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "docketId": {
+    "description": "Docket ID, or null (detail mode).",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "duplicateComments": {
+    "description": "Identical submissions this record stands for. 0 or 1 is an ordinary submission, depending on the agency; above 1 marks a mass-mail campaign record standing for that many identical submissions. Null when not recorded (detail mode).",
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `auth_required`: REGULATIONS_GOV_API_KEY is not configured, or Regulations.gov rejected the key that is. `target_required`: None of docket_id / document_object_id / fr_document_number / comment_id was given. `multiple_targets`: More than one of docket_id / document_object_id / fr_document_number / comment_id was given. `filter_requires_list_mode`: search_term, posted_after, or posted_before was given with comment_id, which reads one comment and takes no filters. `date_range_inverted`: The start of a date range is later than its end. `not_found`: The target docket, document, or comment does not exist on Regulations.gov, or no Regulations.gov document carries the FR number. `rate_limited`: Regulations.gov returned 429. `upstream_unavailable`: Regulations.gov returned a 5xx, timed out, or could not be reached at all. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "auth_required",
+         "target_required",
+         "multiple_targets",
+         "filter_requires_list_mode",
+         "date_range_inverted",
+         "not_found",
+         "rate_limited",
+         "upstream_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "mode": {
+    "description": "Which mode produced this result.",
+    "enum": [
+     "list",
+     "detail"
+    ],
+    "type": "string"
+   },
+   "nextPage": {
+    "description": "Page to request next \u2014 present only when a later page holds comments (list mode).",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance \u2014 no comments matched, the page is past the end, comments lie beyond the last page, or the substance of a comment is in its attachments.",
+    "type": "string"
+   },
+   "organization": {
+    "description": "Submitter organization, or null (detail mode).",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "postedDate": {
+    "description": "Posted date (detail mode).",
+    "type": "string"
+   },
+   "postmarkDate": {
+    "description": "Postmark on a mailed submission, or null \u2014 many agencies record none (detail mode).",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "receivedDate": {
+    "description": "Date Regulations.gov received the comment, or null when not recorded (detail mode).",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "restrictReason": {
+    "description": "Reason the comment is restricted, or null (detail mode).",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "shown": {
+    "description": "Comments returned on this page (list mode).",
+    "type": "number"
+   },
+   "submitterName": {
+    "description": "Submitter name when public, or null (detail mode).",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "target": {
+    "description": "What was queried \u2014 the docket, document, or FR document, with any search_term and posted-date filters (list mode).",
+    "type": "string"
+   },
+   "title": {
+    "description": "Comment title (detail mode).",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Total comments matching the target (list mode).",
+    "type": "number"
+   },
+   "totalPages": {
+    "description": "Pages of comments at this per_page, at most the 40 Regulations.gov serves; 0 when none matched (list mode).",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when more comments matched than 40 pages reach at this per_page, so some are on no page \u2014 set on every page of such a set (list mode).",
+    "type": "boolean"
+   },
+   "withdrawn": {
+    "description": "True when the comment was withdrawn (detail mode).",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "regulations_find_comments"
+}

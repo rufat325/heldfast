@@ -1,0 +1,198 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "List the codes a Census filter dimension accepts, so a predicates map can be written without guessing. Answers the question left open when census_query_data or census_compare_geographies reports that a dimension was left unset. Which route a dimension takes depends on the vintage: NAICS and POPGROUP always publish a value list in the dataset dictionary, and on the current vintages EMPSZES, LFO, RCPSZES, TAXSTAT, and TYPOP publish none and are enumerated here against the live data endpoint instead. A dictionary value list is a classification shared across Census products rather than a list of what one dataset serves, and roughly half of its codes typically return no rows anywhere \u2014 those are checked against the dataset's own published rows and dropped, and the response source field says whether that check ran. The dictionary lists run to thousands of codes and are best narrowed with query. Pass the returned code as the dimension's value in predicates.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "dataset": {
+    "description": "Dataset the dimension belongs to (e.g., \"cbp\", \"nonemp\", \"ecnbasic\", \"dec/ddhca\", \"pep/charv\", \"acs/acs1/spp\"). Use census_list_datasets to discover valid values. Case is ignored, and a two-part code can be given by its last part alone \u2014 \"ddhca\" is dec/ddhca, \"charv\" is pep/charv. Three-part codes such as acs/acs1/spp must be given in full. The response echoes the resolved code. Dimension codes are vintage-specific, so the dataset and year must match the query the values are for.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Maximum codes to return (default: 50, max: 500). totalCount says how many matched.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "predicate": {
+    "description": "Filter dimension code to enumerate (e.g., \"EMPSZES\", \"LFO\", \"POPGROUP\", \"NAICS2017\"). Trimmed and uppercased, and the response echoes that spelling. The response notice of census_query_data names the dimensions a dataset declares, and census_search_variables finds them by keyword.",
+    "type": "string"
+   },
+   "query": {
+    "description": "Keyword to narrow the list, matched case-insensitively against each code and label (e.g., \"software\" against NAICS2017, \"exempt\" against TAXSTAT). Omit to list from the start. NAICS and POPGROUP run to thousands of codes, so a keyword is the practical way to use them.",
+    "type": "string"
+   },
+   "within_naics": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "A NAICS code: 2 to 8 digits, or a hyphenated sector range such as \"31-33\".",
+      "pattern": "^\\d{2,8}(-\\d{2})?$",
+      "type": "string"
+     }
+    ],
+    "description": "Industry code to scope the enumeration by, for dimensions the Census publishes per industry. On ecnbasic, TAXSTAT and TYPOP return only the all-establishments row until a NAICS sector is named \u2014 pass a sector code such as \"62\" (Health Care) or \"42\" (Wholesale Trade) and the result is complete for that industry alone. Ignored for dimensions with a published value list. Get sector codes by calling this tool on the dataset's own NAICS dimension. Blank is treated as omitted."
+   },
+   "year": {
+    "description": "Vintage year (default: latest available for the dataset).",
+    "type": "number"
+   }
+  },
+  "required": [
+   "predicate",
+   "dataset"
+  ],
+  "type": "object"
+ },
+ "name": "census_list_predicate_values",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "values",
+     "predicate",
+     "predicate_label",
+     "dataset",
+     "year",
+     "totalCount",
+     "truncated",
+     "source"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "dataset": {
+    "description": "Dataset queried.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `dataset_not_found`: Dataset code is missing or not recognized, even after case and shorthand resolution. `year_not_available`: The dataset does not serve the requested vintage year. `predicate_not_supported`: The predicate code is not a variable in this dataset and year. `not_a_filter_dimension`: The code is not one of the dimensions the dataset filters on, so it takes no value list. `no_values`: The dimension returned no codes for the scope requested. `upstream_error`: Census API returned an error or was unreachable. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "dataset_not_found",
+         "year_not_available",
+         "predicate_not_supported",
+         "not_a_filter_dimension",
+         "no_values",
+         "upstream_error"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when the list was truncated, when query matched no published code, when codes from the dataset dictionary could not be checked against its published rows, or when the codes returned are complete only for a named industry rather than for the dimension as a whole.",
+    "type": "string"
+   },
+   "predicate": {
+    "description": "Filter dimension enumerated.",
+    "type": "string"
+   },
+   "predicate_label": {
+    "description": "Label of the dimension itself (e.g., \"Employment size of establishments code\").",
+    "type": "string"
+   },
+   "source": {
+    "description": "Where the codes came from. \"live_query\" is a wildcard group-by against the data endpoint, which returns only codes the dataset publishes. \"dataset_dictionary_verified\" is the dataset's published value map with the codes it serves no rows for removed. Plain \"dataset_dictionary\" is that map unchecked \u2014 every code in it is declared by the dataset, but some of them return nothing at any geography, and the notice says why the check did not run.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Codes matched before the limit was applied.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when totalCount exceeds the limit and the list was cut.",
+    "type": "boolean"
+   },
+   "values": {
+    "description": "Codes the dimension accepts, sorted by code.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One accepted code for the dimension, with its label.",
+     "properties": {
+      "code": {
+       "description": "The value to send for this dimension in a predicates map (e.g., \"210\" for EMPSZES).",
+       "type": "string"
+      },
+      "label": {
+       "description": "What the code means (e.g., \"Establishments with less than 5 employees\"). Falls back to the code when the dataset publishes no label for it.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "label"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "year": {
+    "description": "Vintage year queried.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "List Census Predicate Values"
+}

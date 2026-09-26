@@ -1,0 +1,256 @@
+{
+ "_legacy": {
+  "bucket": "discovery",
+  "successor": "https://api.trusteed.xyz/demo-store/mcp/discovery"
+ },
+ "_meta": {
+  "openai/outputTemplate": "ui://widget/catalog-v5.html",
+  "openai/toolInvocation/invoked": "Productos encontrados",
+  "openai/toolInvocation/invoking": "Buscando productos\u2026",
+  "ui": {
+   "resourceUri": "ui://widget/catalog-v5.html"
+  },
+  "ui/resourceUri": "ui://widget/catalog-v5.html"
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search products in Demo Store. Returns matching products with prices, images, availability, and direct links. Results include data for generating a visual product carousel artifact with category filtering.",
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "category": {
+    "description": "Filter by category slug",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "compact": {
+    "default": false,
+    "description": "When true, the same products are described only once instead of twice. `structuredContent.products` stays the full typed record \u2014 every field, every product, untouched \u2014 but the text reply becomes a short id/title/price/currency/availability line per product instead of a markdown re-narration of that same data (images, links, ratings inline). Nothing that asserts trust is affected: `merchant_trust`, `rating_provenance` and `sort_provenance_warning` are never trimmed by this flag. Ignored when `field_mask` is also set \u2014 a field mask already replaces the narration with a compact listing, so there is nothing left for `compact` to cut.",
+    "type": "boolean"
+   },
+   "cursor": {
+    "description": "Opaque pagination cursor from next_cursor of a previous response. Only valid for the SAME query, category, price range and sort_by \u2014 a cursor replayed against different filters is rejected, not silently applied.",
+    "type": "string"
+   },
+   "field_mask": {
+    "description": "Return only these product fields, to spend less of your context on a large catalogue. `id` is always included. Supplying a mask also drops the carousel/UI payloads, which are the bulk of a full response.",
+    "items": {
+     "enum": [
+      "title",
+      "price",
+      "compareAtPrice",
+      "currency",
+      "image",
+      "url",
+      "stockStatus",
+      "rating",
+      "reviewCount",
+      "rating_provenance",
+      "vendor",
+      "variants"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Number of results (1-50)",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "max_price": {
+    "description": "Maximum price filter",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "min_price": {
+    "description": "Minimum price filter",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "query": {
+    "description": "Search query (e.g. 'red sneakers', 'winter jacket'). Omit to list all products.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "sort_by": {
+    "default": "relevance",
+    "description": "Sort order for results",
+    "enum": [
+     "relevance",
+     "price_asc",
+     "price_desc",
+     "newest",
+     "rating"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "search_products",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "has_more": {
+    "type": "boolean"
+   },
+   "next_cursor": {
+    "type": "string"
+   },
+   "products": {
+    "items": {
+     "additionalProperties": true,
+     "properties": {
+      "compareAtPrice": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "currency": {
+       "type": "string"
+      },
+      "id": {
+       "description": "Product ID \u2014 use as product_id in create_cart",
+       "type": "string"
+      },
+      "image": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "price": {
+       "type": "number"
+      },
+      "rating": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "rating_provenance": {
+       "anyOf": [
+        {
+         "additionalProperties": true,
+         "properties": {
+          "note": {
+           "type": "string"
+          },
+          "origin": {
+           "const": "merchant",
+           "type": "string"
+          },
+          "strength": {
+           "const": "claimed",
+           "type": "string"
+          },
+          "verified": {
+           "const": false,
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "origin",
+          "strength",
+          "verified",
+          "note"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "reviewCount": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "stockStatus": {
+       "enum": [
+        "in_stock",
+        "low_stock",
+        "out_of_stock"
+       ],
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      },
+      "url": {
+       "type": "string"
+      },
+      "variants": {
+       "items": {
+        "additionalProperties": true,
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "stock_status": {
+          "enum": [
+           "in_stock",
+           "low_stock",
+           "out_of_stock"
+          ],
+          "type": "string"
+         },
+         "title": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "title",
+         "stock_status"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "vendor": {
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "query": {
+    "type": "string"
+   },
+   "sort_provenance_warning": {
+    "type": "string"
+   },
+   "store_environment": {
+    "type": "string"
+   },
+   "total": {
+    "type": "number"
+   }
+  },
+  "required": [
+   "products",
+   "total"
+  ],
+  "type": "object"
+ }
+}

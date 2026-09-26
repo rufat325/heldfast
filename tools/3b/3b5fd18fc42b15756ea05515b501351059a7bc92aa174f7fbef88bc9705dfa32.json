@@ -1,0 +1,248 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Historical price, market cap, and volume time series for a coin. Two modes: recent (last N days; granularity auto-scales \u2014 \u22641 day \u2192 ~5-min, 2\u201390 \u2192 hourly, >90 \u2192 daily) or range (explicit Unix-second from/to). Returns timestamped point arrays. Use for trend/charting questions, not the current snapshot (use coingecko_get_prices for that). The id must be a CoinGecko slug (resolve tickers with coingecko_search_coins). Chart timestamps are milliseconds.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "days": {
+    "anyOf": [
+     {
+      "description": "Number of days back from now.",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+     },
+     {
+      "const": "max",
+      "description": "Full available history.",
+      "type": "string"
+     }
+    ],
+    "description": "recent mode: number of days back, or \"max\" for full history. Required when mode=recent."
+   },
+   "from": {
+    "description": "range mode: start time as a Unix timestamp in SECONDS. Required when mode=range.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "id": {
+    "description": "CoinGecko slug (e.g. \"bitcoin\"). Not a ticker \u2014 resolve with coingecko_search_coins.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "mode": {
+    "default": "recent",
+    "description": "recent: last N days (use days). range: explicit window (use from and to as Unix seconds).",
+    "enum": [
+     "recent",
+     "range"
+    ],
+    "type": "string"
+   },
+   "to": {
+    "description": "range mode: end time as a Unix timestamp in SECONDS. Required when mode=range.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "vs_currency": {
+    "default": "usd",
+    "description": "Currency to denominate the series in. Single currency; defaults to \"usd\".",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "id"
+  ],
+  "type": "object"
+ },
+ "name": "coingecko_get_market_chart",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "id",
+     "vsCurrency",
+     "granularity",
+     "pointCount",
+     "prices",
+     "marketCaps",
+     "volumes",
+     "attribution"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "attribution": {
+    "description": "Required data-source attribution.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `coin_not_found`: Upstream returned 404 for the slug \u2014 it is not a recognized CoinGecko id. `invalid_range`: Mode/parameter mismatch \u2014 range mode without both from and to, or recent mode without days. `rate_limited`: CoinGecko returned HTTP 429 \u2014 the shared keyless pool is throttled, or the Demo-tier quota was hit. `upstream_unreachable`: CoinGecko was unreachable or returned a 5xx/HTML error after all retry attempts. `invalid_response`: CoinGecko returned a body that could not be parsed as JSON. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "coin_not_found",
+         "invalid_range",
+         "rate_limited",
+         "upstream_unreachable",
+         "invalid_response"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "granularity": {
+    "description": "Point spacing CoinGecko applied for this span (computed from the requested range).",
+    "enum": [
+     "minutely",
+     "hourly",
+     "daily"
+    ],
+    "type": "string"
+   },
+   "id": {
+    "description": "CoinGecko slug the series is for.",
+    "type": "string"
+   },
+   "marketCaps": {
+    "description": "Market-cap series over the same window.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One time-series point.",
+     "properties": {
+      "t": {
+       "description": "Timestamp in Unix MILLISECONDS (note: /simple/price uses seconds).",
+       "type": "number"
+      },
+      "value": {
+       "description": "Value at this timestamp (price, market cap, or volume in vs_currency).",
+       "type": "number"
+      }
+     },
+     "required": [
+      "t",
+      "value"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "pointCount": {
+    "description": "Number of price points returned.",
+    "type": "number"
+   },
+   "prices": {
+    "description": "Price series. Data provided by CoinGecko.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One time-series point.",
+     "properties": {
+      "t": {
+       "description": "Timestamp in Unix MILLISECONDS (note: /simple/price uses seconds).",
+       "type": "number"
+      },
+      "value": {
+       "description": "Value at this timestamp (price, market cap, or volume in vs_currency).",
+       "type": "number"
+      }
+     },
+     "required": [
+      "t",
+      "value"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "volumes": {
+    "description": "Volume series over the same window.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One time-series point.",
+     "properties": {
+      "t": {
+       "description": "Timestamp in Unix MILLISECONDS (note: /simple/price uses seconds).",
+       "type": "number"
+      },
+      "value": {
+       "description": "Value at this timestamp (price, market cap, or volume in vs_currency).",
+       "type": "number"
+      }
+     },
+     "required": [
+      "t",
+      "value"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "vsCurrency": {
+    "description": "Currency the series is denominated in.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "coingecko-mcp-server: get market chart"
+}

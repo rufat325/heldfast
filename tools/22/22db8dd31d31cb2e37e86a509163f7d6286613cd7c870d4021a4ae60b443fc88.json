@@ -1,0 +1,51 @@
+{
+ "description": "Does max pain actually pull price to the strike? Settled Deribit BTC options expiries with the max-pain level we compute per expiry, for measuring the convergence question: does spot drift toward the max-pain level as expiry approaches? Each row: expiry_date, max_pain_strike, spot_at_expiry, %-diff, P/C ratio, notional, expiry-type flags. The mandatory base_rates block answers the convergence question PER expiry class (n, median |diff|, shares within 1%/2%, max, sample_adequate at n>=30) \u2014 the pooled median mixes tiny daily expiries with large quarterlies, which is what the per-class split separates. Filter with expiry_type / min_contracts / snapshot_expiry_date instead of post-processing the full row set. With include_open_snapshots=true it adds the daily observation series of still-open expiries \u2014 that series starts 2026-05-28, is not backfillable, and its per-expiry depth is thin, so check open_snapshot_coverage before computing anything from it. Days auto-capped by tier: Pro 365d, Power 3650d. Max-pain levels are our own aggregation across the option chain; the chain itself is not redistributed. Source: Deribit. Related: arena_get_max_pain (current + upcoming), arena_get_iv_snapshot. [API Pro tier]",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "days": {
+    "description": "Days back from today (default 90, capped by tier).",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "expiry_type": {
+    "description": "Filter expiries AND open_snapshots to one expiry class (label = highest level reached; the nesting booleans stay untouched). base_rates are always computed BEFORE this filter.",
+    "enum": [
+     "daily",
+     "weekly",
+     "monthly",
+     "quarterly"
+    ],
+    "type": "string"
+   },
+   "include_open_snapshots": {
+    "description": "Default false. When true, adds open_snapshots[] (daily observations of not-yet-expired contracts) plus open_snapshot_coverage. Omit for the unchanged response.",
+    "type": "boolean"
+   },
+   "market": {
+    "description": "Options market. Only DERIBIT_BTC is served: IBIT (BlackRock spot-ETF options) is still collected daily but no longer delivered \u2014 the chain comes from an unlicensed source, so it cannot be redistributed (2026-09-24).",
+    "enum": [
+     "DERIBIT_BTC"
+    ],
+    "type": "string"
+   },
+   "min_contracts": {
+    "description": "Only finalized expiries with total_contracts >= this (rows with unknown contracts drop out when set).",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "snapshot_expiry_date": {
+    "description": "Reduce open_snapshots[] to exactly this expiry date (YYYY-MM-DD). Only meaningful with include_open_snapshots=true.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "arena_get_max_pain_history",
+ "title": "Get Deribit BTC Max Pain History"
+}

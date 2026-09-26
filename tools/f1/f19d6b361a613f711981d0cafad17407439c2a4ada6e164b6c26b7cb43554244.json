@@ -1,0 +1,99 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Build a DMARC record \u2014 the `_dmarc` TXT record that tells receivers what to do when a message fails SPF and DKIM alignment, and where to send reports about it. The risk here is not syntax but policy. `p=none` monitors without affecting delivery and is where every deployment starts; `p=quarantine` sends failures to spam; `p=reject` refuses them outright, which silently destroys legitimate mail from any sender that was missed and gives that sender no explanation. Always publish a `rua` address: without aggregate reports there is no way to see which senders fail before enforcing against them. Use `percentage` to apply an enforcing policy to only part of the mail while rolling out. Returns the record, the host to publish it on (`_dmarc`), and warnings covering the mistakes that actually break mail \u2014 enforcing without reporting, reject at full coverage, pct at p=none, and strict alignment breaking subdomain senders and ESPs. Nothing is looked up or stored.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "dkimAlignment": {
+    "description": "adkim= \u2014 strict requires an exact domain match and breaks many ESPs.",
+    "enum": [
+     "relaxed",
+     "strict"
+    ],
+    "type": "string"
+   },
+   "pct": {
+    "description": "Alias for `percentage`, matching the DNS tag name.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "percentage": {
+    "description": "pct= \u2014 share of mail the policy applies to, for a gradual rollout. Has no effect at p=none. Also accepted as `pct`.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "policy": {
+    "description": "p= \u2014 start at 'none' and only enforce once reports show all legitimate senders aligning. Defaults to none.",
+    "enum": [
+     "none",
+     "quarantine",
+     "reject"
+    ],
+    "type": "string"
+   },
+   "reportInterval": {
+    "description": "ri= \u2014 seconds between aggregate reports. Defaults to 86400 (daily).",
+    "maximum": 604800,
+    "minimum": 60,
+    "type": "integer"
+   },
+   "rua": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    ],
+    "description": "Aggregate report address(es). mailto: is added automatically."
+   },
+   "ruf": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    ],
+    "description": "Forensic report address(es). Contains message content and is honoured by very few receivers."
+   },
+   "spfAlignment": {
+    "description": "aspf= \u2014 strict requires an exact domain match and breaks subdomain senders.",
+    "enum": [
+     "relaxed",
+     "strict"
+    ],
+    "type": "string"
+   },
+   "subdomainPolicy": {
+    "description": "sp= \u2014 a different policy for subdomains. Omitted when it matches the main policy.",
+    "enum": [
+     "none",
+     "quarantine",
+     "reject"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "generate_dmarc"
+}

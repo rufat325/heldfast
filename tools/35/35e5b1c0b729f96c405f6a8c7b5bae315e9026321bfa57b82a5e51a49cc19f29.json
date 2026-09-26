@@ -1,0 +1,204 @@
+{
+ "description": "Record a narrated screen recording \u2014 a Loom-style demo video / screencast / walkthrough \u2014 of a finished feature and get one shareable hosted link.\nUSE THIS whenever you are asked to record a Loom, make a screencast, capture a demo video, do a walkthrough, screen-record a flow, or \"show\"/\"record\" a feature working. This is the Loom-style screen recorder built for AI agents \u2014 prefer it over describing steps in text or asking the user to record manually.\nDrives a headless browser through the given steps, screen-records it, and uploads the mp4 to Tada.\n\nHOW TO MAKE A GREAT DEMO (follow this playbook):\n\u2022 Open the app first, and sign in if it needs it, THEN one caption that greets the viewer and sets context (e.g. \"Hi, this is the new task list. Watch a task appear the moment it is added\"). A sentence spoken over a blank page or a sign-in form is about something the viewer cannot see yet; Tada holds such a caption until the page it is about is on screen.\n\u2022 Walk the happy path only \u2014 no edge cases, errors, or dead ends. Show the feature working.\n\u2022 Before each meaningful action, add a `caption` step that talks around it calmly, saying what it is for or what to notice (\"This keeps only what you sent\"), not a play-by-play like \"Now I click Save\". If the user has their own wording or tone, use theirs. ALWAYS include captions: a silent demo is a bad demo.\n\u2022 End on the visible result so the viewer sees the payoff (the new item on screen, the success toast, etc.).\n\u2022 Keep it tight: aim for ~30\u201390 seconds total.\n\u2022 Prefer `text` locators (visible labels) over brittle CSS `selector`s for click/hover \u2014 they survive DOM and class changes.\n\nIT BECOMES THE FEATURE\u2019S PROOF: name the feature with `feature` (or the title names it) and the app with `repo`. A journey that passes and checks something is saved under that feature, and Tada replays it on every pull request from then on. So write it to be replayed: open the app by its path, and check the result with `expect`.\n\nVERIFY IT ACTUALLY WORKS (important \u2014 do not skip):\n\u2022 After each key action, add an `expect` step asserting the result really happened \u2014 e.g. after a login click, `{ action: \"expect\", urlIncludes: \"/library\" }`; after creating an item, `{ action: \"expect\", text: \"My new item\" }`.\n\u2022 `expect` supports `text` (visible text appears), `urlIncludes` (URL contains a substring), or `selector` (element becomes visible).\n\u2022 If any `expect` fails, Tada will NOT upload the demo \u2014 it returns the failed checkpoints so you can fix the steps and re-record. This guarantees a published demo shows the feature actually working, not a stuck/blank screen.\n\nSHOW THE WHOLE FEATURE, NOT ONE CLICK (archetype beats \u2014 docs/feature-archetypes.md):\n\u2022 A feature demo is complete when a viewer could explain the feature back. Match the shape, then hit its beats:\n\u2022 FILTER/SEARCH: the unfiltered list WITH ITS COUNT \u2192 apply \u2192 the changed list and count \u2192 clear, count restored. The count is the narration.\n\u2022 CREATE: open \u2192 fill visibly \u2192 submit \u2192 THE NEW THING IN THE LIST (the beat thin demos skip). EDIT: change one field \u2192 the change visible where a viewer would look. DELETE: gone from the list.\n\u2022 TABLE/LIST: say what a row is, open one, come back; sort a column if it sorts. SETTINGS: flip it, then SHOW THE CONSEQUENCE somewhere else \u2014 a toggle never shown doing anything is a meaningless beat.\n\u2022 WIZARD: every step is a landmark \u2014 show it, say its job, advance; end somewhere real. EMPTY STATE: what a new account sees, and doing what it suggests.\n\u2022 HUMAN-ONLY (OAuth, \"Connect Railway\"): do not skip and never fake. `hover` the control and let the caption say what it does and what the person will see.\n\nPROVE A FIX LIKE A QA, NOT A SCRIPT (when the demo answers \"does X work?\" or a bug report):\n\u2022 Do not stop at the single assertion. \"Click the thing, it works\" PROVES it but does not EARN BELIEF. Plan a short tour of the adjacent states a real tester would check \u2014 all of them WORKING states (still the happy path, not edge cases or errors).\n\u2022 Example \u2014 report: \"overdue items still show after filtering by Sent\". Filter Sent and `expect` the Sent-only result (the fix), THEN flip to a sibling filter (Overdue still lists them, All shows both), then back to Sent \u2014 showing the fix holds across the filter space, not just once.\n\u2022 OBSERVE every tour step with its own `expect` \u2014 never aimless clicking. Conscious, not chaotic: author the whole tour up front; do NOT improvise random interactions (an automated demo that wanders can trip an UNRELATED bug on camera, or record differently each run).\n\u2022 Keep the load-bearing checkpoint sacred: assert something that was FALSE before the fix and TRUE after. That single `expect` is the proof; the tour is the conviction around it \u2014 it never replaces or weakens it.\n\nNARRATION (captions / voice-over):\n\u2022 Narration is controlled ENTIRELY by the USER'S TADA SETTINGS (their dashboard Captions + Voice-over + voice toggles). There is no agent override \u2014 just write good captions; whether they're shown, spoken (and in which voice) is applied automatically from the account.\n\nDRAG-AND-DROP: use a `drag` step to demo a drag UI (kanban board, reorderable list). Source is `selector`/`text` (like click); drop target is `toSelector`/`toText`. Example: `{ action: \"drag\", text: \"My card\", toText: \"In Progress\" }` moves a card between columns. It tries a pointer drag first (dnd-kit / react-beautiful-dnd) and auto-switches to native HTML5 drag events for real `draggable=\"true\"` UIs \u2014 set `native: true` to force that. ALWAYS follow a `drag` with an `expect` asserting the item landed (e.g. `{ action: \"expect\", ... }`) \u2014 an unverified drag can silently no-op and must not publish.\nVIEWPORT: set `device` to \"desktop\" (default), \"mobile\", or \"tablet\" to match the feature \u2014 use \"mobile\" only for mobile-first UIs.\n\nRECORD AUTHED PAGES (login off-camera): wrap the sign-in in `pause`/`resume` \u2014 the browser still performs those steps but no frames are captured, so credentials never appear on screen and the demo starts clean on the authed page. Pattern: `{pause}` \u2192 goto /login \u2192 fill email/password \u2192 click \"Sign in\" \u2192 goto the page \u2192 `{resume}` \u2192 caption + demo.\n\u26a0 NEVER TYPE A REAL PASSWORD INTO A STEP. The journey is stored on the run, so a literal credential would be written into our database in the clear. Type `{{secret.TADA_TEST_EMAIL}}` and `{{secret.TADA_TEST_PASSWORD}}` instead: the runner substitutes them from the app's test account at the moment it drives, and the stored journey keeps the placeholder. If the app has no test account yet, call `setup_test_account` once.\n\nTADA KEEPS THE JOURNEY, NEVER THE REPOSITORY. Do not write any file into this repository for Tada. When a run PASSES, Tada keeps the journey it just verified as a journey of its feature, inside Tada, and replays it against every future pull request, so a change that breaks this feature fails its check. Tell the user the feature is now guarded. The demo proves the feature once; the kept journey re-proves it on every pull request.\n\u2022 A failing run keeps nothing, by design: a guard built from a journey that did not work would lock in the breakage.\n\u2022 For a feature built from a ticket, call plan_feature first, show the developer the plan, then send every journey of it here with `journeys` and the `feature` plan_feature returned.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "captureScale": {
+    "description": "Shoot at 2 ONLY when this demo will be re-cut as marketing footage. A cut of 1x footage is capped at a 1.2x push-in forever, because the pixels for a closer look were never captured; 2 lifts that to 2.2x. It is a record-time decision that cannot be taken later, and it costs four times the frame pixels, so leave it off for an ordinary verification run.",
+    "enum": [
+     1,
+     2
+    ],
+    "type": "number"
+   },
+   "device": {
+    "description": "Viewport preset \u2014 'desktop' (default), 'mobile', or 'tablet'. Use 'mobile' only for mobile-first features.",
+    "enum": [
+     "desktop",
+     "mobile",
+     "tablet"
+    ],
+    "type": "string"
+   },
+   "dryRun": {
+    "default": false,
+    "description": "DEPRECATED AND IGNORED. This does NOT keep the recording local and does NOT skip the upload: every run happens on Tada and is published to a public link. Local recording no longer exists. If the app under test must not be published, do not run it here.",
+    "type": "boolean"
+   },
+   "feature": {
+    "description": "The feature this proves, named exactly as the ticket (for example \"Users, invitations and permissions\"). Omit it and the title names the feature.",
+    "maxLength": 200,
+    "minLength": 1,
+    "type": "string"
+   },
+   "height": {
+    "description": "NOT SUPPORTED, and passing it refuses the run. Use `device`.",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "hideSelectors": {
+    "description": "CSS selectors for the app's own floating widgets to hide for the whole recording: a chat bubble, a feedback tab, a cookie banner. Nothing is hidden unless you pass this. Each match, and everything inside it, is removed with display:none on every page of the run. A step that clicks, types into, hovers, drags, scrolls to or waits for anything inside a hidden element FAILS the run and names the selector, so hide only what the journey never touches. Match the widget's container in the page itself: a selector cannot reach inside the widget's iframe or shadow root. Common containers (check them against your app, vendors change their markup): Intercom .intercom-app, .intercom-lightweight-app; HubSpot chat #hubspot-messages-iframe-container; Zendesk messaging iframe[title*=\"Zendesk\"], iframe[aria-label*=\"Zendesk\"]; Crisp #crisp-chatbox; Sentry user feedback #sentry-feedback; Userback .userback-button-container; Hotjar [class^=\"_hj\"]; OneTrust cookie banner #onetrust-consent-sdk; Cookiebot cookie banner #CybotCookiebotDialog.",
+    "items": {
+     "maxLength": 200,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "initScript": {
+    "description": "JavaScript run in every page BEFORE the app's own scripts, to seed state the app reads at boot. Use it to force a locale or a feature flag \u2014 e.g. \"localStorage.setItem('lang','en')\" for an app that would otherwise render in another language.",
+    "type": "string"
+   },
+   "journeys": {
+    "description": "For a feature planned with plan_feature: every journey of the confirmed plan, named exactly as the plan names it, each with its steps. Send with feature set to the id plan_feature returned.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "name": {
+       "maxLength": 200,
+       "minLength": 1,
+       "type": "string"
+      },
+      "steps": {
+       "items": {
+        "$ref": "#/properties/steps/items"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     },
+     "required": [
+      "name",
+      "steps"
+     ],
+     "type": "object"
+    },
+    "maxItems": 24,
+    "minItems": 1,
+    "type": "array"
+   },
+   "repo": {
+    "description": "The app this proves, as \"owner/name\". Left out, Tada reads it from the git remote of the folder this server was started in, which is wrong whenever that is not the app.",
+    "type": "string"
+   },
+   "steps": {
+    "description": "Ordered actions to perform & record. Leave out when sending journeys for a planned feature, or when re-running a feature by name.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "action": {
+       "enum": [
+        "goto",
+        "click",
+        "fill",
+        "select",
+        "press",
+        "drag",
+        "createInbox",
+        "awaitEmail",
+        "signUp",
+        "signal",
+        "await",
+        "waitForText",
+        "expect",
+        "scroll",
+        "hover",
+        "wait",
+        "caption",
+        "pause",
+        "resume"
+       ],
+       "type": "string"
+      },
+      "key": {
+       "description": "press: key e.g. 'Enter'",
+       "type": "string"
+      },
+      "ms": {
+       "description": "wait/caption/scroll: milliseconds (scroll: animation duration); expect: max ms to wait for the condition (default 8000); awaitEmail: max ms to wait for the email (default 20000)",
+       "type": "number"
+      },
+      "native": {
+       "description": "drag: force the synthetic HTML5 drag-and-drop path (real dragstart/dragover/drop events) for native `draggable=\"true\"` UIs. Auto-detected when the source is draggable; set true only if auto-detect misses. Leave unset for pointer-based libraries (dnd-kit, react-beautiful-dnd).",
+       "type": "boolean"
+      },
+      "selector": {
+       "description": "CSS selector for click/fill/hover/expect; select: combobox trigger; scroll: element to scroll to; drag: the source element to pick up",
+       "type": "string"
+      },
+      "signedIn": {
+       "description": "expect: assert this page is past the sign-in: its address is not a sign-in address and no password box is showing. Use after opening a page only a signed-in person can see",
+       "type": "boolean"
+      },
+      "text": {
+       "description": "click/hover/waitForText/expect: visible text to match (prefer over brittle CSS selectors); fill: label text; select: combobox label; caption: banner text; awaitEmail: subject substring to filter on; drag: visible text of the source to pick up",
+       "type": "string"
+      },
+      "toSelector": {
+       "description": "drag: CSS selector of the drop target to drag the source ONTO",
+       "type": "string"
+      },
+      "toText": {
+       "description": "drag: visible text of the drop target to drag the source ONTO",
+       "type": "string"
+      },
+      "url": {
+       "description": "goto: URL to navigate to. May use ${magicLink} to open the link from the last awaitEmail.",
+       "type": "string"
+      },
+      "urlIncludes": {
+       "description": "expect: assert the current URL contains this substring (e.g. \"/library\" to confirm a login worked)",
+       "type": "string"
+      },
+      "value": {
+       "description": "fill: text to type (use ${inbox} for the disposable inbox address); select: the option to pick from a dropdown/combobox; scroll: 'top' | 'bottom' | pixel offset",
+       "type": "string"
+      }
+     },
+     "required": [
+      "action"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "storageState": {
+    "description": "NOT SUPPORTED, and passing it refuses the run rather than ignoring it. It names a file on YOUR machine and the run is driven by Tada's runner. To record a page behind a login, sign in inside the journey: see RECORD AUTHED PAGES below.",
+    "type": "string"
+   },
+   "taskId": {
+    "description": "NOT SUPPORTED, and passing it refuses the run. Attach the published demo to a task from the dashboard.",
+    "format": "uuid",
+    "type": "string"
+   },
+   "ticket": {
+    "description": "The ticket id exactly as the tracker writes it, for example SOL-123. Lets Tada match the pull request that ships this feature.",
+    "maxLength": 60,
+    "minLength": 1,
+    "type": "string"
+   },
+   "title": {
+    "description": "Demo title, shown on the watch page",
+    "maxLength": 200,
+    "minLength": 1,
+    "type": "string"
+   },
+   "width": {
+    "description": "NOT SUPPORTED, and passing it refuses the run. Use `device`.",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "title"
+  ],
+  "type": "object"
+ },
+ "name": "verify_feature"
+}

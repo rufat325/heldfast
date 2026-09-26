@@ -1,0 +1,86 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "REQUIRES API KEY (bookings:write scope). Creates a new RIGShare booking for the authenticated user. Call rigshare_quote_booking FIRST to preview the exact cost (dry-run, nothing charged) and confirm it with the renter before committing money here. Server computes all prices from the equipment's canonical rates \u2014 client-side price hints are ignored. Enforces identity verification and the daily/monthly budget cap configured on the API key. METERED listings (billing.mode === 'METERED' on the equipment, Tech remote-access only): bill per minute instead of upfront \u2014 you MUST pass budget_usd (the maximum authorized session spend; only actual usage is charged, no deposit). PHYSICAL (non-remote) equipment: coverage_path is REQUIRED ('WAIVER' needs the renter's explicit, informed consent to the damage waiver \u2014 never accept it on their behalf without asking; 'BYOCOI' means they'll upload their own insurance certificate). START TIME RULE: for FOUR_HOURS bookings pass start_date / end_date as ISO date-times WITH a UTC offset in the equipment's local time (e.g. 2026-09-15T08:00:00-05:00 \u2192 2026-09-15T12:00:00-05:00); a date-only start is read as UTC midnight (= the previous evening in the US) and is REFUSED, and four-hour sessions must start by 4:00 PM local. HOURLY bookings are billed per whole hour between the two instants, so send real date-times there too (a date-only start and end price as 1 hour). Returns confirmation code + booking ID + payment status + a next_action (who acts next and the exact URL). An agent NEVER enters a card: unless auto-pay is enabled on the API key, the renter pays at the booking URL after the owner approves. Poll rigshare_get_booking afterwards.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "budget_usd": {
+    "maximum": 25000,
+    "minimum": 0.5,
+    "type": "number"
+   },
+   "coverage_path": {
+    "enum": [
+     "WAIVER",
+     "BYOCOI"
+    ],
+    "type": "string"
+   },
+   "duration_type": {
+    "enum": [
+     "HOURLY",
+     "FOUR_HOURS",
+     "DAILY",
+     "WEEKLY",
+     "MONTHLY"
+    ],
+    "type": "string"
+   },
+   "end_date": {
+    "type": "string"
+   },
+   "equipment_id": {
+    "format": "uuid",
+    "type": "string"
+   },
+   "idempotency_key": {
+    "maxLength": 100,
+    "type": "string"
+   },
+   "pickup_type": {
+    "enum": [
+     "SELF_PICKUP",
+     "OWNER_DELIVERY",
+     "REMOTE_ACCESS"
+    ],
+    "type": "string"
+   },
+   "qualification_answers": {
+    "additionalProperties": {
+     "maxLength": 500,
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "qualification_version": {
+    "maxLength": 50,
+    "type": "string"
+   },
+   "start_date": {
+    "type": "string"
+   },
+   "waiver_version": {
+    "maxLength": 50,
+    "type": "string"
+   }
+  },
+  "required": [
+   "equipment_id",
+   "start_date",
+   "end_date",
+   "duration_type"
+  ],
+  "type": "object"
+ },
+ "name": "rigshare_create_booking",
+ "title": "Create booking"
+}

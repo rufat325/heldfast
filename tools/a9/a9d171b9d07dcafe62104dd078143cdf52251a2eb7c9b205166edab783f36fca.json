@@ -1,0 +1,121 @@
+{
+ "annotations": {
+  "access": "metered",
+  "destructiveHint": false,
+  "front_door": "get_power_pipeline",
+  "idempotentHint": true,
+  "limits": "the generating-unit inventory counts UNITS across all statuses (operating, planned, cancelled, shelved, retired) \u2014 it is not a plant count and not an operating fleet",
+  "maturity": "mature",
+  "openWorldHint": false,
+  "pricing_url": "https://dchub.cloud/pricing/upgrade?tool=get_retirement_headroom&ref=mcp-tools-list",
+  "problem": "power generation, gas and energy infrastructure",
+  "readOnlyHint": true,
+  "title": "Get Retirement Headroom",
+  "upgrade_relay": "Call the tool first: a gated result carries a session-bound checkout link (dchub.cloud/go/c/<token>) and a human relay (dchub.cloud/upgrade/h/<token>) minted for THIS session \u2014 relay those verbatim. This URL is only the fallback for a client that renders annotations before any call."
+ },
+ "description": "Scans scheduled EIA-860M generator retirements to find near-term transmission grid headroom \u2014 a retiring plant is a CONCRETE headroom event (its POI frees injection capacity), from FILED data, not forecasts. Returns _entity=retirement_headroom_results: retiring generators inside your horizon (name, MW, fuel, prime mover, retirement_date), representative_point, nearest substations with distance_km + count within 25 km, county-level queue_pressure (competing in-progress MW), iso_context (the generator's own EIA balancing-authority code), and a pre-filled site_evaluation_handoff (analyze_site + get_water_risk args, capacity_mw = YOUR target load). Answers \"where is grid capacity about to free up\", \"which retiring plants open injection headroom near me\". Try: get_retirement_headroom target_mw=50 horizon_months=18 region_iso=MISO \u2014 \"50 MW opening near a substation inside 18 months, sidestepping the 4-7yr mega-queue.\" Honesty: meta.caveat flags that filed dates are subject to ISO reliability reviews (RMR extensions). Use to find WHERE capacity opens next; for what's already queued use get_refined_queue; for one site use analyze_site.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "fuel_filter": {
+    "description": "Optional filter for retiring fuel categories, substring-matched (e.g., 'Coal', 'Natural Gas', 'Petroleum').",
+    "type": "string"
+   },
+   "horizon_months": {
+    "description": "Time horizon in months to look ahead for planned retirements, 1-120 (e.g., 12, 18, 36).",
+    "maximum": 120,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "limit": {
+    "description": "Max results to return (1-500; default varies by tool)",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "region_iso": {
+    "description": "Optional target region or ISO (e.g., 'MISO', 'PJM', 'ERCOT', 'SPP', 'CAISO', 'NYISO', 'ISONE'). Matches the generator's own EIA balancing-authority code \u2014 real market boundaries, not state lines. Comma-separated for a union.",
+    "type": "string"
+   },
+   "target_mw": {
+    "description": "Minimum required headroom in megawatts (MW) \u2014 filters to retiring generators at/above this size. Also passed through as the handoff's analyze_site capacity_mw (the DC you are siting).",
+    "type": "number"
+   }
+  },
+  "required": [
+   "target_mw",
+   "horizon_months"
+  ],
+  "type": "object"
+ },
+ "name": "get_retirement_headroom",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text \u2014 tool-specific data fields ride at the top level alongside these envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Retirement Headroom"
+}

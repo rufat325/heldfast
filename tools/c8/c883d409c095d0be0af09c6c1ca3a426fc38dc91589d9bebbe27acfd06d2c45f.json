@@ -1,0 +1,41 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Sync messages from OurFamilyWizard into the local cache. Returns counts per folder and a list of unread inbox messages whose bodies were NOT fetched (to avoid mark-as-read on OFW). Call ofw_get_message(id) on those to read them. EVERY call re-checks the newest page first, so new messages are picked up promptly even while an old-history backfill is still running; only then does it spend what is left of its budget advancing that backfill. Pass deep:true to walk all OFW pages instead of stopping at the first all-cached page (use to backfill suspected gaps). Sync is BOUNDED and RESUMABLE: on hosted deployments a per-call OFW-request budget (env OFW_SYNC_MAX_REQUESTS, or the maxRequests argument) caps how far one call walks; when the budget is hit the response reports done:false with a note \u2014 call again with the SAME arguments to resume. done:false means older history is still being backfilled; it does NOT mean recent messages are missing. Local installs are unbounded by default (done is always true).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "deep": {
+    "description": "If true, walk every OFW page until empty regardless of cache state. Use to backfill gaps. Default false.",
+    "type": "boolean"
+   },
+   "fetchUnreadBodies": {
+    "description": "If true, also fetch bodies for unread inbox messages \u2014 which marks each one READ on OurFamilyWizard and stamps a co-parent-visible \"First Viewed\" time that cannot be undone. Defaults to the OFW_FETCH_UNREAD_BODIES env var (false unless set), and is forced off entirely when OFW_ALLOW_MARK_READ=false.",
+    "type": "boolean"
+   },
+   "folders": {
+    "description": "Folders to sync (default: all three). Must be non-empty if given \u2014 an empty list would sync nothing while reporting success.",
+    "items": {
+     "enum": [
+      "inbox",
+      "sent",
+      "drafts"
+     ],
+     "type": "string"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "maxRequests": {
+    "description": "Maximum OFW requests this single call may make before pausing. When hit, the response reports done:false \u2014 call again with the same arguments to continue. Omit to use the server default (OFW_SYNC_MAX_REQUESTS, or unbounded on local installs).",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "ofw_sync_messages"
+}

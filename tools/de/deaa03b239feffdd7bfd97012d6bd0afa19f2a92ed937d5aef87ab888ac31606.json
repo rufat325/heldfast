@@ -1,0 +1,91 @@
+{
+ "description": "Convert a user's local data file into a WaterfallBridge-ready Excel workbook.\n\n\u2550\u2550\u2550 What is preserved from the source xlsx \u2550\u2550\u2550\n  \u2022 Source-cell FORMULAS on SumY / SumN columns are re-emitted in     the target file (column letters + row numbers automatically     remapped). Bridge's remoteFormulaBreakdown service depends on     these formulas to decompose the Result into per-input drivers,     so this is not just cosmetic \u2014 dropping a formula degrades the     analysis quality.\n  \u2022 Source row-2 NUMBER FORMATS (e.g. '#,##0', '0.00%', '$#,##0')     are copied onto target row 3 cells. Bridge's engine reads the     first data row's numFmt to pick chart and contribution-table     display formats. numFmt priority per output column:\n      (1) `num_fmt` explicitly set on the column_map entry (use           this for Result columns where you want '0.00%' even           though there is no source cell to inherit from);\n      (2) inherited from the source column's row-2 numFmt \u2014 works           for any column that declared `source`, INCLUDING Result           columns that point at a source column purely to inherit           its format (the Result row data still comes from           `formula`, not from the source cells).\n  \u2022 Formulas referencing columns NOT in column_map fall back to     the cached scalar value (the file still opens cleanly).\n  Return values `preservedFormulaCells` / `droppedFormulaCells` /   `appliedNumFmtCells` report what happened.\n\n\u2550\u2550\u2550 Sheet layout (FIXED \u2014 required by Bridge) \u2550\u2550\u2550\n  Column A \u2014 Bridge label column. Only A1/A2/A3 are populated with   the literal strings 'Data Type', 'Header', 'Data'. Rows A4+ stay   empty. This column is auto-emitted by prepare_bridge_xlsx; do NOT   include it in column_map.\n  Column B onwards \u2014 your data columns. Row 1 = Data Type   (Dimension/Key/SumY/SumN/Result), Row 2 = Field Name, Row 3+ =   values. column_map[0] \u2192 sheet column B, column_map[1] \u2192 C, etc.   Result formulas reference sheet letters (e.g. '=E3-F3').\n\n  IMPORTANT: prepare_bridge_xlsx is ONLY for converting a raw source   file into a Bridge workbook. If a workbook is already loaded and   you only need to tweak Data Types or Field Names, call set_data_type   / set_field_name + run_bridge \u2014 do NOT regenerate + re-upload.\n\n\u2550\u2550\u2550 The 5 Bridge Data Types (official definition) \u2550\u2550\u2550\n  \u2022 Dimension \u2014 any non-calculated facet: date/time, region, store,     product family, channel, etc. Dimensions do NOT participate in     calculation; they exist so the user can filter Baseline vs     Comparison and slice the Contribution table. ANY column can be     a Dimension.\n  \u2022 Key \u2014 a special Dimension. EXACTLY ONE column must be Key. The     Key is the minimum analysis granularity: Bridge matches rows     between Baseline and Comparison by Key value. A Key value that     appears only in Baseline \u2192 Removed Data bar (e.g. EOL product);     a Key value that appears only in Comparison \u2192 Added Data bar     (e.g. NPI product); a Key value in both \u2192 like-for-like factor     decomposition. Pick whatever granularity the user wants to     analyse at (Product, SKU, Customer, Store, Year, etc.).\n  \u2022 SumY \u2014 a numeric column whose values are MEANINGFUL to add     across rows. Examples: Quantity, Revenue, Cost, Gross Margin,     Headcount. May be raw numbers or a formula of other SumY/SumN.\n  \u2022 SumN \u2014 a numeric column whose values are NOT meaningful to add     across rows. Examples: Unit Price, Unit Cost, Margin%, FX rate.     (You cannot add Product A's price to Product B's price and get     a meaningful 'total price'.) May be raw numbers or a formula.\n  \u2022 Result \u2014 EXACTLY ONE column. MUST contain a formula at row 3     (the engine copies it down). The formula must reference at     least one SumY so the Bridge can aggregate. Variables that     appear in the formula become the decomposition bars; variables     NOT in the formula are outside the analysis scope. Allowed     operators: + \u2212 * / ( ) only, same-row references only. Use     SHEET column letters (B/C/D\u2026) \u2014 sheet column A is the Bridge     label column and is never referenced by a formula.\n\n\u2550\u2550\u2550 SumY / SumN operator algebra (used to validate the Result) \u2550\u2550\u2550\n  +/\u2212   Y+Y=Y    Y+N=ERR    N+N=N\n  *     Y*Y=Y    Y*N=Y      N*N=N\n  /     Y/Y=N    Y/N=Y      N/Y=N    N/N=N\n\n\u2550\u2550\u2550 Other hard rules \u2550\u2550\u2550\n  \u2022 Field Names (Row 2) must be non-empty and unique.\n  \u2022 Formulas can only reference cells in the SAME row.\n  \u2022 Result formula MUST include at least one SumY column.\n  \u2022 Formulas reference SHEET column letters (B/C/D\u2026). column_map[0]     is sheet column B, column_map[1] is C, etc. Sheet column A is     the Bridge label column and is never a valid reference.\n  \u2022 Added/Removed data is auto-detected from the Key column \u2014 no     manual tagging needed.\n\n\u2550\u2550\u2550 How the AI should plan a column_map \u2550\u2550\u2550\n  1. If the user gave explicit instructions (e.g. 'Key = Product      Name, Result = GM% = GM/Revenue'), follow them verbatim.\n  2. Otherwise call `suggest_bridge_schema` first to get a typed      recommendation derived from each column's content (numeric vs      text, cardinality, existing formulas) and present it to the      user for confirmation before writing the file.\n  3. Always include EVERY useful Dimension from the source \u2014 users      slice the Bridge by these. Don't ship a 2-column minimum.\n  4. Source headers are matched case-insensitively after trimming      whitespace, so ` Revenue ` matches `Revenue`.\n\n\u2550\u2550\u2550 When the source data cannot produce a valid Bridge \u2550\u2550\u2550\n  prepare_bridge_xlsx will throw a structured error listing what's   missing (no numeric column for SumY, no plausible Key, no two   populations to compare, etc.) so the AI can ask the user to   prepare the data first.\n\n\u2550\u2550\u2550 Data-preparation gate \u2550\u2550\u2550\n  If source_file still has BLOCKING data-prep issues (merged cells,   crosstab layout, cross-row/sheet formulas, title rows) this tool   returns { success:false, blocked:true, issues:[\u2026] } WITHOUT writing   anything. Show the issues to the user and have them fix the file,   then retry \u2014 or pass confirm_data_prep:true to override a confirmed   false positive.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "column_map": {
+    "description": "Ordered list of output columns. The first entry is written to sheet column B, the second to column C, etc. (Sheet column A is reserved for the Bridge label column \u2014 'Data Type' in A1, 'Header' in A2, 'Data' in A3 \u2014 and is auto-emitted; do not include it in column_map.)",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "bridge_name": {
+       "description": "Friendly column name written to Row 2. Must be non-empty and unique across the column_map.",
+       "type": "string"
+      },
+      "bridge_type": {
+       "description": "WaterfallBridge data type. Definitions:\n  \u2022 Dimension \u2014 any facet for filtering (date, region, channel\u2026); does not participate in calculation.\n  \u2022 Key \u2014 a special Dimension. EXACTLY ONE required. Bridge matches Baseline \u2194 Comparison rows by Key value; Keys present in only one side become Added/Removed Data bars.\n  \u2022 SumY \u2014 numeric column whose values are meaningful to add across rows (Quantity, Revenue, Cost, GM, Headcount\u2026).\n  \u2022 SumN \u2014 numeric column whose values are NOT meaningful to add across rows (Unit Price, Margin %, FX rate\u2026).\n  \u2022 Result \u2014 EXACTLY ONE required. Must carry a row-3 formula that references at least one SumY (operators + \u2212 * / ( ) only).",
+       "enum": [
+        "Dimension",
+        "Key",
+        "SumY",
+        "SumN",
+        "Result"
+       ],
+       "type": "string"
+      },
+      "formula": {
+       "description": "Required when bridge_type='Result', ignored otherwise. The Row-3 formula, e.g. '=E3-F3' or '=C3*D3'. References use the SHEET column letters: column_map[0] \u2192 B, column_map[1] \u2192 C, \u2026 (sheet column A is reserved for the Bridge label column 'Data Type'/'Header'/'Data' and must NEVER be referenced). Same-row only; allowed operators: + \u2212 * / ( ). The formula MUST include at least one SumY column (Bridge needs SumY to perform the aggregated comparison).",
+       "type": "string"
+      },
+      "num_fmt": {
+       "description": "Explicit Excel number format string applied to row 3 of this column (e.g. '0.00%', '#,##0', '$#,##0.00'). Highest priority \u2014 overrides any format that would otherwise be inherited from the source cell. Recommended for Result columns whose formula yields a percentage / currency that has no obvious source cell to inherit from. Leave unset to fall back to source inheritance.",
+       "type": "string"
+      },
+      "source": {
+       "description": "Header name from the source file (matched case-insensitively after trimming whitespace). Required for Dimension/Key/SumY/SumN columns. OPTIONAL for Result columns: if set, the Result column INHERITS that source column's first-row numFmt (e.g. point a new 'Margin %' Result at source 'Gross Margin%' to get the percent format). Result row data is still driven by 'formula' \u2014 'source' on a Result column is used ONLY for numFmt inheritance.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "bridge_type",
+      "bridge_name"
+     ],
+     "type": "object"
+    },
+    "minItems": 2,
+    "type": "array"
+   },
+   "confirm_data_prep": {
+    "description": "Data-preparation gate override. Leave UNSET normally. If the source file still has BLOCKING data-prep issues this tool returns { blocked:true } instead of running \u2014 fix the file (or have the user fix it) and call again. Set this true ONLY after you have shown the user the blocking issues and they explicitly confirmed the data is already correct / want to proceed anyway (false-positive escape hatch). Ignored by the Web AI Panel, which gates via its own interactive card.",
+    "type": "boolean"
+   },
+   "inline_rows": {
+    "description": "Inline data as an array of objects keyed by source column name. Useful when the AI synthesizes a small dataset on the fly.",
+    "items": {
+     "additionalProperties": {},
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "output_path": {
+    "description": "OPTIONAL absolute output path for the generated workbook (must be inside an allowed root and end with .xlsx). LEAVE IT UNSET in the normal flow: this workbook is just the Bridge-ready INPUT that gets uploaded into the app \u2014 NOT a deliverable \u2014 so by default it is written to an internal scratch folder and you should NOT present it to the user. ONLY set output_path when the user EXPLICITLY asks to save the prepared/reshaped workbook to a specific location.",
+    "type": "string"
+   },
+   "overwrite": {
+    "description": "If false (default), fails when output_path already exists. The AI should normally confirm with the user before setting this to true.",
+    "type": "boolean"
+   },
+   "preview_only": {
+    "description": "If true, validate the plan and return the first 10 transformed rows without writing the file. Useful for the AI to confirm with the user.",
+    "type": "boolean"
+   },
+   "source_file": {
+    "description": "Absolute path to a CSV / XLSX / TSV source file. Either source_file or inline_rows is required.",
+    "type": "string"
+   },
+   "source_sheet": {
+    "description": "Worksheet name to read from source_file (xlsx only). Defaults to the first non-empty sheet.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "column_map"
+  ],
+  "type": "object"
+ },
+ "name": "prepare_bridge_xlsx"
+}

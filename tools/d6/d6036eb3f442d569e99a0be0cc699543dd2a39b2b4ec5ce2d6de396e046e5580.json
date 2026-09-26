@@ -1,0 +1,706 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Read one CISA industrial control system advisory in full: affected products flattened from the CSAF product tree into vendor, product, and version ranges; per-CVE CVSS score, vector, and CWE; remediations with their category and vendor instructions; critical-infrastructure sectors; and the revision history. Large advisories return a section outline instead of the whole document, listing each section's size and the CVE IDs the vulnerabilities section holds \u2014 re-call with the sections you need, or with cves to read only those vulnerability entries. Republished vendor advisories carry the originating vendor's text; every response reports the source URL and attribution. Find advisory IDs with cisa_search_ics_advisories.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "advisoryId": {
+    "description": "Advisory identifier, e.g. ICSA-26-260-07 or ICSMA-26-253-02, with an optional revision suffix: a single letter A-F or a numeric -N. Case, surrounding whitespace, and a trailing .json are normalized.",
+    "pattern": "^ICS(A|MA)-\\d{2}-\\d{3}-\\d{2}(?:[A-Z]|-\\d+)?$",
+    "type": "string"
+   },
+   "cves": {
+    "description": "Narrow the vulnerabilities section to these CVE IDs; the outline lists the ones the advisory holds. Alone, it selects the vulnerabilities section; with sections, that list must include \"vulnerabilities\".",
+    "items": {
+     "description": "One CVE identifier the advisory covers, e.g. CVE-2023-3935. Case and surrounding whitespace are normalized.",
+     "pattern": "^CVE-[0-9]{4}-[0-9]{4,19}$",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "sections": {
+    "description": "Sections to return. Omit for the whole document, or for its outline when the document overflows the inline budget.",
+    "items": {
+     "description": "One section name, as the outline reports it.",
+     "enum": [
+      "advisory",
+      "summary",
+      "products",
+      "vulnerabilities",
+      "revisionHistory",
+      "references",
+      "acknowledgments"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "advisoryId"
+  ],
+  "type": "object"
+ },
+ "name": "cisa_get_advisory",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "found"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "acknowledgments": {
+    "description": "Acknowledgment entries.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One acknowledgment entry.",
+     "properties": {
+      "names": {
+       "description": "Acknowledged people.",
+       "items": {
+        "description": "One acknowledged person.",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "organization": {
+       "description": "Acknowledged organization, when named.",
+       "type": "string"
+      },
+      "summary": {
+       "description": "What the acknowledgment records.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "names"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "advisory": {
+    "additionalProperties": false,
+    "description": "Advisory identity, dates, and attribution. Always kept, including on a section selection.",
+    "properties": {
+     "advisoryId": {
+      "description": "The advisory identifier.",
+      "pattern": "^ICS(A|MA)-\\d{2}-\\d{3}-\\d{2}(?:[A-Z]|-\\d+)?$",
+      "type": "string"
+     },
+     "attribution": {
+      "description": "Who authored the text and under what terms it may be redistributed.",
+      "type": "string"
+     },
+     "csafUrl": {
+      "description": "Absolute URL of the raw CSAF JSON document.",
+      "type": "string"
+     },
+     "csafVersion": {
+      "description": "CSAF schema version the document declares.",
+      "type": "string"
+     },
+     "published": {
+      "description": "Initial release date, ISO 8601.",
+      "type": "string"
+     },
+     "publisherCategory": {
+      "description": "coordinator for CISA-authored, other for a republished vendor advisory.",
+      "type": "string"
+     },
+     "publisherName": {
+      "description": "Publisher name as the document records it.",
+      "type": "string"
+     },
+     "revised": {
+      "description": "Current release date, ISO 8601.",
+      "type": "string"
+     },
+     "revision": {
+      "description": "Document revision number.",
+      "type": "string"
+     },
+     "series": {
+      "description": "Advisory series.",
+      "enum": [
+       "ICSA",
+       "ICSMA"
+      ],
+      "type": "string"
+     },
+     "status": {
+      "description": "CSAF tracking status, e.g. final or interim.",
+      "type": "string"
+     },
+     "title": {
+      "description": "The advisory title.",
+      "type": "string"
+     },
+     "url": {
+      "description": "Absolute URL of the cisa.gov web version of the advisory.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "advisoryId",
+     "title",
+     "series",
+     "status",
+     "csafVersion",
+     "published",
+     "revised",
+     "revision",
+     "publisherCategory",
+     "publisherName",
+     "url",
+     "csafUrl",
+     "attribution"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `mirror_not_ready`: The advisory index has never completed a full sync. `mirror_unavailable`: The advisory index store cannot be opened: its location is not writable, is read-only, runs through a missing directory or a file, or holds a file that is not a SQLite database. `unknown_section`: A requested section is one this advisory does not carry. `cves_need_vulnerabilities_section`: cves is set but sections does not include \"vulnerabilities\", so there is nothing for cves to narrow. `unknown_cve`: A cves entry names a CVE this advisory does not cover. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "mirror_not_ready",
+         "mirror_unavailable",
+         "unknown_section",
+         "cves_need_vulnerabilities_section",
+         "unknown_cve"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "found": {
+    "description": "Whether an advisory with that ID is in the index.",
+    "type": "boolean"
+   },
+   "guidance": {
+    "description": "What to do instead, present when found is false: how current the index is, and whether the advisory may be newer than it.",
+    "type": "string"
+   },
+   "indexCheckpoint": {
+    "description": "Present when found is false: the newest revision timestamp the index holds, or null if none.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "indexLastSyncedAt": {
+    "description": "Present when found is false: when the index last completed a sync, ISO 8601, or null if never.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "kind": {
+    "description": "full when the document is returned; outline when only the section listing is.",
+    "enum": [
+     "full",
+     "outline"
+    ],
+    "type": "string"
+   },
+   "outlineNotice": {
+    "description": "Outline arm \u2014 how to call cisa_get_advisory for specific sections.",
+    "type": "string"
+   },
+   "products": {
+    "additionalProperties": false,
+    "description": "Affected products and version ranges.",
+    "properties": {
+     "productCount": {
+      "description": "Flattened product entries in the whole product tree.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "shownProducts": {
+      "description": "Flattened version rows returned \u2014 equal to productCount except on a truncated copy.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "truncated": {
+      "description": "True only on a copy stored by an older index build that capped product rows; the index re-ingests on its next start and then returns every row. Absent otherwise.",
+      "type": "boolean"
+     },
+     "vendorCount": {
+      "description": "Distinct vendors in the product tree.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "vendors": {
+      "description": "Vendors flattened out of the CSAF product tree.",
+      "items": {
+       "additionalProperties": false,
+       "description": "One vendor and its products.",
+       "properties": {
+        "name": {
+         "description": "Vendor label as the advisory spells it.",
+         "type": "string"
+        },
+        "products": {
+         "description": "Products under this vendor.",
+         "items": {
+          "additionalProperties": false,
+          "description": "One product under the vendor.",
+          "properties": {
+           "family": {
+            "description": "Product family, when the tree names one.",
+            "type": "string"
+           },
+           "name": {
+            "description": "Product name.",
+            "type": "string"
+           },
+           "versions": {
+            "description": "Version entries under this product.",
+            "items": {
+             "additionalProperties": false,
+             "description": "One affected version or version range.",
+             "properties": {
+              "kind": {
+               "description": "CSAF branch category this entry came from, e.g. product_version or product_version_range.",
+               "type": "string"
+              },
+              "productId": {
+               "description": "The CSAFPID token vulnerability entries reference \u2014 how a CVE maps to exact affected versions.",
+               "type": "string"
+              },
+              "value": {
+               "description": "The version or version-range expression.",
+               "type": "string"
+              }
+             },
+             "required": [
+              "kind",
+              "value",
+              "productId"
+             ],
+             "type": "object"
+            },
+            "type": "array"
+           }
+          },
+          "required": [
+           "name",
+           "versions"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        }
+       },
+       "required": [
+        "name",
+        "products"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "vendorCount",
+     "productCount",
+     "vendors",
+     "shownProducts"
+    ],
+    "type": "object"
+   },
+   "references": {
+    "description": "Document-level references.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One document-level reference.",
+     "properties": {
+      "category": {
+       "description": "CSAF reference category, e.g. self or external.",
+       "type": "string"
+      },
+      "summary": {
+       "description": "Reference summary, when present.",
+       "type": "string"
+      },
+      "url": {
+       "description": "The reference URL.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "category",
+      "url"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "revisionHistory": {
+    "description": "Revision history, oldest first as published.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One revision-history entry.",
+     "properties": {
+      "date": {
+       "description": "Revision date, ISO 8601.",
+       "type": "string"
+      },
+      "legacyVersion": {
+       "description": "Legacy version label, when the entry carries one.",
+       "type": "string"
+      },
+      "number": {
+       "description": "Revision number.",
+       "type": "string"
+      },
+      "summary": {
+       "description": "What changed in this revision.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "number",
+      "date",
+      "summary"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "sections": {
+    "description": "Outline arm \u2014 the sections available, largest first, with their byte sizes and, for vulnerabilities, its CVE IDs.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One section this advisory carries, with its serialized byte size.",
+     "properties": {
+      "bytes": {
+       "description": "Serialized byte size of the section",
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "cves": {
+       "description": "On the vulnerabilities section only: the CVE IDs it holds, in document order. Pass any of them in cves to cisa_get_advisory to read just those entries.",
+       "items": {
+        "description": "One CVE identifier.",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "name": {
+       "description": "Section identifier \u2014 pass in `sections` to retrieve it",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "bytes"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "summary": {
+    "additionalProperties": false,
+    "description": "Narrative notes and sector classification.",
+    "properties": {
+     "countriesDeployed": {
+      "description": "The countries/areas-deployed note.",
+      "type": "string"
+     },
+     "exploitability": {
+      "description": "The exploitability note, when present.",
+      "type": "string"
+     },
+     "headquarters": {
+      "description": "The company-headquarters-location note.",
+      "type": "string"
+     },
+     "riskEvaluation": {
+      "description": "The risk-evaluation note, when present.",
+      "type": "string"
+     },
+     "sectors": {
+      "description": "Normalized sector names. Empty when the advisory carries no sector note.",
+      "items": {
+       "description": "One canonical sector name.",
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "sectorsRaw": {
+      "description": "The sector note verbatim, when present.",
+      "type": "string"
+     },
+     "summaryText": {
+      "description": "The advisory summary or overview note.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "sectors"
+    ],
+    "type": "object"
+   },
+   "vulnerabilities": {
+    "description": "Vulnerabilities the advisory covers, with scores, remediations, and product status.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One vulnerability the advisory covers.",
+     "properties": {
+      "cve": {
+       "description": "The CVE identifier.",
+       "pattern": "^CVE-[0-9]{4}-[0-9]{4,19}$",
+       "type": "string"
+      },
+      "cweId": {
+       "description": "CWE identifier, when the entry carries one.",
+       "type": "string"
+      },
+      "cweName": {
+       "description": "CWE name, when the entry carries one.",
+       "type": "string"
+      },
+      "notes": {
+       "description": "Notes attached to the vulnerability. CVSS v4 appears here as prose \u2014 it is never parsed into a score field.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One note attached to the vulnerability.",
+        "properties": {
+         "category": {
+          "description": "CSAF note category.",
+          "type": "string"
+         },
+         "text": {
+          "description": "Note text, verbatim.",
+          "type": "string"
+         },
+         "title": {
+          "description": "Note title, when present.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "category",
+         "text"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "productStatus": {
+       "additionalProperties": false,
+       "description": "Per-product status buckets, as CSAF names them.",
+       "properties": {
+        "fixed": {
+         "description": "Products already fixed.",
+         "items": {
+          "description": "One CSAFPID token.",
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "known_affected": {
+         "description": "Products known to be affected.",
+         "items": {
+          "description": "One CSAFPID token.",
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "known_not_affected": {
+         "description": "Products known not to be affected.",
+         "items": {
+          "description": "One CSAFPID token.",
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "recommended": {
+         "description": "Products recommended by the publisher.",
+         "items": {
+          "description": "One CSAFPID token.",
+          "type": "string"
+         },
+         "type": "array"
+        }
+       },
+       "required": [
+        "known_affected",
+        "fixed",
+        "known_not_affected",
+        "recommended"
+       ],
+       "type": "object"
+      },
+      "remediations": {
+       "description": "Remediations for this vulnerability.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One remediation entry.",
+        "properties": {
+         "category": {
+          "description": "CSAF remediation category: mitigation, vendor_fix, workaround, none_available, or no_fix_planned.",
+          "type": "string"
+         },
+         "details": {
+          "description": "The remediation instructions, verbatim.",
+          "type": "string"
+         },
+         "productIds": {
+          "description": "Products this remediation applies to.",
+          "items": {
+           "description": "One CSAFPID token.",
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "restartRequired": {
+          "description": "Restart category the remediation requires, when stated.",
+          "type": "string"
+         },
+         "url": {
+          "description": "Vendor link for the remediation, when present.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "category",
+         "details",
+         "productIds"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "scores": {
+       "description": "CVSS scores. Empty on the 431 vulnerability objects that carry none.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One CVSS score.",
+        "properties": {
+         "baseScore": {
+          "description": "CVSS base score, 0.0 through 10.0.",
+          "type": "number"
+         },
+         "baseSeverity": {
+          "description": "Severity band for the score.",
+          "type": "string"
+         },
+         "productIds": {
+          "description": "Products this score applies to.",
+          "items": {
+           "description": "One CSAFPID token.",
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "severityDerived": {
+          "description": "True when the band was derived here rather than published upstream.",
+          "type": "boolean"
+         },
+         "vectorString": {
+          "description": "The full CVSS vector string.",
+          "type": "string"
+         },
+         "version": {
+          "description": "CVSS version of this score.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "version",
+         "baseScore",
+         "baseSeverity",
+         "severityDerived",
+         "vectorString",
+         "productIds"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "title": {
+       "description": "Vulnerability title, when the entry carries one.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "cve",
+      "scores",
+      "remediations",
+      "productStatus",
+      "notes"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "cisa_get_advisory"
+}

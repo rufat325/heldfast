@@ -1,0 +1,324 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Block until the next inbound message arrives (pushed over the fmsg host's WebSocket) and return it with its thread context so you can answer with reply. Use this when the user asks you to chat, converse, keep replying, auto-reply, or respond to the next message. Loop: wait \u2192 reply \u2192 wait again passing the after_id from the previous result. On status \"timeout\" simply call again with the same arguments. Messages arriving on the same thread within settle_seconds are batched into ONE result; reply once, to the newest (reply_target_id). Your own messages, reactions and no-reply messages never qualify. Each call blocks at most timeout_seconds (max 230); stop looping when the user interrupts or the limits they set are reached.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "after_id": {
+    "description": "only messages with a greater id qualify; pass the after_id from the previous result. Omit on the first call to wait for messages arriving from now on",
+    "pattern": "^[0-9]+$",
+    "type": "string"
+   },
+   "from": {
+    "description": "only accept messages from this address or short name",
+    "type": "string"
+   },
+   "include_thread": {
+    "default": true,
+    "description": "include the assembled thread context of the newest message",
+    "type": "boolean"
+   },
+   "settle_seconds": {
+    "default": 3,
+    "description": "after the first message, keep collecting same-thread messages for this long",
+    "maximum": 30,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "thread_of": {
+    "description": "only accept messages in this message's thread",
+    "pattern": "^[0-9]+$",
+    "type": "string"
+   },
+   "timeout_seconds": {
+    "default": 90,
+    "maximum": 230,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "wait_for_message",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "after_id": {
+    "description": "pass this as after_id on the next call",
+    "type": "string"
+   },
+   "messages": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "added": {
+       "description": "recipients added later via add-to",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "attachments": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "filename": {
+          "type": "string"
+         },
+         "size": {
+          "type": "number"
+         }
+        },
+        "required": [
+         "filename",
+         "size"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "body": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "from": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "important": {
+       "type": "boolean"
+      },
+      "no_reply": {
+       "type": "boolean"
+      },
+      "pid": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "preview": {
+       "type": "string"
+      },
+      "reactions": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "emoji": {
+          "type": "string"
+         },
+         "from": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         }
+        },
+        "required": [
+         "emoji",
+         "from"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "read": {
+       "description": "null when not applicable (your own sent messages)",
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "size": {
+       "type": "number"
+      },
+      "terminal": {
+       "type": "boolean"
+      },
+      "time": {
+       "description": "ISO-8601; null for drafts",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "time_posix": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "to": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "topic": {
+       "type": "string"
+      },
+      "type": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "pid",
+      "from",
+      "to",
+      "added",
+      "topic",
+      "time",
+      "time_posix",
+      "read",
+      "important",
+      "no_reply",
+      "terminal",
+      "type",
+      "size",
+      "preview",
+      "attachments",
+      "reactions",
+      "body"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "note": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "pending_other_threads": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "from": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "root_id": {
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "id",
+      "from",
+      "root_id"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "reply_target_id": {
+    "description": "newest message of the batch; reply to this one",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "skipped": {
+    "description": "messages deliberately passed over; after_id has advanced past them",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "reason": {
+       "enum": [
+        "own",
+        "reaction",
+        "no_reply",
+        "from_mismatch",
+        "other_thread"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "reason"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "status": {
+    "enum": [
+     "message",
+     "timeout"
+    ],
+    "type": "string"
+   },
+   "thread_root_id": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "transport": {
+    "enum": [
+     "websocket",
+     "poll"
+    ],
+    "type": "string"
+   },
+   "unclassified": {
+    "description": "messages whose thread could not be determined; after_id is held before them, call again to retry",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "error": {
+       "type": "string"
+      },
+      "from": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "from",
+      "error"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "status",
+   "after_id",
+   "thread_root_id",
+   "reply_target_id",
+   "messages",
+   "pending_other_threads",
+   "skipped",
+   "unclassified",
+   "transport",
+   "note"
+  ],
+  "type": "object"
+ },
+ "title": "Wait for next fmsg message"
+}

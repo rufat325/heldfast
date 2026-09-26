@@ -1,0 +1,226 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Look up an identifier \u2014 a vessel IMO number, a SWIFT/BIC code, a digital-currency wallet address, a passport or national ID number, or any other identifier a list publishes \u2014 against all loaded sanctions watchlists at once: OFAC SDN + Consolidated, EU, UK, and UN. Exact match after normalization, with no fuzzy or partial matching and no score: spacing, letter case, and the separators - . / are ignored, an IMO number matches with or without its IMO prefix, a SWIFT/BIC code compares on its first eight characters so a branch code matches its institution, and a wallet address folds case only where its encoding is case-insensitive (hex, bech32, cashaddr \u2014 never base58). Returns every designation that publishes a matching identifier, one per designation, with the identifiers that matched as published; sanctions_get_designation pulls the full record. This is a screening AID for a human/compliance review, NOT a compliance determination: a hit means \"review this candidate against the official source,\" and an empty result never means \"cleared\" \u2014 an identifier a list prints only in free-text remarks, or bundled with other numbers in one field, does not match.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "sources": {
+    "description": "Restrict to specific source lists. Omit to search all loaded lists.",
+    "items": {
+     "enum": [
+      "ofac_sdn",
+      "ofac_consolidated",
+      "eu",
+      "uk",
+      "un"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "type": {
+    "default": "any",
+    "description": "Restrict to one identifier category, matched on the label each list publishes, or \"any\" (default) to search every published identifier, including categories with no name here (MMSI, call signs, tail numbers, tax and registration numbers, email, websites).",
+    "enum": [
+     "any",
+     "imo",
+     "swift_bic",
+     "digital_currency_address",
+     "passport",
+     "national_id"
+    ],
+    "type": "string"
+   },
+   "value": {
+    "description": "The identifier to look up, as you hold it (e.g. \"IMO 7406784\", \"DCBKKPPY\", a wallet address, a passport number). Must contain at least one character other than whitespace and - . /",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "value"
+  ],
+  "type": "object"
+ },
+ "name": "sanctions_screen_identifier",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "hits",
+     "caveat",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "caveat": {
+    "description": "Decision-support caveat \u2014 this is a screening aid, not a compliance determination.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `identifier_not_searchable`: The value is left with nothing to compare once whitespace and the separators - . / are removed (or, for type imo, a bare IMO prefix). `mirror_not_ready`: The sanctions mirror has never completed an initial sync. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "identifier_not_searchable",
+         "mirror_not_ready"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "hits": {
+    "description": "Designations that publish a matching identifier, one per designation, ordered by source list then entry ID. Not paged \u2014 the most widely shared published identifiers map to about a dozen designations.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One designation that publishes a matching identifier \u2014 a candidate to verify.",
+     "properties": {
+      "entityType": {
+       "description": "Entity classification as published by the source.",
+       "enum": [
+        "person",
+        "organization",
+        "vessel",
+        "aircraft",
+        "unknown"
+       ],
+       "type": "string"
+      },
+      "matchedIdentifiers": {
+       "description": "Every identifier this designation publishes that matched, as published \u2014 several when the list prints one number more than one way.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One published identifier that matched the lookup.",
+        "properties": {
+         "country": {
+          "description": "Issuing country/authority, when published.",
+          "type": "string"
+         },
+         "type": {
+          "description": "Identifier label as the list publishes it (e.g. Vessel Registration Identification, IMO Number, SWIFT BIC, Digital Currency Address - ETH, Passport).",
+          "type": "string"
+         },
+         "value": {
+          "description": "Identifier value exactly as published, letter case included.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "type",
+         "value"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "primaryName": {
+       "description": "Primary published name of the designated entity.",
+       "type": "string"
+      },
+      "program": {
+       "description": "Sanctioning program / regime, when published by the source.",
+       "type": "string"
+      },
+      "source": {
+       "description": "Which watchlist this candidate is on \u2014 its provenance.",
+       "enum": [
+        "ofac_sdn",
+        "ofac_consolidated",
+        "eu",
+        "uk",
+        "un"
+       ],
+       "type": "string"
+      },
+      "sourceEntryId": {
+       "description": "The list's own entry ID \u2014 pass to sanctions_get_designation for the full record.",
+       "type": "string"
+      },
+      "sourceLabel": {
+       "description": "Human-readable name of the source list.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "source",
+      "sourceLabel",
+      "sourceEntryId",
+      "primaryName",
+      "entityType",
+      "matchedIdentifiers"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance when no designation matched \u2014 what to try next, and what an empty result does NOT mean.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Number of designations returned.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "sanctions-screening-mcp-server: screen identifier"
+}

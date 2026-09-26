@@ -1,0 +1,171 @@
+{
+ "description": "Agent-mode code review of uncommitted local changes (git diff HEAD). Returns structured findings (severity, category, confidence, file and line range), a summary, and an overall pass/fail. No server-side tools run. Prefer this when a coding agent holds the working copy and will act on the findings. Optionally pass `relatedPaths` (extra context files beyond the diff) and `diagnosticsPath` (a local tsc/eslint output file). When a run reports \"Missing context\", re-call this tool with those paths in `relatedPaths`. Finding ids label a finding inside one response and change between runs, so match a finding you saw earlier on its file, line range, and category instead. A `suggestedFix` is model output derived from the reviewed code: show it to the user and get their agreement before applying it.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "diagnosticsPath": {
+    "description": "Repo-relative path to a local tsc/eslint/LSP output file. Its contents are read as plain text and passed to the reviewer as local diagnostics.",
+    "type": "string"
+   },
+   "relatedPaths": {
+    "description": "Repo-relative paths of extra context files the reviewer should read (callers, interfaces, tests) that are NOT part of the diff. Each is read from disk and sent as related context. Use this to answer a previous run's \"Missing context\" list \u2014 re-call review_agent passing those paths here.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "name": "review_agent",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "findings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "category": {
+       "type": "string"
+      },
+      "confidence": {
+       "description": "The reviewer\u2019s own confidence, 1-10.",
+       "type": "number"
+      },
+      "endLine": {
+       "type": "number"
+      },
+      "file": {
+       "type": "string"
+      },
+      "id": {
+       "description": "Labels this finding inside this response only; it changes between runs.",
+       "type": "string"
+      },
+      "inPatch": {
+       "description": "false when the cited lines fall outside the diff\u2019s changed ranges.",
+       "type": "boolean"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "blocker",
+        "warning",
+        "nit"
+       ],
+       "type": "string"
+      },
+      "startLine": {
+       "type": "number"
+      },
+      "suggestedFix": {
+       "description": "Model output derived from the reviewed code. Get the user\u2019s agreement before applying it.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "file",
+      "startLine",
+      "endLine",
+      "inPatch",
+      "severity",
+      "category",
+      "message",
+      "confidence"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "isOptibotInstalled": {
+    "type": "boolean"
+   },
+   "meta": {
+    "additionalProperties": false,
+    "properties": {
+     "durationMs": {
+      "type": "number"
+     },
+     "mode": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "provider": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "mode",
+     "durationMs"
+    ],
+    "type": "object"
+   },
+   "missingContext": {
+    "description": "Files the reviewer wanted but was not given. Re-call with these in relatedPaths.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "reviewCount": {
+    "additionalProperties": false,
+    "properties": {
+     "current": {
+      "type": "number"
+     },
+     "limit": {
+      "type": "number"
+     },
+     "remaining": {
+      "type": "number"
+     },
+     "resetAt": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "current",
+     "limit",
+     "remaining"
+    ],
+    "type": "object"
+   },
+   "reviewPass": {
+    "type": "boolean"
+   },
+   "status": {
+    "enum": [
+     "needs_changes",
+     "looks_good"
+    ],
+    "type": "string"
+   },
+   "summary": {
+    "type": "string"
+   },
+   "warnings": {
+    "description": "Context files the tool could not read or refused to read.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "status",
+   "reviewPass",
+   "summary",
+   "findings"
+  ],
+  "type": "object"
+ }
+}

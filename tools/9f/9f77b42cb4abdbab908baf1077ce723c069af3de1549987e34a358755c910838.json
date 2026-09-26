@@ -1,0 +1,296 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "HS Code Lookup"
+ },
+ "description": "Search 6,940 WCO Harmonized System (HS 2022) commodity codes \u2014 the 6-digit international customs classification layer. The first 2 digits are the chapter, 4 the heading, 6 the subheading.\n\nProvide ONE of: query (free-text description search, min 2 chars), code (2-6 digit lookup, returns the code plus its hierarchy), or section (Roman numeral I-XXI to browse a section).\n\nBehavior: read-only; description search is keyword-based against official HS descriptions, so everyday product words can return zero rows \u2014 count 0 with an empty results[] is a valid answer (e.g. \"laptop\" and \"computers\" find nothing; \"automatic data\" matches the official phrasing \"automatic data processing machines\"); prefer the formal tariff wording. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: the query/code echo, count and results[] (hscode, description and hierarchy context) under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: the 6-digit international level only \u2014 national tariff lines (8-10 digits) and duty rates are set per country; classification here is indicative, not a binding ruling.\n\nRelated: uk_duty_calculator (duty/VAT for a code found here), ics2_check (EU ENS goods-description quality \u2014 a different check entirely).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "code": {
+    "description": "Exact HS code or prefix \u2014 2, 4 or 6 digits. Example: \"8471\".",
+    "pattern": "^\\d{2,6}$",
+    "type": "string"
+   },
+   "query": {
+    "description": "Keyword search on official HS descriptions (min 2 chars). Formal tariff wording works best. Example: \"automatic data\" rather than \"laptop\".",
+    "minLength": 2,
+    "type": "string"
+   },
+   "section": {
+    "description": "Browse a section by Roman numeral I-XXI. Example: \"XVI\" (machinery).",
+    "pattern": "^[ivxIVX]{1,5}$",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "hs_code_lookup",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "code": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "count": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "meta": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "query": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "results": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": {},
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "section": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

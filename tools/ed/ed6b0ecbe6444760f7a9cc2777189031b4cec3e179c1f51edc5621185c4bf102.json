@@ -1,0 +1,274 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Inspect TLS/SSL posture for one or more hosts via a real read-only handshake: negotiated protocol and cipher, the full certificate chain, SANs, validity window, days-to-expiry, issuer, and validation status. Invalid, expired, and self-signed certificates are inspected and reported rather than failing \u2014 surfacing posture problems is the point. One handshake per host; no application data is sent. SSRF-guarded; per-host failures degrade to a per-host error.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "hosts": {
+    "description": "Hosts to inspect (1\u201350).",
+    "items": {
+     "description": "Hostname or IP to inspect (e.g. \"example.com\").",
+     "type": "string"
+    },
+    "maxItems": 50,
+    "minItems": 1,
+    "type": "array"
+   },
+   "port": {
+    "default": 443,
+    "description": "TLS port to connect to.",
+    "maximum": 65535,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "timeoutMs": {
+    "default": 8000,
+    "description": "Per-host handshake timeout in milliseconds.",
+    "maximum": 30000,
+    "minimum": 1000,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "hosts"
+  ],
+  "type": "object"
+ },
+ "name": "attacksurface_inspect_tls",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_host`: A supplied host is not a syntactically valid hostname or IP. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_host"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when every host failed to handshake.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Per-host TLS inspection results.",
+    "items": {
+     "additionalProperties": false,
+     "description": "TLS/SSL posture for one host:port.",
+     "properties": {
+      "certificate": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "description": "A single certificate in the presented chain.",
+         "properties": {
+          "daysUntilExpiry": {
+           "description": "Days until expiry; negative when already expired.",
+           "type": "number"
+          },
+          "extendedKeyUsages": {
+           "description": "Extended key usages, mapped from OID to a readable label where known.",
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "fingerprintSha256": {
+           "description": "SHA-256 fingerprint of the leaf certificate.",
+           "type": "string"
+          },
+          "issuerCommonName": {
+           "description": "Issuer common name.",
+           "type": "string"
+          },
+          "issuerOrganization": {
+           "description": "Issuer organization, when present.",
+           "type": "string"
+          },
+          "serialNumber": {
+           "description": "Certificate serial number (hex).",
+           "type": "string"
+          },
+          "subjectAltNames": {
+           "description": "Subject Alternative Names (DNS/IP entries).",
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "subjectCommonName": {
+           "description": "Certificate subject common name.",
+           "type": "string"
+          },
+          "validFrom": {
+           "description": "Not-before validity bound (ISO 8601).",
+           "type": "string"
+          },
+          "validTo": {
+           "description": "Not-after validity bound (ISO 8601).",
+           "type": "string"
+          }
+         },
+         "required": [
+          "subjectCommonName",
+          "subjectAltNames",
+          "issuerCommonName",
+          "validFrom",
+          "validTo",
+          "daysUntilExpiry",
+          "serialNumber",
+          "fingerprintSha256",
+          "extendedKeyUsages"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Leaf certificate, or null when none was presented."
+      },
+      "chainDepth": {
+       "description": "Depth of the presented certificate chain (1 = leaf only).",
+       "type": "number"
+      },
+      "checkedAt": {
+       "description": "ISO 8601 timestamp of the inspection.",
+       "type": "string"
+      },
+      "cipher": {
+       "description": "Negotiated cipher suite, or null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "findings": {
+       "description": "Posture findings (expiry windows, weak protocol, self-signed, etc.).",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "handshakeError": {
+       "description": "Connection/handshake error, or null on success.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "host": {
+       "description": "Host inspected.",
+       "type": "string"
+      },
+      "port": {
+       "description": "Port inspected.",
+       "type": "number"
+      },
+      "protocol": {
+       "description": "Negotiated TLS protocol, or null when the handshake failed.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "validationAuthorized": {
+       "description": "Whether the chain validated against the system trust store.",
+       "type": "boolean"
+      },
+      "validationError": {
+       "description": "Validation failure reason when not authorized, else null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "host",
+      "port",
+      "protocol",
+      "cipher",
+      "certificate",
+      "chainDepth",
+      "validationAuthorized",
+      "validationError",
+      "findings",
+      "checkedAt",
+      "handshakeError"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "attacksurface_inspect_tls"
+}

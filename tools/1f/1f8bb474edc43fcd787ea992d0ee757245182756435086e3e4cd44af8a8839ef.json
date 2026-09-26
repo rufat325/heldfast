@@ -1,0 +1,190 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Approve or Reject Applications"
+ },
+ "description": "Act on the user's applications. decision \"approve\" submits each waiting application on the employer's hiring system under the user's name: it spends one of their applications per job and cannot be undone. \"reject\" skips it: nothing is sent and nothing is spent. \"cancel\" stops one that is still queued or preparing. \"refine\" rewrites its resume or cover letter from instructions (document_type and instructions; uses AI credits). \"re_prepare\" builds its documents again (optional steps). \"set_stage\" records how it is going (stage). Pass up to 25 application_ids from aiapplyd_get_applications. Only approve on the user's explicit go-ahead, such as a \"yes\" to a specific application. On a timeout or an error, call aiapplyd_get_applications before retrying; an approve that already went through is reported as already approved. Do not use it for matches with no application yet; use aiapplyd_apply or aiapplyd_triage_matches. Next: aiapplyd_get_applications to follow the submissions.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "application_ids": {
+    "description": "Application ids to act on, 1 to 25 (e.g. [1550, 1551]), from aiapplyd_get_applications",
+    "items": {
+     "exclusiveMinimum": 0,
+     "maximum": 9007199254740991,
+     "type": "integer"
+    },
+    "type": "array"
+   },
+   "decision": {
+    "description": "\"approve\" submits the application to the employer and cannot be undone. \"reject\" skips it and sends nothing. \"cancel\" stops a queued one. \"refine\" rewrites a document (needs document_type and instructions). \"re_prepare\" builds its documents again. \"set_stage\" records the stage (needs stage).",
+    "enum": [
+     "approve",
+     "reject",
+     "cancel",
+     "refine",
+     "re_prepare",
+     "set_stage"
+    ],
+    "type": "string"
+   },
+   "document_type": {
+    "description": "For refine: \"resume\" or \"cover_letter\".",
+    "enum": [
+     "resume",
+     "cover_letter"
+    ],
+    "type": "string"
+   },
+   "instructions": {
+    "description": "For refine: what to change, in the user's own words (up to 2,000 characters).",
+    "maxLength": 2000,
+    "type": "string"
+   },
+   "stage": {
+    "description": "For set_stage: applied, callback, phone_screen, interview, offered, rejected or no_response.",
+    "enum": [
+     "applied",
+     "callback",
+     "phone_screen",
+     "interview",
+     "offered",
+     "rejected",
+     "no_response"
+    ],
+    "type": "string"
+   },
+   "steps": {
+    "description": "For re_prepare: the steps to run again. Omit to run every step that is out of date.",
+    "items": {
+     "enum": [
+      "quality_gate",
+      "company_intel",
+      "tailor_resume",
+      "translate",
+      "cover_letter"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "decision",
+   "application_ids"
+  ],
+  "type": "object"
+ },
+ "name": "aiapplyd_review_application",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "attempted": {
+    "type": "number"
+   },
+   "decision": {
+    "enum": [
+     "approve",
+     "reject",
+     "cancel",
+     "refine",
+     "re_prepare",
+     "set_stage"
+    ],
+    "type": "string"
+   },
+   "notConfirmed": {
+    "description": "True when the user declined the confirmation prompt and nothing was sent.",
+    "type": "boolean"
+   },
+   "results": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "applicationId": {
+       "type": "number"
+      },
+      "applicationStage": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "ok": {
+       "type": "boolean"
+      },
+      "reason": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Machine reason when ok is false, or \"already_approved\" for an approve that had already gone through."
+      },
+      "refinedContent": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "status": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Our own record after the action. Never proof the employer received it."
+      },
+      "trackingUrl": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "applicationId",
+      "ok",
+      "status",
+      "reason",
+      "refinedContent",
+      "applicationStage",
+      "trackingUrl"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "succeeded": {
+    "type": "number"
+   }
+  },
+  "required": [
+   "decision",
+   "results",
+   "succeeded",
+   "attempted",
+   "notConfirmed"
+  ],
+  "type": "object"
+ },
+ "title": "Approve or Reject Applications"
+}

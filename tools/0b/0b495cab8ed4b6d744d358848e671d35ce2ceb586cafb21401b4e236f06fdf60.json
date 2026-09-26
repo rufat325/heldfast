@@ -1,0 +1,135 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Liste les PS rattach\u00e9s \u00e0 un \u00e9tablissement FINESS (`num_finess` 9 chiffres). Pivot RPPS\u2194FINESS \u2014 r\u00e9pond \u00e0 \"qui travaille dans ce labo / h\u00f4pital / clinique ?\". Le `mode_exercice` distingue les lib\u00e9raux exer\u00e7ant sur place (vacations) des salari\u00e9s. Couverture : RPPS expose ce lien quand le PS l'a d\u00e9clar\u00e9 ; salari\u00e9s CH/CHU/cliniques bien couverts.\n\nSortie compacte : `coords` et `distance_km` sont `null` (le tool est par \u00e9tablissement, pas spatial \u2014 pour la g\u00e9oloc, pivoter via `etablissement_by_finess` sur le `num_finess`). Cat\u00e9gorie par d\u00e9faut : Civil (C, ~97 % \u2014 lib\u00e9raux, salari\u00e9s priv\u00e9s, hospitaliers contractuels). Opt-in : `include_agents_publics: true` ajoute Agents publics (M, ~0,3 % \u2014 PH titulaires, ARS, CNAM, \u00c9ducation nationale, PMI, militaires SSA) ; `include_etudiants: true` ajoute \u00c9tudiants (E, ~2,5 % \u2014 internes, externes, \u00e9l\u00e8ves IDE/SF). R\u00e9f : https://mos.esante.gouv.fr/NOS/TRE_R09-CategorieProfessionnelle/. Source : Annuaire Sant\u00e9, Agence du Num\u00e9rique en Sant\u00e9 (ANS) \u2014 Licence Ouverte v2.0",
+ "inputSchema": {
+  "properties": {
+   "include_agents_publics": {
+    "type": "boolean"
+   },
+   "include_etudiants": {
+    "type": "boolean"
+   },
+   "include_freshness": {
+    "default": false,
+    "description": "Si true, ajoute un champ `data_freshness` au payload (dans `query_metadata` si pr\u00e9sent, sinon \u00e0 la racine) listant, par source (FINESS, Ameli, RPPS, CDS, IRIS), la derni\u00e8re ingestion r\u00e9ussie (`last_success_at`, `staleness_days`) ET la derni\u00e8re fois que la donn\u00e9e a r\u00e9ellement chang\u00e9 (`last_data_change_at`, `data_age_days` \u2014 un run court-circuit\u00e9 \u00ab fichier amont identique \u00bb compte comme succ\u00e8s mais ne rajeunit pas la donn\u00e9e ; c'est `data_age_days` qui dit l'\u00e2ge r\u00e9el de ce qui est servi). Opt-in pour ne pas alourdir les payloads par d\u00e9faut. Cache 5min c\u00f4t\u00e9 serveur \u2014 co\u00fbt n\u00e9gligeable.",
+    "type": "boolean"
+   },
+   "limit": {
+    "type": "number"
+   },
+   "num_finess": {
+    "pattern": "^\\d{9}$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "num_finess"
+  ],
+  "type": "object"
+ },
+ "name": "rpps_dans_etablissement",
+ "outputSchema": {
+  "description": "R\u00e9sultat de query avec metadata. `results` est tronqu\u00e9 \u00e0 `limit` c\u00f4t\u00e9 serveur (cf. `truncated` quand applicable).",
+  "properties": {
+   "activite_hebergee": {
+    "description": "Compte juxtapos\u00e9 des sites h\u00e9bergeant l'activit\u00e9 correspondant \u00e0 la famille filtr\u00e9e, sous une autre cat\u00e9gorie FINESS. Distinct du `count` principal \u2014 lire `note` pour comprendre la s\u00e9mantique et ne JAMAIS additionner les deux comptes sans pr\u00e9ciser leur nature.",
+    "properties": {
+     "activite": {
+      "type": "string"
+     },
+     "count": {
+      "type": "integer"
+     },
+     "densite_pour_100k_hab": {
+      "type": "number"
+     },
+     "note": {
+      "type": "string"
+     },
+     "sites_apercu": {
+      "items": {
+       "properties": {
+        "categorie_code": {
+         "type": "string"
+        },
+        "categorie_libelle": {
+         "type": "string"
+        },
+        "num_finess": {
+         "type": "string"
+        },
+        "raison_sociale": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "truncated": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "count": {
+    "description": "Nombre d'entr\u00e9es retourn\u00e9es dans `results` (post-troncature).",
+    "type": "number"
+   },
+   "freshness": {
+    "description": "Fra\u00eecheur des sources (pr\u00e9sent si `include_freshness: true`).",
+    "type": "object"
+   },
+   "perimetre": {
+    "description": "Lentille de la source : ce que le comptage inclut/exclut. Lire `completeness_note` et la restituer au lecteur final.",
+    "properties": {
+     "completeness_note": {
+      "type": "string"
+     },
+     "compte": {
+      "type": "string"
+     },
+     "exclut": {
+      "type": "string"
+     },
+     "lens": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "query_metadata": {
+    "description": "Metadata de la query (radius_km, departement, filtres appliqu\u00e9s, \u2026).",
+    "type": "object"
+   },
+   "results": {
+    "description": "Entr\u00e9es m\u00e9tier (shape sp\u00e9cifique au tool, cf. description du tool).",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "total": {
+    "description": "Effectif r\u00e9el avant troncature. Pr\u00e9sent sur les tools de nomenclature pagin\u00e9s (lister_*) : `count` = \u00e9chantillon, `total` = total r\u00e9el, re-appeler avec un `limit` sup\u00e9rieur si `truncated`.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "true si le total r\u00e9el d\u00e9passe `limit` (re-paginer via `offset` si support\u00e9, ou augmenter `limit` sur les lister_*). Optional sur les tools de listing exhaustif (lister_*).",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "count",
+   "results"
+  ],
+  "type": "object"
+ }
+}

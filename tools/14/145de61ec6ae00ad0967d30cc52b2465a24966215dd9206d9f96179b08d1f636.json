@@ -1,0 +1,136 @@
+{
+ "description": "Which of these strategies performed best on the same data? Run 2\u20135 strategies against the SAME pair, interval and date range and return per-strategy metrics plus a comparison summary (best by CAGR, best by win-rate, worst by drawdown). Use this when the user asks which of several strategies fits a market \u2014 it holds the pair, interval and requested date range fixed, which a series of separate arena_run_backtest calls does not guarantee. What it does NOT equalize is the EVALUATION window: a strategy with a long warmup starts trading later, so compare actual_date_from across the runs and check result.benchmark before ranking by CAGR. For one strategy across many pairs use arena_run_universe_backtest instead. Caveat worth passing on: comparing N strategies and reporting the winner IS multiple testing \u2014 the winner\u2019s edge is upward-biased. arena_get_robustness_field puts a counted N on that. Sequential, expect 10\u201350s. Per-day quota: Pro=20, Power=200. [API Pro tier]",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "asset_type": {
+    "description": "Asset class. Use 'crypto' unless you are explicitly backtesting a tokenized real-world asset. Note: tokenized stocks/ETFs/gold trade AS crypto pairs (e.g. spybUSDT, qqqbUSDT) \u2014 there is no separate stocks/forex backtest surface; non-crypto asset classes were retired.",
+    "enum": [
+     "crypto",
+     "tokenized_equity",
+     "tokenized_etf",
+     "commodities"
+    ],
+    "type": "string"
+   },
+   "capital": {
+    "description": "Starting capital in quote currency. Default 10000. Affects absolute figures only, not CAGR or win-rate.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "date_from": {
+    "description": "Start date, YYYY-MM-DD. Earlier than the pair listing is clamped to the first available candle.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "date_to": {
+    "description": "End date, YYYY-MM-DD. Default: today.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "filters": {
+    "additionalProperties": false,
+    "description": "Optional entry filters (Pro+). Each one only ever REMOVES entries \u2014 filters never create trades. Omit for the unfiltered baseline.",
+    "properties": {
+     "altcoinSeasonMode": {
+      "description": "Altcoin-Season gate. 'conservative' needs a confirmed alt season, 'aggressive' an early one. Default 'off'.",
+      "enum": [
+       "off",
+       "aggressive",
+       "conservative"
+      ],
+      "type": "string"
+     },
+     "atrMode": {
+      "description": "ATR volatility regime filter. 'low'/'high' restrict entries to that volatility band, 'expansion' to rising volatility. Default 'off'.",
+      "enum": [
+       "off",
+       "low",
+       "high",
+       "expansion"
+      ],
+      "type": "string"
+     },
+     "bullmarketStageMode": {
+      "description": "Bull-market stage gate from the BTC cycle model; rising strictness from 'early' to 'strict'. Default 'off'.",
+      "enum": [
+       "off",
+       "early",
+       "confirmed",
+       "strict"
+      ],
+      "type": "string"
+     },
+     "minProfitGuardThreshold": {
+      "description": "Per-trade min profit guard (negative cap, e.g. -10 = exit once a trade is 10% under water).",
+      "type": "number"
+     },
+     "stochRsiWeekly": {
+      "description": "Asset-specific weekly Stoch-RSI gate: entries only while the pair's weekly StochRSI(14) sits above its SMA(3). Default false.",
+      "type": "boolean"
+     },
+     "wma200": {
+      "description": "200-week MA filter (BTC-derived): only take entries while BTC trades above its 200-week SMA.",
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "interval": {
+    "description": "Candle interval: '1d' daily, '2d'/'3d' multi-day, '1w' weekly, '1M' monthly. Multi-day candles (2d/3d) are anchored to the Unix epoch, so one of n possible alignments is used. Measured on our own corpus, the choice of alignment alone moves CAGR by 6.66 pp on average (max 12.30). Treat differences below that as not distinguishable \u2014 1d/2d/3d behaved as one block in our tests, not a ranking.",
+    "enum": [
+     "1d",
+     "2d",
+     "3d",
+     "1w",
+     "1M"
+    ],
+    "type": "string"
+   },
+   "pair": {
+    "description": "Crypto pair symbol, e.g. BTCUSDT \u2014 the same pair for every strategy.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "strategies": {
+    "description": "The 2\u20135 strategies to compare, each with optional own params.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "params": {
+       "additionalProperties": {},
+       "description": "Optional per-strategy parameter overrides; omit for audited defaults.",
+       "type": "object"
+      },
+      "strategy": {
+       "description": "Strategy key \u2014 use arena_list_strategies.",
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "strategy"
+     ],
+     "type": "object"
+    },
+    "maxItems": 5,
+    "minItems": 2,
+    "type": "array"
+   }
+  },
+  "required": [
+   "strategies",
+   "pair",
+   "asset_type",
+   "interval",
+   "date_from"
+  ],
+  "type": "object"
+ },
+ "name": "arena_compare_strategies",
+ "title": "Compare 2-5 Strategies"
+}

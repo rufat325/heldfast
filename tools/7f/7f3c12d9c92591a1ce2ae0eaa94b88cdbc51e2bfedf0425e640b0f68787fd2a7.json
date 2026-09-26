@@ -1,0 +1,166 @@
+{
+ "description": "Start a tracked outbound phone mission. This is call-control only unless the configured transport reports realtime_media; risky decisions must be encoded in policy and may require the operator.\n\nPOLICY SCHEMA \u2014 every field below is REQUIRED and the literal values shown are the ONLY accepted values (anything else returns `unsafe-confirm-policy` / `invalid-policy`). Do not guess synonyms (\"abort\", \"never_ever\", true) \u2014 use the literals exactly.\n\nMinimal valid policy (copy-paste, then adjust the cost / duration / regions to taste):\n{\n  \"policyVersion\": 1,\n  \"regionAllowlist\": [\"WORLD\"],\n  \"maxCallDurationSeconds\": 600,\n  \"maxCostPerMission\": 2.0,\n  \"maxAttempts\": 1,\n  \"transcriptEnabled\": true,\n  \"recordingEnabled\": false,\n  \"confirmPolicy\": {\n    \"paymentDetails\": \"never\",\n    \"contractCommitment\": \"never\",\n    \"costOverLimit\": \"needs_operator\",\n    \"sensitivePersonalData\": \"needs_operator\",\n    \"unclearAlternative\": \"needs_operator\"\n  },\n  \"alternativePolicy\": { \"maxTimeShiftMinutes\": 30 }\n}\n\nField requirements (the validator is strict \u2014 use these EXACT names and types):\n  - policyVersion: the literal number 1 (NOT a string like \"2025-01\"). Required.\n  - maxCallDurationSeconds: positive integer (NOT \"maxDurationSeconds\"). Server caps it.\n  - maxCostPerMission: non-negative number, plain decimal (NOT \"USD:2.00\", NOT \"maxCostUsd\"). Server caps it.\n  - maxAttempts: positive integer. Server caps it.\n  - transcriptEnabled / recordingEnabled: boolean.\n\nconfirmPolicy field values are FIXED enums:\n  - paymentDetails / contractCommitment: always \"never\" (the agent must never agree to pay or commit; recovering from a mistake costs the operator real money).\n  - costOverLimit / sensitivePersonalData / unclearAlternative: always \"needs_operator\" (route the decision back through ask_operator).\nregionAllowlist values: \"AT\" | \"DE\" | \"EU\" | \"WORLD\". Use \"WORLD\" for any US/global destination; the transport's supportedRegions must intersect this set or the call is blocked as transport-region-unsupported.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_account": {
+    "description": "Optional. Override identity for THIS call: pass the AgenticMail agent name (e.g. \"Fola\") to authenticate as that agent. Requires AGENTICMAIL_ACCOUNT_KEYS_JSON to contain a matching key. Omit to use the default identity (AGENTICMAIL_API_KEY).",
+    "type": "string"
+   },
+   "dryRun": {
+    "description": "When true, store the mission without calling the provider",
+    "type": "boolean"
+   },
+   "policy": {
+    "additionalProperties": false,
+    "description": "Phone mission policy \u2014 see tool description for the minimal valid shape. All fields required.",
+    "properties": {
+     "alternativePolicy": {
+      "additionalProperties": false,
+      "properties": {
+       "maxTimeShiftMinutes": {
+        "description": "How far the agent may move a proposed appointment without re-asking the operator, non-negative integer.",
+        "type": "number"
+       }
+      },
+      "required": [
+       "maxTimeShiftMinutes"
+      ],
+      "type": "object"
+     },
+     "confirmPolicy": {
+      "additionalProperties": false,
+      "description": "Risk-decision routing. Every field uses a FIXED literal \u2014 see tool description.",
+      "properties": {
+       "contractCommitment": {
+        "description": "Must be \"never\".",
+        "enum": [
+         "never"
+        ],
+        "type": "string"
+       },
+       "costOverLimit": {
+        "description": "Must be \"needs_operator\".",
+        "enum": [
+         "needs_operator"
+        ],
+        "type": "string"
+       },
+       "paymentDetails": {
+        "description": "Must be \"never\".",
+        "enum": [
+         "never"
+        ],
+        "type": "string"
+       },
+       "sensitivePersonalData": {
+        "description": "Must be \"needs_operator\".",
+        "enum": [
+         "needs_operator"
+        ],
+        "type": "string"
+       },
+       "unclearAlternative": {
+        "description": "Must be \"needs_operator\".",
+        "enum": [
+         "needs_operator"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "paymentDetails",
+       "contractCommitment",
+       "costOverLimit",
+       "sensitivePersonalData",
+       "unclearAlternative"
+      ],
+      "type": "object"
+     },
+     "maxAttempts": {
+      "description": "Max redial attempts, positive integer. Server caps this.",
+      "type": "number"
+     },
+     "maxCallDurationSeconds": {
+      "description": "Hard cap on call duration in seconds, positive integer. Server enforces a ceiling.",
+      "type": "number"
+     },
+     "maxCostPerMission": {
+      "description": "Cost cap in USD as a plain decimal (e.g. 2.0, not \"USD:2.00\"). Server enforces a ceiling.",
+      "type": "number"
+     },
+     "policyVersion": {
+      "description": "Must be the literal number 1 (no other value is accepted).",
+      "type": "number"
+     },
+     "recordingEnabled": {
+      "type": "boolean"
+     },
+     "regionAllowlist": {
+      "description": "Regions the agent is allowed to dial. Must intersect the transport's supportedRegions.",
+      "items": {
+       "enum": [
+        "AT",
+        "DE",
+        "EU",
+        "WORLD"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "transcriptEnabled": {
+      "type": "boolean"
+     },
+     "voice": {
+      "description": "Optional voice character (e.g. \"cedar\", \"ara\", or a custom voice id). Validated against the runtime's catalogue; unknown names fall through to the provider default with a log warning.",
+      "type": "string"
+     },
+     "voiceModel": {
+      "description": "Optional model override (e.g. \"gpt-realtime-mini\", \"grok-voice-fast\").",
+      "type": "string"
+     },
+     "voiceRuntime": {
+      "description": "Optional voice-runtime provider id (e.g. \"openai\", \"grok\"). Beats agent persona + install default.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "policyVersion",
+     "regionAllowlist",
+     "maxCallDurationSeconds",
+     "maxCostPerMission",
+     "maxAttempts",
+     "transcriptEnabled",
+     "recordingEnabled",
+     "confirmPolicy",
+     "alternativePolicy"
+    ],
+    "type": "object"
+   },
+   "task": {
+    "description": "Concrete call objective, e.g. \"reserve a table for two at 19:30\"",
+    "type": "string"
+   },
+   "to": {
+    "description": "Target phone number in E.164 format (e.g. +15555550100)",
+    "type": "string"
+   },
+   "voiceRuntimeRef": {
+    "description": "Optional external voice runtime/session reference for future realtime integration",
+    "type": "string"
+   }
+  },
+  "required": [
+   "to",
+   "task",
+   "policy"
+  ],
+  "type": "object"
+ },
+ "name": "call_phone"
+}

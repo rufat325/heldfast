@@ -1,0 +1,103 @@
+{
+ "annotations": {
+  "cost": {
+   "all": 5
+  },
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search FAERS adverse event reports by drug name, MedDRA reaction term, or date range. Returns report counts, reaction types, seriousness levels, and dates. Natural multi-word reaction phrasing is retried against MedDRA preferred-term word order before an empty result is reported. FAERS reports do not establish incidence or causality.",
+ "inputSchema": {
+  "examples": [
+   {
+    "query": "patient.drug.medicinalproduct:\"OZEMPIC\""
+   },
+   {
+    "limit": 50,
+    "query": "patient.drug.medicinalproduct:\"semaglutide\"+AND+serious:1"
+   },
+   {
+    "limit": 10,
+    "query": "patient.drug.medicinalproduct:\"semaglutide\"+AND+patient.reaction.reactionmeddrapt.exact:\"OPTIC ISCHAEMIC NEUROPATHY\""
+   }
+  ],
+  "properties": {
+   "limit": {
+    "description": "Number of results (1-100, default 10)",
+    "type": "number"
+   },
+   "query": {
+    "description": "OpenFDA search query. Filter drugs on patient.drug.medicinalproduct \u2014 the report's own drug-name field, present on every record and matching brand or generic. The patient.drug.openfda.* fields are enrichment that is missing for many newer drugs (semaglutide/OZEMPIC among them) and silently match nothing; this tool retries them against medicinalproduct, but naming it directly costs one call instead of two. Examples: 'patient.drug.medicinalproduct:\"OZEMPIC\"', 'patient.drug.medicinalproduct:\"semaglutide\"+AND+serious:1', 'receivedate:[20240101+TO+20241231]'",
+    "type": "string"
+   },
+   "skip": {
+    "description": "Offset for pagination (default 0)",
+    "type": "number"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "fda_drug_events",
+ "outputSchema": {
+  "properties": {
+   "limit": {
+    "description": "Number of results returned",
+    "type": "number"
+   },
+   "reaction_requested": {
+    "description": "The reaction term as the caller supplied it, uppercased",
+    "type": "string"
+   },
+   "reaction_resolution": {
+    "description": "How the supplied reaction term mapped onto a MedDRA preferred term. not_a_meddra_preferred_term means the filter matched nothing \u2014 counts are zero because the term missed, not because no reports exist",
+    "enum": [
+     "exact_match",
+     "word_order_corrected",
+     "not_a_meddra_preferred_term"
+    ],
+    "type": "string"
+   },
+   "reaction_resolution_hint": {
+    "description": "Present when the term matched nothing; names a working way to discover the real preferred terms",
+    "type": "string"
+   },
+   "reaction_resolution_note": {
+    "description": "Present when word order was corrected; states the substitution made",
+    "type": "string"
+   },
+   "reaction_resolved": {
+    "description": "The MedDRA preferred term actually used for the filter",
+    "type": "string"
+   },
+   "results": {
+    "description": "Array of adverse event report objects",
+    "items": {
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "skip": {
+    "description": "Offset used in pagination",
+    "type": "number"
+   },
+   "total": {
+    "description": "Total count of matching adverse event reports",
+    "type": "number"
+   }
+  },
+  "required": [
+   "total",
+   "skip",
+   "limit",
+   "results"
+  ],
+  "type": "object"
+ },
+ "title": "Fda Drug Events",
+ "version": "v1.eb854fa6"
+}

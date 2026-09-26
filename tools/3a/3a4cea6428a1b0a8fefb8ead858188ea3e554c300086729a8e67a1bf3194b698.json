@@ -1,0 +1,183 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Get timezone info by IANA ID, country code, or partial city/region name. Returns current UTC offset, standard offset, whether DST is currently active, and major cities in the timezone. When querying by country code (ISO alpha-2), returns all timezones observed in that country. Accepts partial matches \u2014 \"Tokyo\" resolves to \"Asia/Tokyo\", \"NY\" resolves to \"America/New_York\".",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "at": {
+    "description": "ISO 8601 datetime to evaluate timezone state at a specific moment (e.g., \"2026-01-15T12:00:00\"). Defaults to current time.",
+    "type": "string"
+   },
+   "by": {
+    "default": "auto",
+    "description": "Lookup mode: iana for exact IANA ID, country for ISO alpha-2 code, auto tries all strategies.",
+    "enum": [
+     "iana",
+     "country",
+     "auto"
+    ],
+    "type": "string"
+   },
+   "query": {
+    "description": "IANA timezone ID (e.g., \"America/New_York\"), ISO alpha-2 country code (e.g., \"US\"), or partial city/region name (e.g., \"Tokyo\", \"London\").",
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "ref_timezone_lookup",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "timezones",
+     "evaluated_at"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_match`: No timezone matched the query. `invalid_at`: The at parameter is not a valid ISO 8601 datetime string. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_match",
+         "invalid_at"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "evaluated_at": {
+    "description": "ISO 8601 UTC datetime at which timezone state was evaluated.",
+    "type": "string"
+   },
+   "timezones": {
+    "description": "Matching timezone records. Multiple records when querying by country.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Timezone record with offset and DST info.",
+     "properties": {
+      "countries": {
+       "description": "ISO alpha-2 country codes observing this timezone.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "current_offset_hours": {
+       "description": "Current UTC offset in hours (e.g., -5.0 for UTC-05:00).",
+       "type": "number"
+      },
+      "dst_abbreviation": {
+       "description": "DST timezone abbreviation (e.g., \"EDT\"), or null when DST not active or timezone has no DST.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "dst_active": {
+       "description": "Whether daylight saving time is currently active.",
+       "type": "boolean"
+      },
+      "iana_id": {
+       "description": "IANA timezone identifier (e.g., \"America/New_York\").",
+       "type": "string"
+      },
+      "major_cities": {
+       "description": "Major cities in this timezone.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "standard_abbreviation": {
+       "description": "Standard timezone abbreviation (e.g., \"EST\").",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "standard_offset_hours": {
+       "description": "Standard (non-DST) UTC offset in hours.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "iana_id",
+      "current_offset_hours",
+      "standard_offset_hours",
+      "dst_active",
+      "dst_abbreviation",
+      "standard_abbreviation",
+      "major_cities",
+      "countries"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Timezone Lookup"
+}

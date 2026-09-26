@@ -1,0 +1,250 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List what CISA has published recently \u2014 its combined advisory feed, its alerts feed, or its ICS advisory feed. Each feed is a rolling window of exactly 30 items with no history, no pagination, and no date-range query, so the window's coverage varies from about a week to about two months depending on the feed. For ICS advisory history beyond the window, use cisa_search_ics_advisories, which covers the full corpus back to 2010.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "feed": {
+    "default": "advisories",
+    "description": "Which feed to read: advisories (all.xml, ~8 days of coverage), alerts (alerts.xml, ~8 weeks), or ics (ics-advisories.xml, ~2.5 weeks).",
+    "enum": [
+     "advisories",
+     "alerts",
+     "ics"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "default": 30,
+    "description": "Maximum items to return. The 30 ceiling is the upstream window, not a server choice.",
+    "maximum": 30,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "since": {
+    "description": "Keep only items published on or after this date, YYYY-MM-DD. Filters within the fetched window; it cannot reach back beyond it.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "cisa_get_alerts",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "feed",
+     "feedUrl",
+     "feedTitle",
+     "items",
+     "window",
+     "windowCaveat"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit that was applied.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "effectiveQuery": {
+    "description": "The since filter as applied, and how many window items it excluded.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `feed_unavailable`: The feed fetch failed or returned a body that carried no RSS channel. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "feed_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "feed": {
+    "description": "The feed that was read.",
+    "enum": [
+     "advisories",
+     "alerts",
+     "ics"
+    ],
+    "type": "string"
+   },
+   "feedTitle": {
+    "description": "The channel title the feed declares.",
+    "type": "string"
+   },
+   "feedUrl": {
+    "description": "The absolute feed URL this window came from.",
+    "type": "string"
+   },
+   "items": {
+    "description": "Items from the current window, newest first as published.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One feed item.",
+     "properties": {
+      "advisoryId": {
+       "description": "Present for ICS advisory items; chains straight into cisa_get_advisory.",
+       "pattern": "^ICS(A|MA)-\\d{2}-\\d{3}-\\d{2}(?:[A-Z]|-\\d+)?$",
+       "type": "string"
+      },
+      "guid": {
+       "description": "The upstream guid \u2014 a node path such as /node/25513, not a URL and not a permalink.",
+       "type": "string"
+      },
+      "link": {
+       "description": "Absolute URL of the canonical page for the item.",
+       "type": "string"
+      },
+      "pubDate": {
+       "description": "Publication timestamp, ISO 8601. Upstream publishes RFC 822 with a two-digit year.",
+       "type": "string"
+      },
+      "summary": {
+       "description": "Item description with HTML stripped and entities decoded, capped at 1,200 characters.",
+       "type": "string"
+      },
+      "summaryTruncated": {
+       "description": "True when the summary was capped.",
+       "type": "boolean"
+      },
+      "title": {
+       "description": "Item title, trimmed \u2014 upstream carries trailing whitespace.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "title",
+      "link",
+      "pubDate",
+      "summary",
+      "summaryTruncated",
+      "guid"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance when the since filter excluded every item.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Items returned.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "truncated": {
+    "description": "True when the limit capped the returned items.",
+    "type": "boolean"
+   },
+   "window": {
+    "additionalProperties": false,
+    "description": "What the fetched window covers.",
+    "properties": {
+     "itemCount": {
+      "description": "Items returned after limit and since were applied.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "newest": {
+      "description": "Publication date of the newest item in the fetched window; null when empty.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "oldest": {
+      "description": "Publication date of the oldest item in the fetched window; null when empty.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "upstreamWindowSize": {
+      "description": "Items the upstream feed serves \u2014 a fixed ceiling, not a server choice.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "itemCount",
+     "oldest",
+     "newest",
+     "upstreamWindowSize"
+    ],
+    "type": "object"
+   },
+   "windowCaveat": {
+    "description": "That the feed has no history, no pagination, and no date query.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "cisa_get_alerts"
+}

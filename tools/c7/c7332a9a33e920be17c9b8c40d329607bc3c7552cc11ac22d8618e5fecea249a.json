@@ -1,0 +1,116 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Edit or combine existing image file(s) using a text instruction: modify elements, restyle, add or remove content, or merge references. Reads the source image(s) from disk, saves the result as a NEW file (never overwrites sources), and returns the absolute saved path(s).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "aspect_ratio": {
+    "description": "Gemini and OpenAI gpt-image-2 honor the ratio exactly. Older OpenAI models approximate: landscape -> 1536x1024, portrait -> 1024x1536, 1:1 -> 1024x1024.",
+    "enum": [
+     "1:1",
+     "2:3",
+     "3:2",
+     "3:4",
+     "4:3",
+     "9:16",
+     "16:9",
+     "21:9"
+    ],
+    "type": "string"
+   },
+   "background": {
+    "description": "OpenAI only, ignored by Gemini. transparent yields alpha PNG/WebP, ideal for logos and icons. Requires gpt-image-1.5 or older: gpt-image-2 does not support it, so transparent calls on gpt-image-2 auto-switch to gpt-image-1.5 (noted in the result). Prefer passing model gpt-image-1.5 explicitly when you need transparency.",
+    "enum": [
+     "transparent",
+     "opaque",
+     "auto"
+    ],
+    "type": "string"
+   },
+   "image_size": {
+    "description": "Gemini 3.x models only (ignored by OpenAI; gemini-2.5-flash-image is fixed at 1024px). Default 1K.",
+    "enum": [
+     "1K",
+     "2K",
+     "4K"
+    ],
+    "type": "string"
+   },
+   "input_fidelity": {
+    "description": "OpenAI only. high preserves faces, logos, and fine details from the input more faithfully. Ignored on gpt-image-2, which always processes inputs at high fidelity.",
+    "enum": [
+     "low",
+     "high"
+    ],
+    "type": "string"
+   },
+   "model": {
+    "description": "Override the model. Gemini: gemini-3.1-flash-image (default), gemini-3.1-flash-lite-image, gemini-3-pro-image, gemini-2.5-flash-image. OpenAI: gpt-image-2 (default, best quality), gpt-image-1.5, gpt-image-1, gpt-image-1-mini. IMPORTANT: gpt-image-2 cannot do transparent backgrounds; pass gpt-image-1.5 when background transparent is needed.",
+    "type": "string"
+   },
+   "n": {
+    "description": "Number of images, 1-4 (default 1). Gemini generates sequentially, so n>1 is slower there.",
+    "maximum": 4,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "output_path": {
+    "description": "Absolute path strongly recommended. Either a full file path (.png/.jpg/.webp) or a directory (a slugified filename is derived from the prompt). If omitted: $IMAGE_GEN_MCP_OUTPUT_DIR, then $CLAUDE_PROJECT_DIR, then the server cwd. The server may be restricted to specific directories; call list_capabilities to see allowedDirs.",
+    "type": "string"
+   },
+   "prompt": {
+    "description": "The edit instruction, e.g. \"make the background transparent\" or \"restyle as a flat vector logo\".",
+    "maxLength": 32000,
+    "minLength": 1,
+    "type": "string"
+   },
+   "provider": {
+    "description": "Override the default provider. Call list_capabilities to see what is configured.",
+    "enum": [
+     "gemini",
+     "openai"
+    ],
+    "type": "string"
+   },
+   "quality": {
+    "description": "OpenAI only, ignored by Gemini. Use low for cheap drafts.",
+    "enum": [
+     "low",
+     "medium",
+     "high",
+     "auto"
+    ],
+    "type": "string"
+   },
+   "return_image": {
+    "description": "Default false. When true, also returns the FIRST image as an inline MCP image block so you can see it without a Read. Large images can exceed the MCP output token limit; for 2K/4K prefer Read on the saved path.",
+    "type": "boolean"
+   },
+   "source_paths": {
+    "description": "Absolute paths to existing input images (.png/.jpg/.jpeg/.webp). The first is the primary edit target; extras act as references. OpenAI accepts up to 16; Gemini works best with 1-3.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "prompt",
+   "source_paths"
+  ],
+  "type": "object"
+ },
+ "name": "edit_image",
+ "title": "Edit image"
+}

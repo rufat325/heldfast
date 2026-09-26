@@ -1,0 +1,368 @@
+{
+ "_meta": {
+  "openai/toolInvocation/invoked": "Draft results ready",
+  "openai/toolInvocation/invoking": "Fetching draft results\u2026",
+  "securitySchemes": [
+   {
+    "scopes": [
+     "mcp:read"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Use this when the user asks about completed draft results, exact draft-board positions, or current draft-pick ownership for a selected league. Returns a common draft summary and ordered picks with explicit confirmed, projected, or unavailable placement provenance. A historical selecting team is not a current pick owner; current ownership comes only from ownership.picks[].currentOwnerTeamId. ESPN and Yahoo expose confirmed draft results but no current pick-ownership ledger, so their responses carry no ownership block at all; only Sleeper can report current or future pick ownership, and an exact board placement only when Sleeper supplies enough draft-order evidence. An ownership.scope of changed_picks_only lists only picks known to have changed hands and is not a complete pick inventory. selectionInRound is the round slot rendered in a value such as 12.15, while draftColumn is the stable draft-board column; they are not interchangeable. For a completed Sleeper draft, an omitted ownership block means no draft picks changed hands. Use round to return one draft round. Use team_id to return completed selections made by that historical team and ownership rows currently owned by that team. Omit draft_id to use the league's associated draft; draft_id is Sleeper-only and should be passed only when Flaim previously returned a provider draft ID. Omit season_year for the current sport season, or pass the season_year returned by get_user_session for a specific league or past draft. Use established session context (call get_user_session only if needed), then get_league_info for the specified league if this chat has not already loaded it. For multi-league comparisons, call once per league. Read-only. Current date is 2026-09-26.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "draft_id": {
+    "description": "Optional Sleeper draft ID. Omit to retrieve the league's associated draft; pass only an ID previously returned by Flaim.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "league_id": {
+    "description": "League ID (get from get_user_session)",
+    "type": "string"
+   },
+   "platform": {
+    "description": "Fantasy platform (e.g., \"espn\", \"yahoo\", \"sleeper\")",
+    "enum": [
+     "espn",
+     "yahoo",
+     "sleeper"
+    ],
+    "type": "string"
+   },
+   "round": {
+    "description": "Optional positive draft round. Returns only completed selections and ownership rows from this round.",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "season_year": {
+    "description": "Season start year. Omit for the current sport season; use the season_year returned by get_user_session for this league or a past draft. Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).",
+    "type": "integer"
+   },
+   "sport": {
+    "description": "Sport type (e.g., \"football\", \"baseball\")",
+    "enum": [
+     "football",
+     "baseball",
+     "basketball",
+     "hockey"
+    ],
+    "type": "string"
+   },
+   "team_id": {
+    "description": "Optional provider team ID. Filters completed selections by historical selecting team and ownership rows by current owner.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "platform",
+   "sport",
+   "league_id"
+  ],
+  "type": "object"
+ },
+ "name": "get_draft",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "data": {
+    "additionalProperties": true,
+    "description": "Platform envelope. Field availability varies by platform (ESPN, Yahoo, Sleeper); absent fields are not provided by that platform.",
+    "properties": {
+     "draft": {
+      "additionalProperties": true,
+      "properties": {
+       "id": {
+        "type": [
+         "string",
+         "number"
+        ]
+       },
+       "playerPool": {
+        "additionalProperties": true,
+        "properties": {},
+        "type": "object"
+       },
+       "rounds": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "status": {
+        "enum": [
+         "pre_draft",
+         "in_progress",
+         "complete",
+         "unavailable",
+         "unknown"
+        ],
+        "type": "string"
+       },
+       "teams": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "type": {
+        "enum": [
+         "snake",
+         "linear",
+         "auction",
+         "offline",
+         "unknown"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "type",
+       "status"
+      ],
+      "type": "object"
+     },
+     "leagueId": {
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "ownership": {
+      "additionalProperties": true,
+      "properties": {
+       "picks": {
+        "items": {
+         "additionalProperties": true,
+         "properties": {
+          "currentOwnerTeamId": {
+           "type": [
+            "string",
+            "number"
+           ]
+          },
+          "draftColumn": {
+           "exclusiveMinimum": 0,
+           "type": "integer"
+          },
+          "originalTeamId": {
+           "type": [
+            "string",
+            "number"
+           ]
+          },
+          "overallPick": {
+           "exclusiveMinimum": 0,
+           "type": "integer"
+          },
+          "placement": {
+           "$ref": "#/properties/data/properties/picks/items/properties/placement"
+          },
+          "round": {
+           "exclusiveMinimum": 0,
+           "type": "integer"
+          },
+          "seasonYear": {
+           "type": "number"
+          },
+          "selectionInRound": {
+           "exclusiveMinimum": 0,
+           "type": "integer"
+          }
+         },
+         "required": [
+          "seasonYear",
+          "round",
+          "originalTeamId",
+          "currentOwnerTeamId",
+          "placement"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "scope": {
+        "enum": [
+         "complete",
+         "changed_picks_only",
+         "unavailable"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "scope",
+       "picks"
+      ],
+      "type": "object"
+     },
+     "picks": {
+      "items": {
+       "additionalProperties": true,
+       "properties": {
+        "cost": {
+         "additionalProperties": true,
+         "properties": {
+          "amount": {
+           "minimum": 0,
+           "type": "number"
+          },
+          "unit": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "amount",
+          "unit"
+         ],
+         "type": "object"
+        },
+        "draftColumn": {
+         "exclusiveMinimum": 0,
+         "type": "integer"
+        },
+        "isKeeper": {
+         "type": "boolean"
+        },
+        "originalTeamId": {
+         "type": [
+          "string",
+          "number"
+         ]
+        },
+        "overallPick": {
+         "exclusiveMinimum": 0,
+         "type": "integer"
+        },
+        "placement": {
+         "additionalProperties": true,
+         "properties": {
+          "source": {
+           "enum": [
+            "provider_pick",
+            "provider_order_derived",
+            "no_provider_order"
+           ],
+           "type": "string"
+          },
+          "status": {
+           "enum": [
+            "confirmed",
+            "projected",
+            "unavailable"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "status",
+          "source"
+         ],
+         "type": "object"
+        },
+        "playerId": {
+         "type": [
+          "string",
+          "number"
+         ]
+        },
+        "playerName": {
+         "type": "string"
+        },
+        "playerPosition": {
+         "type": "string"
+        },
+        "playerProTeam": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "round": {
+         "exclusiveMinimum": 0,
+         "type": "integer"
+        },
+        "selectionInRound": {
+         "exclusiveMinimum": 0,
+         "type": "integer"
+        },
+        "selectionTeamId": {
+         "type": [
+          "string",
+          "number"
+         ]
+        }
+       },
+       "required": [
+        "round",
+        "placement"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "platform": {
+      "type": "string"
+     },
+     "seasonYear": {
+      "type": "number"
+     },
+     "sport": {
+      "type": "string"
+     },
+     "teamOwners": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "Owner names keyed by provider team ID",
+      "type": "object"
+     },
+     "teams": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "Team names keyed by provider team ID",
+      "type": "object"
+     }
+    },
+    "required": [
+     "platform",
+     "sport",
+     "leagueId",
+     "seasonYear",
+     "draft",
+     "picks"
+    ],
+    "type": "object"
+   },
+   "success": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "success",
+   "data"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "mcp:read"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "Draft Results and Pick Ownership"
+}

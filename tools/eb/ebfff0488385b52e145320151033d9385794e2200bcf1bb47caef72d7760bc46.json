@@ -1,0 +1,101 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "USE WHEN an agent is about to swap and wants the venue chosen, the fee disclosed, and the trade CHECKED before anything is signed. Two modes: `recommend` returns the choice, the fee sentence and the verdicts and NEVER a transaction; `build-tx` returns an UNSIGNED transaction, and only when the gate allowed it and a simulation did not revert.\n\nNON-CUSTODIAL: this tool NEVER signs, holds, moves or broadcasts funds, and it never asks for a key. What comes back is an unsigned object the caller signs or discards. The response signature proves Sato Hub produced those bytes; it is not a claim that anyone authorised a transfer.\n\nWHAT IS CHECKED, and under what: four targets \u2014 token_in, token_out, the venue endpoint, and the recipient \u2014 each with its own verdict, the rule id that produced it and the reason. Then the caller's policy (caps per trade and per period, allowed chains, tokens, venues, recipients, slippage and deadline). Manage policies at https://satohub.ai/api/swap/policies; with no stored policy the default applies.\n\nUNKNOWN REFUSES BY DEFAULT. A target we could not read, or a simulation that could not run, WITHHOLDS the transaction unless the policy says otherwise \u2014 and the response says which lane could not be read. \"We did not check\" and \"we checked and it is fine\" never look alike. A refusal is an ANSWER: it is not an error, and retrying it unchanged will refuse again.\n\nA COUNTERPARTY WITH NO PASSPORT IS `no_record`. That is the ordinary case and is not a finding against the address. A Passport is self-registered, and wallet_verified proves control of a key, never anything about the product behind it. There is no list of trusted counterparties here.\n\nTHE FEE: disclosed verbatim in `disclosure`, per venue, before anything is signed \u2014 a fee sentence has to be true for the venue it describes. A trade that is never signed pays nothing.\n\nRECEIPT: a `build-tx` response is recorded and `receipt_url` points at the public record of what was checked, under which policy, at what instant. A receipt is not a claim the trade filled.\n\nReturns (json): { mode, lane, route_id, venue, chain, token_in, token_out, amount_in, amount_out, sato_fee_bps, sato_fee_recipient, disclosure, chosen_by, alternatives, unavailable_venues, preflight, gate: { verdict, refusals, policy_id, policy_version }, gate_result: { allowed, verdicts, verdicts_digest, counterparty, policy }, simulation, tx | null, withheld: { reason, rule } | null, receipt_url, non_custodial, checked_at, caveat, meta: { signature } }. When no adapter answered: { unavailable, tried, checked_at, caveat }.\n\nExample: { chain_in: \"Base\", token_in: \"USDC\", token_out: \"WETH\", amount_in: \"1000000\", mode: \"recommend\" }",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "amount_in": {
+    "description": "Sell amount in the INPUT token's base units (1000000 = 1 USDC at 6 decimals). A string, because a uint256 does not survive a JSON number.",
+    "pattern": "^[0-9]{1,78}$",
+    "type": "string"
+   },
+   "chain_in": {
+    "description": "Source chain as the directory writes it, e.g. 'Base', 'Ethereum', 'Solana'.",
+    "maxLength": 40,
+    "minLength": 1,
+    "type": "string"
+   },
+   "chain_out": {
+    "description": "Destination chain. Omit, or repeat chain_in, for a same-chain swap. A different value is the cross-chain lane, and the two lanes are never compared with each other.",
+    "maxLength": 40,
+    "minLength": 1,
+    "type": "string"
+   },
+   "deadline": {
+    "description": "Unix seconds the quote should stay good until. Omit for the venue's own default.",
+    "maximum": 4102444800,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "mode": {
+    "description": "`recommend` (default) never returns a transaction, whatever the gate said. `build-tx` returns an unsigned one, and only when the gate allowed it AND the simulation did not revert.",
+    "enum": [
+     "recommend",
+     "build-tx"
+    ],
+    "type": "string"
+   },
+   "recipient": {
+    "description": "Where the output goes. Omit to send to the taker. A recipient we hold no record of is `no_record` \u2014 an absence of evidence, and on its own never a refusal.",
+    "maxLength": 120,
+    "minLength": 1,
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: 'markdown' (default) or 'json'.",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "slippage_bps": {
+    "description": "Slippage tolerance in basis points, passed through to the venue. A policy may cap it, and then the refusal states the cap and the value.",
+    "maximum": 5000,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "taker": {
+    "description": "The address that would sign. Some venues only return a transaction when it is given; nothing is ever signed here.",
+    "maxLength": 120,
+    "minLength": 1,
+    "type": "string"
+   },
+   "token_in": {
+    "description": "Input token: a contract address (or Solana mint), or a symbol for the well-known stablecoins.",
+    "maxLength": 120,
+    "minLength": 1,
+    "type": "string"
+   },
+   "token_out": {
+    "description": "Output token: a contract address (or Solana mint), or a symbol.",
+    "maxLength": 120,
+    "minLength": 1,
+    "type": "string"
+   },
+   "usd_notional": {
+    "description": "USD notional of amount_in, when YOU already hold a price. Omitted is unknown, never zero \u2014 a USD cap simply does not bite without it.",
+    "minimum": 0,
+    "type": "number"
+   }
+  },
+  "required": [
+   "chain_in",
+   "token_in",
+   "token_out",
+   "amount_in"
+  ],
+  "type": "object"
+ },
+ "name": "onchain_agent_swap",
+ "title": "Quote a swap, check it against a policy, and get an unsigned transaction"
+}

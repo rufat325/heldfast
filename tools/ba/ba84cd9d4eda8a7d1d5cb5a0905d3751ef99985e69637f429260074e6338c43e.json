@@ -1,0 +1,66 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Submit a document to HandInLoop for extraction with human-in-the-loop validation.\n\nAI extracts the document first; low-confidence fields are routed to a trained human reviewer. The result is validated data with per-field confidence and a complete audit trail.\n\nASYNC: returns immediately with a job_id and status 'queued'. Human turnaround is minutes to hours in production \u2014 poll handinloop_get_job_status (respect estimated_seconds_remaining), then call handinloop_get_job_result once status is 'completed'. Ideal for scheduled/recurring workflows.\n\nArgs:\n  - task_type: one of the ids from handinloop_list_task_types (e.g. \"invoice\"), OR\n  - fields: for CUSTOM extraction, describe the fields to extract yourself \u2014 [{ name, description? }]. Works on ANY document, not just the built-in task types. Provide task_type OR fields.\n  - document_url OR document_base64: the document (PDF/image). Exactly one required.\n  - file_name (optional): original filename for routing and audit\n  - instructions (optional): note for the human reviewer\n\nReturns: { job_id, task_type, status, submitted_at, estimated_seconds_remaining }",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "document_base64": {
+    "description": "Base64-encoded document content (alternative to document_url)",
+    "type": "string"
+   },
+   "document_url": {
+    "description": "Publicly fetchable URL of the document (PDF or image)",
+    "format": "uri",
+    "type": "string"
+   },
+   "fields": {
+    "description": "Custom extraction: define the fields to extract instead of a built-in task_type. Provide task_type OR fields.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "description": {
+       "description": "What this field is, to guide extraction, e.g. 'Delivery order number'",
+       "type": "string"
+      },
+      "name": {
+       "description": "Field name to extract, e.g. 'do_number' (letters, digits, spaces, _ or -)",
+       "minLength": 1,
+       "type": "string"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "file_name": {
+    "description": "Original filename, e.g. 'inv-04187.pdf'",
+    "type": "string"
+   },
+   "instructions": {
+    "description": "Free-form note passed to the human reviewer",
+    "maxLength": 2000,
+    "type": "string"
+   },
+   "task_type": {
+    "description": "Built-in task type id from handinloop_list_task_types, e.g. 'invoice'. Provide this OR fields.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "handinloop_submit_extraction_job",
+ "title": "Submit Extraction Job"
+}

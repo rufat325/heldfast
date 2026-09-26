@@ -1,0 +1,277 @@
+{
+ "description": "Log THIS agent's own live session into MIND Chat \u2192 Agents, so Anthony can read the transcript and reply \u2014 his reply reaches you on your next turn. Distinct from mind_remember (one durable fact) and mind_train (teaching the KG): this is the live, turn-by-turn session log, mirrored into a MIND document when you close it.\n\nPROTOCOL (do this every session): 1) CONNECT \u2014 as soon as mind_context succeeds, call action=open with source_key (your assigned MIND Chat toggle, e.g. \"claude-code-1\"), external_session_id (your runtime's own session id), runtime, title (first user ask, 6-10 words), machine/cwd/repo/branch/model. Your real source is derived from runtime x installation (device/platform/env), never the literal source_key \u2014 the response's own `source_key` tells you what it actually resolved to. If you're a named agent within a shared runtime (a scheduled job, a persona, a bot on a shared account), pass `agent` (a bare name, or {key,label}) so sessions attribute to WHO ran them, not just where \u2014 this works for every runtime, not only shared/cloud ones. If `resumed` is true, read `tail` before answering, and answer everything in `pending_replies` first \u2014 those arrived while you were away. 2) EVERY TURN \u2014 after you finish replying, call action=append with the user's message and your final reply (role user / assistant); tool calls go in as role=tool one-line summaries, never raw payloads. Check `pending_replies` on the response and answer them next turn. action=reply is a shortcut for appending a single assistant-role message when you have no user message to log alongside it. 3) IDLE \u2014 MIND marks the session idle after 30 minutes with no append; the next append revives it, nothing to do meanwhile. 4) TERMINATE \u2014 on exit, compaction, or \"done\", call action=close with a summary (what was asked, what shipped with ids/PR numbers, what is still undone); MIND mirrors the transcript into your Sessions folder as a document. 5) HANDOFF \u2014 to pass the conversation to another agent, call action=handoff with to_source_key=<their toggle>; they see it in their session list with the transcript as context. 6) SHARE \u2014 to let another MIND user follow this session, call action=share with grantee_username and role (\"viewer\" read-only, the default, or \"replier\" which also lets them reply \u2014 a reply is a live action that wakes your process via wake_url, so grant it deliberately). It's a live mirror, never a copy: they always see the current transcript, and revoking (action=revoke_share) removes their access immediately. Never share a session with anyone who shouldn't see its full transcript.\nNever claim a session is synced without the session_id MIND returned. Never log secrets or raw tool payloads.\n\nActions: open, append, close, list, get, reply (alias for append of one assistant message), inbox (undelivered mind-origin replies), handoff, sources (source_action=list|create|update|delete manages the MIND Chat sidebar toggles \u2014 auto-created on first open with an unknown source_key), share (grant another MIND account viewer or replier access \u2014 owner only), list_shares (owner only), revoke_share (owner only).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "action": {
+    "description": "Which agent-session operation to perform.",
+    "enum": [
+     "open",
+     "append",
+     "close",
+     "list",
+     "get",
+     "reply",
+     "inbox",
+     "handoff",
+     "sources",
+     "share",
+     "list_shares",
+     "revoke_share"
+    ],
+    "type": "string"
+   },
+   "agent": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "properties": {
+       "key": {
+        "type": "string"
+       },
+       "label": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "key"
+      ],
+      "type": "object"
+     }
+    ],
+    "description": "Who is actually running this session \u2014 an attribute OF the session, never a source key, and unconditional on runtime (a claude-code cron run can carry agent=\"Chief of Staff\" exactly like a grok run carries agent=\"Dae\"). Bare string used as both key and label, or {key, label}. Falls back to a legacy alias for a bot-shaped source_key (\"dae\"\u2192Dae, \"meter\"\u2192Meter, \"grok-bot\"\u2192Helm, \"n8n\"\u2192n8n), then to the runtime's own display name \u2014 open only."
+   },
+   "before": {
+    "description": "Pagination cursor (last_activity_at) \u2014 list.",
+    "type": "string"
+   },
+   "before_seq": {
+    "description": "Return messages with seq before this value \u2014 get.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "branch": {
+    "description": "Git branch \u2014 open.",
+    "type": "string"
+   },
+   "color": {
+    "description": "Sidebar chip color \u2014 sources action=create/update.",
+    "type": "string"
+   },
+   "content": {
+    "description": "Message text \u2014 required for reply (appended as a single role=assistant message).",
+    "type": "string"
+   },
+   "cwd": {
+    "description": "Working directory \u2014 open.",
+    "type": "string"
+   },
+   "device": {
+    "description": "Explicit device declaration \u2014 open/append. Wins outright over machine/platform/env inference; an out-of-vocabulary `kind` is dropped server-side rather than passed through raw.",
+    "properties": {
+     "host": {
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "mac",
+       "linux",
+       "windows",
+       "droplet",
+       "cloud",
+       "container",
+       "ci",
+       "phone",
+       "unknown"
+      ],
+      "type": "string"
+     },
+     "label": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "env": {
+    "additionalProperties": {},
+    "description": "Environment markers you read from your OWN process (GITHUB_ACTIONS, RENDER, KUBERNETES_SERVICE_HOST, DROPLET_ID, DOCKERENV, ...) \u2014 open/append. Used to infer device kind (CI runner, cloud, container, droplet) when `device` isn't supplied.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "external_session_id": {
+    "description": "Your runtime's own session id \u2014 required for open. Idempotent: opening the same (source_key, external_session_id) again resumes the existing session instead of creating a new one.",
+    "type": "string"
+   },
+   "force": {
+    "description": "sources action=delete: also delete the source's sessions instead of failing 409 when sessions exist.",
+    "type": "boolean"
+   },
+   "grantee_username": {
+    "description": "MIND username to share with \u2014 required for share.",
+    "type": "string"
+   },
+   "key": {
+    "description": "New source's key slug \u2014 required for sources action=create.",
+    "type": "string"
+   },
+   "label": {
+    "description": "Source label, e.g. \"Claude Code 1\" \u2014 sources action=create (required) / update.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Max results \u2014 list (default 30) / get (default 200, messages).",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "machine": {
+    "description": "Machine identifier \u2014 open.",
+    "type": "string"
+   },
+   "messages": {
+    "description": "Messages to append, in order \u2014 required for append. Tool-call messages should be role=tool, one-line summaries only, never raw payloads.",
+    "items": {
+     "properties": {
+      "content": {
+       "type": "string"
+      },
+      "created_at": {
+       "type": "string"
+      },
+      "meta": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "origin": {
+       "enum": [
+        "agent"
+       ],
+       "type": "string"
+      },
+      "role": {
+       "enum": [
+        "user",
+        "assistant",
+        "system",
+        "tool"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "role",
+      "content"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "model": {
+    "description": "LLM model in use \u2014 open.",
+    "type": "string"
+   },
+   "platform": {
+    "description": "Your own platform string (sys.platform / platform.system() / a mobile OS name, e.g. \"darwin\", \"linux\", \"win32\", \"ios\") \u2014 open/append. Used to infer device kind when `device` isn't supplied.",
+    "type": "string"
+   },
+   "q": {
+    "description": "Free-text search over title/preview \u2014 list.",
+    "type": "string"
+   },
+   "repo": {
+    "description": "Repository name \u2014 open.",
+    "type": "string"
+   },
+   "role": {
+    "description": "Role to grant \u2014 share (default \"viewer\"). \"replier\" additionally allows the grantee to reply, which reaches you via wake_url.",
+    "enum": [
+     "viewer",
+     "replier"
+    ],
+    "type": "string"
+   },
+   "runtime": {
+    "description": "Runtime name, e.g. \"claude-code\", \"codex\", \"cursor\", \"openclaw\", \"grok\", \"n8n\", \"custom\" \u2014 open (used if the source is auto-created); sources action=create/update.",
+    "type": "string"
+   },
+   "session_id": {
+    "description": "Session id returned by open \u2014 required for append/close/get/inbox/handoff.",
+    "type": "string"
+   },
+   "share_id": {
+    "description": "Share grant id (from share or list_shares) \u2014 required for revoke_share.",
+    "type": "string"
+   },
+   "source_action": {
+    "description": "Sub-action for action=sources (default list).",
+    "enum": [
+     "list",
+     "create",
+     "update",
+     "delete"
+    ],
+    "type": "string"
+   },
+   "source_id": {
+    "description": "Source id \u2014 required for sources action=update/delete.",
+    "type": "string"
+   },
+   "source_key": {
+    "description": "Your assigned MIND Chat sidebar toggle slug, e.g. \"claude-code-1\" \u2014 required for open; also filters list; also required for sources action=create (as the new source's key).",
+    "type": "string"
+   },
+   "source_label": {
+    "description": "Human-readable label for an auto-created source on open, e.g. \"Claude Code 1\" \u2014 defaults to the titlecased source_key if omitted.",
+    "type": "string"
+   },
+   "status": {
+    "description": "close: pass \"ended\" to explicitly close (default when summary is given). list: filter sessions by status.",
+    "enum": [
+     "active",
+     "idle",
+     "ended"
+    ],
+    "type": "string"
+   },
+   "summary": {
+    "description": "What was asked, what shipped (with ids/PR numbers), what is still undone \u2014 close. If omitted, MIND builds one from the transcript.",
+    "type": "string"
+   },
+   "tags": {
+    "description": "Freeform tags \u2014 open.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "title": {
+    "description": "Session title (first user ask, 6-10 words) \u2014 open (initial) or append (updates it).",
+    "type": "string"
+   },
+   "to_source_key": {
+    "description": "Target source's key to hand this session off to \u2014 required for handoff.",
+    "type": "string"
+   },
+   "wake_url": {
+    "description": "Optional push endpoint MIND POSTs {session_id, reply} to (fire-and-forget, 5s timeout) when the user replies \u2014 sources action=create/update.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "action"
+  ],
+  "type": "object"
+ },
+ "name": "mind_sessions"
+}

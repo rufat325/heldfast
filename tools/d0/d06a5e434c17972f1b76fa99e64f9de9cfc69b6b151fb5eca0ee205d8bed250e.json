@@ -1,0 +1,101 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Call a pay-per-call x402 endpoint from the public index (find it with search_x402) \u2014 any host, not only FiatDock listings. TO BUY: call once WITHOUT `payment` to get the endpoint's 402 decoded (its price, its payTo, the EIP-712 domain) plus step-by-step instructions, sign ONE entry of accepts \u2014 the one on a network you can pay \u2014 with your own wallet, then call again with the same url/method/body plus `payment` set to the base64 x402 payload; the money goes straight from your wallet to the endpoint's payTo, FiatDock takes no fee and never touches it. No wallet? `npx fiatdock-mcp` with AGENT_PRIVATE_KEY and a maxPriceUsd ceiling signs and pays automatically. The endpoint's answer comes back as `result` with its settlement receipt when it settled. Reaches only hosts the public index lists; a FiatDock listing is called with call_service.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "body": {
+    "additionalProperties": {},
+    "description": "JSON body to send (default {}). Its shape is the endpoint's \u2014 read its description, or the 402's own hint",
+    "type": "object"
+   },
+   "method": {
+    "description": "HTTP method (default POST \u2014 most x402 endpoints take a JSON body)",
+    "enum": [
+     "GET",
+     "POST"
+    ],
+    "type": "string"
+   },
+   "payment": {
+    "description": "Base64 of ONE x402 v2 PaymentPayload you signed for ONE entry of the endpoint's accepts (from the first call's 402 \u2014 pick the network you can pay). Sent to the ENDPOINT as its PAYMENT-SIGNATURE header, never read by FiatDock. Omit on the first call to receive the challenge",
+    "type": "string"
+   },
+   "url": {
+    "description": "The endpoint URL from search_x402 (https). Fill any path parameter (e.g. :email) yourself",
+    "type": "string"
+   }
+  },
+  "required": [
+   "url"
+  ],
+  "type": "object"
+ },
+ "name": "call_x402",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "allow": {
+    "description": "The endpoint's Allow header on a 405, when it sent one",
+    "type": "string"
+   },
+   "hint": {
+    "description": "Present on a 405: the endpoint refused this HTTP method \u2014 call again with the other one (the index records no method)",
+    "type": "string"
+   },
+   "method": {
+    "description": "GET or POST",
+    "type": "string"
+   },
+   "note": {
+    "description": "Present only when truncated",
+    "type": "string"
+   },
+   "ok": {
+    "description": "true when the endpoint answered 2xx",
+    "type": "boolean"
+   },
+   "paid": {
+    "description": "true when a payment header travelled with the request \u2014 yours, or one this package signed",
+    "type": "boolean"
+   },
+   "result": {
+    "description": "The endpoint's response body \u2014 parsed JSON when it returned JSON, otherwise the raw text"
+   },
+   "settlement": {
+    "description": "The endpoint's decoded PAYMENT-RESPONSE header when it settled: the x402 settlement receipt (tx hash, network, payer)"
+   },
+   "status": {
+    "description": "The ENDPOINT's HTTP status (a 402 comes back as isError with the decoded challenge instead)",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when the body was cut at 256 KB",
+    "type": "boolean"
+   },
+   "url": {
+    "description": "The URL that was called",
+    "type": "string"
+   }
+  },
+  "required": [
+   "ok",
+   "status",
+   "url",
+   "method",
+   "paid"
+  ],
+  "type": "object"
+ },
+ "title": "Call any x402 endpoint"
+}

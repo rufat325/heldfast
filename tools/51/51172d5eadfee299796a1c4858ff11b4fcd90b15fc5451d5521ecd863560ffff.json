@@ -1,0 +1,241 @@
+{
+ "description": "Pick the single cheapest model that meets the task tier, capabilities, and budget, with full reasoning and a fallbackChain. Offline.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "estimatedInputTokens": {
+    "description": "Estimated input tokens for the forecast.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "estimatedOutputTokens": {
+    "description": "Estimated output tokens for the forecast.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "includeLocal": {
+    "type": "boolean"
+   },
+   "maxCostUsd": {
+    "description": "Budget ceiling for the predicted call cost.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "providers": {
+    "description": "Axis 1: provider availability allowlist (spec 5.4).",
+    "items": {
+     "enum": [
+      "anthropic",
+      "gemini",
+      "openai",
+      "local"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "requiredCapabilities": {
+    "description": "Capabilities the model must support.",
+    "items": {
+     "enum": [
+      "chat",
+      "tools",
+      "vision",
+      "streaming"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "target": {
+    "description": "Axis 2: \"self\" (default) applies the client scope; \"code\" considers all providers.",
+    "enum": [
+     "self",
+     "code"
+    ],
+    "type": "string"
+   },
+   "task": {
+    "description": "Free-text task; used for the tier heuristic when taskClass is absent.",
+    "maxLength": 20000,
+    "type": "string"
+   },
+   "taskClass": {
+    "description": "Explicit task class; overrides the heuristic.",
+    "enum": [
+     "slot_fill",
+     "classify_route",
+     "draft_short",
+     "summarise",
+     "plan_decompose",
+     "synthesise",
+     "reason_hard",
+     "gate_safety"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "estimatedInputTokens",
+   "estimatedOutputTokens"
+  ],
+  "type": "object"
+ },
+ "name": "select_optimal_model",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "asOf": {
+    "type": "string"
+   },
+   "budgetExceeded": {
+    "type": "boolean"
+   },
+   "catalogVersion": {
+    "type": "string"
+   },
+   "cheaperIfAvailable": {
+    "additionalProperties": false,
+    "properties": {
+     "model": {
+      "type": "string"
+     },
+     "predictedCost": {
+      "$ref": "#/properties/selected/anyOf/0/properties/predictedCost"
+     },
+     "provider": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "model",
+     "provider",
+     "predictedCost",
+     "reason"
+    ],
+    "type": "object"
+   },
+   "fallbackChain": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "providerScope": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "reasoning": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "rejected": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "model": {
+       "type": "string"
+      },
+      "reason": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "model",
+      "reason"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "runnerUp": {
+    "additionalProperties": false,
+    "properties": {
+     "model": {
+      "type": "string"
+     },
+     "predictedCost": {
+      "$ref": "#/properties/selected/anyOf/0/properties/predictedCost"
+     }
+    },
+    "required": [
+     "model",
+     "predictedCost"
+    ],
+    "type": "object"
+   },
+   "scopeSource": {
+    "type": "string"
+   },
+   "selected": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "model": {
+        "type": "string"
+       },
+       "predictedCost": {
+        "additionalProperties": false,
+        "properties": {
+         "usd": {
+          "type": "number"
+         },
+         "usdMicros": {
+          "type": "number"
+         }
+        },
+        "required": [
+         "usd",
+         "usdMicros"
+        ],
+        "type": "object"
+       },
+       "provider": {
+        "type": "string"
+       },
+       "tier": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "model",
+       "provider",
+       "tier",
+       "predictedCost"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "shortfallUsd": {
+    "type": "number"
+   }
+  },
+  "required": [
+   "selected",
+   "rejected",
+   "reasoning",
+   "fallbackChain",
+   "catalogVersion",
+   "asOf"
+  ],
+  "type": "object"
+ },
+ "title": "Select optimal model"
+}

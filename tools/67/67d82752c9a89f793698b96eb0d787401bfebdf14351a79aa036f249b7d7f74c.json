@@ -1,0 +1,116 @@
+{
+ "description": "Does this strategy hold up across a whole universe? Runs it against every pair in the universe. Pair cap depends on your API tier: Pro 50, Power 250 \u2014 Power covers crypto-top-250 in ONE job, and a single job keeps the ranking on one pair set (merging results across different pair sets measures pair selection, not strategy quality). THIS CALL IS ASYNCHRONOUS AND RETURNS NOTHING BUT A job_id: the result is NOT in this response. You MUST poll arena_get_job_status until status is 'completed'; estimated_seconds in the create-response says how long to budget. Provide either universe_id (call arena_list_universes) OR explicit pairs[]. Benchmarks bnh_fixed and dca_reference are accepted here \u2014 run one of them over the SAME universe and interval alongside: an excess over buy-and-hold is only readable next to the buy-and-hold value itself, which can be negative. beats_bh_count compares each pair's cagr against the LIKE-FOR-LIKE buy-and-hold \u2014 the benchmark measured over the window the strategy actually traded, not from the requested start. A long warmup or a pair listed after date_from shifts that start, and comparing across two different windows is a handicap, not a benchmark. The old pairing is still reported as beats_bh_count_requested_window, and pairs_with_window_offset says on how many pairs the two can differ at all; per-pair, buyhold_cagr_strategy_window and benchmark_matches_window carry the same distinction. PERSISTENCE: universe results live ONLY in the job response (api_jobs.result). They are deliberately not written to backtest_runs, so they carry no filter_binding and no coin-denominated history, and you will not find them later via arena_list_backtests \u2014 copy what you need out of the job result. Per-day quota: Pro=5, Power=50. [API Pro tier]",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "capital": {
+    "description": "Starting capital in quote currency. Default 10000. Affects absolute figures only, not CAGR or win-rate.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "date_from": {
+    "description": "Start date, YYYY-MM-DD. Earlier than the pair listing is clamped to the first available candle.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "date_to": {
+    "description": "End date, YYYY-MM-DD. Default: today.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "filters": {
+    "additionalProperties": false,
+    "description": "Optional entry filters (Pro+). Each one only ever REMOVES entries \u2014 filters never create trades. Omit for the unfiltered baseline.",
+    "properties": {
+     "altcoinSeasonMode": {
+      "description": "Altcoin-Season gate. 'conservative' needs a confirmed alt season, 'aggressive' an early one. Default 'off'.",
+      "enum": [
+       "off",
+       "aggressive",
+       "conservative"
+      ],
+      "type": "string"
+     },
+     "atrMode": {
+      "description": "ATR volatility regime filter. 'low'/'high' restrict entries to that volatility band, 'expansion' to rising volatility. Default 'off'.",
+      "enum": [
+       "off",
+       "low",
+       "high",
+       "expansion"
+      ],
+      "type": "string"
+     },
+     "bullmarketStageMode": {
+      "description": "Bull-market stage gate from the BTC cycle model; rising strictness from 'early' to 'strict'. Default 'off'.",
+      "enum": [
+       "off",
+       "early",
+       "confirmed",
+       "strict"
+      ],
+      "type": "string"
+     },
+     "minProfitGuardThreshold": {
+      "description": "Per-trade min profit guard (negative cap, e.g. -10 = exit once a trade is 10% under water).",
+      "type": "number"
+     },
+     "stochRsiWeekly": {
+      "description": "Asset-specific weekly Stoch-RSI gate: entries only while the pair's weekly StochRSI(14) sits above its SMA(3). Default false.",
+      "type": "boolean"
+     },
+     "wma200": {
+      "description": "200-week MA filter (BTC-derived): only take entries while BTC trades above its 200-week SMA.",
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "interval": {
+    "description": "Candle interval: '1d' daily, '2d'/'3d' multi-day, '1w' weekly, '1M' monthly. Multi-day candles (2d/3d) are anchored to the Unix epoch, so one of n possible alignments is used. Measured on our own corpus, the choice of alignment alone moves CAGR by 6.66 pp on average (max 12.30). Treat differences below that as not distinguishable \u2014 1d/2d/3d behaved as one block in our tests, not a ranking.",
+    "enum": [
+     "1d",
+     "2d",
+     "3d",
+     "1w",
+     "1M"
+    ],
+    "type": "string"
+   },
+   "pairs": {
+    "description": "Explicit pair list. Hard schema limit 250; the effective cap is your tier (Pro 50, Power 250). Use instead of universe_id.",
+    "items": {
+     "type": "string"
+    },
+    "maxItems": 250,
+    "type": "array"
+   },
+   "params": {
+    "additionalProperties": {},
+    "description": "Strategy-specific parameters applied to EVERY pair in the universe. Omit for audited defaults.",
+    "type": "object"
+   },
+   "strategy": {
+    "description": "Strategy key \u2014 call arena_list_strategies.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "universe_id": {
+    "description": "Pre-curated universe \u2014 call arena_list_universes for valid IDs. Capped by tier (Pro 50, Power 250); a larger universe is rejected rather than silently truncated.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "strategy",
+   "interval",
+   "date_from"
+  ],
+  "type": "object"
+ },
+ "name": "arena_run_universe_backtest",
+ "title": "Run Backtest on a Pair Universe (async)"
+}

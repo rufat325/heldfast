@@ -1,0 +1,53 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Validate a PDF against a PDF/A flavour (ISO 19005, archiving) or a PDF/UA flavour (ISO 14289, accessibility).\n\nHybrid engine: when veraPDF is installed (PDF_VERIFY_VERAPDF env var or on PATH) validation is delegated to it for an authoritative result. Otherwise a built-in rule subset is checked natively:\n  - PDF/A (15 rules): encryption, file ID, LZW, font embedding, JavaScript/prohibited actions, OutputIntent, transparency for A-1, XFA, and more\n  - PDF/UA (12 rules): MarkInfo/Marked, StructTreeRoot, pdfuaid declaration, /Lang, DisplayDocTitle, document title, Figure /Alt, image tagging, heading hierarchy, table TH/TR, Link /Contents\n\nArgs:\n  - file_path (string): Absolute path to a local PDF file\n  - response_format ('markdown' | 'json'): Output format (default: 'markdown')\n  - flavour (string, optional): e.g. \"pdfa-2b\", \"pdfa-4\", \"pdfa-4f\", \"pdfua-1\". Defaults to the XMP declaration (PDF/A wins when both are declared; fallback: pdfa-2b). PDF/A-4 has no A/B/U level, so there is no \"pdfa-4b\"\n  - engine ('auto' | 'verapdf' | 'native'): Engine selection (default: 'auto')\n  - password (string, optional): Password for an encrypted PDF. PDF/UA validation decrypts the document first so structure rules see real structures; permission-encrypted PDFs (empty user password) are decrypted automatically\n\nWhen veraPDF does not run, the report says so before the numbers: authoritativeValidation.performed is false and names the reason (\"not_installed\", \"configured_path_unusable\" when PDF_VERIFY_VERAPDF points at something that is not executable, or \"native_engine_requested\"). A configured-but-unusable path is never silently replaced by another executable \u2014 with engine: \"verapdf\" it errors as VERAPDF_NOT_AVAILABLE.\n\nReturns:\n  Every report begins with a \"scope\" object - how far the reading got, not a verdict: whether the cross-reference chain could be walked to the end (chainStop), whether this tool had to rebuild the cross-reference table itself (reconstructed - when true, the table is this tool's reconstruction and not the one the file carries), how many objects and sections were read, and whether an encrypted document could be opened. Read it before the verdict: \"no violations\" over a rebuilt table is not the same statement as \"no violations\" over the file's own table.\n\n  Size (v0.29.0): violations lists at most 200 entries; failedRules and compliant are computed over all of them and violationsTruncated = { returned, total } says when the list was cut. JSON is never cut by length.\n\n  Per-rule results with ISO clause references. compliant is true/false for veraPDF; for the native engine, false means definitive violations were found and null means \"no violations in the checked subset\" (NOT certification). PDF/UA native violations carry a severity: only 'error' rules can prove non-conformance, 'warning' rules need human review. For an encrypted PDF that cannot be decrypted, structure-dependent PDF/UA rules are reported in skippedRules (not checked) rather than as violations. The PDF/A font-embedding rule looks at fonts that are actually rendered (text rendering mode 3 is invisible and needs no embedded program, ISO 32000-2 9.3.6); when the content streams cannot be read far enough to tell, that rule is reported in skippedRules instead of guessing.\n\nNote: PDF/UA cannot be fully decided by machine \u2014 whether alt text is *present* is checkable, whether it is *meaningful* is not. Use pdf-reader-mcp's inspect_tags to examine the structure tree itself.\n\nExamples:\n  - Check whether a scanned archive PDF actually meets its declared PDF/A-2b\n  - Verify a generated document is tagged and accessible before publishing (pdfua-1)\n  - Find why a document fails PDF/A before submitting it to an archive system",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "engine": {
+    "default": "auto",
+    "description": "Validation engine: \"auto\" (veraPDF when installed, else native subset), \"verapdf\" (require veraPDF), \"native\" (built-in rule subset).",
+    "enum": [
+     "auto",
+     "native",
+     "verapdf"
+    ],
+    "type": "string"
+   },
+   "file_path": {
+    "description": "Absolute path to a local PDF file (e.g., \"/path/to/document.pdf\")",
+    "minLength": 1,
+    "type": "string"
+   },
+   "flavour": {
+    "description": "Flavour to validate against. PDF/A: \"pdfa-1b\", \"pdfa-1a\", \"pdfa-2b\", \"pdfa-2u\", \"pdfa-3b\", etc. PDF/A-4 takes no conformance level \u2014 use \"pdfa-4\", or \"pdfa-4e\" / \"pdfa-4f\" for the variants (\"pdfa-4b\" does not exist). PDF/UA: \"pdfua-1\", \"pdfua-2\". Omit to use the document's XMP declaration (PDF/A takes precedence when both are declared; falls back to pdfa-2b).",
+    "type": "string"
+   },
+   "password": {
+    "description": "Password for an encrypted PDF (PDF/UA validation only \u2014 the document is decrypted before checking structure-dependent rules). Omit for permission-encrypted PDFs (an empty user password is tried automatically).",
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: \"markdown\" for human-readable, \"json\" for structured data",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "file_path"
+  ],
+  "type": "object"
+ },
+ "name": "validate_conformance",
+ "title": "Validate PDF/A and PDF/UA Conformance"
+}

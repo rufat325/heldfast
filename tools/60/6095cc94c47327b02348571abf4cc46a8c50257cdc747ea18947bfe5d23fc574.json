@@ -1,0 +1,131 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Run a read-only SQL SELECT against water data tables staged on a DataCanvas by water_get_series or water_find_sites. Workflow: run water_get_series or water_find_sites (get canvas_id + table_name) \u2192 water_dataframe_describe (confirm the table and its columns) \u2192 water_dataframe_query (SQL analysis). Only SELECT statements are permitted. At most 10,000 rows are returned; a query matching more is capped and the response sets truncated=true \u2014 scope with WHERE/LIMIT, and use SELECT COUNT(*) or water_dataframe_describe to learn the true match count. Requires DataCanvas to be enabled on this server instance. Returns an error if DataCanvas is not available.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Canvas ID returned by water_get_series or water_find_sites. Identifies the canvas holding the data.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   },
+   "sql": {
+    "description": "Read-only SELECT statement. Reference the table by the table_name from water_get_series or water_find_sites; columns vary by source table, so run water_dataframe_describe first for the exact schema. Example: SELECT date_time, value FROM water_series_01646500_00060 ORDER BY date_time DESC LIMIT 10",
+    "type": "string"
+   }
+  },
+  "required": [
+   "canvas_id",
+   "sql"
+  ],
+  "type": "object"
+ },
+ "name": "water_dataframe_query",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "rows",
+     "row_count",
+     "truncated"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `canvas_disabled`: DataCanvas is not enabled on this server instance. `canvas_not_found`: The canvas_id does not exist or has expired. `table_not_found`: The SQL names a table that is not staged on this canvas \u2014 it may have expired, or was never created. `system_catalog_access`: The SQL reads a database system catalog (information_schema, pg_catalog, sqlite_master, duckdb_*) instead of a staged table. `invalid_sql`: The SQL is not a read-only SELECT, contains disallowed functions, is syntactically invalid, or failed on the staged data (a cast or conversion the engine could not apply). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "canvas_disabled",
+         "canvas_not_found",
+         "table_not_found",
+         "system_catalog_access",
+         "invalid_sql"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "row_count": {
+    "description": "Number of rows returned in the rows array (up to the 10,000-row cap), not the total matched by the query. When truncated is true the cap was reached, so row_count equals the returned count and undercounts the true total. To get the true match count run SELECT COUNT(*) with the same filter, or call water_dataframe_describe for the full row count of the staged table; page large results with LIMIT/OFFSET.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "rows": {
+    "description": "Result rows returned (up to 10,000). Column names match the SELECT clause.",
+    "items": {
+     "additionalProperties": {},
+     "description": "A result row whose keys are the selected column names and values are the corresponding cell values.",
+     "properties": {},
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "truncated": {
+    "description": "True when the query matched more rows than the 10,000-row cap and the result was capped \u2014 rows and row_count then cover only the first 10,000 matches, and the rest are not in this response. False means rows and row_count are the complete result for this query. When true, narrow the query with WHERE, page with LIMIT/OFFSET, or run SELECT COUNT(*) with the same filter for the true total.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Water Dataframe Query"
+}

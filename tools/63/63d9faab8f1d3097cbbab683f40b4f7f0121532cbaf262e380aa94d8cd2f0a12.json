@@ -1,0 +1,40 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Realizable-vs-theoretical edge check against live CLOB order-book depth. REQUIRES one of `market` (single-market mode) or `event` (basket/partition mode). SINGLE-MARKET: pass a market slug/URL + side (buy_yes|sell_yes|buy_no|sell_no, default buy_yes) + size_usd (default 1000 \u2014 max spend on buys, target proceeds on sells); walks the ladder and returns top_of_book, vwap_fill_price, slippage_pp, shares_filled, max_fillable_usd, and a verdict (clean|degraded|cannot_fill). BASKET: pass an event slug/URL + side (sell_yes = capture overround by selling every leg, buy_yes = capture underround; default auto from partition sum) + size_usd interpreted as settlement notional S (shares per leg; each share pays $1); returns theoretical_sum vs realizable_sum (top-of-book vs VWAP across all legs), capture_ratio, profit_usd at executed size, per-leg fill detail, thin_legs[], max_clean_notional_usd, and forced_directional_risk naming the legs most likely to strand you unhedged. USE THIS before acting on any polymarket_arbitrage SELL/BUY-EVERY-LEG signal or any polymarket_edges trade above ~$500 \u2014 theoretical overround on thin books is not capturable, and partial basket fills convert an arb into an unhedged directional position (the dominant loss mode in real arb-bot P&L). FEES ARE NOT MODELLED HERE: vwap_fill_price/profit_usd are GROSS of Polymarket's own taker fee (rate 0.04-0.07 by category \u2014 see polymarket_edges/fees.ts), on top of which this tool prices depth-crossing cost; a thin-margin fill that looks clean here can still be net-negative after the fee.",
+ "inputSchema": {
+  "examples": [
+   {
+    "market": "will-the-fed-increase-interest-rates-by-25-bps-after-the-december-2026-meeting-20260729232808636",
+    "side": "buy_yes",
+    "size_usd": 1000
+   }
+  ],
+  "properties": {
+   "event": {
+    "description": "Basket mode: event slug or full polymarket.com URL \u2014 checks every leg of the partition.",
+    "type": "string"
+   },
+   "market": {
+    "description": "Single-market mode: market slug or full polymarket.com URL.",
+    "type": "string"
+   },
+   "side": {
+    "description": "Single-market: buy_yes | sell_yes | buy_no | sell_no (default buy_yes). Basket: sell_yes | buy_yes (default auto \u2014 sell if partition sum > 1, buy if < 1).",
+    "type": "string"
+   },
+   "size_usd": {
+    "description": "Single-market: USD to spend (buys) or target proceeds (sells). Basket: settlement notional \u2014 shares per leg, each paying $1 at resolution. Default 1000, clamp 10\u20131,000,000.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "name": "polymarket_fill_risk",
+ "title": "Polymarket Fill Risk",
+ "version": "v1.0fac5cc9"
+}

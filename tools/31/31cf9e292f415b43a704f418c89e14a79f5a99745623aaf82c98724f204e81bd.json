@@ -1,0 +1,173 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Enumerate the valid term vocabulary for an indexed Smithsonian filter field (unit_code, culture, place, date, online_media_type, topic). Terms are a controlled vocabulary \u2014 often plural or qualified (e.g. \"Paintings\", not \"Painting\") \u2014 so guessed filter values tend to return nothing. Returns a page of the field's distinct term values; large vocabularies (topic has 133k terms, place 114k) page via start and rows. For unit_code, each code is returned with its museum name and contains matches the name as well as the code, so a museum name resolves to its code in one call.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "contains": {
+    "description": "Case-insensitive substring filter on the term vocabulary \u2014 resolve a filter value (e.g. \"greek\") to its exact controlled-vocabulary term(s). For unit_code the substring also matches each code's museum name, so \"National Air and Space\" resolves to \"NASM\".",
+    "type": "string"
+   },
+   "field": {
+    "description": "Indexed field to enumerate. Choices: unit_code (museum codes like \"NASM\"), culture (e.g. \"Aztecs\"), place (geographic terms), date (decade/era values like \"1920s\"), online_media_type (media formats like \"Images\", \"3D Models\"), topic (subject terms like \"Quilts\" \u2014 133k terms, so pair it with contains).",
+    "enum": [
+     "unit_code",
+     "culture",
+     "place",
+     "date",
+     "online_media_type",
+     "topic"
+    ],
+    "type": "string"
+   },
+   "rows": {
+    "default": 50,
+    "description": "Number of terms to return per page (default 50, max 100).",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "start": {
+    "default": 0,
+    "description": "Pagination offset (0-indexed). Use with rows to page through large vocabularies.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "field"
+  ],
+  "type": "object"
+ },
+ "name": "smithsonian_list_terms",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "field",
+     "terms",
+     "total"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The rows cap that was applied.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_terms`: The field returned no indexed terms. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_terms"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "field": {
+    "description": "The enumerated field, as provided in the request.",
+    "type": "string"
+   },
+   "labels": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Museum name for each unit_code on this page that has one \u2014 present only when field is \"unit_code\". A few rarely-indexed archive sub-unit codes have no mapped name and are absent from this map; their term is still returned in terms.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance naming the input that retrieves the terms this page omitted, or how to broaden a contains filter that matched nothing.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of terms returned in this page.",
+    "type": "number"
+   },
+   "terms": {
+    "description": "The field's distinct term values for this page, in the Smithsonian index's native order. No per-term object counts are available upstream.",
+    "items": {
+     "description": "A term value \u2014 pass directly as the filter value in smithsonian_search_objects or smithsonian_browse_category.",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "total": {
+    "description": "Total number of distinct terms for this field (the full vocabulary size; terms is one page of it).",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when matching terms remain past this page. False on a terminal or past-the-end page, where nothing is being withheld.",
+    "type": "boolean"
+   },
+   "truncationCeiling": {
+    "description": "Distinct terms available for this query (the full vocabulary, or the contains-match count) \u2014 upper bound for omitted items.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "List Valid Filter Terms"
+}

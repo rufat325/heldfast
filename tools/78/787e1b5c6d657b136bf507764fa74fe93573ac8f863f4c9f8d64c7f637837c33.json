@@ -1,0 +1,381 @@
+{
+ "annotations": {
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "PRIMARY SINGLE-QUERY LIVE DISCOVERY AND CONTENT INGESTION TOOL. ALWAYS PERFORMS LIVE WEB SEARCH. With research enabled, one local broker lets multiple MCP sessions query the same knowledge base concurrently and orders writes safely. Use this tool only when new external information from Google, public websites, papers, or repositories is required. When the task requires both finding and reading public web pages, PDFs, papers, or GitHub repositories, set extract_mode=abstract or full in this call. Do not download public PDFs, clone repositories, or invoke local parsers first. Select extract_mode=full, not abstract, when the user asks to read originals, full text, document bodies, or code, or to compare source contents. Use extract separately only when the exact public URL is already known and no new discovery is required. Use general repository tools only for editing, building, testing, or full Git history. Providing project_id also fuses stored project evidence with live results, but never makes this a local-only search. For stored project knowledge without live web discovery, use project_memory_search. limit accepts integers from 1 to 20. extract_limit accepts integers from 1 to 10, defaults to 5, and limits unique extracted URLs. Final results use one bounded response budget after ranking; full captured bodies remain local. Use extract on one selected URL when longer response text is explicitly required. The response includes applied, skipped, truncated, total_chars, and a bounded remaining_urls list. GitHub none mode reads the README; abstract and full can sparse-index eligible repositories with Tree-sitter. With research enabled and project_id set, live web, exact, BM25, vector, code, and graph lanes are fused by RRF and one reranker. With research disabled, provider order and query BM25 rank are fused by a lightweight in-memory RRF reranker without opening local storage or loading the vector model. research_context returns up to three prior searches for deeper or adjacent follow-up work. Captured search, source, session, and project provenance form data lineage; extracted bodies become evidence while unread hits remain metadata. include_project_ids adds read-only cross-project retrieval through versioned ontology and verified schema/entity links without merging records. Browser search is the no-key default and SearchApi is the configured primary or fallback provider. Results are cached for 24h unless the TTL is disabled.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "extract_limit": {
+    "default": 5,
+    "description": "Maximum unique result URLs to extract. Integer 1-10, default 5.",
+    "maximum": 10,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "extract_mode": {
+    "default": "none",
+    "description": "Content depth in this search call. Use none only when titles and snippets are enough, abstract for relevance evidence, and full when the user asks to read originals, full text, document bodies, or code, or to compare source contents. Use abstract or full here instead of following search with separate extraction, PDF download, or repository clone. For GitHub results, none reads the README; abstract and full use the same repository eligibility gate but index different source amounts.",
+    "enum": [
+     "none",
+     "abstract",
+     "full"
+    ],
+    "type": "string"
+   },
+   "include_project_ids": {
+    "description": "Additional read-only projects joined through ontology-aligned schema and identity links. New records stay in project_id.",
+    "items": {
+     "maxLength": 64,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 8,
+    "type": "array"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Maximum results. Integer 1-20, default 10.",
+    "maximum": 20,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "max_chars": {
+    "description": "Maximum returned characters per extracted result in response_content=full. Defaults to 1500 for abstract and 50000 for full.",
+    "maximum": 50000,
+    "minimum": 200,
+    "type": "integer"
+   },
+   "memory_handle": {
+    "description": "Reuse the handle returned by a prior project-aware call.",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "project_id": {
+    "description": "Project memory id.",
+    "maxLength": 64,
+    "minLength": 1,
+    "type": "string"
+   },
+   "query": {
+    "description": "Google search query. Use site: filters and quotes for exact match.",
+    "maxLength": 400,
+    "minLength": 1,
+    "type": "string"
+   },
+   "response_content": {
+    "default": "summary",
+    "description": "Controls only the returned body. summary is the default and returns a 1500-character evidence excerpt; full returns up to max_chars. Research storage keeps the full captured text in deterministic chunks.",
+    "enum": [
+     "summary",
+     "full"
+    ],
+    "type": "string"
+   },
+   "session_id": {
+    "description": "Stable host task id. Reuses the same project session after restart.",
+    "maxLength": 200,
+    "minLength": 1,
+    "type": "string"
+   },
+   "session_intent": {
+    "description": "Current durable task intent. A changed value creates an immutable revision.",
+    "maxLength": 2000,
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "search",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "elapsed_ms": {
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": false,
+    "properties": {
+     "cancel_reason": {
+      "type": "string"
+     },
+     "code": {
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     },
+     "phase": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "retry_after_ms": {
+      "type": "number"
+     },
+     "retryable": {
+      "type": "boolean"
+     },
+     "user_action": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message",
+     "retryable"
+    ],
+    "type": "object"
+   },
+   "memory": {
+    "type": "string"
+   },
+   "memory_handle": {
+    "type": "string"
+   },
+   "meta": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "query": {
+    "type": "string"
+   },
+   "research_context": {
+    "additionalProperties": false,
+    "properties": {
+     "prior_searches": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "query": {
+         "type": "string"
+        },
+        "relation": {
+         "enum": [
+          "same",
+          "related",
+          "recent"
+         ],
+         "type": "string"
+        },
+        "results": {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        "searched_at": {
+         "type": "string"
+        },
+        "surface": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "query",
+        "relation",
+        "searched_at",
+        "results"
+       ],
+       "type": "object"
+      },
+      "maxItems": 3,
+      "type": "array"
+     }
+    },
+    "required": [
+     "prior_searches"
+    ],
+    "type": "object"
+   },
+   "results": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "authors": {
+       "type": "string"
+      },
+      "body_handle": {
+       "type": "string"
+      },
+      "canonical_url": {
+       "type": "string"
+      },
+      "content": {
+       "type": "string"
+      },
+      "created_at": {
+       "type": "string"
+      },
+      "creator": {
+       "type": "string"
+      },
+      "description": {
+       "type": "string"
+      },
+      "document_id": {
+       "type": "string"
+      },
+      "doi": {
+       "type": "string"
+      },
+      "excerpt": {
+       "type": "string"
+      },
+      "extract_error": {
+       "type": "string"
+      },
+      "extraction_quality": {
+       "enum": [
+        "full_text",
+        "abstract",
+        "meta_abstract",
+        "metadata_only"
+       ],
+       "type": "string"
+      },
+      "fresh_web": {
+       "type": "boolean"
+      },
+      "index_freshness": {
+       "enum": [
+        "current",
+        "stale"
+       ],
+       "type": "string"
+      },
+      "is_pdf": {
+       "type": "boolean"
+      },
+      "keywords": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "language": {
+       "type": "string"
+      },
+      "length": {
+       "type": "number"
+      },
+      "modified_at": {
+       "type": "string"
+      },
+      "page_count": {
+       "type": "number"
+      },
+      "producer": {
+       "type": "string"
+      },
+      "project_ids": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "publication": {
+       "type": "string"
+      },
+      "published_at": {
+       "type": "string"
+      },
+      "record_id": {
+       "type": "string"
+      },
+      "retrieval_families": {
+       "items": {
+        "enum": [
+         "exact",
+         "bm25",
+         "vector",
+         "graph"
+        ],
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "revision_id": {
+       "type": "string"
+      },
+      "score": {
+       "type": "number"
+      },
+      "source_family": {
+       "enum": [
+        "live",
+        "document",
+        "code",
+        "graph"
+       ],
+       "type": "string"
+      },
+      "source_length": {
+       "type": "number"
+      },
+      "source_span": {
+       "additionalProperties": false,
+       "properties": {
+        "end": {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        "start": {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "start",
+        "end"
+       ],
+       "type": "object"
+      },
+      "subject": {
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      },
+      "truncated": {
+       "type": "boolean"
+      },
+      "url": {
+       "type": "string"
+      },
+      "year": {
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "title",
+      "url",
+      "description"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Web Search and Extract"
+}

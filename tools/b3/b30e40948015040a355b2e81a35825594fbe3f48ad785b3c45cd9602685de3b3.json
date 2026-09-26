@@ -1,0 +1,549 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch full records for one or more Met Museum object IDs. Accepts up to 20 IDs per call and returns partial success \u2014 a single 404 does not fail the whole batch; per-ID failures are reported separately. Object IDs come from met_search_collections. Non-public-domain objects return empty image URLs. The constituents array is null for anonymous or unattributed works; tags and measurements are null when the Met records none. Records are returned whole and never truncated, so a batch of unusually large records may return fewer than requested \u2014 any that did not fit are listed in deferred[] with their sizes, to be re-requested in a follow-up call.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "objectIDs": {
+    "description": "One or more Met object IDs to fetch. Maximum 20 per call. IDs come from met_search_collections. A repeated ID is fetched and returned once, at its first position. Partial failures are reported per ID rather than failing the whole batch.",
+    "items": {
+     "description": "A Met object ID from met_search_collections.",
+     "exclusiveMinimum": 0,
+     "maximum": 9007199254740991,
+     "type": "integer"
+    },
+    "maxItems": 20,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "objectIDs"
+  ],
+  "type": "object"
+ },
+ "name": "met_get_object",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "objects",
+     "failed"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "deferred": {
+    "description": "Records that were fetched but did not fit the call\u2019s cumulative budget on serialized structuredContent bytes, in request order. Re-call met_get_object with these IDs to retrieve them. Absent when every fetched record fit.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A record fetched successfully but withheld to keep the response bounded.",
+     "properties": {
+      "bytes": {
+       "description": "Serialized structuredContent size of the withheld record \u2014 the same scale the budget is measured on \u2014 so a follow-up batch can be sized before it is requested.",
+       "maximum": 9007199254740991,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "objectID": {
+       "description": "Object ID whose record was fetched but withheld from this response.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "objectID",
+      "bytes"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `all_not_found`: Every requested objectID returned a 404 \u2014 all IDs are stale or invalid. `all_failed`: Every requested objectID failed due to network errors or API downtime. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "all_not_found",
+         "all_failed"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "failed": {
+    "description": "Object IDs that failed to fetch with per-ID error context.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A per-ID fetch failure.",
+     "properties": {
+      "error": {
+       "description": "Error detail and suggested recovery action.",
+       "type": "string"
+      },
+      "objectID": {
+       "description": "Object ID that could not be fetched.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "objectID",
+      "error"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "How to retrieve the deferred records, with the budget applied. Present only when the batch byte budget deferred a record.",
+    "type": "string"
+   },
+   "objects": {
+    "description": "Successfully fetched objects.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A fully fetched Met Museum object record.",
+     "properties": {
+      "GalleryNumber": {
+       "description": "Gallery room number at the museum. Empty string for objects not currently on display.",
+       "type": "string"
+      },
+      "accessionNumber": {
+       "description": "The Met's accession number for the object.",
+       "type": "string"
+      },
+      "additionalImages": {
+       "description": "Additional image URLs (detail shots, alternate views). CC0 objects only.",
+       "items": {
+        "description": "An additional image URL (detail shot or alternate view).",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "artistBeginDate": {
+       "description": "Artist birth year as a string (e.g., \"1853\"). Empty for anonymous works.",
+       "type": "string"
+      },
+      "artistDisplayBio": {
+       "description": "Artist biographical summary including nationality, birth/death place and year (e.g., \"Dutch, Zundert 1853\u20131890 Auvers-sur-Oise\"). Empty for anonymous works.",
+       "type": "string"
+      },
+      "artistDisplayName": {
+       "description": "Primary artist name as displayed (e.g., \"Vincent van Gogh\"). Empty for anonymous or unknown works.",
+       "type": "string"
+      },
+      "artistEndDate": {
+       "description": "Artist death year as a string. Empty for living or anonymous.",
+       "type": "string"
+      },
+      "artistNationality": {
+       "description": "Artist's nationality (e.g., \"Dutch\", \"French\"). Empty for anonymous works.",
+       "type": "string"
+      },
+      "classification": {
+       "description": "Broad classification category (e.g., \"Paintings\", \"Ceramics\").",
+       "type": "string"
+      },
+      "constituents": {
+       "anyOf": [
+        {
+         "items": {
+          "additionalProperties": false,
+          "description": "A person associated with the object.",
+          "properties": {
+           "constituentID": {
+            "description": "Constituent identifier for cross-referencing.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+           },
+           "constituentULAN_URL": {
+            "description": "Getty ULAN (Union List of Artist Names) URL for the constituent. Empty when no ULAN record exists.",
+            "type": "string"
+           },
+           "constituentWikidata_URL": {
+            "description": "Wikidata entity URL for the constituent. Useful for enrichment via wikidata-mcp-server. Empty when no Wikidata record exists.",
+            "type": "string"
+           },
+           "gender": {
+            "description": "Gender of the constituent. Usually empty string \u2014 sparsely populated in the Met catalogue.",
+            "type": "string"
+           },
+           "name": {
+            "description": "Constituent display name.",
+            "type": "string"
+           },
+           "role": {
+            "description": "Role in relation to the object (e.g., \"Artist\", \"Maker\", \"Designer\").",
+            "type": "string"
+           }
+          },
+          "required": [
+           "constituentID",
+           "role",
+           "name",
+           "constituentULAN_URL",
+           "constituentWikidata_URL",
+           "gender"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "All persons associated with the object. Null for anonymous or unknown attribution."
+      },
+      "country": {
+       "description": "Country of origin. Often empty.",
+       "type": "string"
+      },
+      "creditLine": {
+       "description": "Provenance and gift/bequest attribution.",
+       "type": "string"
+      },
+      "culture": {
+       "description": "Cultural origin when not attributed to an individual (e.g., \"Japanese\", \"Roman\"). Often empty for Western art with named artists.",
+       "type": "string"
+      },
+      "department": {
+       "description": "Curatorial department (e.g., \"European Paintings\", \"Egyptian Art\").",
+       "type": "string"
+      },
+      "dimensions": {
+       "description": "Dimensions as a formatted string (e.g., \"16 x 12 1/2 in. (40.6 x 31.8 cm)\").",
+       "type": "string"
+      },
+      "dynasty": {
+       "description": "Dynasty for applicable cultures (e.g., \"Dynasty 19\"). Often empty.",
+       "type": "string"
+      },
+      "geography": {
+       "additionalProperties": false,
+       "description": "Findspot detail beyond the top-level country and region, which are not repeated here. Every field is an empty string when the Met records nothing; population concentrates in the archaeological departments.",
+       "properties": {
+        "city": {
+         "description": "City of origin or findspot (e.g., \"Damascus\", \"Constantinople (?)\", \"Springfield\"). The most widely populated field of this block outside the archaeological departments; empty when the Met records no city.",
+         "type": "string"
+        },
+        "county": {
+         "description": "County of origin. Empty on nearly every record.",
+         "type": "string"
+        },
+        "excavation": {
+         "description": "Excavation that recovered the object (e.g., \"MMA excavations, 1928-29\"). Excavated objects only.",
+         "type": "string"
+        },
+        "geographyType": {
+         "description": "How the object relates to the place (e.g., \"From\", \"Original\", \"Probably originally from\"). Empty when the Met records no findspot.",
+         "type": "string"
+        },
+        "locale": {
+         "description": "Named place within the site (e.g., \"Late Period cemetery, Tomb of Harkhebit\"). Excavated objects only.",
+         "type": "string"
+        },
+        "locus": {
+         "description": "Specific findspot within the locale (e.g., \"burial chamber\"). Excavated objects only.",
+         "type": "string"
+        },
+        "river": {
+         "description": "Associated river. Empty on nearly every record.",
+         "type": "string"
+        },
+        "state": {
+         "description": "State or province of origin (e.g., \"Massachusetts\"). Sparse, and concentrated in departments that catalogue a manufacturing place. Empty when the Met records none.",
+         "type": "string"
+        },
+        "subregion": {
+         "description": "Sub-region or site within the region (e.g., \"Saqqara\", \"Deir el-Bahri\"). Commonly populated for archaeological departments, empty elsewhere.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "geographyType",
+        "city",
+        "state",
+        "county",
+        "subregion",
+        "locale",
+        "locus",
+        "excavation",
+        "river"
+       ],
+       "type": "object"
+      },
+      "hasCC0Image": {
+       "description": "True when a CC0 open-access image URL is available (primaryImage is non-empty). Distinct from met_search_collections's hasImages filter, which matches objects that have any image including copyrighted works.",
+       "type": "boolean"
+      },
+      "isHighlight": {
+       "description": "True when the Met designates this a collection highlight.",
+       "type": "boolean"
+      },
+      "isPublicDomain": {
+       "description": "True when the object is released under CC0 open access. Only true objects return usable image URLs.",
+       "type": "boolean"
+      },
+      "isTimelineWork": {
+       "description": "True when the work appears in the Met's art timeline.",
+       "type": "boolean"
+      },
+      "measurements": {
+       "anyOf": [
+        {
+         "items": {
+          "additionalProperties": false,
+          "description": "One measured element of the object.",
+          "properties": {
+           "elementDescription": {
+            "description": "Qualifier distinguishing this element from a sibling with the same name (e.g., \"Print\" vs \"Negativ\"). Empty when the Met records none.",
+            "type": "string"
+           },
+           "elementMeasurements": {
+            "additionalProperties": {
+             "description": "Measured value \u2014 centimeters for spatial axes, kilograms for weight.",
+             "type": "number"
+            },
+            "description": "Measured axes for this element. Which keys are present varies element to element, so read the keys rather than assuming a fixed set. Empty object when the Met records no values.",
+            "propertyNames": {
+             "description": "Measurement axis (e.g., \"Height\", \"Width\", \"Depth\", \"Length\").",
+             "type": "string"
+            },
+            "type": "object"
+           },
+           "elementName": {
+            "description": "Which part of the object was measured (e.g., \"Overall\", \"Other\", \"Length\").",
+            "type": "string"
+           }
+          },
+          "required": [
+           "elementName",
+           "elementDescription",
+           "elementMeasurements"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Structured element measurements \u2014 the numeric counterpart to the formatted dimensions string. Null when the Met records none."
+      },
+      "medium": {
+       "description": "Materials and techniques (e.g., \"Oil on canvas\", \"Bronze\", \"Limestone\").",
+       "type": "string"
+      },
+      "objectBeginDate": {
+       "anyOf": [
+        {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Earliest date as an integer year (negative = BCE). Null when the Met has no machine-readable date for the work \u2014 read objectDate for what is known instead, and do not treat null as year zero or substitute a default."
+      },
+      "objectDate": {
+       "description": "Human-readable date string (e.g., \"1887\", \"ca. 1295\u20131294 B.C.\", \"1700\u20131800\").",
+       "type": "string"
+      },
+      "objectEndDate": {
+       "anyOf": [
+        {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Latest date as an integer year (negative = BCE). Null under the same condition as objectBeginDate \u2014 the two are null together."
+      },
+      "objectID": {
+       "description": "Unique Met object identifier.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "objectName": {
+       "description": "Object type or classification name (e.g., \"Painting\", \"Statuette\").",
+       "type": "string"
+      },
+      "objectURL": {
+       "description": "Canonical metmuseum.org page URL for human follow-up.",
+       "type": "string"
+      },
+      "objectWikidata_URL": {
+       "description": "Wikidata entity URL for the object itself. Enables enrichment via wikidata-mcp-server.",
+       "type": "string"
+      },
+      "period": {
+       "description": "Historical period (e.g., \"New Kingdom, Ramesside\", \"Meiji period\"). Often empty.",
+       "type": "string"
+      },
+      "primaryImage": {
+       "description": "Full-resolution image URL (CC0 objects only; empty string for non-public-domain works).",
+       "type": "string"
+      },
+      "primaryImageSmall": {
+       "description": "Web-display image URL (~800px; CC0 objects only; empty string for non-public-domain works).",
+       "type": "string"
+      },
+      "region": {
+       "description": "Geographic region of origin. Often empty.",
+       "type": "string"
+      },
+      "tags": {
+       "anyOf": [
+        {
+         "items": {
+          "additionalProperties": false,
+          "description": "A controlled vocabulary tag applied to the object.",
+          "properties": {
+           "AAT_URL": {
+            "description": "Getty Art & Architecture Thesaurus URL for the term.",
+            "type": "string"
+           },
+           "Wikidata_URL": {
+            "description": "Wikidata entity URL for the term. Useful for enrichment.",
+            "type": "string"
+           },
+           "term": {
+            "description": "Tag label (e.g., \"Men\", \"Self-portraits\", \"Flowers\").",
+            "type": "string"
+           }
+          },
+          "required": [
+           "term",
+           "AAT_URL",
+           "Wikidata_URL"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Controlled vocabulary tags applied to the object. Null when no tags assigned."
+      },
+      "title": {
+       "description": "Object title as catalogued.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "objectID",
+      "title",
+      "isPublicDomain",
+      "hasCC0Image",
+      "primaryImage",
+      "primaryImageSmall",
+      "additionalImages",
+      "objectURL",
+      "department",
+      "objectName",
+      "classification",
+      "isHighlight",
+      "isTimelineWork",
+      "artistDisplayName",
+      "artistDisplayBio",
+      "artistNationality",
+      "artistBeginDate",
+      "artistEndDate",
+      "constituents",
+      "objectDate",
+      "objectBeginDate",
+      "objectEndDate",
+      "medium",
+      "dimensions",
+      "culture",
+      "period",
+      "dynasty",
+      "accessionNumber",
+      "creditLine",
+      "country",
+      "region",
+      "geography",
+      "measurements",
+      "tags",
+      "objectWikidata_URL",
+      "GalleryNumber"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Met Objects"
+}

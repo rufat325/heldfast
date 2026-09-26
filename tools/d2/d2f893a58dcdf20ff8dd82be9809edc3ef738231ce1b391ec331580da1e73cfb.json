@@ -1,0 +1,429 @@
+{
+ "description": "Edit a scene by applying a batch of operations ATOMICALLY (all-or-nothing; one undo step in the editor). Call this for any add / move / edit / delete / duplicate / group / reparent / re-material. Reference existing nodes ONLY by the id shown in get_scene \u2014 never guess ids. To create a node and then modify or parent it in the same batch, put a `tempId` on the add op and use that same string as the id/parentId of later ops. SPACING: every foreground element on a panel (text, a link chip, a picture) is inset from it by the same margin, and the gaps between those elements are that same margin again - this door sets the widths and centres for you (reported as marginFixes) and warns when the vertical gaps disagree. Coordinates: Y up, units \u2248 meters, ground at y\u22480 \u2014 place objects so they rest sensibly. Geometry size lives in `data`, under the keys get_scene reports as `size`: box {width,height,depth}, plane {width,height}, sphere {radius}, cylinder {radius,height}, torus {radius,tube}; the default box is 1.5\u00d71.5\u00d71.5. An update writes them in patch.data (never patch.size). MATERIALS: to color an object pass `color` (#rrggbb) on add/assignMaterial; to apply a GENERATED material pass `materialMaps` (the map urls from get_generation) on add/assignMaterial; for a real surface with no image at all pass `materialPreset` (brushed-metal, frosted-ice, rough-stone, ... see the field) \u2014 all three mint-or-reuse a material and assign it, no pre-existing library entry needed. Prefer a preset or a set from list_assets over a flat color for walls, floors, trim and metal, so the first pass reads as a place, not a grey box. IMPORTED MODELS: a glb from list_assets (kind \"glb\") or get_generation goes on a geometry node as data: {primitive:\"imported\", assetUrl:\"<url>\"}, NOT as the top-level `primitive` (that enum is the five built-ins). Once placed, get_scene reports the model's bounds and size. The built-in low-poly picture frames face +X: to hang one on a wall that faces +Z rotate it [0, 1.5708, 0]. INSTANCING (971): identical PRIMITIVES are drawn as one batch too, keyed on the primitive, its data dimensions and segments, its material (color, materialMaps or materialPreset) and its room: 281 boxes that share one size and one material cost one draw call, and the weight meter credits it. Vary placement with position, rotation and the node SCALE (not data.width/height/depth) to stay in the batch; a different data size or material starts another. An animated, tapped or surface-emitter host node draws on its own. WEB BLOCKS (responsive site building-blocks): add webText (data.role h1|h2|h3|body|caption + data.text + data.fontWeight 400|500|600|700 for a real weighted face (a role already picks one); glyph outline via data.outline true|false + data.outlineColor + data.outlineWidth), webImage (data.src + data.alt), webLink (data.label + data.href or data.linkedPageId), webVideo (data.src + data.poster); any web block also accepts data.anchor = world|billboard|hud. PAGES & NEIGHBORHOODS: add a `webpage` node per page (set data.pageTitle, data.slug); place pages tens of meters apart and parent each area's content under its page to build a multi-area site. Link areas with a webLink (data.linkedPageId = target page, or data.linkedCameraId = a saved viewpoint); a tempId minted in the SAME batch works as linkedPageId, so a \"sign in the park linking to the mall\" can be built in one call. Set data.arrivalCameraId on a page (a camera node id, or a tempId from the same batch) to choose the viewpoint visitors ARRIVE at for it \u2014 otherwise the runtime auto-frames the page from a generic distance. It belongs on the PAGE, not on the signs: a sign that jumps to a camera skips the page change, so the URL and title would still name the previous room. MULTI-LEG ARRIVALS (969): a flight is a straight line between two poses, which cuts through a wall to reach a room. Set data.viaCameraIds on a CAMERA node (an ordered array of camera node ids, or same-batch tempIds, up to 8) and every flight to that camera (a page arrival through arrivalCameraId, a sign or tap with linkedCameraId, a #view deep link) passes through those viewpoints first on one smooth curve: place a via camera in the doorway, aimed into the room, and the visitor is threaded through the door. The flight takes longer in proportion to the path, the mid-flight bow is off on a legged flight, a via camera's own legs are not followed, and a via id that names no camera is skipped (get_scene warns). Wire a doorway in one batch: add the door camera with tempId \"door\", then the arrival camera with data.viaCameraIds [\"door\"]. PACING (1028): data.travelScale 0.25-4 on a camera node multiplies the viewport.cameraTravelScale of the scene for every flight that ENDS at that viewpoint (a page arrival, a sign, a #view link): 2 is a slow reveal into a hero room, 0.5 a quick hop. TAP ACTIONS: object nodes (geometry, text3d, group, cable) take data.tap = {\"action\":\"inspect\"} (fullscreen orbit lightbox on tap \u2014 products/exhibits/hero models), {\"action\":\"moveTo\"} (camera flies to frame it \u2014 tap-to-travel on landmarks), or {\"action\":\"link\", href|linkedPageId|linkedCameraId} (navigate like a webLink). inspect/moveTo take an optional \"distance\" (meters) overriding the auto camera distance. Runs for visitors in the published scene. ANIMATION: any node (geometry, text3d, group, cable, the web blocks and lights, and a camera, which makes it a RIDE, below) takes data.animation to move on a loop in the published scene: {\"duration\":4,\"loop\":\"loop\",\"easing\":\"easeInOut\",\"tracks\":{\"position\":[{\"t\":0,\"v\":[0,0,0]},{\"t\":0.5,\"v\":[0,0.6,0]},{\"t\":1,\"v\":[0,0,0]}]}} bobs the node half a meter. t is 0-1 across duration seconds; values are OFFSETS from the authored transform (position meters, rotation euler radians, scale a multiplier, 1 = authored size). tracks = position|rotation|scale; loop = loop|pingpong|once; optional delay seconds; max 16 keys per track. Animated nodes cost scene weight and cannot be GPU-instanced: animate a few focal objects, not everything. MOTION PATH (973): data.animation.path puts the node ON a curve instead of (or as well as) the tracks: {\"duration\":12,\"loop\":\"loop\",\"path\":{\"curveId\":\"<a nurbs node id, or its same-batch tempId>\",\"facing\":\"tangent\",\"forward\":\"z\",\"up\":[0,1,0]}}. facing = tangent (nose along the curve) | target (toward a world point, pass \"target\":[x,y,z]) | fixed (keep the authored rotation); forward = z|-z|x|-x is which local axis of the model leads (a glb whose nose points -Z wants \"-z\"); up is the world up the roll is kept against; offset 0..1 is where along the curve the ride starts (space several riders around one loop with different offsets); reverse:true rides it backwards; facingEase (seconds, default 1, 0 snaps) is how long the rider takes to TURN from the way it was placed into the facing of the path when the ride begins (and again if the heading jumps, such as the loop seam of an open curve), eased in and out. `easing` shapes the ride itself: linear is the default on a loop (constant speed, no braking at the seam) and easeInOut on once/pingpong (pull away, brake at the end). While bound, the authored position and rotation are NOT where the node is (it sits on the curve; scale still applies, tracks stack on top as offsets); a curveId that names no curve node leaves it at its authored place. The curve is a nurbs node: {\"op\":\"add\",\"nodeType\":\"nurbs\",\"tempId\":\"track\",\"data\":{\"controlPoints\":[[0,0,0],[8,0,-4],[16,0,0],[8,0,4]],\"closed\":true}} then {\"op\":\"add\",\"nodeType\":\"geometry\",\"primitive\":\"box\",\"data\":{\"animation\":{\"duration\":10,\"path\":{\"curveId\":\"track\"}}}}. get_scene reads a rider back as motionPath:<curveId>. A curve something rides is a HELPER on the published site (1032): registered for the ride, not drawn, so a swing arc does not show as a green spline across the door; set data.renderCurve:true on the curve to draw it anyway. The editor always shows it. CAMERA RIDE (1026): a CAMERA node with data.animation.path is a ride: every flight that lands on it (a page arrival through arrivalCameraId, a sign or tap with linkedCameraId, a #view link) ends at the curve's start pose and the visitor's camera then follows the curve, looking along it (facing tangent), at a world point (facing target + target) or the way it arrived (facing fixed); animation.duration, loop (once = ride to the end and hand control back there; loop and pingpong ride until the visitor takes over; on an OPEN curve loop cuts back to the start each lap, so use once or pingpong there or set closed:true on the curve), easing, path.offset and path.reverse mean what they mean for any rider (a pingpong ride looks where it is going on the way back too). data.rideBreak is the author's choice of what ends the ride early: \"any\" (default: any pointer down, key, wheel or touch), \"move\" (only a drag, a wheel or a movement key, so a tap on a sign still navigates and a stray click does not stop the ride) or \"none\" (nothing; a loop rides until the visitor navigates elsewhere). A new flight always ends a ride; a reduced-motion visitor and a screenshot get the start pose and no ride; the curve is a helper (not drawn) like any ridden curve. {\"op\":\"add\",\"nodeType\":\"nurbs\",\"tempId\":\"rail\",\"data\":{\"controlPoints\":[[0,1.6,8],[0,1.6,2],[3,1.6,-2]]}},{\"op\":\"add\",\"nodeType\":\"camera\",\"tempId\":\"arrive\",\"data\":{\"animation\":{\"duration\":8,\"loop\":\"once\",\"path\":{\"curveId\":\"rail\"}},\"rideBreak\":\"move\"}} then arrivalCameraId \"arrive\" on the page. FAST PATH \u2014 make_page: for a page that is a heading + paragraph + some links, ONE `make_page` op builds the whole thing: pass name, data.pageTitle+data.slug, hero (h1 text), body (paragraph), and links [{label, to: a page id/tempId | href}], plus a tempId (which becomes the PAGE id so other signs can target it). Create link-target pages earlier in the batch so their tempIds resolve. It replaces ~6\u201312 primitive ops. SET-DRESSING: use the `scatter` op to make `count` jittered copies of a node across an {area:{x,z}} (random rotation + slight scale + optional per-copy `tint` for imported models) \u2014 efficient for many props, debris, foliage, a trashy parking lot. The result names what it CREATED (`created`: id, type, name) so you can edit those nodes in your next call without re-reading the scene. LARGE SCENES: build INCREMENTALLY across multiple apply_ops calls (~40\u201350 objects per batch) instead of one huge batch \u2014 each call is its own atomic Undo and stays well within limits; call get_scene between batches to stay aligned. Do not try to emit hundreds of operations in a single call. The result may carry `warnings`: advisory scene lint (floating content, orphan web blocks, unreadable text, crowded pages, a lamp whose range reaches the ceiling above it, a plane facing a shadow lamp with content behind it, ambient IBL in a sun-less studio scene, a page card inside a room, a camera ride looping an open curve, scene WEIGHT over the perf red line) and design fails (text that does not read against what is behind it, with the nearest shade that does; a room with no composed arrival shot; a primary action outside its arrival frame; the action's accent hue worn everywhere on its page; dead-end pages; two h1s, or body text with none). These are the fails only; the full critique, ranked for the brief with ready fixes, is design_review. A per-node warning you have read and disagree with goes quiet with data.lintMute:true on that node (every rule about one node honours it; scene-wide ones do not). When more than six fire, the last entry counts the rest. The ops APPLIED; act on warnings in your next batch unless they contradict what the user asked for. A weight warning names the heaviest categories: trim them (lower-poly models, fewer shadow lights/particles) or publish will warn and far heavier scenes are blocked.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "operations": {
+    "description": "Ordered edit operations, applied atomically.",
+    "items": {
+     "additionalProperties": {},
+     "properties": {
+      "area": {
+       "additionalProperties": {},
+       "description": "For scatter: half-extents (meters) of the XZ area to spread copies across, centered on the source. Default 5 each. Large = a lot strewn over a parking lot; small = a tight cluster.",
+       "properties": {
+        "x": {
+         "type": "number"
+        },
+        "z": {
+         "type": "number"
+        }
+       },
+       "type": "object"
+      },
+      "audio": {
+       "additionalProperties": {},
+       "description": "For settings: the scene audio bus. {masterLevel 0-1, ambientLevel 0-1, ambientMuted}.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "body": {
+       "description": "For make_page: a paragraph of body text placed under the hero.",
+       "type": "string"
+      },
+      "color": {
+       "description": "Hex color like \"#ff3344\". On add or assignMaterial, mints-or-reuses a solid-color material and assigns it \u2014 no pre-existing material needed. A webText or webLink has no material: on add, color is the colour it shows (the text, or a link chip's fill; the label on a text-variant link).",
+       "type": "string"
+      },
+      "count": {
+       "description": "For scatter (1\u2013200) or duplicate (1\u201364): how many copies to make. A duplicate count lays the copies out in a straight row by `step`; scatter jitters them across `area`.",
+       "type": "number"
+      },
+      "data": {
+       "additionalProperties": {},
+       "description": "Type-specific fields to merge: geometry dimensions, under the SAME keys get_scene reports as `size` (so a size you read is a size you can write back): box {width,height,depth} (default 1.5 each), plane {width,height}, sphere {radius}, cylinder {radius,height}, torus {radius,tube}; there is no `size`, `w`, `h` or `d` key and one is REFUSED by name rather than stored. A glb model is {primitive:\"imported\", assetUrl} (see IMPORTED MODELS). CUT a primitive (take part of it), ALL ANGLES IN RADIANS: sphere {thetaStart (down from the pole, 0..PI), thetaLength (sweep, capped at PI - thetaStart), phiStart, phiLength (around, 0..2PI)}, a hemisphere/dome is {thetaStart:0, thetaLength:1.5708}; a WALL or CEILING that must block a lamp is a THIN BOX ({width, height, depth:0.05}), not a plane: a plane shows one face and casts a shadow only from BEHIND, so a shadow-casting lamp in front of it shines straight through; cylinder {cylinderThetaStart, cylinderThetaLength (PI = half-pipe), cylinderOpenEnded:true (a tube, no caps)}; torus {torusArc (PI = horseshoe)}. A cut renders double-sided and costs the SAME triangles as the whole (only openEnded removes faces). text {text,color,fontSize, fontWeight:400|500|600|700, outline:true|false, outlineColor, outlineWidth}. webpage (a page/neighborhood surface) {pageTitle, slug, isHomePage, accentColor, clusterLabel, showPanel}. showPanel:false removes the page's white card (background plane, accent strip, LOD stand-in) while its text, links and children still render: use it when a page is a ROOM or an anchor rather than a billboard, instead of burying the page underground. The card is floored at 3.6 x 2.6 m otherwise. backgroundLayer (env-sphere backdrop centred on camera) {kind:gradient|color|image, color, color2, src, tint, height (world-Y offset; negative=horizon lower), coverage (band thickness), headingDeg, opacity}. light {lightType:point|spot|area, color, intensity, distance, decay, angle, penumbra, width, height, castShadow, shadowMapSize:512|1024|2048, timeMode, goboPattern, goboSrc, goboAnim, goboSpeed, goboSpin, volumetric, volumetricDensity} (see the light notes on nodeType). Web blocks: webText {text, role:h1|h2|h3|body|caption, fontWeight:400|500|600|700, outline:true|false, outlineColor, outlineWidth}; webImage {src, alt}; webLink {label, fontWeight, href|linkedPageId (jump to a page) | linkedCameraId (jump to a viewpoint) (href \"#share\" opens the share sheet of the visitor for the page they are on, the \"send this to someone\" button; a mailto may leave the recipient blank, mailto:?subject=...&body=..., so the visitor picks one), bgColor (the chip, the BUTTON colour; the accent on a primary action goes here), color (the LABEL text on the chip, not the button), textureUrl (a same-origin /assets image mapped onto the chip - use list_assets to find one, and bgColor tints it), castShadow (the chip joins the shadow pass so it reads as an object ON a surface rather than an overlay; needs a light with castShadow), roughness}; webVideo {src, poster}; any web block also accepts {anchor:world|billboard|hud}.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "design": {
+       "additionalProperties": {},
+       "description": "For settings: the DESIGN BRIEF, what the scene is FOR, which every design rule and design_review keys on. {intent: convert (get the visitor to do one thing) | inform | showcase | entertain | navigate, mood: calm|energetic|luxury|playful|serious|dramatic|natural, audience: one line (120 characters) on who it is for, primaryActionId: the node id or same-batch tempId of the one thing the page exists for, a sign or a tap target}. null (or \"\") clears a field; absent means undeclared, and the review says what it inferred instead. A webpage can carry its own data.intent and data.primaryActionId, which win for that page (add the action first, then point at it).",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "edges": {
+       "description": "For make_diagram: the connectors, each { from, to } naming node ids from `nodes`, plus an optional label drawn at the midpoint. Max 128. Cycles are fine.",
+       "items": {
+        "properties": {
+         "from": {
+          "type": "string"
+         },
+         "label": {
+          "type": "string"
+         },
+         "to": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "from",
+         "to"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "emissive": {
+       "description": "Beside `color`: a hex that GLOWS, added as light on top of the lit colour and visible in the dark (a lampshade, a neon tube, a screen, an ember), no texture needed. #000000 glows nothing. A lit and an unlit copy of one colour are two materials. A map set glows through materialMaps.emissive instead.",
+       "type": "string"
+      },
+      "emissiveIntensity": {
+       "description": "0 to 16, default 1 = the emissive colour as given; 2 to 4 reads as a lit lamp, higher blooms. Needs `emissive` beside it.",
+       "type": "number"
+      },
+      "environment": {
+       "additionalProperties": {},
+       "description": "For settings: FOG and the background. {backgroundColor, fogColor, fogNear, fogFar, fogType: linear|exponential, fogDensity}. Fog is what makes distance read, so raising drawDistance without pushing fogFar out with it shows nothing new.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "hero": {
+       "description": "For make_page: the hero heading text \u2014 becomes an h1 webText on the page.",
+       "type": "string"
+      },
+      "id": {
+       "description": "Target node id from get_scene, or a tempId minted earlier in this batch. Required for duplicate/reparent; update, assignMaterial and delete take either `id` or `where`.",
+       "type": "string"
+      },
+      "ids": {
+       "description": "For group: the node ids to gather under a new group.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "layout": {
+       "description": "For make_diagram: `layered` (default) stacks flowchart rows downward from the nodes nothing points at \u2014 use for processes, pipelines, org charts. `radial` puts the first root in the middle with rings of children around it \u2014 use for mind maps.",
+       "enum": [
+        "layered",
+        "radial"
+       ],
+       "type": "string"
+      },
+      "lighting": {
+       "additionalProperties": {},
+       "description": "For settings: the SUN and the sky. {mode: time|studio, forceDaylight}; {timeOfDay: {source: live|fixed, preset: sunrise|noon|sunset|twilight|midnight|null, minutes 0-1439}}: source must be \"fixed\" or the preset is stored and ignored and the sky keeps following the clock on each viewer device. A preset pins the SOLAR PHASE and is re-derived for the current date on every load (sunset stays sunset all year; the sun's bearing still follows the season), so pass a preset alone for that; pass minutes to pin a CLOCK time instead (writing minutes clears any stored preset, or pass preset null explicitly; 18:28 is on the horizon in August and night in December); {sun: {azimuth, elevation, intensity, color, castShadow}} for studio mode; {moon: {intensity 0-4, color}} is the moonlight in time mode (1 = its natural phase-scaled strength as the key light after sunset, 0 = no moonlight while the disc still draws; the sky's own faint night fill stays); {env: {intensity 0-4}} is the ambient fill (0.55 default): the IBL in studio mode, and in time mode the scale of the sky's own fill (hemisphere plus IBL, about 0.2 by night to 0.9 by day at 0.55; never the sun or moon key). The control to reach for after pinning a low sun, since almost nothing is lit directly and a dark palette renders black (~1.25 lifts a charcoal set back); 0 leaves only the sun, the moon and the lamps, so a lamp-only night scene is a midnight pin with env 0 and moon 0.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "links": {
+       "description": "For make_page: wayfinding \"sign\" buttons. Each { label, and EITHER to (a page id/tempId to fly to) OR href (external URL) }.",
+       "items": {
+        "properties": {
+         "href": {
+          "type": "string"
+         },
+         "label": {
+          "type": "string"
+         },
+         "to": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "lookAt": {
+       "description": "A WORLD point [x,y,z] to aim at, instead of a rotation (on add; inside patch on update). A camera looks at it with a level horizon (what the published viewer shows), a spot or area light beams at it, and a page, a web block or 3D text turns about the vertical to face it. Compose every saved viewpoint (entry, arrival, via, a sign's target) this way; never hand-compute a camera euler. With `where` on an update, every match aims at the one point: all the spots at the statue is one op.",
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "lookAtNodeId": {
+       "description": "Like lookAt, aimed at a node (its id, or a same-batch tempId): at its visible centre, so a page is aimed at its card, a pivoted door at its mesh and a room group at the middle of what is in it.",
+       "type": "string"
+      },
+      "materialAssetId": {
+       "description": "A material id from the scene summary (for add geometry or assignMaterial).",
+       "type": "string"
+      },
+      "materialMaps": {
+       "additionalProperties": {},
+       "description": "Bind a GENERATED PBR material. Pass the map URLs from get_generation (its maps.<field>.url). On add or assignMaterial, mints-or-reuses a textured material from these maps and assigns it - this is how you place a generate_material result onto a node. At least one map url required. `repeat` tiles the whole set (a number, or [x, y]) - a map wraps EXACTLY ONCE without it, which is right for a prop and useless for ground, since one wrap over a 400m plane is a single smeared ripple. `uvAnimation` moves it: { mode: \"scroll\", speedX, speedY } in UV per second is the flowing-water primitive - point it at a set with a normal map and the surface ripples - or { mode: \"flipbook\", columns, rows, fps } to step a spritesheet. Both apply to every channel at once, so the albedo and the normal cannot end up tiled differently. `offset` [x, y] shifts the whole set in UV units (1 = one full tile) so two pieces of one wall can be phase-aligned across their seam: a piece that starts 1.2 m into a 0.5 m tile pattern wants offset [2.4, 0] (distance divided by tile size). A different offset mints a different material; every piece needs its own repeat (piece size / tile size) since a box face always maps 0..1. `emissive` is a sixth map url: the pixels that GLOW (lit windows on a facade, a screen, a neon tube, a lava crack), added as light on top of the lit surface and visible in the dark; black pixels glow nothing. `emissiveIntensity` (0 to 16, default 1 = the map as painted) scales that glow; needs `emissive` beside it. A different emissive map or intensity mints a different material. `ao` is a separate ambient-occlusion map url (list_assets mapRole \"ao\"), the crevice shading; a packed file already carries it in R, so ao beside ormh or orm is refused. PACKED SETS: `ormh` is one RGBA file carrying AO (R), roughness (G), metalness (B) and height (A), which is how every set in the shared library ships (list_assets mapRole \"ormh\"); `orm` is the glTF three-channel form (R=AO, G=roughness, B=metalness, no height). Pass the file on `ormh` (or `orm`) and each channel is split out and wired for you; it REPLACES the separate roughness/metalness (and, for ormh, height) urls, so naming both is refused, and ormh and orm together is refused. A library set is baseColor + normal + ormh: {\"baseColor\":\"<albedo url>\",\"normal\":\"<normal url>\",\"ormh\":\"<ormh url>\",\"repeat\":4}. Tiling, offset and animation apply to the split channels too. `worldScale` (meters) is the size of ONE tile of the set and REPLACES repeat: the engine turns it into the repeat for the node the material lands on from that primitive's dimensions and its WORLD scale (its own times its ancestors'), so brick every 0.4 m reads the same on a 2 m wall and a 12 m one ({\"baseColor\":..., \"normal\":..., \"ormh\":..., \"worldScale\":0.4}). With a `where` selector each match gets the repeat for its own size (same-sized pieces still share one material). A box has three face sizes and one repeat, so its LARGEST face is sized right and a long thin box stretches on its small faces; a sphere, cylinder and torus size by their unwrapped surface. Refused on an imported model (its UVs are whatever the file baked) and beside repeat. `offsetFromWorld: true` does the seam arithmetic for you: the offset is derived from where the node stands in the world (its face's UV origin along the face's own axes, over the tile size, modulo one tile), so two pieces of one wall bound with the same set and worldScale carry the pattern straight across their join. Box and plane only; needs worldScale or repeat beside it; refused beside an explicit offset. With `where` each match gets its own phase, and pieces a whole tile apart still share one material. Each distinct phase is its own material (one texture upload is shared by every tiling of a file), so use it on the pieces of a seam, not on every brick of a city. BOTH worldScale AND offsetFromWorld ARE COMPUTED ONCE, WHEN THE MATERIAL IS BOUND: a node moved, resized or duplicated afterwards keeps the repeat and phase it was bound with (get_scene shows the material's repeat and offset), so re-run assignMaterial on the pieces you moved. One material source per op: materialAssetId, materialMaps, materialPreset or color, not two.",
+       "properties": {
+        "ao": {
+         "type": "string"
+        },
+        "baseColor": {
+         "type": "string"
+        },
+        "emissive": {
+         "type": "string"
+        },
+        "emissiveIntensity": {
+         "type": "number"
+        },
+        "height": {
+         "type": "string"
+        },
+        "metalness": {
+         "type": "string"
+        },
+        "normal": {
+         "type": "string"
+        },
+        "offset": {
+         "items": {
+          "type": "number"
+         },
+         "type": "array"
+        },
+        "offsetFromWorld": {
+         "type": "boolean"
+        },
+        "orm": {
+         "type": "string"
+        },
+        "ormh": {
+         "type": "string"
+        },
+        "repeat": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "items": {
+            "type": "number"
+           },
+           "type": "array"
+          }
+         ]
+        },
+        "roughness": {
+         "type": "string"
+        },
+        "uvAnimation": {
+         "additionalProperties": {},
+         "propertyNames": {
+          "type": "string"
+         },
+         "type": "object"
+        },
+        "worldScale": {
+         "type": "number"
+        }
+       },
+       "type": "object"
+      },
+      "materialName": {
+       "description": "Display name for the material minted from materialMaps or materialPreset (e.g. the generation label like \"Lush Grass\").",
+       "type": "string"
+      },
+      "materialPreset": {
+       "description": "On add or assignMaterial: mint-or-reuse one of the fourteen curated procedural presets, the same ones the editor's Material Assets panel offers, so a first pass is textured rather than flat (pass `color` beside it and the preset takes that colour: its tint ramp keeps the preset's own light-to-dark contrast about your hue, so brushed-metal + #8a2be2 is purple metal, neon-glass + #ff2020 glows red; without a colour a preset is exactly its stock look): matte-paper, neon-glass, brushed-metal, warm-ceramic, soft-plastic, holographic-film, dark-carbon, rough-stone, frosted-ice, worn-leather, polished-marble, lava-rock, ocean-glass, gold-leaf. Optional `color` becomes the preset's base color where the preset takes one. No image files, no weight beyond the node.",
+       "type": "string"
+      },
+      "metalness": {
+       "description": "Optional 0\u20131 metalness for the minted color material (0 = non-metal, 1 = metal). Default 0.",
+       "type": "number"
+      },
+      "name": {
+       "description": "Display name for a created node, or a rename. On duplicate: the copy's name (default \"<source> copy\"; with a count, \"<name> 1\", \"<name> 2\", ...).",
+       "type": "string"
+      },
+      "nodeType": {
+       "description": "For add: the kind of node to create. `cable` is a catenary wire sagging between data.pointA and data.pointB (node-local [x,y,z]; data.sag = midspan droop in meters, data.thickness, data.color) \u2014 power lines, festoon lights, rigging. `webpage` is a page / \"neighborhood\" surface (set data.pageTitle, data.slug; place pages a distance apart to make a multi-area site). `backgroundLayer` is an env-sphere backdrop centred on the camera (distant mountains, skyline, valley haze) \u2014 set data.kind gradient|color|image, colors; data.height offsets the horizon (negative=lower), data.coverage=band thickness. `light` is a placeable lamp: data.lightType point|spot|area (area = a soft glowing panel of data.width\u00d7data.height meters), data.color, data.intensity (~30), data.distance range (0=unlimited, point/spot), spot data.angle rad + data.penumbra (a DOWNWARD-ONLY bulb, the light that fills a room without washing its ceiling, is a spot with angle 1.55 and penumbra 0.6 and NO rotation: it beams straight down over a 178 deg cone, and a point light has no such flag because this is it); data.castShadow true (max 4 lights cast, scene order; on an area light it adds a soft grounding shadow since the panel casts none itself; \u26a0 a shadow light is PRICED as if it re-drew the whole scene, one 1024 spot roughly doubles the geometry + draw score, so for an object that merely needs to look grounded use a `shadowPool` instead, which is nearly free); data.shadowMapSize 512|1024|2048 sets that light's shadow map resolution (default: spot 1024, point 512 per cube face, area 1024; a point light caps at 1024): the price is the TEXELS, so a 512 spot costs a quarter of the default and a 2048 four times it, and 512 is the right call for a soft grounding shadow under a small object while 2048 is for one crisp hero shadow; data.timeMode always|night|day gates it by the live sky (night = streetlamp). A spot and an area panel beam down local -Y \u2014 rotate the node to aim. GOBO (a projected cookie) + VOLUMETRIC lit air, on point and spot only (never area): data.goboPattern none|dapple (sun through blowing leaves)|blinds|windowpane|caustics (water light)|custom (with data.goboSrc, an image or video URL; a video makes a moving projector); data.goboAnim none|drift MOVES the pattern (slow pan + spin, the leaves stir): data.goboSpeed 0-1 uv/s (0.03), data.goboSpin -3..3 rad/s (0); data.volumetric true renders the beam as lit air (light shafts), data.volumetricDensity 0-3 (0.6). On a spot the cookie hits lit surfaces AND the cone shafts; a point light has no surface cookie, its pattern lives inside a spherical glow and shows ONLY with volumetric true. With castShadow, real geometry carves dark shafts through the beam. Dappled light through a canopy is one spot: {lightType:\"spot\", goboPattern:\"dapple\", goboAnim:\"drift\", volumetric:true}, aimed down at the floor. `shadowPool` is a fake contact shadow: a flat soft dark disc laid just above the floor (data.radius meters, data.opacity 0 to 1, data.softness, data.color) so a heavy object reads as resting on the ground rather than floating; it works where no light casts a real shadow. `forcefield` bends nearby particle motion and does nothing without particles in range: data.fieldType vortex|gravity|wind|turbulence|pointer|camera, data.radius meters of influence, data.strength, data.falloff constant|linear|inverseSquare; vortex and wind act along local +Y, so rotate the node to aim. `pointer` binds the field to the VISITOR'S cursor or finger instead of to the node: dragging is a magnet plus a wind along the direction of travel, a click or tap sends a ripple expanding outward. It uses its position only to fix the depth the cursor projects onto (data.pointerPlane camera|ground), plus data.pointerMagnet, data.pointerWind, data.rippleStrength, data.rippleSpeed, data.rippleWidth and data.pointerDamping (how fast particles settle again; at 0 the effect never reaches equilibrium). `camera` makes the CAMERA the force: particles are shoved aside as the visitor moves through them and settle again when it stops, so a parked camera costs nothing. data.cameraSweep 0 shoves straight outward from the camera, 1 sweeps along the direction of travel; 0.35 (default) reads as dodging. The web* types are responsive site building-blocks. Keep in sync with server/copilotSchema.js NODE_TYPE_ENUM.",
+       "enum": [
+        "geometry",
+        "text3d",
+        "nurbs",
+        "group",
+        "camera",
+        "particle",
+        "forcefield",
+        "light",
+        "shadowPool",
+        "cable",
+        "webpage",
+        "backgroundLayer",
+        "webText",
+        "webImage",
+        "webLink",
+        "webVideo"
+       ],
+       "type": "string"
+      },
+      "nodes": {
+       "description": "For make_diagram: the boxes. Each { id (your own short handle, referenced by edges), label (the text on the card), body (optional smaller line under it) }. Max 64.",
+       "items": {
+        "properties": {
+         "body": {
+          "type": "string"
+         },
+         "id": {
+          "type": "string"
+         },
+         "label": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "label"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "op": {
+       "description": "Which kind of edit. `scatter` makes many jittered copies of a node across an area (set-dressing: debris, foliage, props). `make_page` is a COMPOSITE that builds a whole page in one op (webpage surface + hero h1 + body paragraph + link \"signs\") \u2014 prefer it over hand-assembling a page from primitives. `make_diagram` is a COMPOSITE that builds a whole flowchart / mind map from `nodes` + `edges`, laid out for you \u2014 never place diagram boxes by hand. `settings` edits the SCENE rather than its nodes \u2014 the post-processing look, the sun and time of day, fog, the audio bus, editor preferences, the scene `name` and its `activeCameraId` \u2014 via `viewport`, `lighting`, `environment`, `audio` and `ui`; it is the only way to reach any of them.",
+       "type": "string"
+      },
+      "parentId": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Parent node id/tempId, or null for the scene root. On duplicate: where the copy goes (default: beside the source, under the same parent)."
+      },
+      "patch": {
+       "additionalProperties": {},
+       "description": "For update: any of name, visible, position, rotation, scale, pivot, lookAt or lookAtNodeId (aim instead of a rotation, from the position the patch sets), plus a nested `data` object (shallow-merged). update reads them ONLY from here \u2014 a top-level position/rotation/scale/data on an update op is REJECTED, not applied.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "pivot": {
+       "description": "For add: the HINGE. The point in the primitive's own space that sits at the node's origin, so rotation swings about it: a 1 m wide door hinged on its left edge is pivot [-0.5,0,0] with position at the hinge, and a rotation track of [0,0,0] to [0,1.4,0] swings it open. Default [0,0,0] = rotate about the centre. (update takes it in patch.)",
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "position": {
+       "description": "[x,y,z]. Y is up, units \u2248 meters, ground at y\u22480. On duplicate: the copy's position (default: the source's, i.e. exactly on top of it).",
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "primitive": {
+       "description": "For add of a geometry node: which primitive.",
+       "enum": [
+        "box",
+        "sphere",
+        "cylinder",
+        "plane",
+        "torus"
+       ],
+       "type": "string"
+      },
+      "rotation": {
+       "description": "[x,y,z] euler radians. On duplicate: the copy's rotation (default: the source's). To AIM a camera or a lamp, or turn a sign to face a point, pass lookAt instead.",
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "roughness": {
+       "description": "Optional 0\u20131 roughness for the minted color material (0 = glossy, 1 = matte). Default 0.5.",
+       "type": "number"
+      },
+      "scale": {
+       "description": "[x,y,z] scale. On duplicate: the copy's scale (default: the source's).",
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "seed": {
+       "description": "For scatter: integer RNG seed for reproducible placement (optional).",
+       "type": "number"
+      },
+      "spacing": {
+       "description": "For make_diagram: multiplier on the gaps between cards (default 1). Raise it for long labels, lower it for a compact board.",
+       "type": "number"
+      },
+      "step": {
+       "description": "For duplicate with a count: [x,y,z] meters added per successive copy, so sixteen identical wall units 4.8 m apart are ONE op: {\"op\":\"duplicate\",\"id\":\"wall\",\"count\":16,\"step\":[4.8,0,0]}. Default [0,0,0] (copies stack in place).",
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      "tempId": {
+       "description": "Batch-local handle for a node this op creates (add/duplicate/group). Later ops in the SAME batch may use it as id/parentId. On a duplicate with a count it names the FIRST copy.",
+       "type": "string"
+      },
+      "tint": {
+       "description": "Hex color. On scatter, a base per-copy tint for imported/generated (assetRef) copies, with slight random variation (rust/foliage/grime). No effect on solid-color primitives.",
+       "type": "string"
+      },
+      "ui": {
+       "additionalProperties": {},
+       "description": "For settings: editor preferences stored on the scene. {density: comfy|compact|ultra, theme: auto|light|dark, polyWheelTheme, reduceMotion, showStatusBar, showHistoryHud, showMobileViewportHints, gizmoSize/Thickness Desktop+Mobile, longPressDurationMs, longPressMoveTolerance, tapFrameWindowMs}. These travel with the scene but change nothing a visitor sees.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "viewport": {
+       "additionalProperties": {},
+       "description": "For settings: the published LOOK. Post effects {bloomEnabled, dofEnabled, vignetteEnabled, colorGradingEnabled, glitchEnabled, filmGrainEnabled, lensDistortionEnabled, chromaticAberrationEnabled + chromaticAberrationOffset 0.0002-0.01 + chromaticAberrationRadial, godRaysEnabled + godRaysSamples 15-120 (the COST dial) + godRaysDensity, godRaysWeight, godRaysDecay, godRaysExposure, lensFlareEnabled} each with their own numeric params; camera flights {cameraEasing: out|inOut|gentle|linear, cameraTravelScale 0.25-4 (flight length), cameraFlightArc 0-1}; neighborhood dissolve {zoneFadeMs 0-2000}; particles and cables take data.forceFieldIds: [fieldId,...] (null = every field, [] = none, the one lever that makes fields cheap) and a webpage takes data.zoneKeepDistance; {lutEnabled, lutPreset: neutral|warm|cool|teal-orange|vintage|noir|sepia|vibrant, lutIntensity}; {toneMapping: none|linear|reinhard|cineon|aces, toneMappingExposure 0.1-4}; {drawDistance 1-5000}; {showGroundPlane, showNeighborhoodPlates, showGrid}. \u26a0 publishPostFx must be true or bloom/DoF/vignette/grading/glitch/grain/lens-distortion/chromatic-aberration render in the editor ONLY and every visitor sees none of them. \u26a0 drawDistance is overridden by the data.far on any camera node (created at 100), so raise those too.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "where": {
+       "additionalProperties": {},
+       "description": "For update, assignMaterial and delete: act on MANY nodes at once instead of one by id. {type, name, nameStartsWith, nameContains, primitive, parentId (direct children only), underId (the WHOLE subtree of a node: every wall in a room group, however deep; a same-batch tempId works), materialAssetId (every node wearing that material, for a global restyle), limit} - every field given must match. Pass either `id` or `where`, never both. delete removes each match WITH its subtree and defaults to a limit of 100 (update and assignMaterial default to 500); pass where.limit to delete more on purpose. `scatter` names its copies \"<source> 1\", \"<source> 2\", so nameStartsWith is how you re-edit a scattered set without listing 60 ids. A selector matching NOTHING rejects the batch rather than quietly doing nothing, and an empty selector is refused rather than matching everything.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      }
+     },
+     "required": [
+      "op"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "sceneId": {
+    "description": "Scene id from list_scenes.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "sceneId",
+   "operations"
+  ],
+  "type": "object"
+ },
+ "name": "apply_ops",
+ "title": "Edit a 3dCMS scene"
+}

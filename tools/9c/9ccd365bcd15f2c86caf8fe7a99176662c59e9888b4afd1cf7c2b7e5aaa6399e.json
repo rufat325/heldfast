@@ -1,0 +1,199 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "title": "Learn"
+ },
+ "description": "Create an engram \u2014 record a reusable learning, preference, or correction. A write is never suppressed by similarity: exact content-hash duplicates NOOP, and anything merely SIMILAR is written and reported back in `dedup.near_duplicates` (closest existing engrams, their cosine scores, and a preview of each neighbour's own statement \u2014 read them before moving on; that is what they are for) so you can supersede or merge deliberately. High similarity is a reason to look, not a decision \u2014 cosine cannot tell a duplicate from a correction of it. Multi-agent note: in an orchestration that spawns subagents, have the PARENT session own plur_learn writes \u2014 spawned subagents should return their findings as text for the parent to persist, rather than each calling plur_learn (tool availability is not guaranteed in every subagent context). See plur-ai/plur#281.",
+ "inputSchema": {
+  "properties": {
+   "attribution": {
+    "description": "Who is answerable for this memory (#961). Every sub-field optional; OMIT rather than guess \u2014 a memory with no agent is honest, one with an invented agent is worse than none. Set asserted_by to \"unidentified\" when nobody is identified, rather than leaving it out: absence cannot be told apart from a memory written before this existed.",
+    "properties": {
+     "asserted_by": {
+      "description": "Who or what asserted it. Any address: a local name, a Decentralized Identifier, or \"unidentified\".",
+      "type": "string"
+     },
+     "model": {
+      "description": "The model behind the statement, if one was involved. Prompt TEXT is never stored, only a hash.",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "prompt_id": {
+        "type": "string"
+       },
+       "prompt_sha256": {
+        "type": "string"
+       },
+       "prompt_version": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "on_behalf_of": {
+      "description": "The party the runtime acted for.",
+      "type": "string"
+     },
+     "runtime": {
+      "description": "The software writing this. Usually known, so usually worth setting.",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "version": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "tool": {
+      "description": "An extractor or importer, with its version.",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "version": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "claim_class": {
+    "description": "What KIND of claim this is (#963), and the most useful single field for anyone later deciding how much to trust it. Use \"asserted\" when a PERSON stated it outright, \"inferred\" when YOU worked it out, \"documented\" when you took it from prose someone wrote, \"observed\" for a record of something that happened, \"structural\" when read off the shape of an artifact, \"revised\" for a rewrite. Omit only when it genuinely cannot be determined.",
+    "enum": [
+     "observed",
+     "documented",
+     "structural",
+     "asserted",
+     "inferred",
+     "revised"
+    ],
+    "type": "string"
+   },
+   "commitment": {
+    "description": "How firmly the user has committed to this belief (default: leaning). `draft` marks the engram as pending human approval: core stores and RECALLS it normally but NEVER injects it (#1141), so an unapproved rule cannot shape agent behaviour. Retrieval stays open because reviewing something requires reading it.",
+    "enum": [
+     "exploring",
+     "leaning",
+     "decided",
+     "locked",
+     "draft"
+    ],
+    "type": "string"
+   },
+   "domain": {
+    "description": "Domain tag, e.g. software.deployment",
+    "type": "string"
+   },
+   "license": {
+    "description": "Which licence governs reuse of this memory, as an SPDX-style identifier such as \"cc-by-4.0\" or \"apache-2.0\". Set it only when the user has actually said which licence applies \u2014 do NOT guess one. Left unset, a default applies that nobody chose, and a provenance record reports it as unchosen rather than presenting it as a decision.",
+    "type": "string"
+   },
+   "locked_reason": {
+    "description": "Why this engram is locked (only meaningful when commitment=locked)",
+    "type": "string"
+   },
+   "measured_under": {
+    "description": "Measurement context for numeric or benchmark-derived claims (#869). Records the conditions under which the asserted value was measured \u2014 model, source_type, hardware, dataset, date. When present, the tension scanner does not treat two measurements from the same store taken under different configurations as a contradiction (the skipped pair is reported in the scan result). Omit for non-numeric engrams.",
+    "properties": {
+     "dataset": {
+      "description": "Dataset or workload identifier (e.g. \"LongMemEval-S\", \"plur-bench-2026-Q2\")",
+      "type": "string"
+     },
+     "date": {
+      "description": "ISO date (YYYY-MM-DD) the measurement was taken",
+      "type": "string"
+     },
+     "hardware": {
+      "description": "Hardware or runtime tier (e.g. \"M3-Pro-36GB\", \"A100\", \"CI-runner\")",
+      "type": "string"
+     },
+     "model": {
+      "description": "Model or system variant (e.g. \"claude-opus-4\", \"gpt-4o\")",
+      "type": "string"
+     },
+     "source_type": {
+      "description": "Source environment type (e.g. \"local-git\", \"gitlab\", \"bench\", \"production\")",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "pinned": {
+    "description": "Always-load flag. If true, this engram bypasses the keyword-relevance gate at injection time. Use sparingly: meta-rules, safety conventions, core operating principles only.",
+    "type": "boolean"
+   },
+   "rationale": {
+    "description": "The mechanism that makes the statement true, and therefore the condition under which it would STOP being true. One sentence. \"Because the user said so on <date>\" is a citation, not a mechanism: that belongs in `source`. This text is indexed, so a real mechanism also carries concrete nouns a future query can match. NOTE: constraints render without rationale (plur-ai/plur#1144), so a mechanism a prohibition needs the model to weigh must stay in the statement.",
+    "type": "string"
+   },
+   "scope": {
+    "description": "Namespace, e.g. global, project:myapp",
+    "type": "string"
+   },
+   "session_id": {
+    "description": "Session this write belongs to (from plur_session_start). Resolves the session default scope (incl. mid-session plur_session_scope changes) when no explicit scope is passed. Optional when one session is open; pass it when several are (#243).",
+    "type": "string"
+   },
+   "source": {
+    "description": "Origin of this knowledge (URL, conversation ref, etc.)",
+    "type": "string"
+   },
+   "statement": {
+    "description": "ONE assertion, written so someone who was not there can act on it. Route the rest to the field whose job it is: the mechanism that makes it true goes in `rationale`, where it came from in `source`, when it applies in `tags`/`domain`. An \"and also\" means a second engram. Good: \"Never name a client unless the user names them first, say the customer.\" Typical 100-300 chars; past ~600 you are carrying another field content. Length is a symptom, not the rule.",
+    "type": "string"
+   },
+   "supersedes": {
+    "description": "Engram IDs this statement intentionally replaces (#240). Writes relations.supersedes on the new engram and the reverse superseded_by edge on each local target. Supersedes-linked pairs are skipped by tension scans \u2014 an intentional update is not a contradiction. Use when updating a standing fact (new version, changed rule) rather than contradicting it.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "tags": {
+    "description": "Searchable keyword tags \u2014 contribute to BM25/embedding recall, so concrete keywords pay off",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "type": {
+    "description": "Category of the engram",
+    "enum": [
+     "behavioral",
+     "terminological",
+     "procedural",
+     "architectural"
+    ],
+    "type": "string"
+   },
+   "valid_from": {
+    "description": "ISO date (YYYY-MM-DD) the knowledge becomes valid \u2014 inject/recall skip the engram before this date (#347)",
+    "type": "string"
+   },
+   "valid_until": {
+    "description": "ISO date (YYYY-MM-DD) the knowledge expires \u2014 inject/recall skip the engram after this date. Set this for any time-bound fact (offers, deadlines, temporary endpoints). When omitted, an explicit expiry phrase in the statement (\"valid until 31 May 2026\") is auto-parsed and echoed back (#347)",
+    "type": "string"
+   },
+   "visibility": {
+    "description": "Whether this memory may leave this machine. Defaults to \"private\", which means it is EXCLUDED from every exported pack. Set \"public\" only when the user has said this is shareable with others \u2014 it is their decision, not yours. Without this an agent cannot mark anything shareable at all, so every memory it writes is private forever and any pack built from them is empty.",
+    "enum": [
+     "private",
+     "public",
+     "template"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "statement"
+  ],
+  "type": "object"
+ },
+ "name": "plur_learn"
+}

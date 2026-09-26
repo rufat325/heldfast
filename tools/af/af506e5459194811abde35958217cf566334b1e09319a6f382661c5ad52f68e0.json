@@ -1,0 +1,366 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch one Federal Register document by its FR document number \u2014 full metadata (title, type, agencies, abstract, action, effective/comment dates, RINs) plus the cross-source handles that make this a workflow server. The output carries the Regulations.gov docket ID (chain into regulations_get_docket or regulations_find_comments), the docket numbers the Federal Register prints (chain back into regulations_search_rules as docket_id), the comment count and comment URL, and the affected CFR parts (chain into regulations_get_cfr_section). Set include_full_text only when the rule body itself is needed: it returns the plain-text body as a window of up to 64,000 characters (max_chars raises it to 200,000), with the body's total length and, when text remains, the offset to resume from. Short documents return whole; major final rules run past a million characters, so page through with offset rather than reading them in one call.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "document_number": {
+    "description": "Federal Register document number, as regulations_search_rules returns it in documentNumber: \"2024-07773\" from 2010 on, older and correction numbers like \"98-1572\", \"E9-25990\", or \"C1-2009-30484\".",
+    "pattern": "^[A-Za-z]?[0-9]{1,4}-[0-9]{1,6}(-[0-9]{1,6})?$",
+    "type": "string"
+   },
+   "include_full_text": {
+    "description": "When true, inline one window of the document body as plain text (see offset and max_chars). Omitted, the body URLs alone come back unless offset or max_chars is passed; fetch full text only when you need to read the rule itself, not just its metadata and cross-links.",
+    "type": "boolean"
+   },
+   "max_chars": {
+    "description": "Most body characters to return in this window (1\u2013200,000, default 64,000). Implies include_full_text.",
+    "maximum": 200000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "description": "Character offset into the plain-text body where the window starts (default 0). Pass the fullTextNextOffset from the previous call to read on. Implies include_full_text.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "document_number"
+  ],
+  "type": "object"
+ },
+ "name": "regulations_get_document",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "documentNumber",
+     "title",
+     "type",
+     "abstract",
+     "action",
+     "dates",
+     "publicationDate",
+     "citation",
+     "startPage",
+     "endPage",
+     "effectiveOn",
+     "commentsCloseOn",
+     "commentPeriodOpen",
+     "agencies",
+     "regulationIdNumbers",
+     "cfrReferences",
+     "docketIds",
+     "docketId",
+     "regulationsGovDocumentId",
+     "commentCount",
+     "commentUrl",
+     "supportingDocuments",
+     "bodyHtmlUrl",
+     "rawTextUrl",
+     "htmlUrl"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "abstract": {
+    "description": "Abstract summary, or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "action": {
+    "description": "Action line (e.g. \"Final rule.\"), or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "agencies": {
+    "description": "Issuing agencies.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One issuing agency.",
+     "properties": {
+      "name": {
+       "description": "Agency name.",
+       "type": "string"
+      },
+      "slug": {
+       "description": "Federal Register agency slug \u2014 the value the agencies filter on regulations_search_rules and regulations_list_open_comments takes. Null when the Federal Register lists the agency by raw name only.",
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "name",
+      "slug"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "bodyHtmlUrl": {
+    "description": "URL of the rendered HTML body.",
+    "type": "string"
+   },
+   "cfrReferences": {
+    "description": "Affected CFR parts \u2014 chain into regulations_get_cfr_section.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single affected CFR title + part.",
+     "properties": {
+      "part": {
+       "description": "CFR part.",
+       "type": "string"
+      },
+      "title": {
+       "description": "CFR title number.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "title",
+      "part"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "description": "Where the document starts in the Federal Register (\"89 FR 49101\"); null when none is recorded, as for most of 1994.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "commentCount": {
+    "description": "Comments Regulations.gov received on this document, as the Federal Register reports it; null when not on Regulations.gov. Can exceed the comment records regulations_find_comments lists.",
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "commentPeriodOpen": {
+    "description": "Whether that comment period is open today: true through 11:59 PM Eastern on commentsCloseOn, false after it, null when commentsCloseOn is null.",
+    "type": [
+     "boolean",
+     "null"
+    ]
+   },
+   "commentUrl": {
+    "description": "Regulations.gov page for submitting a comment on this document, as the Federal Register lists it. Null when it lists none, as it usually stops doing once the comment period closes.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "commentsCloseOn": {
+    "description": "Last day of the comment period this document printed (ISO 8601), inclusive, in Eastern time; null when it prints none. A later extension published as its own document is not reflected here.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "dates": {
+    "description": "Free-text dates summary from the rule, or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "docketId": {
+    "description": "Regulations.gov docket ID \u2014 chain into regulations_get_docket / regulations_find_comments(docket_id). Null when not on Regulations.gov. An <AGENCY>_FRDOC_0001 docket (EPA_FRDOC_0001 holds 3,451 documents) is Regulations.gov's catch-all for Federal Register documents outside a rulemaking docket, so this document's comments come from regulationsGovDocumentId instead.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "docketIds": {
+    "description": "Docket numbers as the Federal Register prints them \u2014 an agency's own number (\"REG-101355-26\"), or an ID inside a wrapper (\"Docket No. FAA-2026-8449\"). Pass one to regulations_search_rules as docket_id for every Federal Register document in the docket. Not always a Regulations.gov ID: docketId is.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "documentNumber": {
+    "description": "Federal Register document number.",
+    "type": "string"
+   },
+   "effectiveOn": {
+    "description": "Effective date (ISO 8601), or null.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "endPage": {
+    "description": "Last Federal Register page the document is printed on; null when unrecorded. A CFR source-note cite to any page from startPage to endPage points at this document.",
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `full_text_disabled`: offset or max_chars was passed together with include_full_text: false. `not_found`: No Federal Register document exists with that number. `upstream_unavailable`: Federal Register returned a 5xx, timed out, served an HTML error page, or failed to serve the body URL it published (include_full_text only). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "full_text_disabled",
+         "not_found",
+         "upstream_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "fullText": {
+    "description": "One window of the plain-text body, starting at fullTextOffset \u2014 present only when full text was requested. Empty when the offset is at or past the end.",
+    "type": "string"
+   },
+   "fullTextLength": {
+    "description": "Characters in the whole plain-text body \u2014 present with fullText.",
+    "type": "number"
+   },
+   "fullTextNextOffset": {
+    "description": "Offset to pass as offset to read the next window \u2014 present only when body text remains past this window.",
+    "type": "number"
+   },
+   "fullTextOffset": {
+    "description": "Character offset fullText starts at \u2014 present with fullText.",
+    "type": "number"
+   },
+   "htmlUrl": {
+    "description": "Federal Register web URL for the document.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when the requested offset is at or past the end of the body.",
+    "type": "string"
+   },
+   "publicationDate": {
+    "description": "Publication date (ISO 8601).",
+    "type": "string"
+   },
+   "rawTextUrl": {
+    "description": "URL of the plain-text body.",
+    "type": "string"
+   },
+   "regulationIdNumbers": {
+    "description": "Regulation Identifier Number(s) (RIN).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "regulationsGovDocumentId": {
+    "description": "Regulations.gov document ID \u2014 pass as document_object_id to regulations_find_comments for the comments filed on this document alone. Null when absent.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "startPage": {
+    "description": "First Federal Register page the document is printed on; null when unrecorded.",
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "supportingDocuments": {
+    "description": "Related Regulations.gov supporting documents.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One related Regulations.gov supporting document.",
+     "properties": {
+      "documentId": {
+       "description": "Regulations.gov document ID.",
+       "type": "string"
+      },
+      "title": {
+       "description": "Supporting document title.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "title",
+      "documentId"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "title": {
+    "description": "Document title.",
+    "type": "string"
+   },
+   "type": {
+    "description": "Document type.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "regulations_get_document"
+}

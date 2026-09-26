@@ -1,0 +1,48 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Run a script that calls these tools"
+ },
+ "description": "Write a JavaScript program that calls this server's other tools. You have the whole language: loops, arithmetic, functions, conditionals, and values carried from one call into the next \u2014 all running next to the tools instead of across the conversation. Use it whenever code says the thing more directly than a sequence of separate calls would, which is often.\n\nCOMPUTE, don't hand-write. Anything you would otherwise work out in your head and type as literals is better computed here \u2014 eased keyframe tracks, staggered start times, grid coordinates, derived palettes, positions from measured text widths. This is usually what makes motion look right: sample a curve at ten points and emit the values, rather than guessing four.\n\nDON'T COMMENT THE SCRIPT. Nobody reads it \u2014 it runs once and is gone. Comments, blank lines and explanatory names are pure cost here. Write it dense.\n\nThe one thing to remember: inside a script you see only what you `return` or log, so a tool's own rich output (layout measurements, layout_qa, new ids) has to be surfaced deliberately. That also makes a single-call script worthwhile when a read is fat \u2014 `find` takes no projection argument, so logging the 200 characters you need is a real saving.\n\nA fat read is usually better narrowed at the source than filtered here: get_clip takes `select`, and get_element_schema takes `fields` (name what you're setting and a 15KB schema becomes ~200 bytes). get_element_schema returns TEXT by default, which you cannot index into \u2014 pass `format: 'json'` when you want to compute over the schema rather than log it.\n\nCALLING TOOLS\nEvery tool except run_script and get_script_job is a global function taking exactly the arguments it takes normally, and returning its parsed result (those two are excluded so a script cannot recurse into itself or poll its own job). Calls are synchronous \u2014 do NOT use async/await, and there are no imports.\n\n`sleep(ms)` waits, synchronously like everything else here. Use it to poll a generation: `generate_media` and `voiceover_batch` return before their work lands, and `get_clip(select:['busy'])` says what is still being written. A sleep longer than the script's remaining time FAILS the run with a budget error rather than overrunning it or returning early (a run that hands off to a background job gets the job budget, and a sleep already waiting picks that up) \u2014 and it holds one of the few concurrent script slots while it waits, so poll on the order of seconds, not milliseconds.\n\n  const p = create_project({ title: \"Launch\" });\n  const made = add_clips({ project_id: p.projectId, kind: \"blank\", clips: [{ duration: 4 }] });\n\nUse the BARE tool name. If your client shows these tools under a prefix, the prefixed form works too \u2014 mcp__clueso_connect__add_elements and clueso__add_elements both resolve to add_elements. `tools()` lists every callable name; `call(name, args)` invokes one by a name computed at runtime.\n\nWHY IT IS CHEAPER\nWhat you construct never passes through the conversation. Build an array in a loop and send it in ONE batched call \u2014 a 24x24 dot grid is six lines here versus 576 elements of JSON:\n\n  const els = [];\n  for (let r = 0; r < 24; r++)\n    for (let c = 0; c < 24; c++)\n      els.push({ x: c * 60, y: r * 60, width: 8, height: 8, type_data: { backgroundColor: \"#C462F5\" } });\n  add_elements({ project_id, defaults: { clip_index: 0, element_type: \"rectangle\" }, elements: els });\n\nREAD, THEN WRITE \u2014 this is how you edit in bulk:\n\n  const clip = get_clip({ project_id, clip_index: 0, select: [\"elements.name\", \"elements.y\"] });\n  const captions = clip.elements.filter(e => e.name.startsWith(\"caption\"));\n  update_elements({ project_id, defaults: { clip_index: 0 },\n                    updates: captions.map(e => ({ element_id: e.id, y: e.y + 40 })) });\n\nWHAT COMES BACK\n`return` a value to hand it back, and `console.log` anything you want to see \u2014 that output is all you pay for, so log summaries, not payloads. `print_json(obj, maxBytes)` logs an object and truncates it for you, which is safer than hand-rolling JSON.stringify(...).slice(...) at every call site.\nYou get `{ ok, calls, writes_applied, result, stdout }`. `writes_applied` matters because a script is NOT a transaction: if it throws on call nine, the first eight writes already landed, and that count is how you tell.\nA FAILED TOOL CALL THROWS. It does not return an error object, so a failure stops the script instead of letting it run on against bad state. Wrap a call in try/catch only when you genuinely intend to continue.\nYou get every tool's normal result, so `succeeded`/`failed` counts, per-element `layout` (font_size_px, text_width_px, natural_width_px, line_count, fits_width/fits_height/fits plus `adjusted` when your height was replaced \u2014 widen to natural_width_px, not text_width_px) and `layout_qa` findings are all readable in the script. Check them and react.\nNO IMAGES are returned inside a script \u2014 a render in a loop would flood the reply. But you are not blind: `get_clip({..., render: { save: true }})` gives the script a `presigned_url` and `s3_key` for the rendered frame, so it can render many frames, keep the URLs, and hand them on (update_clueprint takes one as source_url). `_images_omitted` counts the frames withheld; when the reply would be a bare array it arrives as `{items, _images_omitted}`. Call get_clip yourself, outside a script, when YOU need to look at one.\n\nFINISHING\nFast scripts return their result here. If one is still running after `wait_seconds` (default 45s) you get `{ job_id, status: \"processing\" }` and it keeps running \u2014 poll `get_script_job`. Set `idempotency_key` on anything that builds, so a retry cannot run it twice \u2014 a key that already ran is never re-executed, failed runs included.\n\nLIMITS: 200 tool calls, 45s of run time inline and 5 minutes once it hands off to a job, 16KB each of logged output and returned value. `dry_run` runs reads for real and only records writes. Anything costing credits errors as it normally would.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "code": {
+    "description": "JavaScript. Tools are globals called synchronously \u2014 no async/await, no imports, no network or filesystem. `return` a value to hand it back.",
+    "maxLength": 40000,
+    "minLength": 1,
+    "type": "string"
+   },
+   "dry_run": {
+    "description": "Read-only tools still run; anything that writes is recorded and skipped. Use it to check what a script would do before it does it.",
+    "type": "boolean"
+   },
+   "idempotency_key": {
+    "description": "Pass a unique string so a retry cannot run the same build twice. If a script with this key already ran in this workspace, its job is returned and nothing executes again \u2014 including when that run FAILED, because a script is not a transaction and the writes it made before failing are still there. To act after a failure, read the project, repair what landed, and use a NEW key. Worth setting for anything that builds.",
+    "maxLength": 200,
+    "minLength": 8,
+    "type": "string"
+   },
+   "timeout_seconds": {
+    "description": "Wall-clock budget for the SCRIPT \u2014 separate from wait_seconds, which is only how long this call stays open. By default a script gets 45s while you are waiting on it, and is raised to 5 minutes the moment it outlives the wait and becomes a job you poll with get_script_job. Set this only to override BOTH with one fixed budget. Watch the slow tools: analyze_audio in 'transcript' or 'beats' mode, export_project and auto_sync take tens of seconds each and will eat a budget fast. analyze_audio in 'features' mode is ~1s and is fine to loop over.",
+    "maximum": 900,
+    "minimum": 5,
+    "type": "integer"
+   },
+   "wait_seconds": {
+    "description": "How long to hold this call open waiting for the script, default 45s. If it finishes in time you get the result here; if not you get a job_id to poll with get_script_job, and the script keeps running either way.",
+    "maximum": 55,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "code"
+  ],
+  "type": "object"
+ },
+ "name": "run_script",
+ "title": "Run a script that calls these tools"
+}

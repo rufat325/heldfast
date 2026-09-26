@@ -1,0 +1,487 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Search the CISA industrial control system advisory corpus \u2014 every CSAF 2.0 advisory covering PLC, HMI, SCADA, building-automation, and medical-device products from 2010 onward. Filter by vendor, product, CVE, CWE, CVSS range, severity band, critical-infrastructure sector, advisory series, publication date, revision date, or whether an advisory covers a CVE in the CISA Known Exploited Vulnerabilities catalog, and run full-text search over advisory titles and product names. Sector filtering reaches only advisories that carry a sector note, which begins in 2017; the response reports how many documents a sector filter can never match. Returns advisory IDs for cisa_get_advisory, the CVEs each advisory covers and which of them are in KEV, and the source URL and attribution every advisory response carries.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cursor": {
+    "description": "Opaque pagination cursor from a previous call. Omit for the first page.",
+    "type": "string"
+   },
+   "cve": {
+    "description": "Exact CVE membership, e.g. CVE-2021-44228. Case and surrounding whitespace are normalized.",
+    "pattern": "^CVE-[0-9]{4}-[0-9]{4,19}$",
+    "type": "string"
+   },
+   "cvssMax": {
+    "description": "Maximum value of the advisory's maximum CVSS base score, inclusive.",
+    "maximum": 10,
+    "minimum": 0,
+    "type": "number"
+   },
+   "cvssMin": {
+    "description": "Minimum value of the advisory's maximum CVSS base score, inclusive.",
+    "maximum": 10,
+    "minimum": 0,
+    "type": "number"
+   },
+   "cwe": {
+    "description": "Exact CWE identifier, e.g. CWE-787, matched against every vulnerability entry in the advisory. Case and surrounding whitespace are normalized. A parent class does not match its children.",
+    "pattern": "^CWE-[0-9]+$",
+    "type": "string"
+   },
+   "inKev": {
+    "description": "true selects advisories covering at least one CVE in the CISA Known Exploited Vulnerabilities catalog; false selects advisories covering none. Checked against every CVE an advisory covers, not only the twenty listed per result.",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Maximum advisories per page.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "order": {
+    "default": "desc",
+    "description": "Sort direction. Under relevance, desc means most relevant first.",
+    "enum": [
+     "asc",
+     "desc"
+    ],
+    "type": "string"
+   },
+   "product": {
+    "description": "Case-insensitive substring of a product name, matched literally \u2014 % and _ are ordinary characters.",
+    "minLength": 2,
+    "type": "string"
+   },
+   "publishedFrom": {
+    "description": "Earliest initial release date, inclusive, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "publishedTo": {
+    "description": "Latest initial release date, inclusive, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "publisher": {
+    "description": "coordinator selects CISA-authored advisories; other selects vendor advisories CISA republished, over a quarter of the corpus.",
+    "enum": [
+     "coordinator",
+     "other"
+    ],
+    "type": "string"
+   },
+   "q": {
+    "description": "Full-text search over advisory titles, vendor names, and product names. Tokens are AND-combined; FTS5 operators in the input are neutralized rather than honored, and a token with no letter or digit is ignored. Needs at least one word or number.",
+    "minLength": 2,
+    "type": "string"
+   },
+   "revisedFrom": {
+    "description": "Earliest current release date, inclusive, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "revisedTo": {
+    "description": "Latest current release date, inclusive, YYYY-MM-DD.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "sector": {
+    "description": "Critical-infrastructure sector, matched against the normalized sector set. Multiple is the sentinel the corpus uses for an advisory affecting many sectors.",
+    "enum": [
+     "Chemical",
+     "Commercial Facilities",
+     "Communications",
+     "Critical Manufacturing",
+     "Dams",
+     "Defense Industrial Base",
+     "Emergency Services",
+     "Energy",
+     "Financial Services",
+     "Food and Agriculture",
+     "Government Facilities",
+     "Healthcare and Public Health",
+     "Information Technology",
+     "Nuclear Reactors, Materials, and Waste",
+     "Transportation Systems",
+     "Water and Wastewater Systems",
+     "Multiple"
+    ],
+    "type": "string"
+   },
+   "series": {
+    "description": "Advisory series: ICSA industrial control system advisories, or ICSMA medical-device advisories, a small minority of the corpus.",
+    "enum": [
+     "ICSA",
+     "ICSMA"
+    ],
+    "type": "string"
+   },
+   "severity": {
+    "description": "Severity band of the advisory's maximum CVSS score.",
+    "enum": [
+     "NONE",
+     "LOW",
+     "MEDIUM",
+     "HIGH",
+     "CRITICAL"
+    ],
+    "type": "string"
+   },
+   "sortBy": {
+    "default": "revised",
+    "description": "Field to sort by. relevance requires q and ranks by FTS5 bm25.",
+    "enum": [
+     "relevance",
+     "published",
+     "revised",
+     "maxCvss"
+    ],
+    "type": "string"
+   },
+   "vendor": {
+    "description": "Case-insensitive substring of a vendor label, matched literally \u2014 % and _ are ordinary characters. Vendor names are unnormalized upstream \u2014 the same company appears under several spellings \u2014 so this is substring, not exact.",
+    "minLength": 2,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "cisa_search_ics_advisories",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results",
+     "hasMore",
+     "totalCount",
+     "appliedFilters",
+     "mirror"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "appliedFilters": {
+    "additionalProperties": {
+     "description": "The filter value as the server parsed it.",
+     "type": "string"
+    },
+    "description": "The filters the server actually applied.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "cap": {
+    "description": "The page limit that was applied.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "cursor": {
+    "description": "Opaque cursor for the next page. Absent when this is the last page.",
+    "type": "string"
+   },
+   "cvssCoverage": {
+    "description": "Disclosure of derived-band and no-score coverage under a score filter.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `mirror_not_ready`: The advisory index has never completed a full sync. `mirror_unavailable`: The advisory index store cannot be opened: its location is not writable, is read-only, runs through a missing directory or a file, or holds a file that is not a SQLite database. `invalid_cvss_range`: cvssMin exceeds cvssMax. `invalid_date_range`: A From bound is later than its matching To bound. `relevance_sort_without_query`: sortBy is relevance but no q was supplied, so there is no bm25 rank to sort by. `empty_search_text`: q contains no word or number once quotes and punctuation are removed, so there is nothing to search for. `catalog_unavailable`: inKev is set, no KEV catalog snapshot is held, and the fetch from cisa.gov failed. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "mirror_not_ready",
+         "mirror_unavailable",
+         "invalid_cvss_range",
+         "invalid_date_range",
+         "relevance_sort_without_query",
+         "empty_search_text",
+         "catalog_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "hasMore": {
+    "description": "Whether more matches exist beyond this page.",
+    "type": "boolean"
+   },
+   "mirror": {
+    "additionalProperties": false,
+    "description": "Which index state answered this call.",
+    "properties": {
+     "checkpoint": {
+      "description": "Newest current_release_date ingested, or \"none\".",
+      "type": "string"
+     },
+     "documentCount": {
+      "description": "Advisories held in the local index.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "lastRefreshedAt": {
+      "description": "When a full sync last completed, or \"never\".",
+      "type": "string"
+     }
+    },
+    "required": [
+     "documentCount",
+     "checkpoint",
+     "lastRefreshedAt"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when nothing matched \u2014 the filter that matches no advisory on its own and what dropping it restores, or the filters whose removal restores results and how many \u2014 when a page was capped, when KEV membership was not evaluated, or when a cwe result may be incomplete.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Matching advisories for this page.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One matching advisory.",
+     "properties": {
+      "advisoryId": {
+       "description": "The advisory identifier, e.g. ICSA-26-260-07. Pass it to cisa_get_advisory.",
+       "pattern": "^ICS(A|MA)-\\d{2}-\\d{3}-\\d{2}(?:[A-Z]|-\\d+)?$",
+       "type": "string"
+      },
+      "attribution": {
+       "description": "Who authored the text and under what terms it may be redistributed.",
+       "type": "string"
+      },
+      "csafUrl": {
+       "description": "Absolute URL of the raw CSAF JSON document.",
+       "type": "string"
+      },
+      "cveCount": {
+       "description": "Distinct CVEs the advisory covers.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "cves": {
+       "description": "Up to twenty CVEs; cveCount carries the full count.",
+       "items": {
+        "description": "One CVE identifier.",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "kevCves": {
+       "description": "Every CVE this advisory covers that is in the KEV catalog, drawn from its full CVE list rather than the twenty in cves. Empty when none is; absent when KEV membership could not be evaluated.",
+       "items": {
+        "description": "One CVE identifier.",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "maxCvss": {
+       "additionalProperties": false,
+       "description": "Highest CVSS score across the advisory. Absent when the advisory carries no CVSS score.",
+       "properties": {
+        "score": {
+         "description": "Highest CVSS base score in the advisory.",
+         "type": "number"
+        },
+        "severity": {
+         "description": "Severity band for that score.",
+         "enum": [
+          "NONE",
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          "CRITICAL"
+         ],
+         "type": "string"
+        },
+        "severityDerived": {
+         "description": "True when the band was derived from a CVSS v2 score rather than published upstream.",
+         "type": "boolean"
+        },
+        "version": {
+         "description": "CVSS version the highest score was published under.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "score",
+        "severity",
+        "version",
+        "severityDerived"
+       ],
+       "type": "object"
+      },
+      "productCount": {
+       "description": "Flattened product entries in the product tree.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "published": {
+       "description": "Initial release date, ISO 8601.",
+       "type": "string"
+      },
+      "publisherCategory": {
+       "description": "coordinator for CISA-authored, other for a republished vendor advisory.",
+       "type": "string"
+      },
+      "revised": {
+       "description": "Current release date, ISO 8601.",
+       "type": "string"
+      },
+      "revision": {
+       "description": "Document revision number.",
+       "type": "string"
+      },
+      "sectors": {
+       "description": "Normalized sector names. Empty when the advisory carries no sector note.",
+       "items": {
+        "description": "One canonical sector name.",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "sectorsRaw": {
+       "description": "The sector note verbatim, when the advisory carries one.",
+       "type": "string"
+      },
+      "series": {
+       "description": "Advisory series.",
+       "enum": [
+        "ICSA",
+        "ICSMA"
+       ],
+       "type": "string"
+      },
+      "title": {
+       "description": "The advisory title.",
+       "type": "string"
+      },
+      "url": {
+       "description": "Absolute URL of the cisa.gov web version of the advisory.",
+       "type": "string"
+      },
+      "vendorCount": {
+       "description": "Distinct vendors named in the product tree.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "vendors": {
+       "description": "Up to ten vendor labels; vendorCount carries the full count.",
+       "items": {
+        "description": "One vendor label.",
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "advisoryId",
+      "title",
+      "series",
+      "vendors",
+      "vendorCount",
+      "productCount",
+      "cves",
+      "cveCount",
+      "sectors",
+      "published",
+      "revised",
+      "revision",
+      "publisherCategory",
+      "url",
+      "csafUrl",
+      "attribution"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "sectorCoverage": {
+    "description": "Disclosure of how many advisories a sector filter can never match.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Advisories returned on this page.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "totalCount": {
+    "description": "Total matches before paging.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "truncated": {
+    "description": "True when the page limit capped this result.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "cisa_search_ics_advisories"
+}

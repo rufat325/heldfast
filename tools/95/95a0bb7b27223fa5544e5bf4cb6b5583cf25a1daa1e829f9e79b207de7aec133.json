@@ -1,0 +1,206 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Resolves a Crossref member ID to its publisher/organization record: primary name, alternate imprint names, owned DOI prefixes, registered DOI counts, a per-work-type breakdown, and per-category metadata deposit coverage. Members are the organizations that register DOIs with Crossref, so this answers \"what does this publisher publish, and how completely do they deposit metadata?\" Resolve a DOI prefix (e.g. \"10.1038\") to its member ID with crossref_get_prefix, then pass that ID here.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "member_id": {
+    "description": "Crossref member ID \u2014 a positive integer, e.g. 297 (Springer) or 340 (PLOS). Resolve a DOI prefix to a member ID first with crossref_get_prefix.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "member_id"
+  ],
+  "type": "object"
+ },
+ "name": "crossref_get_member",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "id"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "counts": {
+    "additionalProperties": false,
+    "description": "Registered DOI counts",
+    "properties": {
+     "backfileDois": {
+      "description": "DOIs registered in the backfile (older) window",
+      "type": "number"
+     },
+     "currentDois": {
+      "description": "DOIs registered in the current (recent) window",
+      "type": "number"
+     },
+     "totalDois": {
+      "description": "Total DOIs registered by this member (current + backfile)",
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "coverage": {
+    "description": "Per-category metadata deposit coverage \u2014 each a 0\u20131 fraction split into current (recent) and backfile (older) DOIs. Signals how completely this publisher deposits references, abstracts, ORCIDs, funders, licenses, and similar metadata.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Metadata deposit coverage for one category",
+     "properties": {
+      "backfile": {
+       "description": "Coverage fraction (0\u20131) among backfile (older) DOIs",
+       "type": "number"
+      },
+      "category": {
+       "description": "Metadata deposit category, e.g. \"references\", \"abstracts\", \"orcids\", \"funders\", \"licenses\", \"affiliations\"",
+       "type": "string"
+      },
+      "current": {
+       "description": "Coverage fraction (0\u20131) among current (recent) DOIs",
+       "type": "number"
+      }
+     },
+     "required": [
+      "category"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "deposits": {
+    "description": "Whether the member deposits any metadata with Crossref",
+    "type": "boolean"
+   },
+   "depositsArticles": {
+    "description": "Whether the member deposits journal-article metadata",
+    "type": "boolean"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: Crossref answered HTTP 429 and the limit did not clear inside the retry budget. `upstream_unavailable`: Crossref was unreachable, returned a 5xx status, or served an HTML error page instead of JSON. `malformed_response`: Crossref returned HTTP 200 with a body that is not valid JSON. `request_timeout`: Crossref did not respond within CROSSREF_TIMEOUT_MS, or answered HTTP 408/504. `member_not_found`: No Crossref member exists for the given ID. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_unavailable",
+         "malformed_response",
+         "request_timeout",
+         "member_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "id": {
+    "description": "Crossref member ID",
+    "type": "number"
+   },
+   "location": {
+    "description": "Publisher location (city, region, country)",
+    "type": "string"
+   },
+   "names": {
+    "description": "Alternate and imprint names registered under this member",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "prefixes": {
+    "description": "DOI prefixes owned by this member, e.g. \"10.1038\"",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "primaryName": {
+    "description": "Primary publisher/organization name",
+    "type": "string"
+   },
+   "worksByType": {
+    "description": "DOI counts broken down by work type (all DOIs), sorted by count descending",
+    "items": {
+     "additionalProperties": false,
+     "description": "DOI count for one work type",
+     "properties": {
+      "count": {
+       "description": "Number of DOIs of this type registered by the member",
+       "type": "number"
+      },
+      "type": {
+       "description": "Crossref work type, e.g. \"journal-article\", \"book-chapter\", \"posted-content\"",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "count"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Member by ID"
+}

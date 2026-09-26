@@ -1,0 +1,133 @@
+{
+ "description": "Polish Premises Prospector - REGON jednostki lokalne. Build prospect lists at the physical-site level from the Polish REGON registry. One row per premise (jednostka lokalna) with industry (PKD), address, company age, and ownership, filterable by region (TERYT). Advanced fields beyond this schema are also accepted (regdata_describe lists them).",
+ "inputSchema": {
+  "additionalProperties": true,
+  "properties": {
+   "fetchSitePkd": {
+    "default": true,
+    "description": "Fetch each premise's own PKD activity (one extra API call per premise). When off, premises inherit the parent company's main PKD.",
+    "title": "Fetch per-site PKD",
+    "type": "boolean"
+   },
+   "footprintUserAgent": {
+    "default": "polish-premises-prospector/1.0 (Apify actor; contact via Apify Store)",
+    "description": "Contact User-Agent sent to the free OSM Nominatim/Overpass APIs used by the building-footprint headcount estimator. Their usage policy requires a descriptive identifier with a contact. Leave default unless you want your own contact string.",
+    "title": "Footprint contact User-Agent",
+    "type": "string"
+   },
+   "headcountMethod": {
+    "default": "auto",
+    "description": "auto = LinkedIn city-count for office/clinic/school sites and a building-footprint estimate for industrial sites (factory/warehouse/DC). Force a single method if desired.",
+    "enum": [
+     "auto",
+     "linkedin",
+     "footprint",
+     "none"
+    ],
+    "title": "Headcount method",
+    "type": "string"
+   },
+   "includeHeadcount": {
+    "default": false,
+    "description": "Attach a per-site headcount signal. Each row is labelled with headcountBasis: 'reported-proxy' (LinkedIn employees-by-city, a real sourced count) or 'modeled-estimate' (building footprint \u00f7 density for industrial sites - computed, \u00b150-100%). No source publishes a verified per-site count; see README.",
+    "title": "Include headcount enrichment",
+    "type": "boolean"
+   },
+   "linkedinActorId": {
+    "default": "harvestapi/linkedin-company-employees",
+    "description": "Apify actor used for LinkedIn employees-by-city counts.",
+    "title": "LinkedIn employees actor ID",
+    "type": "string"
+   },
+   "linkedinDomainResolverActorId": {
+    "default": "s-r/free-linkedin-company-finder---linkedin-address-from-any-site",
+    "description": "Fallback resolver: maps a company's website domain (from REGON) to its LinkedIn page when name resolution fails - fixes companies whose brand differs from their legal name (e.g. pkobp.pl -> /company/pko-bp). Pay-per-success. Leave default; clear to disable.",
+    "title": "LinkedIn domain resolver actor ID",
+    "type": "string"
+   },
+   "linkedinMaxItems": {
+    "default": 1,
+    "description": "Profiles actually scraped per company+city. The headcount COUNT is read from the run log ('Found N profiles total'), so 1 is enough and cheapest (~$0.02/company-city). Raise only if you also want the profile list.",
+    "title": "LinkedIn max profiles per company-city",
+    "type": "integer"
+   },
+   "linkedinMode": {
+    "default": "short",
+    "description": "Profile detail level (cost): short is cheapest and enough for a headcount count.",
+    "enum": [
+     "short",
+     "full"
+    ],
+    "title": "LinkedIn scrape mode",
+    "type": "string"
+   },
+   "linkedinResolverActorId": {
+    "default": "harvestapi/linkedin-company",
+    "description": "Actor that resolves a company name to its canonical LinkedIn page (URL + company-wide employee count). The match is validated (website domain / name overlap) and rejected if low-confidence, so wrong matches become 'unknown' rather than false counts. Leave default.",
+    "title": "LinkedIn company resolver actor ID",
+    "type": "string"
+   },
+   "maxEnrich": {
+    "default": 0,
+    "description": "Hard cap on paid LinkedIn calls per run (~$0.02/company-city; 0 = unlimited). The footprint estimator uses free OSM APIs and is NOT counted against this budget. Bounds cost.",
+    "title": "Max enrichment calls (shared budget)",
+    "type": "integer"
+   },
+   "maxItems": {
+    "description": "Optional cap on billed dataset items returned.",
+    "type": "integer"
+   },
+   "maxResults": {
+    "default": 0,
+    "description": "Maximum premise rows to output (0 = unlimited).",
+    "title": "Max results",
+    "type": "integer"
+   },
+   "minIntervalMs": {
+    "default": 350,
+    "description": "Politeness delay between REGON requests. Keep >= 300ms to avoid the public site's conditional rate limit.",
+    "title": "Min interval between requests (ms)",
+    "type": "integer"
+   },
+   "pkdCodes": {
+    "description": "Explicit PKD code prefixes to match (e.g. \"86\", \"8610\", \"5210B\"). Combined with Site types.",
+    "title": "PKD codes (advanced)",
+    "type": "array"
+   },
+   "regions": {
+    "description": "Filter premises to these regions. Use presets (warszawa, lodz, kutno) or objects like {\"woj\":\"10\",\"powiat\":\"03\"} (TERYT symbols). Empty = all of Poland.",
+    "title": "Regions",
+    "type": "array"
+   },
+   "seedDatasetId": {
+    "description": "Optional Apify dataset ID to read identifiers from (fields: nip / regon / regon14 / krs). Use this to chain in a regional REGON web search or a KRS export as the discovery source.",
+    "title": "Seed dataset ID",
+    "type": "string"
+   },
+   "seedIdType": {
+    "default": "auto",
+    "description": "How to interpret 10-digit identifiers (NIP and KRS are both 10 digits).",
+    "enum": [
+     "auto",
+     "nip",
+     "regon",
+     "krs"
+    ],
+    "title": "Seed identifier type",
+    "type": "string"
+   },
+   "seedIdentifiers": {
+    "description": "List of company identifiers to expand. Auto-detected by shape: 9 or 14 digits = REGON, 10 digits = NIP (override with Seed identifier type). The BIR registry has no geographic search, so you seed the companies to examine here (or via Seed dataset).",
+    "title": "Seed identifiers (NIP / REGON / KRS)",
+    "type": "array"
+   },
+   "siteTypes": {
+    "description": "Filter premises by industry preset: factory, warehouse, clinic, school, coliving. Empty = all industries. (Large offices are not cleanly identifiable by PKD - leave empty or use PKD codes.)",
+    "title": "Site types",
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "name": "regdata_polish_premises"
+}

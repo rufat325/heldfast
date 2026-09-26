@@ -1,0 +1,455 @@
+{
+ "_meta": {
+  "apiVersion": "1.0.0",
+  "examples": [
+   {
+    "input": {
+     "compression": {
+      "deterministic": true
+     },
+     "entries": [
+      {
+       "name": "README.md",
+       "text": "# Hello\n"
+      },
+      {
+       "name": "src/index.js",
+       "text": "export {};\n"
+      }
+     ],
+     "includeSha256": true
+    },
+    "title": "Two text files, reproducible"
+   },
+   {
+    "input": {
+     "entries": [
+      {
+       "compression": {
+        "method": "store"
+       },
+       "name": "mimetype",
+       "text": "application/epub+zip"
+      },
+      {
+       "name": "META-INF/container.xml",
+       "text": "<container/>"
+      }
+     ],
+     "order": "insertion"
+    },
+    "title": "EPUB-style layout (mimetype first, stored)"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Write a ZIP from inline entries (`dataBase64` | `text` | `sourcePath` in the sandbox, or `directory:true`). Reproducible by default: canonical order (raw UTF-8 name bytes), DOS-epoch timestamps, UTF-8 names, constant attributes \u2014 `defaultDate:'now'` or per-entry `date` opts out (ZIP_TIMESTAMP_NOT_PINNED diagnostic). `compression` {method store|deflate, level 0\u20139, deterministic:true = pinned pure-TS encoder \u21d2 identical bytes on every runtime} at archive or entry level; `order:'insertion'` for EPUB / JAR (mimetype first, stored); `comment`, per-entry comment / unixMode / externalAttributes / raw extraFields. `stream:true` on a sourcePath feeds the file through addStream (data-descriptor layout, bounded memory). `parallel` compresses with the worker pool \u2014 byte-identical output. Zip64 is emitted exactly when a field overflows. Output base64 (\u2264 50 MiB) or a sandbox file (streamed, never overwritten); `summary.deterministic` is true ONLY with compression.deterministic:true (cross-runtime identity); a default call is reproducible on the same runtime (`deflateTier` 'node-zlib') and reports false; `sha256` (includeSha256, base64 and file modes) is the proof. Every archive it writes is ISO/IEC 21320-1 conformant (CI-validated).",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "chunkSize": {
+    "description": "file mode: output chunk size for the streaming assembler (default 64 KiB). Never changes the bytes.",
+    "maximum": 16777216,
+    "minimum": 1024,
+    "type": "integer"
+   },
+   "comment": {
+    "description": "Archive comment (UTF-8, \u2264 65535 bytes).",
+    "maxLength": 65535,
+    "type": "string"
+   },
+   "compression": {
+    "additionalProperties": false,
+    "description": "Compression settings. `method` 'deflate' (default) or 'store'; `level` 0\u20139 (default 6); `deterministic: true` pins the pure-TS encoder so the bytes are identical on every runtime (slower).",
+    "properties": {
+     "deterministic": {
+      "description": "true pins the pure-TS encoder: identical bytes on every runtime (slower).",
+      "type": "boolean"
+     },
+     "level": {
+      "description": "Deflate effort 0\u20139 (default 6).",
+      "maximum": 9,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "method": {
+      "description": "'deflate' (default) or 'store' (no compression).",
+      "enum": [
+       "store",
+       "deflate"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "defaultDate": {
+    "description": "Timestamp for entries that set no `date`: an ISO-8601 instant (1980-01-01 \u2026 2107-12-31, 2-second DOS granularity) or 'now' (wall clock \u2014 emits the ZIP_TIMESTAMP_NOT_PINNED diagnostic and makes the bytes non-reproducible). Omitted: the DOS epoch 1980-01-01T00:00:00 (reproducible).",
+    "pattern": "^(?:now|\\d{4}-\\d{2}-\\d{2})",
+    "type": "string"
+   },
+   "entries": {
+    "description": "The entries to write (0\u2013100000; an empty array writes a valid empty archive). Each takes exactly one of dataBase64 / text / sourcePath, or directory: true.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "comment": {
+       "description": "Entry comment (UTF-8, \u2264 65535 bytes).",
+       "maxLength": 65535,
+       "type": "string"
+      },
+      "compression": {
+       "additionalProperties": false,
+       "description": "Compression settings. `method` 'deflate' (default) or 'store'; `level` 0\u20139 (default 6); `deterministic: true` pins the pure-TS encoder so the bytes are identical on every runtime (slower).",
+       "properties": {
+        "deterministic": {
+         "description": "true pins the pure-TS encoder: identical bytes on every runtime (slower).",
+         "type": "boolean"
+        },
+        "level": {
+         "description": "Deflate effort 0\u20139 (default 6).",
+         "maximum": 9,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "method": {
+         "description": "'deflate' (default) or 'store' (no compression).",
+         "enum": [
+          "store",
+          "deflate"
+         ],
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "dataBase64": {
+       "description": "File content as base64. Exclusive with text / sourcePath.",
+       "type": "string"
+      },
+      "date": {
+       "description": "ISO-8601 last-modified instant for this entry, 1980-01-01 \u2026 2107-12-31 (overrides defaultDate; 2-second DOS granularity).",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}",
+       "type": "string"
+      },
+      "directory": {
+       "default": false,
+       "description": "Explicit directory entry (no payload).",
+       "type": "boolean"
+      },
+      "externalAttributes": {
+       "description": "Raw external attributes (uint32). Exclusive with unixMode.",
+       "maximum": 4294967295,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "extraFields": {
+       "description": "Extra fields to embed verbatim (id 0\u201365535 except 0x0001, the Zip64 record the engine owns). The caller owns their determinism.",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "dataBase64": {
+          "description": "Payload bytes as base64 (may be empty).",
+          "type": "string"
+         },
+         "id": {
+          "description": "Extra-field header id (0\u201365535; 0x0001 is reserved for the engine).",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "required": [
+         "id",
+         "dataBase64"
+        ],
+        "type": "object"
+       },
+       "maxItems": 16,
+       "type": "array"
+      },
+      "name": {
+       "description": "Entry name, '/'-separated. Directories end in '/' (or set `directory: true`).",
+       "maxLength": 4096,
+       "minLength": 1,
+       "type": "string"
+      },
+      "sourcePath": {
+       "description": "Relative path of a file inside the ZIPNATIVE_MCP_OUTPUT_DIR sandbox to read the content from (any extension). Exclusive with dataBase64 / text.",
+       "minLength": 1,
+       "type": "string"
+      },
+      "stream": {
+       "default": false,
+       "description": "With sourcePath: feed the file through addStream (bounded memory, data-descriptor layout; entries > 4 GiB refused). The archive is then assembled by streaming.",
+       "type": "boolean"
+      },
+      "text": {
+       "description": "File content as UTF-8 text. Exclusive with dataBase64 / sourcePath.",
+       "type": "string"
+      },
+      "unixMode": {
+       "description": "Unix permission bits as 3\u20134 octal digits ('0644', '755', '0o755'); mapped to external attributes. Exclusive with externalAttributes.",
+       "pattern": "^(?:0o)?[0-7]{3,4}$",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "type": "object"
+    },
+    "maxItems": 100000,
+    "type": "array"
+   },
+   "includeSha256": {
+    "default": false,
+    "description": "Add `summary.sha256` of the produced bytes (determinism proofs).",
+    "type": "boolean"
+   },
+   "limits": {
+    "additionalProperties": false,
+    "description": "Override zipnative's named security bounds for this call (CWE-400 / CWE-409 guards). Every key is optional; absent keys keep the engine defaults (maxEntries 100000, maxEntryUncompressedSize 1 GiB, maxTotalUncompressedSize 8 GiB, maxCompressionRatio 1024, maxNameBytes 4096, maxExtraFieldBytes 65535, maxCommentBytes 65535, maxCentralDirectoryBytes 256 MiB). Values above the operator ceilings (ZIPNATIVE_MCP_MAX_UNCOMPRESSED_BYTES, ZIPNATIVE_MCP_MAX_ENTRIES) are refused with LIMIT_CEILING_EXCEEDED. Raise a bound for trusted input only.",
+    "properties": {
+     "maxCentralDirectoryBytes": {
+      "description": "Maximum central-directory size in bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCommentBytes": {
+      "description": "Maximum comment length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxCompressionRatio": {
+      "description": "Maximum declared uncompressed/compressed ratio for entries >= 1 KiB compressed (zip-bomb guard).",
+      "minimum": 1,
+      "type": "number"
+     },
+     "maxEntries": {
+      "description": "Maximum central-directory entry count.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxEntryUncompressedSize": {
+      "description": "Maximum decompressed size of one entry, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxExtraFieldBytes": {
+      "description": "Maximum extra-field block length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxNameBytes": {
+      "description": "Maximum entry-name length in bytes.",
+      "maximum": 65535,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "maxTotalUncompressedSize": {
+      "description": "Maximum total decompressed size across an extraction, bytes.",
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "order": {
+    "default": "canonical",
+    "description": "'canonical' (default): entries sorted by raw UTF-8 name bytes (reproducible). 'insertion': call order preserved (EPUB / JAR mimetype-first layouts).",
+    "enum": [
+     "canonical",
+     "insertion"
+    ],
+    "type": "string"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default) returns the bytes inline as an embedded resource (\u2264 50 MiB). 'file' writes them inside ZIPNATIVE_MCP_OUTPUT_DIR (never overwrites; \u2264 4 GiB, streamed) and returns a resource_link.",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Relative path inside the sandbox (only when outputMode='file'); must end in a container extension (.zip recommended).",
+    "type": "string"
+   },
+   "parallel": {
+    "additionalProperties": false,
+    "description": "Compress with the worker pool (zipnative/worker). Byte-identical to the sequential writer; only worth it for many large entries. `workers` 0 keeps everything on the calling thread.",
+    "properties": {
+     "jobTimeout": {
+      "description": "Per-job cap in ms before inline fallback (default 60000).",
+      "maximum": 600000,
+      "minimum": 1000,
+      "type": "integer"
+     },
+     "minWorkerJobSize": {
+      "description": "Entries below this size compress inline (default 32 KiB).",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "workers": {
+      "description": "Worker count (default max(1, min(cores \u2212 1, 8)); capped by ZIPNATIVE_MCP_WORKERS).",
+      "maximum": 64,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "strict": {
+    "default": false,
+    "description": "Escalate the first engine diagnostic (prepended data, duplicate name, name mismatch, \u2026) to a ZIP_STRICT_DIAGNOSTIC error instead of reporting it.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "entries"
+  ],
+  "type": "object"
+ },
+ "name": "create_zip",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Result of an archive-producing tool. base64 mode: the archive arrives as an embedded `resource` content block (not duplicated here); file mode: `filePath` + a resource_link.",
+  "properties": {
+   "diagnosticCounts": {
+    "additionalProperties": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "description": "Number of diagnostics received per code (counts every occurrence, including de-duplicated ones).",
+    "type": "object"
+   },
+   "diagnostics": {
+    "description": "Non-fatal conformance concerns the engine raised while parsing or writing (de-duplicated by code + entry, at most 200). Empty for a clean archive. Codes: ZIP_PREPENDED_DATA, ZIP_MULTIPLE_EOCD, ZIP_NAME_MISMATCH, ZIP_UNICODE_PATH_CONFLICT, ZIP_INVALID_UTF8_NAME, ZIP_DUPLICATE_NAME, ZIP_EXTRA_FIELD_MALFORMED, ZIP_ZIP64_EXTRA_IGNORED, ZIP_TIMESTAMP_NOT_PINNED, ZIP_NONDETERMINISTIC_CODEC, ZIP_DEAD_BYTES_RATIO.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "entryName": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning",
+        "info"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "severity",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "diagnosticsTruncated": {
+    "description": "Present (true) when more than 200 distinct diagnostics were dropped from `diagnostics`.",
+    "type": "boolean"
+   },
+   "filePath": {
+    "description": "Sandboxed absolute path (file mode).",
+    "type": "string"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "sizeBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "summary": {
+    "additionalProperties": false,
+    "description": "create_zip summary.",
+    "properties": {
+     "deflateTier": {
+      "description": "The engine deflate tier in use ('node-zlib', 'pure-pinned', 'pure', 'injected').",
+      "type": "string"
+     },
+     "deterministic": {
+      "description": "true only when compression.deterministic:true pins every entry and no wall-clock date is used (cross-runtime identity).",
+      "type": "boolean"
+     },
+     "directoryCount": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "entryCount": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "fileCount": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "order": {
+      "enum": [
+       "canonical",
+       "insertion"
+      ],
+      "type": "string"
+     },
+     "parallel": {
+      "additionalProperties": false,
+      "properties": {
+       "requested": {
+        "type": "boolean"
+       },
+       "workers": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "type": "object"
+     },
+     "sha256": {
+      "description": "Present with includeSha256 (base64 and file modes).",
+      "type": "string"
+     },
+     "streamedCount": {
+      "description": "Entries fed through addStream (stream:true).",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "uncompressedBytes": {
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "sizeBytes",
+   "summary",
+   "diagnostics"
+  ],
+  "type": "object"
+ },
+ "title": "Create archive (reproducible; deterministic:true for cross-runtime identical bytes)"
+}

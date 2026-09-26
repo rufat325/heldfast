@@ -1,0 +1,30 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Answers the one question the API cannot: if I edit this module, which tests break? Builds the reverse index of `execute` steps \u2014 for every imported test, its direct importers and its full transitive blast radius through nested chains. Run this BEFORE editing any module.\n\nAlso surfaces three things that only appear once the index exists: import-only tests nobody imports (dead, or a test that lost its caller and is silently not running); imported tests NOT flagged import-only, which run standalone *and* inside their importers, so an edit changes both paths; and execute steps pointing at ids that no longer exist.\n\n\ud83d\udd34 It also finds `vacuousTests`: tests that execute no steps at all, because their definition is only `execute` calls and the chain bottoms out in empty modules. Those pass \u2014 nothing can fail \u2014 so the dashboard shows them green while they assert nothing, which is worse than a red test and invisible any other way. Emptying one shared module does this to every test that imports it.\n\nThis is the expensive tool. `steps` is absent from the test listing, so it costs one request per test in the account \u2014 a few seconds for a few hundred tests, at deliberately low concurrency because the rate limit is undisclosed. Call it once and work from the result rather than per module. A definition that cannot be read is counted in `scanned.unreadable`, never skipped silently, because a missing definition understates a blast radius.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "folder": {
+    "description": "Folder id, or part of its name. Lists only the modules its tests import; counts stay account-wide.",
+    "type": "string"
+   },
+   "module": {
+    "description": "Case-insensitive substring of a module name. Narrows the listing and names every importer instead of capping the list.",
+    "type": "string"
+   },
+   "suite": {
+    "description": "Suite id, or part of its name. Lists only the modules its tests import; with folder, both apply.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "gi_module_usage",
+ "title": "Ghost Inspector: who imports each module"
+}

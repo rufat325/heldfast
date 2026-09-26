@@ -1,0 +1,83 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Produce a deterministic 4-value trust verdict (trust_and_use / use_with_caution / human_review_required / reject) for a PDF.\n\nRuns verify_signatures, verify_integrity and detect_pades_level internally (plus validate_conformance for long-term-preservation profiles) and folds the facts through a fixed rule table \u2014 the same facts and profile always yield the same verdict. The verdict is decided entirely by code; use the returned firedRules/advisories to explain the outcome, never to override it. It judges authenticity and integrity only, never the truth of the document's content.\n\nArgs:\n  - file_path (string): Absolute path to a local PDF file\n  - response_format ('markdown' | 'json'): Output format (default: 'markdown')\n  - profile ('general' | 'contract' | 'financial' | 'legal' | 'medical' | 'government'): Judgment profile (default: 'general')\n  - trust_anchors (string[], optional): Trust anchor certificate paths. Without them, signer identity stays not_evaluated and the verdict is capped at use_with_caution\n  - check_revocation ('none' | 'embedded' | 'online'): Revocation mode (default: 'embedded')\n  - revocation_freshness (integer seconds, default 86400): How long before the validation time a CRL / OCSP response may have been issued and still count as \"good\"\n  - trusted_ocsp_responders (string[], optional): Certificates of locally trusted OCSP responders (RFC 6960 \u00a74.2.2.2)\n  - password (string, optional): Password for an encrypted PDF\n\nReturns:\n  Every report begins with a \"scope\" object - how far the reading got, not a verdict: whether the cross-reference chain could be walked to the end (chainStop), whether this tool had to rebuild the cross-reference table itself (reconstructed - when true, the table is this tool's reconstruction and not the one the file carries), how many objects and sections were read, and whether an encrypted document could be opened. Read it before the verdict: \"no violations\" over a rebuilt table is not the same statement as \"no violations\" over the file's own table.\n\n  Size (v0.29.0): the verdict is computed over EVERY signature; facts.signatures lists at most 32 of them and facts.signaturesTruncated = { returned, total } says when it was cut. JSON is never cut by length.\n\n  verdict, firedRules (rule IDs with per-rule verdict and reason), advisories (recommendations that do not affect the verdict), and the underlying facts summary.\n\nExamples:\n  - Gate incoming invoices before filing them (profile: financial)\n  - Decide whether a countersigned contract can be relied on (profile: contract, with the counterparty CA as trust anchor)\n  - Batch-audit a folder of received PDFs with a reproducible, model-independent verdict",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "check_revocation": {
+    "default": "embedded",
+    "description": "Revocation checking: \"none\", \"embedded\" (default), or \"online\" (queries OCSP/CRL endpoints over HTTP).",
+    "enum": [
+     "none",
+     "embedded",
+     "online"
+    ],
+    "type": "string"
+   },
+   "file_path": {
+    "description": "Absolute path to a local PDF file (e.g., \"/path/to/document.pdf\")",
+    "minLength": 1,
+    "type": "string"
+   },
+   "password": {
+    "description": "Password for an encrypted PDF. Omit for permission-encrypted PDFs (an empty user password is tried automatically).",
+    "type": "string"
+   },
+   "profile": {
+    "default": "general",
+    "description": "Judgment profile: \"general\" (default thresholds), \"contract\" (signature required, identity-focused), \"financial\" (long-term preservation checks), \"legal\", \"medical\" (most conservative; caution escalates to review), \"government\" (long-term checks, unsigned tolerated).",
+    "enum": [
+     "general",
+     "contract",
+     "financial",
+     "legal",
+     "medical",
+     "government"
+    ],
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: \"markdown\" for human-readable, \"json\" for structured data",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "revocation_freshness": {
+    "default": 86400,
+    "description": "Seconds before the validation time that a CRL / OCSP response may have been issued (thisUpdate) and still support \"good\". Default 86400 (24 h); 0 accepts only data issued at or after the validation time. Older data gives \"unknown\".",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "trust_anchors": {
+    "description": "Absolute paths to trust anchor certificates (PEM or DER). Merged with the PDF_VERIFY_TRUST_ANCHORS environment variable. Without anchors, valid signatures are capped at use_with_caution (identity not evaluated).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "trusted_ocsp_responders": {
+    "description": "Absolute paths to certificates (PEM or DER) of locally trusted OCSP responders (RFC 6960 \u00a74.2.2.2). A response signed by one of them is accepted even when the responder is not the issuing CA or its delegate.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "file_path"
+  ],
+  "type": "object"
+ },
+ "name": "evaluate_policy",
+ "title": "Evaluate Trust Policy (deterministic verdict)"
+}

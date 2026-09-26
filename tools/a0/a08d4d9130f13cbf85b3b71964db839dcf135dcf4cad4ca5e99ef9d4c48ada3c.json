@@ -1,0 +1,363 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Deep profile for a single coin: description, categories, genesis date, homepage/whitepaper/repo/social links, full market data (price, cap, supply, ATH/ATL, multi-window price change), developer activity (GitHub stars/forks/commits), community stats, and sentiment vote split. The full picture for \"tell me everything about Ethereum\". The id must be a CoinGecko slug (resolve tickers with coingecko_search_coins). Use sections to fetch only part of the large record. Note: categories here are display names (e.g. \"Layer 1 (L1)\"), not the category_id slugs from coingecko_list_categories.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "id": {
+    "description": "CoinGecko slug (e.g. \"ethereum\"). Not a ticker \u2014 resolve with coingecko_search_coins.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "sections": {
+    "description": "Subset of sections to return: profile, market, links, developer, community, sentiment. Omit for all sections.",
+    "items": {
+     "enum": [
+      "profile",
+      "market",
+      "links",
+      "developer",
+      "community",
+      "sentiment"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "vs_currency": {
+    "default": "usd",
+    "description": "Currency for the market-data figures (price, cap, ATH/ATL). Single currency; defaults to \"usd\".",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "id"
+  ],
+  "type": "object"
+ },
+ "name": "coingecko_get_coin",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "id",
+     "symbol",
+     "name",
+     "attribution"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "attribution": {
+    "description": "Required data-source attribution.",
+    "type": "string"
+   },
+   "community": {
+    "additionalProperties": false,
+    "description": "Community stats (CoinGecko no longer returns Twitter follower counts). Present when the community section is requested.",
+    "properties": {
+     "redditSubscribers": {
+      "description": "Reddit subscribers, when available.",
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "developer": {
+    "additionalProperties": false,
+    "description": "Developer activity. Present when the developer section is requested.",
+    "properties": {
+     "closedIssues": {
+      "description": "Closed issues, when available.",
+      "type": "number"
+     },
+     "commits4w": {
+      "description": "Commits in the last 4 weeks, when available.",
+      "type": "number"
+     },
+     "forks": {
+      "description": "GitHub forks, when available.",
+      "type": "number"
+     },
+     "stars": {
+      "description": "GitHub stars, when available.",
+      "type": "number"
+     },
+     "totalIssues": {
+      "description": "Total issues, when available.",
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `coin_not_found`: Upstream returned 404 for the slug \u2014 it is not a recognized CoinGecko id. `rate_limited`: CoinGecko returned HTTP 429 \u2014 the shared keyless pool is throttled, or the Demo-tier quota was hit. `upstream_unreachable`: CoinGecko was unreachable or returned a 5xx/HTML error after all retry attempts. `invalid_response`: CoinGecko returned a body that could not be parsed as JSON. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "coin_not_found",
+         "rate_limited",
+         "upstream_unreachable",
+         "invalid_response"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "id": {
+    "description": "CoinGecko slug.",
+    "type": "string"
+   },
+   "links": {
+    "additionalProperties": false,
+    "description": "Official and social links. Present when the links section is requested.",
+    "properties": {
+     "homepage": {
+      "description": "Homepage URLs (may be empty).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "repos": {
+      "description": "Source-code repository URLs (GitHub/Bitbucket; may be empty).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "subreddit": {
+      "description": "Subreddit URL, when available.",
+      "type": "string"
+     },
+     "telegram": {
+      "description": "Telegram channel identifier, when available.",
+      "type": "string"
+     },
+     "twitter": {
+      "description": "Twitter/X handle (screen name), when available.",
+      "type": "string"
+     },
+     "whitepaper": {
+      "description": "Whitepaper URL, when available.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "homepage",
+     "repos"
+    ],
+    "type": "object"
+   },
+   "market": {
+    "additionalProperties": false,
+    "description": "Market data in vs_currency. Present when the market section is requested.",
+    "properties": {
+     "ath": {
+      "additionalProperties": false,
+      "description": "All-time high, when available.",
+      "properties": {
+       "date": {
+        "description": "All-time-high date (ISO 8601), when available.",
+        "type": "string"
+       },
+       "price": {
+        "description": "All-time-high price in vs_currency.",
+        "type": "number"
+       }
+      },
+      "required": [
+       "price"
+      ],
+      "type": "object"
+     },
+     "atl": {
+      "additionalProperties": false,
+      "description": "All-time low, when available.",
+      "properties": {
+       "date": {
+        "description": "All-time-low date (ISO 8601), when available.",
+        "type": "string"
+       },
+       "price": {
+        "description": "All-time-low price in vs_currency.",
+        "type": "number"
+       }
+      },
+      "required": [
+       "price"
+      ],
+      "type": "object"
+     },
+     "circulatingSupply": {
+      "description": "Circulating supply (coin units), when available.",
+      "type": "number"
+     },
+     "currentPrice": {
+      "description": "Current price in vs_currency, when available.",
+      "type": "number"
+     },
+     "fullyDilutedValuation": {
+      "description": "Fully diluted valuation in vs_currency, when available.",
+      "type": "number"
+     },
+     "marketCap": {
+      "description": "Market capitalization in vs_currency, when available.",
+      "type": "number"
+     },
+     "maxSupply": {
+      "description": "Maximum supply (coin units), when available.",
+      "type": "number"
+     },
+     "priceChangePct": {
+      "additionalProperties": false,
+      "description": "Multi-window price change percentages (each field present only when upstream provides it).",
+      "properties": {
+       "d1y": {
+        "description": "1-year price change percentage, when available.",
+        "type": "number"
+       },
+       "d24h": {
+        "description": "24-hour price change percentage, when available.",
+        "type": "number"
+       },
+       "d30d": {
+        "description": "30-day price change percentage, when available.",
+        "type": "number"
+       },
+       "d7d": {
+        "description": "7-day price change percentage, when available.",
+        "type": "number"
+       }
+      },
+      "type": "object"
+     },
+     "totalSupply": {
+      "description": "Total supply (coin units), when available.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "priceChangePct"
+    ],
+    "type": "object"
+   },
+   "name": {
+    "description": "Display name.",
+    "type": "string"
+   },
+   "profile": {
+    "additionalProperties": false,
+    "description": "Identity and descriptive metadata. Present when the profile section is requested.",
+    "properties": {
+     "categories": {
+      "description": "Category display names (e.g. \"Layer 1 (L1)\") \u2014 not category_id slugs.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "countryOrigin": {
+      "description": "Country of origin, when available.",
+      "type": "string"
+     },
+     "description": {
+      "description": "Long-form description (English), when available.",
+      "type": "string"
+     },
+     "genesisDate": {
+      "description": "Genesis/launch date (ISO 8601), when available.",
+      "type": "string"
+     },
+     "hashingAlgorithm": {
+      "description": "Hashing algorithm, when available.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "categories"
+    ],
+    "type": "object"
+   },
+   "sentiment": {
+    "additionalProperties": false,
+    "description": "Sentiment vote split. Present when the sentiment section is requested.",
+    "properties": {
+     "downPercentage": {
+      "description": "Percentage of down votes, when available.",
+      "type": "number"
+     },
+     "upPercentage": {
+      "description": "Percentage of up votes, when available.",
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "symbol": {
+    "description": "Ticker symbol.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "coingecko-mcp-server: get coin"
+}

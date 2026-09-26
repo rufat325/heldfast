@@ -1,0 +1,320 @@
+{
+ "description": "Admin-only Agent Command Center \u2014 canonical registry of every Astra AI agent (running on VPS, planned, archived). Query before scaffolding a new agent. Update status / current_job / responsibilities after non-trivial work. Every agent is owned by a MIND account (owner_username) and can be transferred or shared with other accounts as owner/viewer. Backed by /admin/agents on the MIND backend; admin API key required.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "action": {
+    "description": "Action: list (filter+stats), get (detail+recent activities), create, update (partial), delete (soft archive; pass hard=true to remove), heartbeat (push from agent runtime), probe (HTTP/OpenClaw liveness probe), log_activity (manual note), list_activities, import_from_mind (enrich from agent-identity docs), seed_known (idempotent upsert of canonical seed), set_status (shortcut update), set_current_job (shortcut update), transfer_owner (move the agent to another account's board \u2014 needs owner_username), share (grant another account access \u2014 needs grantee_username + share_role), list_shares (who the agent is shared with), revoke_share (drop a share grant \u2014 needs share_id), list_invoices (invoices linked to an agent), link_invoice (attach an existing invoice id), unlink_invoice (detach an invoice id), create_invoice (create a new Invoice Agent draft + link it), list_workflows (workflows linked to an agent), link_workflow (attach an existing workflow slug \u2014 needs workflow_slug), unlink_workflow (detach a workflow \u2014 needs workflow_slug), used_by (inverse view: which agents call this workflow)",
+    "enum": [
+     "list",
+     "get",
+     "create",
+     "update",
+     "delete",
+     "heartbeat",
+     "probe",
+     "log_activity",
+     "list_activities",
+     "import_from_mind",
+     "seed_known",
+     "set_status",
+     "set_current_job",
+     "transfer_owner",
+     "share",
+     "list_shares",
+     "revoke_share",
+     "list_invoices",
+     "link_invoice",
+     "unlink_invoice",
+     "create_invoice",
+     "list_workflows",
+     "link_workflow",
+     "unlink_workflow",
+     "used_by"
+    ],
+    "type": "string"
+   },
+   "activity_payload": {
+    "additionalProperties": {},
+    "description": "Activity payload for log_activity.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "activity_type": {
+    "description": "Activity type for log_activity (e.g. job_done, job_start, error, note).",
+    "type": "string"
+   },
+   "authority_can_autonomous": {
+    "description": "Things this agent can do without asking.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "authority_requires_approval": {
+    "description": "Things that need Anthony's sign-off.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "bill_to_company": {
+    "description": "Recipient company for create_invoice.",
+    "type": "string"
+   },
+   "bill_to_email": {
+    "description": "Recipient email for create_invoice.",
+    "type": "string"
+   },
+   "bill_to_name": {
+    "description": "Recipient name for create_invoice (required).",
+    "type": "string"
+   },
+   "cadence": {
+    "description": "How the agent runs.",
+    "enum": [
+     "continuous",
+     "scheduled",
+     "on-demand"
+    ],
+    "type": "string"
+   },
+   "credentials_required": {
+    "description": "Named credentials this workflow touches (e.g. ['OpenAI API key', 'Resend API key', 'MIND tenant key']).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "currency": {
+    "description": "Invoice currency for create_invoice (default USD).",
+    "type": "string"
+   },
+   "current_job": {
+    "description": "What the agent is doing right now (set on heartbeat or set_current_job).",
+    "type": "string"
+   },
+   "description": {
+    "description": "One-paragraph description of the agent.",
+    "type": "string"
+   },
+   "expected_interval_seconds": {
+    "description": "Expected heartbeat cadence in seconds; live_status thresholds compute against 2\u00d7 / 4\u00d7 this value.",
+    "type": "number"
+   },
+   "grantee_username": {
+    "description": "MIND account username to share the agent with (action=share). The account must already exist.",
+    "type": "string"
+   },
+   "hard": {
+    "description": "If true with action=delete, permanently remove. Default soft-archives.",
+    "type": "boolean"
+   },
+   "health_url": {
+    "description": "Optional HTTP health endpoint for the probe action.",
+    "type": "string"
+   },
+   "host": {
+    "description": "Host: DO1 / DO2-LEO / local / render / vercel / atlas-droplet / other.",
+    "type": "string"
+   },
+   "host_address": {
+    "description": "IP or hostname (e.g. 45.55.233.204).",
+    "type": "string"
+   },
+   "include_archived": {
+    "description": "Include archived records when listing (default false).",
+    "type": "boolean"
+   },
+   "inputs_summary": {
+    "description": "One-line description of the data this workflow consumes.",
+    "type": "string"
+   },
+   "invoice_id": {
+    "description": "Invoice id \u2014 required for link_invoice / unlink_invoice.",
+    "type": "string"
+   },
+   "invoice_notes": {
+    "description": "Notes shown on the invoice for create_invoice.",
+    "type": "string"
+   },
+   "kind": {
+    "description": "Registry kind. Pass on create to scaffold a Workflow card instead of an Agent. Pass on action=list (via list_kind) to filter the board.",
+    "enum": [
+     "agent",
+     "workflow"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "description": "Max activities to return for list_activities (default 50).",
+    "type": "number"
+   },
+   "line_item_description": {
+    "description": "Single line-item description for create_invoice.",
+    "type": "string"
+   },
+   "list_host": {
+    "description": "Filter by host when listing.",
+    "type": "string"
+   },
+   "list_kind": {
+    "description": "Filter the board by kind when listing \u2014 'agent' or 'workflow'. Omit to return both.",
+    "enum": [
+     "agent",
+     "workflow"
+    ],
+    "type": "string"
+   },
+   "list_query": {
+    "description": "Free-text search when listing \u2014 case-insensitive substring match across slug, name, description, and tags.",
+    "type": "string"
+   },
+   "list_status": {
+    "description": "Filter by status when listing.",
+    "enum": [
+     "running",
+     "paused",
+     "planned",
+     "archived",
+     "error"
+    ],
+    "type": "string"
+   },
+   "list_tag": {
+    "description": "Filter by tag when listing.",
+    "type": "string"
+   },
+   "metrics": {
+    "additionalProperties": {},
+    "description": "Arbitrary metrics blob attached to a heartbeat.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "mind_identity_doc_id": {
+    "description": "MIND document id for the agent-identity record.",
+    "type": "string"
+   },
+   "name": {
+    "description": "Display name.",
+    "type": "string"
+   },
+   "note": {
+    "description": "Free-form note attached to a heartbeat.",
+    "type": "string"
+   },
+   "outputs_summary": {
+    "description": "One-line description of the artifacts this workflow produces.",
+    "type": "string"
+   },
+   "overwrite": {
+    "description": "If true with action=seed_known, reset existing records to seed defaults.",
+    "type": "boolean"
+   },
+   "owner_email": {
+    "description": "Owner contact (defaults to anthony@theastraway.com).",
+    "type": "string"
+   },
+   "owner_username": {
+    "description": "MIND account username to transfer the agent to (action=transfer_owner). The account must already exist.",
+    "type": "string"
+   },
+   "port": {
+    "description": "TCP port if applicable.",
+    "type": "number"
+   },
+   "quantity": {
+    "description": "Line-item quantity for create_invoice (default 1).",
+    "type": "number"
+   },
+   "responsibilities": {
+    "description": "Bullet list of what the agent does.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "share_id": {
+    "description": "Share-grant id to revoke (action=revoke_share). Get it from list_shares.",
+    "type": "string"
+   },
+   "share_role": {
+    "description": "Role for action=share: 'owner' (full control) or 'viewer' (read-only). Default: viewer.",
+    "enum": [
+     "owner",
+     "viewer"
+    ],
+    "type": "string"
+   },
+   "slug": {
+    "description": "Agent slug (lowercase, dashes). Required for get/update/delete/heartbeat/probe/activities/set_*/transfer_owner/share/list_shares/revoke_share.",
+    "type": "string"
+   },
+   "source": {
+    "description": "Source attribution for heartbeats / activities.",
+    "type": "string"
+   },
+   "source_path": {
+    "description": "Local path to the agent directory (e.g. /Users/anthonyjconti/Documents/Agents/Foo).",
+    "type": "string"
+   },
+   "source_repo": {
+    "description": "Git repo URL when applicable.",
+    "type": "string"
+   },
+   "status": {
+    "description": "Lifecycle status.",
+    "enum": [
+     "running",
+     "paused",
+     "planned",
+     "archived",
+     "error"
+    ],
+    "type": "string"
+   },
+   "steps_json": {
+    "description": "JSON-encoded array of WorkflowStep dicts (kind='workflow' only). Each step: {order, name, description, kind, credentials[], inputs[], outputs[], notes}. Step kind \u2208 {trigger, action, ai, branch, loop, wait, notify, output}.",
+    "type": "string"
+   },
+   "tags": {
+    "description": "Domain tags for filtering.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "trigger_summary": {
+    "description": "One-line description of what fires this workflow (kind='workflow' only).",
+    "type": "string"
+   },
+   "triggers": {
+    "description": "Canonical phrases that should invoke this agent.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "unit_price": {
+    "description": "Line-item unit price for create_invoice (default 0).",
+    "type": "number"
+   },
+   "workflow_slug": {
+    "description": "Workflow slug \u2014 required for link_workflow / unlink_workflow.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "action"
+  ],
+  "type": "object"
+ },
+ "name": "mind_agents"
+}

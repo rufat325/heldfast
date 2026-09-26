@@ -1,0 +1,541 @@
+{
+ "annotations": {
+  "access": "paid",
+  "destructiveHint": false,
+  "front_door": "rank_markets",
+  "idempotentHint": true,
+  "maturity": "mature",
+  "openWorldHint": false,
+  "pricing_url": "https://dchub.cloud/pricing/upgrade?tool=get_market_intel&ref=mcp-tools-list",
+  "problem": "colocation and wholesale data-center markets",
+  "readOnlyHint": true,
+  "title": "Market Intelligence",
+  "upgrade_relay": "Call the tool first: a gated result carries a session-bound checkout link (dchub.cloud/go/c/<token>) and a human relay (dchub.cloud/upgrade/h/<token>) minted for THIS session \u2014 relay those verbatim. This URL is only the fallback for a client that renders annotations before any call."
+ },
+ "description": "Use when a user asks about ONE data-center market \u2014 vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth \u2014 across any of 300+ markets. Example: \"What is Northern Virginia's vacancy rate, $/MW-day pricing, and current DCPI verdict?\" \u2014 get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. \"northern-virginia\", \"dallas\", \"phoenix\", \"frankfurt\", \"tokyo\", \"singapore\"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "compare_to": {
+    "description": "Optional second market slug to compare against, e.g. dallas",
+    "type": "string"
+   },
+   "market": {
+    "description": "Market slug (metro), e.g. northern-virginia, dallas, frankfurt, singapore \u2014 valid slugs come from rank_markets / get_market_dcpi_rank",
+    "type": "string"
+   },
+   "metric": {
+    "description": "Optional single metric to focus on, e.g. vacancy, pricing, absorption, pipeline",
+    "type": "string"
+   },
+   "mpp_credential": {
+    "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result \u2014 no API key, no subscription, no human. One payment covers one call.",
+    "type": "string"
+   },
+   "mpp_pay": {
+    "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves \u2014 a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+    "type": "boolean"
+   },
+   "period": {
+    "description": "Optional time window for the metric, e.g. ttm, 12mo, ytd",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "get_market_intel",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "One-market intelligence read: identity, stats, status mix, operators, recent facilities, cited related intel \u2014 alongside the DC Hub envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_gated": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "true when parts of the payload were withheld by tier"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "by_status": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Facility counts keyed by status (Operational, Under Construction, Planned, Announced, active)"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "market": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {
+       "cities": {
+        "description": "Cities composing the market"
+       },
+       "id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Market slug"
+       },
+       "name": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Market display name"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The market identity block"
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "recent_facilities": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "city": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "City"
+        },
+        "discovered_at": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "When DC Hub first tracked it"
+        },
+        "id": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Facility id"
+        },
+        "name": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Facility name"
+        },
+        "power_mw": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Capacity, MW"
+        },
+        "provider": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Operator"
+        },
+        "status": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Facility status"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Recently added / discovered facilities in the market"
+   },
+   "related_intel": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "citation": {
+         "description": "Citation payload"
+        },
+        "cosine": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Retrieval similarity score"
+        },
+        "kind": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Passage kind"
+        },
+        "source": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Source name"
+        },
+        "text": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Cited passage text"
+        },
+        "title": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Passage title"
+        },
+        "url": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Source URL"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "RAG-grounded related intelligence passages (cited)"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   },
+   "stats": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {
+       "avg_power_mw": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Average facility capacity, MW"
+       },
+       "facility_count": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Tracked facilities in the market"
+       },
+       "provider_count": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Distinct operators"
+       },
+       "total_power_mw": {
+        "anyOf": [
+         {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ]
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Total tracked capacity, MW"
+       }
+      },
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Headline market stats"
+   },
+   "success": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "true when the market lookup succeeded"
+   },
+   "top_providers": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "facilities": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Facility count"
+        },
+        "name": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Operator name"
+        },
+        "power_mw": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Aggregate capacity, MW"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Dominant operators, largest first"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Market Intelligence"
+}

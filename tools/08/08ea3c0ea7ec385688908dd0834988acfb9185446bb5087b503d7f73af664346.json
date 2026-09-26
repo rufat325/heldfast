@@ -1,0 +1,77 @@
+{
+ "_meta": {
+  "dfx.example": {
+   "arguments": {
+    "event_type": "LOAN_MATURITY_SCHEDULED",
+    "limit": 10,
+    "state": "MA",
+    "within_days": 548
+   },
+   "expect": "rows, ordered soonest first, each with a maturity date, a headline, its source and the loan's balance and rate under `debt`",
+   "goal": "Commercial mortgages maturing in one state inside eighteen months.",
+   "note": "Drop `within_days` for any historical family. Drop `state` for the national picture."
+  }
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Find dated property events by type, state and time window"
+ },
+ "description": "Dated events over US properties and parcels, with provenance and a human-readable headline. Covers LIHTC compliance period endings (the Year 15 recapitalisation trigger, 11,956 of them), HUD subsidy contract expiries (4,721), scheduled loan maturities (3,281) now national rather than Massachusetts, CMBS distress and workout reporting (1,430 delinquency flags across 26 states, 123 foreclosures across 21), issued building permits and demolition filings (Boston only), and recorded sales (47,479, 3 states). 9,381 events fall inside the next 548 days, measured 2026-09-26. Filter by event type, state and days ahead. An unrecognised event type is REFUSED with the served vocabulary, never answered with an empty list. Free. ORDER: results are sorted by `occurred_at`. A family whose events lie AHEAD is returned soonest first, so the first row is the next thing to happen. A family whose events have already happened is returned NEWEST first, so the first row is the most recent thing that did. The tie-break is stable, so paging never reorders what you have already seen. FORWARD, soonest first: COMPLIANCE_PERIOD_ENDING, LEASE_EXPIRING, LOAN_MATURITY_SCHEDULED, SUBSIDY_CONTRACT_EXPIRING. HISTORICAL, newest first: BANKRUPTCY_EVENT, CERTIFICATE_OF_OCCUPANCY, DEMOLITION_FILED, DISTRESS_FLAG_RAISED, FORECLOSURE_EVENT, FORECLOSURE_FILED, LOAN_MODIFIED, PERMIT_ISSUED, PORTFOLIO_CONTRACTED, PORTFOLIO_EXPANDED, PROPERTY_SOLD, TAX_LIEN_LISTED, USE_CONVERSION_PERMITTED. Measured 2026-09-26. Passing `within_days` asks about a future whatever the family, so it sorts soonest first. PAGING: a full page carries `next_cursor`. Supplied as `cursor` with every other argument unchanged, it continues the traversal; `next_cursor` is null on the last page, and that is the only signal the traversal has ended. The cursor carries the sort it was issued under, so a cursor replayed against a different `event_type` is REFUSED rather than quietly paging you back through rows you have seen. The counts above are therefore all reachable.",
+ "inputSchema": {
+  "properties": {
+   "cursor": {
+    "description": "The `next_cursor` from a previous page. With EVERY other argument identical it returns the rows after that page. `next_cursor` is null only once the whole result set has been read: a short page is not the end, because a page can shrink when two sources publish the same event. Opaque, and not constructed or edited by hand. An unreadable cursor is REFUSED rather than ignored, so a traversal is never silently restarted at page one.",
+    "type": "string"
+   },
+   "event_type": {
+    "description": "ONE family per call. Left unset, every family is searched together, which mixes populations of very different sizes. The list is generated from what this server actually publishes today, so it grows without a release. An empty result for a family in a state is not by itself evidence of an absent market: coverage per family and state is measured and published separately.",
+    "enum": [
+     "BANKRUPTCY_EVENT",
+     "CERTIFICATE_OF_OCCUPANCY",
+     "COMPLIANCE_PERIOD_ENDING",
+     "DEMOLITION_FILED",
+     "DISTRESS_FLAG_RAISED",
+     "FORECLOSURE_EVENT",
+     "FORECLOSURE_FILED",
+     "LEASE_EXPIRING",
+     "LOAN_MATURITY_SCHEDULED",
+     "LOAN_MODIFIED",
+     "PERMIT_ISSUED",
+     "PERMIT_STATUS_CHANGED",
+     "PORTFOLIO_CONTRACTED",
+     "PORTFOLIO_EXPANDED",
+     "PROPERTY_SOLD",
+     "SUBSIDY_CONTRACT_EXPIRING",
+     "TAX_LIEN_LISTED",
+     "USE_CONVERSION_PERMITTED",
+     "VACANT_FORECLOSURE_REGISTERED"
+    ],
+    "type": "string"
+   },
+   "include_past": {
+    "default": false,
+    "description": "Return the whole tape including events already past, instead of the default forward window applied to expiry families. Has no effect when `within_days` is given, which sets its own window, and none on historical families, which are never floored.",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 25,
+    "description": "Max 50. Results are ordered by occurred_at ASCENDING. For the expiry families (maturities, compliance periods, subsidy contracts, leases) a call with no `within_days` now returns events dated TODAY OR LATER, soonest first; the envelope reports this as `applied_date_floor`. `include_past=true` returns the full history.",
+    "type": "integer"
+   },
+   "state": {
+    "description": "Two letter state code",
+    "type": "string"
+   },
+   "within_days": {
+    "description": "FORWARD ONLY: it filters to events occurring between today and N days from now, and it cannot reach the past. A historical event fails every forward window, so any value here returns an empty list for a backward-looking question (\"recent sales\", \"foreclosures that already happened\"), which reads like an absent market; those events are reached with this argument unset. 548 is eighteen months. FORWARD FAMILIES, which this argument is for: COMPLIANCE_PERIOD_ENDING, LEASE_EXPIRING, LOAN_MATURITY_SCHEDULED, SUBSIDY_CONTRACT_EXPIRING. ENTIRELY HISTORICAL as of 2026-09-26, where ANY value returns nothing: BANKRUPTCY_EVENT, CERTIFICATE_OF_OCCUPANCY, DEMOLITION_FILED, DISTRESS_FLAG_RAISED, FORECLOSURE_EVENT, FORECLOSURE_FILED, LOAN_MODIFIED, PERMIT_ISSUED, PORTFOLIO_CONTRACTED, PORTFOLIO_EXPANDED, PROPERTY_SOLD, TAX_LIEN_LISTED, USE_CONVERSION_PERMITTED.",
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "search_property_events",
+ "title": "Find dated property events by type, state and time window"
+}

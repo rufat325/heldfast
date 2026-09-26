@@ -1,0 +1,149 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Deploy a custom rule that fires on every future evaluate_output call of its bundle \u2014 persisted, active immediately, audited.\n\nWhat it does. Stores the rule and loads it into the running engine. eval_type says WHEN it fires (that bundle, and eval_type=\"all\"); severity says what a failure does: low and medium lower the score, high and critical fail the verdict. definition.type picks the check, definition.config its keys. A taken name is refused unless replace is true. Full detail: iris://capabilities.\n\nWhen not to use it. For a one-off check (custom_rules on evaluate_output). To pause a rule (delete_rule with enabled: false).\n\nReturns. JSON: rule, replaced, warning.\n\nErrors. IRIS_DUPLICATE_RULE; IRIS_INVALID_RULE_CONFIG, naming the field; IRIS_STORAGE_ERROR. Failures return {\"error\":{code,message,recovery}} with isError; follow recovery.\n\nSiblings. list_rules \u2014 see what is deployed; delete_rule \u2014 remove or disable; evaluate_output \u2014 where it fires.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "definition": {
+    "additionalProperties": false,
+    "description": "The check: type, config and optional weight; an unknown key is rejected",
+    "properties": {
+     "config": {
+      "additionalProperties": {},
+      "description": "Check configuration; required keys depend on type (regex_match: pattern; min_length: min_length; max_length: max_length; contains_keywords/excludes_keywords: keywords; cost_threshold: max_cost; json_schema: schema, optional; action_policy: allow and/or deny)",
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "name": {
+      "description": "Ignored: the server overwrites it with the top-level `name`",
+      "maxLength": 80,
+      "minLength": 1,
+      "type": "string"
+     },
+     "type": {
+      "description": "Check type \u2014 decides which config keys are required",
+      "enum": [
+       "regex_match",
+       "regex_no_match",
+       "min_length",
+       "max_length",
+       "contains_keywords",
+       "excludes_keywords",
+       "json_schema",
+       "cost_threshold",
+       "action_policy"
+      ],
+      "type": "string"
+     },
+     "weight": {
+      "description": "Weight in the weighted score (default 1; must be > 0)",
+      "exclusiveMinimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "type",
+     "config"
+    ],
+    "type": "object"
+   },
+   "description": {
+    "description": "What this rule checks for and why it matters",
+    "maxLength": 500,
+    "type": "string"
+   },
+   "evalType": {
+    "description": "camelCase alias of eval_type, accepted for compatibility \u2014 prefer eval_type (snake_case is canonical across the tools)",
+    "enum": [
+     "completeness",
+     "relevance",
+     "safety",
+     "cost",
+     "custom"
+    ],
+    "type": "string"
+   },
+   "eval_type": {
+    "description": "The bundle this rule fires in (and on eval_type=\"all\"); pass one of eval_type / evalType",
+    "enum": [
+     "completeness",
+     "relevance",
+     "safety",
+     "cost",
+     "custom"
+    ],
+    "type": "string"
+   },
+   "name": {
+    "description": "Human-readable rule name (1-80 chars; used in eval results). Must be unique among deployed rules unless replace=true",
+    "maxLength": 80,
+    "minLength": 1,
+    "type": "string"
+   },
+   "replace": {
+    "default": false,
+    "description": "true replaces a deployed rule of the same name (fresh id, audit kept); false (default) refuses",
+    "type": "boolean"
+   },
+   "severity": {
+    "default": "medium",
+    "description": "What a FAILURE of this rule means. low/medium: informational \u2014 contributes to the weighted score only (plus dashboard sort + audit alerts). high/critical: hard-fail \u2014 a failing evaluation of this rule forces the overall passed=false regardless of the weighted score",
+    "enum": [
+     "low",
+     "medium",
+     "high",
+     "critical"
+    ],
+    "type": "string"
+   },
+   "sourceMomentId": {
+    "description": "camelCase alias of source_moment_id, accepted for compatibility \u2014 prefer source_moment_id",
+    "type": "string"
+   },
+   "source_moment_id": {
+    "description": "Optional id of the Decision Moment this rule came from; pass one of source_moment_id / sourceMomentId",
+    "type": "string"
+   }
+  },
+  "required": [
+   "name",
+   "definition"
+  ],
+  "type": "object"
+ },
+ "name": "deploy_rule",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {},
+  "properties": {
+   "replaced": {
+    "items": {},
+    "type": "array"
+   },
+   "rule": {
+    "additionalProperties": {},
+    "properties": {},
+    "type": "object"
+   },
+   "warning": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "rule"
+  ],
+  "type": "object"
+ },
+ "title": "Deploy Custom Rule"
+}

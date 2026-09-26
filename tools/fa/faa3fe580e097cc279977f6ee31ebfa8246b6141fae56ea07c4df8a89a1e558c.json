@@ -1,0 +1,60 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Vue 360 d'un \u00e9tablissement de sant\u00e9 en 1 appel (V0.10). Pendant naturel de `panorama_sante_territoire` c\u00f4t\u00e9 **site** : agr\u00e8ge en parall\u00e8le (a) identification FINESS DREES (raison sociale, adresse, t\u00e9l\u00e9phone), (b) statut administratif SIRENE via le resolver SIRET (verdicts site + groupe, best_match, SIREN explor\u00e9s, dinum_errors, explication LLM-friendly), (c) professionnels rattach\u00e9s via num_finess (sample born\u00e9 + flag `truncated` si le site a plus de PS \u2014 PAS un count total), (d) historique INSEE (timeline p\u00e9riodes administratives par SIRET candidat).\n\nRemplace 3 appels MCP individuels (`verifier_site_actif` + `rpps_dans_etablissement` + `historique_etablissement`) par 1 seul. Utile pour : prospection (qualifier un site avant outreach), audit territorial (cross-check rapide d'un FINESS suspect), enrichissement CRM en batch.\n\n**Format de retour** : objet `LookupResult`. Quand `found: true`, payload avec 4 sections (finess, statut_site, professionnels, historique). La section `historique` peut \u00eatre `available: false` quand le FINESS existe mais qu'aucun SIRET candidat n'a \u00e9t\u00e9 identifi\u00e9 (RPPS vide + DINUM 0 match) \u2014 dans ce cas le `message` reprend celui de `historique_etablissement`. Quand `num_finess` est absent de FINESS DREES, retourne `{found: false, lookupStatus: 'not_found', message}`.\n\nCo\u00fbt : 3 sous-appels parall\u00e8les. Cache PostgreSQL absorbe la duplication FINESS-RPC ; le pivot RPPS\u2192DINUM est ex\u00e9cut\u00e9 en double (verifier + historique partagent la cascade), surco\u00fbt p95 \u2264 600 ms \u2014 acceptable pour un agr\u00e9gateur. Pour les besoins cibl\u00e9s (juste le verdict, juste l'historique), pr\u00e9f\u00e9rer les tools individuels. Payload lourd (~7K tokens) : passer `historique_detail: false` pour un retour all\u00e9g\u00e9 (r\u00e9sum\u00e9 au lieu des timelines SIRENE compl\u00e8tes) en usage batch.\n\nAlias accept\u00e9s : `numFiness`/`finess`/`id` \u2192 `num_finess`.",
+ "inputSchema": {
+  "properties": {
+   "historique_detail": {
+    "default": true,
+    "description": "Inclure les timelines SIRENE d\u00e9taill\u00e9es dans `historique.siret_timelines` (d\u00e9faut true). `false` = payload all\u00e9g\u00e9 (~7K tokens en moins) : `historique` ne porte qu'un `resume` (counts) + un pointeur vers `historique_etablissement`.",
+    "type": "boolean"
+   },
+   "num_finess": {
+    "description": "Num\u00e9ro FINESS exact 9 chiffres. Ex: '590048997'.",
+    "type": "string"
+   },
+   "rpps_limit": {
+    "description": "Nombre max de PS dans `professionnels.sample`. `professionnels.count` = taille du sample (\u2264 cette borne), pas le total du site ; `truncated: true` signale qu'il y a davantage de PS. Born\u00e9 [1, 50]. D\u00e9faut 10.",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "num_finess"
+  ],
+  "type": "object"
+ },
+ "name": "inspect_site",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

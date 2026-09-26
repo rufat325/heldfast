@@ -1,0 +1,179 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Navigate the Eurostat theme tree. Without theme_code returns the top-level theme folders (Economy, Population, Transport, etc.) \u2014 the practical starting points. With a theme_code returns its immediate children: subtheme folders and datasets in that branch. Use this for structured discovery when you know the domain but not the dataset code, or to drill down from a broad topic to a specific dataset. Pair with eurostat_search_datasets for keyword-based discovery. The tree is the dissemination table of contents plus the Comext host's DS-* collections: detailed trade under ext_go_detail (inside ext_go, \"International trade in goods\") and PRODCOM under prom (inside icts, \"Industry, trade and services\"). A collection on neither, such as the legacy PRODCOM DS-056120, is not disseminated and appears nowhere in the tree.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "theme_code": {
+    "description": "Folder code to expand (e.g., \"economy\", \"reg\"). Omit to list the top-level theme folders.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "eurostat_browse_themes",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "items",
+     "parentPath",
+     "itemCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `not_found`: The provided theme_code does not exist in the TOC. `not_a_folder`: The provided theme_code identifies a dataset or table entry instead of a folder. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "not_found",
+         "not_a_folder"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "itemCount": {
+    "description": "Number of items returned in this level.",
+    "type": "number"
+   },
+   "items": {
+    "description": "Immediate children of the requested theme, or the root themes if theme_code was omitted.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A theme folder, dataset, or table entry.",
+     "properties": {
+      "code": {
+       "description": "Theme or dataset code. Pass to theme_code to drill into a folder, or use as dataset_code for data tools.",
+       "type": "string"
+      },
+      "dataEnd": {
+       "description": "Most recent data period. Omitted for folders and when not reported.",
+       "type": "string"
+      },
+      "dataStart": {
+       "description": "Earliest data period (e.g., \"1995\"). Omitted for folders and when not reported.",
+       "type": "string"
+      },
+      "hasChildren": {
+       "description": "True when this folder contains sub-items. Only meaningful for type \"folder\".",
+       "type": "boolean"
+      },
+      "label": {
+       "description": "Human-readable name.",
+       "type": "string"
+      },
+      "obsCount": {
+       "description": "Approximate observation count. Omitted for folders and when not reported.",
+       "type": "number"
+      },
+      "type": {
+       "description": "Item type: \"folder\" has sub-items; \"dataset\"/\"table\" can be queried for data.",
+       "enum": [
+        "folder",
+        "dataset",
+        "table"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "label",
+      "type",
+      "hasChildren"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "nextStep": {
+    "description": "Suggested next action based on these results. Populated when there is a clear follow-up call.",
+    "type": "string"
+   },
+   "otherPlacements": {
+    "description": "Breadcrumbs of the other branches that file this same theme_code. Eurostat lists a few folder codes in more than one branch; the items above come from the first one the catalogue lists, which never has fewer children than the branches named here but can list different ones. theme_code takes a bare code, so those branches cannot be addressed directly \u2014 browse down to them from the root instead. Omitted when the code has a single placement \u2014 the normal case.",
+    "items": {
+     "description": "Breadcrumb from root to one other folder carrying the requested code.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "type": "array"
+   },
+   "parentPath": {
+    "description": "Breadcrumb from root to the requested theme (e.g., [\"Database by themes\", \"Economy and finance\"]). Empty when browsing root.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "themeCode": {
+    "description": "Folder code that was browsed, or omitted for root.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Browse Eurostat Theme Hierarchy"
+}

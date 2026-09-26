@@ -1,0 +1,181 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Current price and core market stats (market cap, 24h volume, 24h change) for one or more coins in one or more fiat/crypto currencies. Batch-friendly \u2014 pass a whole portfolio in one call (up to 250 ids). IDs must be CoinGecko slugs (bitcoin, ethereum), not tickers; resolve unknown tickers with coingecko_search_coins first. Any requested ids that returned no data are reported in the missing field (a wrong slug yields a silent upstream miss, not an error), so a typo reads as \"unresolved\", not \"nonexistent\".",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "ids": {
+    "description": "CoinGecko slugs to price (e.g. [\"bitcoin\",\"ethereum\"]). Not tickers \u2014 resolve with coingecko_search_coins. Up to 250 per call.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 250,
+    "minItems": 1,
+    "type": "array"
+   },
+   "vs_currencies": {
+    "default": [
+     "usd"
+    ],
+    "description": "Currency codes to price against (e.g. [\"usd\",\"eur\",\"btc\"]). Defaults to [\"usd\"].",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "ids"
+  ],
+  "type": "object"
+ },
+ "name": "coingecko_get_prices",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "prices",
+     "missing",
+     "attribution"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "attribution": {
+    "description": "Required data-source attribution.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `all_missing`: No requested ID returned data \u2014 every slug was unknown or the upstream response was empty. `rate_limited`: CoinGecko returned HTTP 429 \u2014 the shared keyless pool is throttled, or the Demo-tier quota was hit. `upstream_unreachable`: CoinGecko was unreachable or returned a 5xx/HTML error after all retry attempts. `invalid_response`: CoinGecko returned a body that could not be parsed as JSON. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "all_missing",
+         "rate_limited",
+         "upstream_unreachable",
+         "invalid_response"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "lastUpdatedAtUnixSec": {
+    "description": "Upstream last-updated time as a Unix timestamp in seconds (note: market-chart timestamps are milliseconds).",
+    "type": "number"
+   },
+   "missing": {
+    "description": "Requested ids absent from the response (unknown slug or upstream silent miss). Re-resolve these with coingecko_search_coins. Empty when all ids resolved.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance when some requested ids returned no data \u2014 lists the missing ids and how to recover.",
+    "type": "string"
+   },
+   "prices": {
+    "description": "One row per (id, currency) that returned a price. Data provided by CoinGecko.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Price and stats for one coin in one currency.",
+     "properties": {
+      "change24h": {
+       "description": "24-hour price change as a percentage, when available.",
+       "type": "number"
+      },
+      "currency": {
+       "description": "Currency code this row is denominated in.",
+       "type": "string"
+      },
+      "id": {
+       "description": "CoinGecko slug.",
+       "type": "string"
+      },
+      "marketCap": {
+       "description": "Market capitalization in the row currency, when available.",
+       "type": "number"
+      },
+      "price": {
+       "description": "Current price in the row currency.",
+       "type": "number"
+      },
+      "vol24h": {
+       "description": "24-hour trading volume in the row currency, when available.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "id",
+      "currency",
+      "price"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "coingecko-mcp-server: get prices"
+}

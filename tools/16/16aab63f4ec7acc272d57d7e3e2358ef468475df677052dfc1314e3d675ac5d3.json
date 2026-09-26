@@ -1,0 +1,78 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Use when the company you are about to invoice or pay is BELGIAN or POLISH and you must verify the supplier before payment (for France, use prepare_french_invoice_file). ONE call returns official registry identity, the VAT number checked against VIES, Peppol reachability for Belgium \u2014 whose structured B2B e-invoicing mandate has been in force since 1 January 2026 \u2014 and, uniquely in Poland, whether the IBAN is actually DECLARED by that taxpayer in the official White List (wykaz podatnikow VAT). The Polish check has FISCAL scope: paying more than 15,000 PLN into an undeclared account costs the buyer the deduction and creates joint liability for the supplier's VAT (art. 117ba Ordynacja podatkowa), so an undeclared account is a blocking reason. Everywhere else the bank leg is a FORM check (ISO 13616 structure + mod-97 key) plus bank identification \u2014 never a payee verification: with an `iban` supplied, verdict.non_verifie sits next to the verdict and names what is not checked (account existence, holder name), and the White List itself proves the account is DECLARED by that taxpayer, never who holds it. Returns a deterministic pret_a_facturer verdict with closed-list reasons, each tagged blocking or informational. The response is Ed25519-signed and carries provenance[] \u2014 one entry per block served, with the official register, its licence and its as_of date, the White List entry carrying the date actually sent to the ministry's API \u2014 so the payment decision is provable to an auditor offline. Paid via x402 ($0.03 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "iban": {
+    "description": "IBAN of the account you are about to pay, unpunctuated (spaces tolerated) \u2014 optional, but it is what unlocks the Polish White List account check, and everywhere the structure check plus bank identification",
+    "maxLength": 34,
+    "minLength": 15,
+    "type": "string"
+   },
+   "id": {
+    "description": "Belgian enterprise number (10 digits, KBO/BCE) or Polish NIP (10 digits); dots, spaces and dashes are tolerated",
+    "pattern": "^[0-9.\\s-]{9,14}$",
+    "type": "string"
+   },
+   "pays": {
+    "description": "Country of the counterparty: BE (Belgium) or PL (Poland). For France use prepare_french_invoice_file.",
+    "enum": [
+     "BE",
+     "PL"
+    ],
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "pays",
+   "id"
+  ],
+  "type": "object"
+ },
+ "name": "prepare_european_invoice_file",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Prepare Belgian or Polish invoice file"
+}

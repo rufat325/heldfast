@@ -1,0 +1,64 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "IBAN verification and bank validation for SEPA \u2014 use when you are about to pay a NEW or CHANGED IBAN, or when onboarding a supplier's bank details, and want the cheapest check of the supplier before payment. Runs a FORM check on the IBAN (ISO 13616 structure + mod-97 key), identifies the bank from FREE official registers (France: name+LEI+SIREN via ACPR/REGAFI; Belgium, Austria, Netherlands: name+BIC; Germany when the Bundesbank file is loaded, incl. LEI where available; French banks get their BIC via the GLEIF/SWIFT BIC-to-LEI mapping). Explicitly NOT a payee verification \u2014 the account holder's name is never checked and the account's existence is not tested (verification_titulaire: non_disponible): a well-formed IBAN at an identified bank is no proof that the account belongs to your supplier. The answer says this in machine-readable form next to `valide`: nature_du_controle (forme | forme_et_registres), non_verifie [account existence, holder name] and exemple_de_documentation \u2014 true for IBANs on a published list of known documentation samples, which pass every check; the account's existence is not tested; false is not proof of the contrary. The response is Ed25519-signed and carries provenance[] \u2014 one entry per block served, naming the official register actually consulted, its licence and its as_of date. For the full invoicing verdict on a French counterparty, call prepare_french_invoice_file instead. Paid via x402 ($0.005 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "iban": {
+    "description": "IBAN of the account to check, any ISO 13616 country (spaces and dashes tolerated); bank identification is limited to the registers listed in the tool description",
+    "maxLength": 42,
+    "minLength": 15,
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "iban"
+  ],
+  "type": "object"
+ },
+ "name": "verify_iban_bank",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Verify IBAN and bank (SEPA)"
+}

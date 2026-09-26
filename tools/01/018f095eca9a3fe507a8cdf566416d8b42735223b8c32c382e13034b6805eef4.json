@@ -1,0 +1,644 @@
+{
+ "description": "Generate profile-aware physical rack blocks, rack-plan candidates, and site layout data from a nested design request.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "design": {
+    "additionalProperties": {},
+    "description": "Nested design request that drives layout.",
+    "properties": {
+     "customInputs": {
+      "additionalProperties": {},
+      "description": "Optional project-specific design inputs.",
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "gpuGen": {
+      "description": "NVIDIA GPU generation: hopper, blackwell, or rubin.",
+      "enum": [
+       "hopper",
+       "blackwell",
+       "rubin"
+      ],
+      "type": "string"
+     },
+     "hallCount": {
+      "description": "Optional requested data-hall count.",
+      "exclusiveMinimum": 0,
+      "maximum": 48,
+      "type": "integer"
+     },
+     "itLoadMw": {
+      "description": "IT load in megawatts. 0 < x <= 1000.",
+      "exclusiveMinimum": 0,
+      "maximum": 1000,
+      "type": "number"
+     },
+     "options": {
+      "description": "Optional redundancy, cooling-mode, and PUE overrides.",
+      "properties": {
+       "coolingMode": {
+        "enum": [
+         "air",
+         "hybrid",
+         "liquid"
+        ],
+        "type": "string"
+       },
+       "pueTarget": {
+        "maximum": 2.5,
+        "minimum": 1,
+        "type": "number"
+       },
+       "redundancy": {
+        "enum": [
+         "n",
+         "n_plus_1",
+         "2n"
+        ],
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "parcels": {
+      "description": "Optional bounded GeoJSON parcel features.",
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "geometry": {
+         "anyOf": [
+          {
+           "properties": {
+            "coordinates": {
+             "items": {
+              "items": {
+               "items": {
+                "type": "number"
+               },
+               "maxItems": 3,
+               "minItems": 2,
+               "type": "array"
+              },
+              "maxItems": 512,
+              "minItems": 4,
+              "type": "array"
+             },
+             "maxItems": 16,
+             "minItems": 1,
+             "type": "array"
+            },
+            "type": {
+             "const": "Polygon",
+             "type": "string"
+            }
+           },
+           "required": [
+            "type",
+            "coordinates"
+           ],
+           "type": "object"
+          },
+          {
+           "properties": {
+            "coordinates": {
+             "items": {
+              "items": {
+               "items": {
+                "items": {
+                 "type": "number"
+                },
+                "maxItems": 3,
+                "minItems": 2,
+                "type": "array"
+               },
+               "maxItems": 512,
+               "minItems": 4,
+               "type": "array"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array"
+             },
+             "maxItems": 8,
+             "minItems": 1,
+             "type": "array"
+            },
+            "type": {
+             "const": "MultiPolygon",
+             "type": "string"
+            }
+           },
+           "required": [
+            "type",
+            "coordinates"
+           ],
+           "type": "object"
+          }
+         ]
+        },
+        "id": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "number"
+          }
+         ]
+        },
+        "properties": {
+         "additionalProperties": {},
+         "propertyNames": {
+          "type": "string"
+         },
+         "type": "object"
+        },
+        "type": {
+         "const": "Feature",
+         "type": "string"
+        }
+       },
+       "required": [
+        "type",
+        "geometry"
+       ],
+       "type": "object"
+      },
+      "maxItems": 25,
+      "type": "array"
+     },
+     "rackDensityKw": {
+      "description": "Requested per-rack power in kW. 0 < x <= 500.",
+      "exclusiveMinimum": 0,
+      "maximum": 500,
+      "type": "number"
+     },
+     "region": {
+      "description": "Metropolitan or regional site class.",
+      "enum": [
+       "metropolitan",
+       "regional"
+      ],
+      "type": "string"
+     },
+     "siteAreaSqm": {
+      "description": "Total site area in square meters.",
+      "exclusiveMinimum": 0,
+      "maximum": 1000000,
+      "type": "number"
+     }
+    },
+    "required": [
+     "itLoadMw",
+     "rackDensityKw",
+     "gpuGen",
+     "siteAreaSqm",
+     "region"
+    ],
+    "type": "object"
+   },
+   "siteAreaSqm": {
+    "description": "Optional layout-specific site area override.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "siteCentroid": {
+    "description": "Optional WGS84 site centroid.",
+    "properties": {
+     "lat": {
+      "type": "number"
+     },
+     "lng": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "lat",
+     "lng"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "design"
+  ],
+  "type": "object"
+ },
+ "name": "layout",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {},
+  "properties": {
+   "_agent": {
+    "additionalProperties": false,
+    "properties": {
+     "api": {
+      "additionalProperties": false,
+      "properties": {
+       "docs": {
+        "type": "string"
+       },
+       "openapi": {
+        "type": "string"
+       },
+       "plugin": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "openapi",
+       "plugin",
+       "docs"
+      ],
+      "type": "object"
+     },
+     "citation": {
+      "additionalProperties": false,
+      "properties": {
+       "description": {
+        "type": "string"
+       },
+       "provider": {
+        "type": "string"
+       },
+       "url": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "provider",
+       "url",
+       "description"
+      ],
+      "type": "object"
+     },
+     "usage": {
+      "additionalProperties": false,
+      "properties": {
+       "auth": {
+        "type": "string"
+       },
+       "contact": {
+        "type": "string"
+       },
+       "rateLimit": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "rateLimit",
+       "auth",
+       "contact"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "citation",
+     "api",
+     "usage"
+    ],
+    "type": "object"
+   },
+   "candidates": {
+    "items": {
+     "additionalProperties": {},
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "label": {
+       "type": "string"
+      },
+      "layout": {
+       "additionalProperties": {},
+       "properties": {
+        "rackPlan": {
+         "additionalProperties": {},
+         "properties": {
+          "blocks": {
+           "items": {
+            "additionalProperties": {},
+            "properties": {
+             "kw": {
+              "type": "number"
+             },
+             "xMm": {
+              "type": "number"
+             },
+             "yMm": {
+              "type": "number"
+             }
+            },
+            "required": [
+             "xMm",
+             "yMm",
+             "kw"
+            ],
+            "type": "object"
+           },
+           "maxItems": 512,
+           "type": "array"
+          },
+          "deploymentUnitCount": {
+           "type": "number"
+          },
+          "hallDimensionMode": {
+           "enum": [
+            "nominal_expanded_to_fit_preview"
+           ],
+           "type": "string"
+          },
+          "mainRackCount": {
+           "type": "number"
+          },
+          "previewTruncated": {
+           "type": "boolean"
+          },
+          "profileCompatibilityDiagnostics": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "profileId": {
+           "type": "string"
+          },
+          "rackCount": {
+           "maximum": 9007199254740991,
+           "minimum": 0,
+           "type": "integer"
+          },
+          "renderedPhysicalRackBlocks": {
+           "type": "number"
+          },
+          "requestedDeploymentUnitCount": {
+           "type": "number"
+          },
+          "requestedMainRackCount": {
+           "type": "number"
+          },
+          "requestedPhysicalRackBlocks": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "rackCount",
+          "blocks"
+         ],
+         "type": "object"
+        }
+       },
+       "required": [
+        "rackPlan"
+       ],
+       "type": "object"
+      },
+      "sourceStatus": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "layout"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "engineVersion": {
+    "type": "string"
+   },
+   "facilityLayoutResult": {
+    "additionalProperties": {},
+    "properties": {
+     "adjacency": {
+      "items": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "blocks": {
+      "items": {
+       "additionalProperties": {},
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "error": {
+      "type": "string"
+     },
+     "objectiveValue": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "ok": {
+      "type": "boolean"
+     },
+     "site": {
+      "additionalProperties": {},
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "solver": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string"
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "ok",
+     "status"
+    ],
+    "type": "object"
+   },
+   "ok": {
+    "const": true,
+    "type": "boolean"
+   },
+   "rackPlan": {
+    "additionalProperties": {},
+    "properties": {
+     "blocks": {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "kw": {
+         "type": "number"
+        },
+        "xMm": {
+         "type": "number"
+        },
+        "yMm": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "xMm",
+        "yMm",
+        "kw"
+       ],
+       "type": "object"
+      },
+      "maxItems": 512,
+      "type": "array"
+     },
+     "cols": {
+      "type": "number"
+     },
+     "deploymentUnitCount": {
+      "type": "number"
+     },
+     "hallDepthMm": {
+      "type": "number"
+     },
+     "hallDimensionMode": {
+      "enum": [
+       "nominal_expanded_to_fit_preview"
+      ],
+      "type": "string"
+     },
+     "hallWidthMm": {
+      "type": "number"
+     },
+     "mainRackCount": {
+      "type": "number"
+     },
+     "previewTruncated": {
+      "type": "boolean"
+     },
+     "profileCompatibilityDiagnostics": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "profileId": {
+      "type": "string"
+     },
+     "rackCount": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "renderedPhysicalRackBlocks": {
+      "type": "number"
+     },
+     "requestedDeploymentUnitCount": {
+      "type": "number"
+     },
+     "requestedMainRackCount": {
+      "type": "number"
+     },
+     "requestedPhysicalRackBlocks": {
+      "type": "number"
+     },
+     "rows": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "hallWidthMm",
+     "hallDepthMm",
+     "rows",
+     "cols",
+     "rackCount",
+     "blocks"
+    ],
+    "type": "object"
+   },
+   "requestId": {
+    "type": "string"
+   },
+   "sitePlan": {
+    "additionalProperties": false,
+    "properties": {
+     "blocks": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "fill": {
+         "type": "string"
+        },
+        "hPct": {
+         "type": "number"
+        },
+        "id": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        },
+        "wPct": {
+         "type": "number"
+        },
+        "xPct": {
+         "type": "number"
+        },
+        "yPct": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "id",
+        "label",
+        "xPct",
+        "yPct",
+        "wPct",
+        "hPct"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "blocks"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "ok",
+   "requestId",
+   "_agent",
+   "rackPlan",
+   "sitePlan",
+   "warnings",
+   "engineVersion"
+  ],
+  "type": "object"
+ },
+ "title": "Generate rack and site layout"
+}

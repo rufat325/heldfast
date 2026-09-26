@@ -1,0 +1,43 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "List all PlantUML and Mermaid diagram files stored under the project's diagrams directory.\n\nThis tool scans the configured diagrams root recursively and returns every file with a recognized diagram extension (.puml, .plantuml, .mmd, .mermaid). It does NOT create, modify, or render diagrams \u2014 read-only.\n\nArgs:\n  - type_filter ('plantuml' | 'mermaid' | 'all'): Restrict results to one diagram type (default: 'all')\n  - offset (number, optional): Zero-based number of matching diagrams to skip (default: 0)\n  - limit (number, optional): Maximum diagrams to return (1-500). Omit to return every remaining match\n\nReturns:\n  JSON with schema:\n  {\n    \"diagrams_root\": string,       // absolute path being scanned\n    \"count\": number,               // number of diagrams in this page\n    \"total\": number,               // number of diagrams matching type_filter, before paging\n    \"offset\": number,              // effective offset of this page\n    \"limit\": number,               // effective limit of this page (requested limit, or remaining count when omitted)\n    \"has_more\": boolean,           // true when diagrams after this page remain\n    \"diagrams\": [\n      {\n        \"relative_path\": string,   // path to use with diagrams_get / diagrams_update\n        \"type\": \"plantuml\" | \"mermaid\",\n        \"title\": string | null,    // best-effort extracted title\n        \"size_bytes\": number,\n        \"modified_at\": string      // ISO 8601 timestamp\n      }\n    ]\n  }\n\n  Pagination is explicit: omitting offset/limit returns every match with\n  has_more=false. Nothing is ever silently dropped \u2014 has_more tells the\n  caller when to request the next page with offset=<offset+count>.\n\nExamples:\n  - Use when: \"What diagrams exist for this project?\" -> type_filter=\"all\"\n  - Use when: \"Show me all the Mermaid diagrams\" -> type_filter=\"mermaid\"\n  - Use when: \"List diagrams ten at a time\" -> limit=10, then offset=10 for the next page\n  - Don't use when: You already know the exact path and just need its content (use diagrams_get instead)\n\nError Handling:\n  - Returns an empty \"diagrams\" array if the diagrams directory doesn't exist yet or is empty (this is not an error)\n  - Returns an empty page (count 0, has_more=false) when offset is past the end of the matches\n  - Returns \"Error: Invalid pagination: ...\" if offset is negative/non-integer or limit is outside 1-500\n  - Unexpected internal failures return a generic \"Error: Unexpected internal error ...\" with isError:true and are logged to stderr without source, paths, or secrets",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "limit": {
+    "description": "Maximum number of diagrams to return (1-500). Omit to return every remaining match.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Zero-based number of matching diagrams to skip before the returned page (default: 0).",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "type_filter": {
+    "default": "all",
+    "description": "Restrict results to a single diagram type, or 'all' for both.",
+    "enum": [
+     "plantuml",
+     "mermaid",
+     "all"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "diagrams_list",
+ "title": "List Architecture Diagrams"
+}

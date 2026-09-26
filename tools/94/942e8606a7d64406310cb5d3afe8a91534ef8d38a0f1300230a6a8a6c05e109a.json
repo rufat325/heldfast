@@ -1,0 +1,62 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Verify a single US contractor's license against the official state (or city) licensing board. USE WHEN: the user has a specific license number and wants to confirm it's valid, current, and free of disciplinary action \u2014 e.g. 'is TX license TACLA00000103C still active?', 'check if this electrician's license expired', 'pull disciplinary history for this contractor.' DO NOT USE FOR: searching by contractor or business name when the license number is unknown (use search_by_name); discovering what states/cities are supported (use list_supported_states); verifying federal licenses, doctors/lawyers, or non-construction trades (out of scope). RETURNS: {valid, name, license_number, trade, expiration, status, state, disciplinary_actions[], source_url, cached, checked_at}. Result is fetched live from the authoritative state portal; active licenses are cached 24h, expired/not-found results are always re-fetched. EXAMPLE: state='TX', license_number='TACLA00000103C', trade='hvac' \u2192 {valid:true, name:'ANDERSON, ORIN RAE', status:'Active', expiration:'05/12/2026', source_url:'https://www.tdlr.texas.gov/...'}. ERRORS: 400 INVALID_INPUT (malformed license/state/trade \u2014 fix the args and retry); 502 STATE_PORTAL_UNAVAILABLE (the state portal itself is down \u2014 retry after a few minutes); 429 RATE_LIMITED (back off and retry). All errors return a human-readable message; transient errors (502/429) are safe to retry, 400 is not.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "city": {
+    "description": "Optional city slug for municipal contractor licensing. Use this when the contractor holds a city-issued license (some cities issue licenses in addition to or instead of state licenses). Lowercase, no spaces \u2014 e.g. 'chicago', 'nyc', 'philadelphia', 'detroit', 'atlanta', 'dallas', 'lasvegas', 'nashville'. Call list_supported_states to see registered cities under each state.",
+    "maxLength": 64,
+    "minLength": 1,
+    "type": "string"
+   },
+   "force_refresh": {
+    "default": false,
+    "description": "Bypass the 24-hour cache and fetch fresh data from the licensing portal. Use sparingly \u2014 uncached lookups take 5-30 seconds vs <100ms cached, and aggressive use can trigger portal-side rate limits.",
+    "type": "boolean"
+   },
+   "license_number": {
+    "description": "The contractor's license number, exactly as printed on their license card (some states allow letters, dashes, or leading zeros \u2014 preserve them). Format varies by state.",
+    "maxLength": 50,
+    "minLength": 1,
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Response format \u2014 'markdown' for human-readable, 'json' for programmatic consumption.",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "state": {
+    "description": "Two-letter US state code (e.g. 'CA', 'TX'). Call list_supported_states to see what's available \u2014 every US state is supported.",
+    "maxLength": 2,
+    "minLength": 2,
+    "type": "string"
+   },
+   "trade": {
+    "default": "general",
+    "description": "Trade type \u2014 e.g. 'general', 'electrical', 'plumbing', 'hvac', 'mechanical', 'roofing'. Defaults to 'general' if omitted. Valid values vary by state; check list_supported_states.supported_trades for the jurisdiction.",
+    "maxLength": 50,
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "state",
+   "license_number"
+  ],
+  "type": "object"
+ },
+ "name": "verify_license",
+ "title": "Verify Contractor License"
+}

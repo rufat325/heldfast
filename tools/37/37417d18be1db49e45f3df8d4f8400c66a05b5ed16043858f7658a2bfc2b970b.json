@@ -1,0 +1,430 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Check the current health status for one or more vendors. Accepts registered vendor slugs (e.g., \"github\", \"aws\", \"gcp\", \"gitlab\") or raw Atlassian Statuspage base URLs. Registry entries are served by each vendor's native status API (Statuspage, Status.io, Slack, AWS Health, Google Cloud Service Health, Azure status, Firehydrant) and normalized to one shape. Returns per-vendor operational indicator (none = all clear, minor, major, critical, maintenance = scheduled window), degraded components, and active incidents. Use mode: \"detailed\" for component lists and maintenance windows, narrowed with component_filter and bounded by component_limit. Batch-friendly \u2014 pass a list to check your full stack in one call; a vendor that cannot be resolved or reached is reported in its own result row, so one bad entry never discards the rest. Every vendor with an active problem gets a pre-filled devops_suggest_action call in nextToolSuggestions.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "component_filter": {
+    "description": "Case-insensitive substring matched against component names in detailed mode (e.g., \"api\" to check just the API components). Applied before component_limit, so it is the way to reach a component that the cap would otherwise omit. Ignored in summary mode.",
+    "type": "string"
+   },
+   "component_limit": {
+    "default": 50,
+    "description": "Maximum components returned per vendor in detailed mode (1-500). Large status pages publish hundreds of components, so a multi-vendor batch at a high limit returns a very large response; narrow with component_filter instead where possible.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "mode": {
+    "default": "summary",
+    "description": "summary: indicator + degraded components + active incidents only. detailed: adds the component list and scheduled maintenance windows.",
+    "enum": [
+     "summary",
+     "detailed"
+    ],
+    "type": "string"
+   },
+   "vendors": {
+    "description": "Vendor slugs from the built-in registry (e.g., \"github\", \"aws\") or raw Atlassian Statuspage base URLs (non-Statuspage backends are supported via registry slugs only). Mix freely. Use devops_list_vendors to discover available slugs.",
+    "items": {
+     "description": "A vendor slug (e.g., \"github\") or raw Atlassian Statuspage base URL.",
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 20,
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "vendors"
+  ],
+  "type": "object"
+ },
+ "name": "devops_status_check",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results",
+     "summary",
+     "nextToolSuggestions"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The per-vendor component_limit that was applied. Present only when truncated.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `vendor_not_found`: No requested vendor could be checked and the first failure was a slug that matches no registry entry and is not a valid URL. `target_blocked`: No requested vendor could be checked and the first failure was a raw URL resolving to a private, loopback, or cloud-metadata address. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "vendor_not_found",
+         "target_blocked"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextToolSuggestions": {
+    "description": "One devops_suggest_action call per vendor with an active problem \u2014 an indicator of minor, major, or critical, or an open incident of that impact even while the indicator reads none or maintenance \u2014 with its arguments filled from that vendor's result. Vendors that could not be checked never appear. Empty when no checked vendor has an active problem.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A recommended follow-up tool call with pre-filled arguments.",
+     "properties": {
+      "args": {
+       "additionalProperties": {},
+       "description": "Ready-to-use devops_suggest_action arguments: vendor (registry slug, or the normalized status page URL for a raw URL), vendor_indicator (only for minor, major, or critical), affected_components (degraded components outside a maintenance window), incident_summary (title of the most recently started open incident rated minor or worse).",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "reason": {
+       "description": "Why the vendor qualifies: its reported indicator, or the open incident behind it.",
+       "type": "string"
+      },
+      "toolName": {
+       "description": "Tool to call next \u2014 \"devops_suggest_action\".",
+       "type": "string"
+      }
+     },
+     "required": [
+      "toolName",
+      "reason",
+      "args"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Plain-language explanation of the capped component lists \u2014 how many components were omitted and how to reach them (component_filter to target one, component_limit to raise the cap). Present only when truncated.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Per-vendor status results in the same order as the input vendors list.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Status result for a single vendor.",
+     "properties": {
+      "active_incidents": {
+       "description": "Active (non-resolved) incidents.",
+       "items": {
+        "additionalProperties": false,
+        "description": "An active incident entry.",
+        "properties": {
+         "id": {
+          "description": "Unique incident identifier from the vendor's status API.",
+          "type": "string"
+         },
+         "impact": {
+          "description": "Severity level: none = informational, minor = degraded performance, major = partial outage, critical = full outage, maintenance = scheduled window folded into incident history.",
+          "enum": [
+           "none",
+           "minor",
+           "major",
+           "critical",
+           "maintenance"
+          ],
+          "type": "string"
+         },
+         "latest_update": {
+          "description": "Most recent incident_update body text.",
+          "type": "string"
+         },
+         "name": {
+          "description": "Incident title.",
+          "type": "string"
+         },
+         "started_at": {
+          "description": "ISO 8601 timestamp, with the vendor's UTC offset (Z, +00:00, or a local offset such as -07:00), when the incident started, or null/absent if not set by the vendor.",
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "status": {
+          "description": "Current incident status (e.g., investigating, monitoring, resolved).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "impact",
+         "status",
+         "latest_update"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "all_components": {
+       "description": "Components including operational ones, capped at component_limit per vendor and narrowed by component_filter when given. Present in detailed mode only.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A component entry.",
+        "properties": {
+         "description": {
+          "description": "Component description, or null if not provided.",
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "name": {
+          "description": "Component name.",
+          "type": "string"
+         },
+         "status": {
+          "description": "Component operational status.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "status",
+         "description"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "all_components_total": {
+       "description": "Components matching component_filter for this vendor before the component_limit cap. Larger than the length of all_components when this vendor was capped. Present in detailed mode only.",
+       "type": "number"
+      },
+      "cached": {
+       "description": "True when this result was served from the 60s in-memory cache.",
+       "type": "boolean"
+      },
+      "checked_at": {
+       "description": "ISO 8601 UTC timestamp of this check.",
+       "type": "string"
+      },
+      "degraded_components": {
+       "description": "Every component not in an operational state, uncapped \u2014 a vendor with a large edge-node fleet routinely publishes dozens. Includes in-progress maintenance windows (status under_maintenance) alongside genuine outages; read status to tell a planned window from a fault. Empty when all clear.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A degraded component entry.",
+        "properties": {
+         "name": {
+          "description": "Component name.",
+          "type": "string"
+         },
+         "status": {
+          "description": "Degradation level: degraded_performance = slow/intermittent, partial_outage = some requests failing, major_outage = most requests failing, under_maintenance = scheduled maintenance in progress.",
+          "enum": [
+           "degraded_performance",
+           "partial_outage",
+           "major_outage",
+           "under_maintenance"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "status"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "description": {
+       "description": "Human-readable status description (e.g., \"All Systems Operational\").",
+       "type": "string"
+      },
+      "error": {
+       "description": "Why this vendor could not be checked \u2014 unreachable status API, timeout, non-2xx, or a response that is not a Statuspage payload. Reported here rather than thrown so one bad vendor does not fail the batch. Absent when the vendor was fetched successfully.",
+       "type": "string"
+      },
+      "indicator": {
+       "description": "Overall health indicator: none = all clear, minor = some degradation, major = significant outage, critical = complete outage, maintenance = scheduled window in progress, planned rather than a fault.",
+       "enum": [
+        "none",
+        "minor",
+        "major",
+        "critical",
+        "maintenance"
+       ],
+       "type": "string"
+      },
+      "name": {
+       "description": "Display name of the vendor.",
+       "type": "string"
+      },
+      "scheduled_maintenances": {
+       "description": "Upcoming or in-progress maintenance windows. Present in detailed mode only.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A scheduled maintenance entry.",
+        "properties": {
+         "name": {
+          "description": "Maintenance window name.",
+          "type": "string"
+         },
+         "scheduled_for": {
+          "description": "ISO 8601 start time, with the vendor's UTC offset.",
+          "type": "string"
+         },
+         "scheduled_until": {
+          "description": "ISO 8601 end time, with the vendor's UTC offset.",
+          "type": "string"
+         },
+         "status": {
+          "description": "Maintenance status (scheduled, in_progress, completed).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "scheduled_for",
+         "scheduled_until",
+         "status"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "statuspage_url": {
+       "description": "Status page base URL used for this vendor.",
+       "type": "string"
+      },
+      "vendor": {
+       "description": "Vendor slug or URL as provided.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "vendor",
+      "name",
+      "indicator",
+      "description",
+      "degraded_components",
+      "active_incidents",
+      "cached",
+      "checked_at",
+      "statuspage_url"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Components returned across all vendors. Present only when truncated.",
+    "type": "number"
+   },
+   "summary": {
+    "additionalProperties": false,
+    "description": "Aggregate health counts across all checked vendors. Buckets partition the batch: operational + degraded + down + maintenance + unavailable = total.",
+    "properties": {
+     "degraded": {
+      "description": "Vendors with indicator = minor or major.",
+      "type": "number"
+     },
+     "down": {
+      "description": "Vendors with indicator = critical.",
+      "type": "number"
+     },
+     "maintenance": {
+      "description": "Vendors with indicator = maintenance \u2014 in a scheduled window the vendor published. Counted apart from degraded and down, which are faults.",
+      "type": "number"
+     },
+     "operational": {
+      "description": "Vendors with indicator = none and no error.",
+      "type": "number"
+     },
+     "total": {
+      "description": "Total number of vendors checked.",
+      "type": "number"
+     },
+     "unavailable": {
+      "description": "Vendors that could not be checked (carry an error) \u2014 unresolvable slug, blocked target, or failed status fetch. Counted as unknown, never operational.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "total",
+     "operational",
+     "degraded",
+     "down",
+     "maintenance",
+     "unavailable"
+    ],
+    "type": "object"
+   },
+   "totalCount": {
+    "description": "Components matching component_filter across all vendors before the cap. Present only when truncated.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when at least one vendor's component list was capped at component_limit. Absent when nothing was capped.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Devops Status Check"
+}

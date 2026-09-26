@@ -1,0 +1,39 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "\u00c9tude d'implantation labo en 1 appel (V0.23). G\u00e9ocode l'adresse cible puis agr\u00e8ge EN PARALL\u00c8LE 7 sections : `territoire` (densit\u00e9s PS commune vs national + \u00e9tablissements), `demande` (profil d\u00e9mographique du BASSIN \u2014 rayon \u2014 via profil_iris : \u00e2ge, CSP, revenu pond\u00e9r\u00e9), `concurrents` (labos FINESS), `pourvoyeurs` (MCO/EHPAD/SSR/dialyse \u2014 drivers \u00e9cosyst\u00e9miques), `prescripteurs` (m\u00e9decins RPPS + IDEL Ameli), `cds` (centres de sant\u00e9), `referentiels` (qualit\u00e9 couverture FINESS\u2194SIRENE).\n\nRemplace ~15 appels MCP individuels par 1. Renvoie des R\u00c9SUM\u00c9S (count / top-N / moyenne), JAMAIS de listes brutes. AUCUNE interpr\u00e9tation m\u00e9tier (pas de 'd\u00e9sert m\u00e9dical' ni de verdict GO/NO-GO) \u2014 le caller LLM applique sa grille.\n\nD\u00c9GRADATION (lis `couverture` \u2014 1 drapeau par section) : `\"ok\"` | `\"partiel:<raison>\"` | `\"indisponible:<raison>\"`. Si une source est down, SA section est flagg\u00e9e et le RESTE est renvoy\u00e9 \u2014 comble alors le trou via l'outil unitaire correspondant (etablissements_finess_in_radius, professionnels_rpps_in_radius, densite_sante, centres_sante_in_radius\u2026). \u00c9chec d'ANCRAGE (g\u00e9ocodage KO / adresse douteuse / code INSEE ind\u00e9rivable) = rejet total (RangeError).\n\nPi\u00e8ges internalis\u00e9s : Paris/Lyon/Marseille bascul\u00e9s sur le d\u00e9partement (`meta.plm_mode=true`) ; `prescripteurs` expose `precis_count` (PS g\u00e9olocalis\u00e9s \u00e0 l'adresse, pas au centro\u00efde commune) ; `cds` sans distance individuelle (centro\u00efde commune).\n\nWORKFLOW : appelle CET outil pour D\u00c9MARRER une \u00e9tude, puis creuse les sections `partiel`/`indisponible` via les unitaires, puis `enrichir_concurrents` sur le top 3 de `concurrents.top`.\n\nSources : IGN (g\u00e9ocodage), FINESS DREES, RPPS/ANS, Ameli/CNAM, INSEE/FILOSOFI, SIRENE/DINUM.",
+ "inputSchema": {
+  "properties": {
+   "adresse": {
+    "description": "Adresse cible, g\u00e9ocod\u00e9e en interne via IGN. Ex: \"12 rue Nationale, Lille\". XOR avec `point`.",
+    "type": "string"
+   },
+   "code_insee": {
+    "description": "Code INSEE commune (avec `point`, quand le g\u00e9ocodage est d\u00e9j\u00e0 fait).",
+    "type": "string"
+   },
+   "point": {
+    "description": "Coordonn\u00e9es { lat, lon } si d\u00e9j\u00e0 connues (skip g\u00e9ocodage). Fournir `code_insee` avec.",
+    "properties": {
+     "lat": {
+      "type": "number"
+     },
+     "lon": {
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "rayon_km": {
+    "description": "Rayon du bassin de l'\u00e9tude (km). D\u00e9faut 5.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "name": "panorama_implantation_complet"
+}

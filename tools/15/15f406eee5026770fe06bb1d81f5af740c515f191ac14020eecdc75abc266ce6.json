@@ -1,0 +1,294 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "List executives/insiders who have recently traded their company stock. Filter by role (CEO only or all executives). Useful for finding notable insider buying/selling activity across the market.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "limit": {
+    "default": 20,
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "page": {
+    "default": 1,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "role": {
+    "default": "all",
+    "description": "Filter by role (case-insensitive): CEO, executive/officer, or all",
+    "enum": [
+     "ceo",
+     "executive",
+     "all"
+    ],
+    "type": "string"
+   },
+   "search": {
+    "description": "Search by name or ticker",
+    "maxLength": 200,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "list_insider_traders",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "grain": {
+    "const": "insider_trade_date",
+    "type": "string"
+   },
+   "paging": {
+    "additionalProperties": false,
+    "description": "Paging state reconciled from ko.io meta.total_count and meta.softwall",
+    "properties": {
+     "continuation": {
+      "description": "SIGNIN_REQUIRED = page>1 needs a (free) ko.io API key",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "has_more": {
+      "description": "null = a full page came back and more MAY exist",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "next_page": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/rows/items/properties/form4_lines/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Next page THIS caller can open; null when there is none (or sign-in is required)"
+     },
+     "page": {
+      "type": "integer"
+     },
+     "per_page": {
+      "type": "integer"
+     },
+     "plan_row_cap": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/rows/items/properties/form4_lines/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Row cap the caller's plan applied to this page, if any"
+     },
+     "returned": {
+      "type": "integer"
+     },
+     "total_count": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/rows/items/properties/form4_lines/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Total rows matching the request, when ko.io reported it"
+     },
+     "truncated_by_plan": {
+      "description": "True when the plan's row cap withheld rows from this page",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "page",
+     "per_page",
+     "returned",
+     "total_count",
+     "has_more",
+     "next_page",
+     "continuation",
+     "plan_row_cap",
+     "truncated_by_plan"
+    ],
+    "type": "object"
+   },
+   "plan_limit": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "continuation": {
+        "$ref": "#/properties/search"
+       },
+       "date_basis": {
+        "$ref": "#/properties/search"
+       },
+       "effective_period": {
+        "$ref": "#/properties/search"
+       },
+       "policy_version": {
+        "$ref": "#/properties/search"
+       },
+       "row_cap": {
+        "$ref": "#/properties/rows/items/properties/form4_lines"
+       },
+       "truncated": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "window_end": {
+        "$ref": "#/properties/search"
+       },
+       "window_start": {
+        "$ref": "#/properties/search"
+       }
+      },
+      "required": [
+       "policy_version",
+       "window_start",
+       "window_end",
+       "effective_period",
+       "date_basis",
+       "row_cap",
+       "truncated",
+       "continuation"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The Free/keyless plan limits ko.io applied to this answer (null for paid callers)"
+   },
+   "role": {
+    "type": "string"
+   },
+   "rows": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "all_value_acquired": {
+       "anyOf": [
+        {
+         "$ref": "#/properties/rows/items/properties/ps_value_bought/anyOf/0"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "all_value_disposed": {
+       "$ref": "#/properties/rows/items/properties/all_value_acquired"
+      },
+      "company_name": {
+       "$ref": "#/properties/search"
+      },
+      "form4_lines": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "officer_title": {
+       "$ref": "#/properties/search"
+      },
+      "person_cik": {
+       "$ref": "#/properties/search"
+      },
+      "person_name": {
+       "$ref": "#/properties/search"
+      },
+      "ps_value_bought": {
+       "anyOf": [
+        {
+         "pattern": "^-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Code P lines (open-market or private purchase), priced lines only"
+      },
+      "ps_value_sold": {
+       "anyOf": [
+        {
+         "$ref": "#/properties/rows/items/properties/ps_value_bought/anyOf/0"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Code S lines (open-market or private sale), priced lines only"
+      },
+      "shares_owned_after": {
+       "$ref": "#/properties/rows/items/properties/all_value_acquired"
+      },
+      "ticker": {
+       "$ref": "#/properties/search"
+      },
+      "trade_date": {
+       "$ref": "#/properties/search"
+      }
+     },
+     "required": [
+      "ticker",
+      "company_name",
+      "person_cik",
+      "person_name",
+      "officer_title",
+      "trade_date",
+      "form4_lines",
+      "ps_value_bought",
+      "ps_value_sold",
+      "all_value_acquired",
+      "all_value_disposed",
+      "shares_owned_after"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "search": {
+    "type": [
+     "string",
+     "null"
+    ]
+   }
+  },
+  "required": [
+   "search",
+   "role",
+   "grain",
+   "rows",
+   "paging",
+   "plan_limit"
+  ],
+  "type": "object"
+ }
+}

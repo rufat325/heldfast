@@ -1,0 +1,171 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "pdfBase64": "<base64>",
+     "values": {
+      "fullName": "Alice Martin",
+      "subscribe": true
+     }
+    },
+    "title": "Fill a couple of fields"
+   },
+   {
+    "input": {
+     "flatten": true,
+     "pdfBase64": "<base64>",
+     "values": {
+      "fullName": "Alice Martin"
+     }
+    },
+    "title": "Fill and flatten (final, non-editable)"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Fill and/or flatten the AcroForm of an EXISTING PDF (add_form creates one) as an incremental update \u2014 prior signatures stay valid for their revision. `values`: fully-qualified name \u2192 string (array for multi-select), boolean or export state for checkbox/radio. `flatten:true` stamps appearances and drops the interactive layer (with no values = pure flatten). Unknown names \u2192 FORM_FIELD_NOT_FOUND unless onUnknownField:'ignore'; signature fields cannot be filled (FORM_UNSUPPORTED). Encrypted sources: `password`.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "flatten": {
+    "default": false,
+    "description": "When true, stamp appearances into page content and remove the interactive fields after filling.",
+    "type": "boolean"
+   },
+   "nonWinAnsi": {
+    "default": "throw",
+    "description": "Behaviour when a value contains non-WinAnsi characters (appearance font is Helvetica/WinAnsi). 'throw' (default) rejects it; 'needAppearances' writes the value and sets /NeedAppearances so the viewer regenerates the appearance.",
+    "enum": [
+     "throw",
+     "needAppearances"
+    ],
+    "type": "string"
+   },
+   "onUnknownField": {
+    "default": "throw",
+    "description": "Behaviour for a value key that matches no field. 'throw' (default) \u2192 FORM_FIELD_NOT_FOUND; 'ignore' skips it.",
+    "enum": [
+     "throw",
+     "ignore"
+    ],
+    "type": "string"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default) returns the PDF inline; 'file' writes it inside the PDFNATIVE_MCP_OUTPUT_DIR sandbox (SECURITY_VIOLATION when the sandbox is not configured).",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Required when outputMode='file'. Relative path inside the sandbox; must end with .pdf.",
+    "type": "string"
+   },
+   "password": {
+    "description": "Password (user or owner) of an encrypted source. Never logged or echoed.",
+    "maxLength": 4096,
+    "minLength": 1,
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded source PDF containing the AcroForm to fill. Use read_form_fields first to discover field names.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "values": {
+    "additionalProperties": {
+     "oneOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "boolean"
+      },
+      {
+       "items": {
+        "type": "string"
+       },
+       "maxItems": 1000,
+       "type": "array"
+      }
+     ]
+    },
+    "description": "Map of fully-qualified field name \u2192 value. Text/choice: a string (array of strings for multi-select listboxes). Checkbox/radio: a boolean or the export-state string. Omit (or pass {}) with flatten:true for a pure flatten.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "pdfBase64"
+  ],
+  "type": "object"
+ },
+ "name": "fill_form",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Result of a PDF-producing tool. base64 mode: the PDF arrives as an embedded `resource` content block (not duplicated here); file mode: `filePath`.",
+  "properties": {
+   "diagnostics": {
+    "description": "Engine diagnostics (when includeDiagnostics=true).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "severity"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "filePath": {
+    "description": "Sandboxed absolute path (file mode).",
+    "type": "string"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "sizeBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "summary": {
+    "additionalProperties": true,
+    "description": "Tool-specific summary, when produced.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "sizeBytes"
+  ],
+  "type": "object"
+ },
+ "title": "Fill / flatten an existing AcroForm"
+}

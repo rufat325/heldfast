@@ -1,0 +1,268 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Aggregate OpenAlex entities into groups and count them. Use for trend analysis (group works by publication_year), distribution analysis (group by oa_status, type, country), and comparative analysis (group by institution or topic). Combine with filters to scope the analysis. Returns up to 200 groups per page \u2014 use cursor pagination for fields with many distinct values.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cursor": {
+    "description": "Pagination cursor from a previous response. Only relevant when order is \"key\" \u2014 count-descending results have no next page. Pass the next_cursor from the previous response to advance. Omit it on the first call \u2014 an empty string is rejected, since a supplied-but-blank cursor is a caller mistake rather than a request for the first page.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "entity_type": {
+    "description": "Entity type to aggregate.",
+    "enum": [
+     "works",
+     "authors",
+     "sources",
+     "institutions",
+     "topics",
+     "keywords",
+     "publishers",
+     "funders"
+    ],
+    "type": "string"
+   },
+   "filters": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Filter criteria (same syntax as openalex_search_entities filters). Narrows the population before aggregation. For full-text within filters, use abstract.search, title.search, or default.search \u2014 there is no bare 'search' filter key. Example: group works by year filtered to a specific topic.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "group_by": {
+    "description": "Field to group by. Works examples: \"publication_year\", \"type\", \"oa_status\", \"primary_topic.field.id\", \"authorships.institutions.country_code\", \"is_retracted\". Authors: \"last_known_institutions.country_code\", \"has_orcid\". Sources: \"type\", \"is_oa\", \"country_code\". Not all fields support group_by \u2014 call openalex_describe_fields(entity_type, \"group_by\") for the groupable set.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "include_unknown": {
+    "default": false,
+    "description": "Add a group for entities with no value for the grouped field. Hidden by default. That group carries `is_unknown: true`; OpenAlex keys it -111 or -111.0 on numeric fields, \"unknown\" on text fields and under order \"key\", and an ID ending in /unknown on ID fields \u2014 a sentinel, not a measured value. The key is not a filter value: passing -111 as a filter matches a numeric range, not the entities with no value. Boolean fields have no separate group \u2014 a missing value counts as false.",
+    "type": "boolean"
+   },
+   "order": {
+    "description": "Sort order for groups. Omit or pass \"count\" (default) to return the top-N groups by count descending \u2014 no further pages. Pass \"key\" to enumerate all distinct values in key-ascending order with cursor pagination. Use \"key\" only when you need a full traversal; most analysis calls want \"count\".",
+    "enum": [
+     "count",
+     "key"
+    ],
+    "type": "string"
+   },
+   "per_page": {
+    "default": 200,
+    "description": "Maximum groups per page (1-200). Default 200 (the upstream cap). A real top-N knob when order is count (the default) \u2014 reduce to return only the highest-count groups.",
+    "maximum": 200,
+    "minimum": 1,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "entity_type",
+   "group_by"
+  ],
+  "type": "object"
+ },
+ "name": "openalex_analyze_trends",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "meta",
+     "groups",
+     "echo",
+     "totalCount"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "budget": {
+    "additionalProperties": false,
+    "description": "What this call cost against the OpenAlex daily budget and what is left of it \u2014 weigh `remainingUsd` against `costUsd` before enumerating every group with `order: \"key\"`. Absent when OpenAlex omitted the accounting headers.",
+    "properties": {
+     "costUsd": {
+      "description": "USD this call spent. Aggregation is priced far below paging the same entities, so a group_by is the cheap way to size a population before searching it.",
+      "type": "number"
+     },
+     "prepaidRemainingUsd": {
+      "description": "USD left in the prepaid balance \u2014 a separate pool OpenAlex draws on only after the daily allowance runs out, and which the daily reset does not refill. Add it to `remainingUsd` for the full spendable amount. Absent when the account holds no prepaid balance.",
+      "type": "number"
+     },
+     "remainingUsd": {
+      "description": "USD left in today's OpenAlex budget after this call.",
+      "type": "number"
+     },
+     "resetsInSeconds": {
+      "description": "Seconds until the daily budget refills (midnight UTC).",
+      "type": "number"
+     }
+    },
+    "required": [
+     "costUsd",
+     "remainingUsd",
+     "resetsInSeconds"
+    ],
+    "type": "object"
+   },
+   "echo": {
+    "description": "Compact echo of the input criteria (entity_type, group_by, filters) \u2014 surfaces what was actually requested when no groups are returned.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: OpenAlex throttled the request for exceeding its per-second ceiling (HTTP 429). `upstream_budget_exhausted`: The OpenAlex daily usage budget is spent (HTTP 429). `upstream_timeout`: OpenAlex did not respond within the request deadline. `upstream_unavailable`: OpenAlex was unreachable or unusable \u2014 HTTP 503, a connection failure, or a body that was empty, HTML, or unparseable JSON. `upstream_unauthorized`: OpenAlex rejected the API key (HTTP 401). `upstream_forbidden`: OpenAlex denied access to the requested resource (HTTP 403). `comma_in_filter_value`: A filter value contains a comma, which collides with the OpenAlex filter separator. `upstream_invalid_params`: OpenAlex rejected an invalid group_by or filter field name (HTTP 400). `upstream_invalid_id_value`: An entity-ID filter received a value that is not an OpenAlex ID \u2014 usually a name (HTTP 400). `upstream_ungroupable_group_by`: group_by targets a field OpenAlex cannot aggregate \u2014 a raw date, a decimal score, a *.search operator, a field such as display_name, doi, or referenced_works, or a concept key on authors, which OpenAlex reports as an invalid OpenAlex ID (HTTP 400). `upstream_invalid_params_other`: OpenAlex rejected the request (HTTP 400) for a reason other than an invalid field name. `upstream_validation_failed`: OpenAlex rejected the request as semantically invalid (HTTP 422). `upstream_missing_group_by`: OpenAlex answered with its plain list shape, carrying no aggregation for the requested group_by. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_budget_exhausted",
+         "upstream_timeout",
+         "upstream_unavailable",
+         "upstream_unauthorized",
+         "upstream_forbidden",
+         "comma_in_filter_value",
+         "upstream_invalid_params",
+         "upstream_invalid_id_value",
+         "upstream_ungroupable_group_by",
+         "upstream_invalid_params_other",
+         "upstream_validation_failed",
+         "upstream_missing_group_by"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "groups": {
+    "description": "Aggregation groups with counts.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single aggregation group with its key, display label, and entity count.",
+     "properties": {
+      "count": {
+       "description": "Number of entities in this group.",
+       "type": "number"
+      },
+      "is_unknown": {
+       "const": true,
+       "description": "Present only on the group include_unknown adds for entities with no value; its key is an OpenAlex sentinel (-111, -111.0, unknown, or an ID ending in /unknown), not a measured value.",
+       "type": "boolean"
+      },
+      "key": {
+       "description": "Group key (OpenAlex ID or raw value), exactly as OpenAlex returns it.",
+       "type": "string"
+      },
+      "key_display_name": {
+       "description": "Human-readable group label as plain text, with HTML entities decoded and markup removed.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "key",
+      "key_display_name",
+      "count"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "meta": {
+    "additionalProperties": false,
+    "description": "Aggregation metadata.",
+    "properties": {
+     "count": {
+      "description": "Total entities matching the filters (before grouping).",
+      "type": "number"
+     },
+     "groups_count": {
+      "description": "Number of groups on this page (max 200).",
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "next_cursor": {
+      "description": "Cursor for next page of groups. null if no more groups.",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "count",
+     "groups_count",
+     "next_cursor"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance notice. Set when a first call returns no groups (recovery suggestions), when a `cursor` continuation returns none because the traversal is already finished, or when the page is full and more groups likely exist (truncation signal with narrowing advice). Absent otherwise.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Total entities matching the filters before grouping (across all pages).",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Openalex Analyze Trends"
+}

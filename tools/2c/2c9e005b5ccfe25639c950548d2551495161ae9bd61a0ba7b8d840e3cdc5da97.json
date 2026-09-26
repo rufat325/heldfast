@@ -1,0 +1,440 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search the Federal Register \u2014 the daily journal of US proposed rules, final rules, notices, and presidential documents (1994\u2013present) \u2014 filtering by full-text query, document type, agency slug, publication date range, affected CFR title and part, printed docket number, and RIN, all combined. A page cite from a CFR source note (\"89 FR 49102\", with its date) resolves to the documents printed on that page. The primary discovery entry point: results carry the document number (open with regulations_get_document), its citation and page range, each issuing agency with its filterable slug, printed docket numbers, Regulations.gov docket and document IDs, comment count and comment URL, whether the comment period is open, RINs, and affected CFR parts that chain into the comment and codified-text tools. A query ranks by relevance unless order says otherwise; filter-only browsing lists newest first. The Federal Register caps navigation at 50 pages and the match count at 10,000; when a result set is larger, narrow with published_after/published_before rather than paging deeper.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "agencies": {
+    "description": "Filter to one or more agencies by Federal Register agency slug (e.g. \"environmental-protection-agency\", \"securities-and-exchange-commission\") \u2014 lowercase kebab-case, not a name or acronym. Every result lists its agencies with their slugs; if unsure, search by query and read agencies[].slug off a result. One unrecognized slug fails the whole request.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "cfr_part": {
+    "description": "Only documents whose cfrReferences list this part of cfr_title: a part number (\"141\") or a range (\"140-143\"), such as the part regulations_get_cfr_section just read; a \"Part\" or \"pt.\" prefix is dropped. Requires cfr_title. A part with a letter in it (\"1203a\") cannot be filtered on. Unlike a query of \"40 CFR 141\", which matches documents that mention the part, this matches the documents whose CFR references list it.",
+    "type": "string"
+   },
+   "cfr_title": {
+    "description": "Only documents whose affected CFR parts (cfrReferences) fall in this title (1\u201350) \u2014 such as the title regulations_get_cfr_section just read. Alone it filters to the title; with cfr_part, to that part.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Federal Register volume and page, \"89 FR 49102\".",
+      "pattern": "^\\s*(\\d{1,3})\\s*[Ff]\\.?\\s?[Rr]\\.?\\s*(\\d{1,6})\\s*$",
+      "type": "string"
+     }
+    ],
+    "description": "A Federal Register page cite, \"89 FR 49102\" (volume FR page) \u2014 such as one from the source note that ends a regulations_get_cfr_section bodyText. Returns the documents printed on that page, usually one and sometimes a few sharing it, ordered by start page. Requires citation_date and replaces published_after/published_before. Volume 59 (1994) onward."
+   },
+   "citation_date": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "ISO 8601 date (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "The publication date printed beside the cite in the source note (YYYY-MM-DD) \u2014 \"89 FR 49102, June 11, 2024\" is 2024-06-11. Required with citation; its year is the volume + 1935."
+   },
+   "docket_id": {
+    "description": "Only documents carrying this docket number as the Federal Register prints it \u2014 a docketIds entry from a result here or from regulations_get_document, with or without a wrapper such as \"Docket No.\". Lists a docket's Federal Register documents with no REGULATIONS_GOV_API_KEY. A Regulations.gov docket ID matches only where the Federal Register prints it. Pass the complete number: a fragment (\"FAA-2026\") matches every docket that contains it.",
+    "type": "string"
+   },
+   "order": {
+    "description": "Result order. Defaults to relevance with a query, newest without one. relevance without a query falls back to newest first; oldest lists the earliest publications first. Ignored with citation, whose matches come in page order.",
+    "enum": [
+     "relevance",
+     "newest",
+     "oldest"
+    ],
+    "type": "string"
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number (1\u201350, default 1). The Federal Register serves 50 pages, so a query reaches 50 \u00d7 per_page matches (5,000 at per_page 100); totalPages and nextPage in the response say how far this one goes. To reach past that, narrow with published_after/published_before rather than paging deeper.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "per_page": {
+    "default": 20,
+    "description": "Results per page (2\u2013100, default 20). The Federal Register API treats exactly 1 as its default page size instead of returning one result.",
+    "maximum": 100,
+    "minimum": 2,
+    "type": "integer"
+   },
+   "published_after": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "ISO 8601 date (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Earliest publication date, ISO 8601 (YYYY-MM-DD), a real calendar day. Combine with published_before to window large result sets \u2014 the FR caps navigation at 50 pages."
+   },
+   "published_before": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "ISO 8601 date (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "type": "string"
+     }
+    ],
+    "description": "Latest publication date, ISO 8601 (YYYY-MM-DD), a real calendar day."
+   },
+   "query": {
+    "description": "Full-text search across document title and body. Omit to browse by filters alone (e.g. all EPA proposed rules in a date range).",
+    "type": "string"
+   },
+   "rin": {
+    "description": "Only documents carrying this Regulation Identifier Number \u2014 a regulationIdNumbers entry such as \"2040-AG18\", which follows one rulemaking from proposal to final rule. Pass the complete RIN: a fragment (\"2040\") matches every RIN that contains it.",
+    "type": "string"
+   },
+   "type": {
+    "description": "Document types to include. PRORULE=Proposed Rule, RULE=Final Rule, NOTICE=Notice, PRESDOCU=Presidential Document. Omit for all types.",
+    "items": {
+     "enum": [
+      "PRORULE",
+      "RULE",
+      "NOTICE",
+      "PRESDOCU"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "name": "regulations_search_rules",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "results",
+     "totalCount",
+     "totalPages"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The most matches 50 pages reach at this per_page (50 \u00d7 per_page); set with truncated.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `upstream_unavailable`: Federal Register returned a 5xx, timed out, or served an HTML error page. `invalid_filter`: The Federal Register rejected a filter value \u2014 most often an agency name or acronym passed where a slug belongs. `date_range_inverted`: The start of a date range is later than its end. `title_required_for_part`: cfr_part was given with no cfr_title. Part numbers repeat across titles, and the Federal Register rejects a part filter that names no title. `citation_incomplete`: citation or citation_date was given without the other, or together with published_after/published_before. `citation_out_of_range`: The cite's volume predates the Federal Register API (before volume 59, 1994), or citation_date falls in a different year from the volume. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "upstream_unavailable",
+         "invalid_filter",
+         "date_range_inverted",
+         "title_required_for_part",
+         "citation_incomplete",
+         "citation_out_of_range"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextPage": {
+    "description": "Page to request next \u2014 present only when a later page holds matches.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when nothing matched, when the page is past the end, or when matches lie beyond the last page.",
+    "type": "string"
+   },
+   "results": {
+    "description": "Matching Federal Register documents (this page).",
+    "items": {
+     "additionalProperties": false,
+     "description": "One matching Federal Register document.",
+     "properties": {
+      "abstract": {
+       "description": "Abstract summary, or null when absent.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "agencies": {
+       "description": "Issuing agencies.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One issuing agency.",
+        "properties": {
+         "name": {
+          "description": "Agency name.",
+          "type": "string"
+         },
+         "slug": {
+          "description": "Federal Register agency slug \u2014 pass it back as the agencies filter. Null when the Federal Register lists the agency by raw name only, so it cannot be filtered on.",
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "required": [
+         "name",
+         "slug"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "cfrReferences": {
+       "description": "Affected CFR parts \u2014 chain into regulations_get_cfr_section.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A single affected CFR title + part.",
+        "properties": {
+         "part": {
+          "description": "CFR part.",
+          "type": "string"
+         },
+         "title": {
+          "description": "CFR title number.",
+          "type": "number"
+         }
+        },
+        "required": [
+         "title",
+         "part"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "citation": {
+       "description": "Where the document starts in the Federal Register (\"89 FR 49101\"); null when none is recorded, as for most of 1994.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "commentCount": {
+       "description": "Comments Regulations.gov received on this document, as the Federal Register reports it; null when not on Regulations.gov. Can exceed the comment records regulations_find_comments lists.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "commentPeriodOpen": {
+       "description": "Whether that comment period is open today: true through 11:59 PM Eastern on commentsCloseOn, false after it, null when commentsCloseOn is null.",
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "commentUrl": {
+       "description": "Regulations.gov page for submitting a comment on this document, as the Federal Register lists it. Null when it lists none, as it usually stops doing once the comment period closes.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "commentsCloseOn": {
+       "description": "Last day of the comment period this document printed (ISO 8601), inclusive, in Eastern time; null when it prints none. A later extension published as its own document is not reflected here.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "docketIds": {
+       "description": "Docket numbers as the Federal Register prints them \u2014 an agency's own number (\"REG-101355-26\"), or an ID inside a wrapper (\"Docket No. FAA-2026-8449\"). Pass one back as the docket_id filter. Not always a Regulations.gov ID: for regulations_get_docket / regulations_find_comments use regulationsGovDocketId.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "documentNumber": {
+       "description": "Federal Register document number \u2014 chains into regulations_get_document.",
+       "type": "string"
+      },
+      "effectiveOn": {
+       "description": "Effective date (ISO 8601), or null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "endPage": {
+       "description": "Last Federal Register page the document is printed on; null when unrecorded.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "htmlUrl": {
+       "description": "Federal Register web URL for the document.",
+       "type": "string"
+      },
+      "publicationDate": {
+       "description": "Publication date (ISO 8601).",
+       "type": "string"
+      },
+      "regulationIdNumbers": {
+       "description": "Regulation Identifier Number(s) (RIN).",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "regulationsGovDocketId": {
+       "description": "Regulations.gov docket ID \u2014 chains into regulations_get_docket / regulations_find_comments(docket_id). Null when the document is not on Regulations.gov. An <AGENCY>_FRDOC_0001 docket (EPA_FRDOC_0001 holds 3,451 documents) is Regulations.gov's catch-all for Federal Register documents outside a rulemaking docket, so this document's comments come from regulationsGovDocumentId instead.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "regulationsGovDocumentId": {
+       "description": "Regulations.gov document ID \u2014 pass as document_object_id to regulations_find_comments for the comments filed on this document. Null when absent.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "startPage": {
+       "description": "First Federal Register page the document is printed on; null when unrecorded.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "title": {
+       "description": "Document title.",
+       "type": "string"
+      },
+      "type": {
+       "description": "Document type: Proposed Rule, Final Rule, Notice, or Presidential Document.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "documentNumber",
+      "title",
+      "type",
+      "abstract",
+      "publicationDate",
+      "citation",
+      "startPage",
+      "endPage",
+      "agencies",
+      "docketIds",
+      "regulationsGovDocketId",
+      "regulationsGovDocumentId",
+      "commentCount",
+      "commentUrl",
+      "regulationIdNumbers",
+      "cfrReferences",
+      "commentsCloseOn",
+      "commentPeriodOpen",
+      "effectiveOn",
+      "htmlUrl"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Results returned on this page.",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Matches before pagination. The Federal Register stops counting at 10,000, so 10,000 means at least that many.",
+    "type": "number"
+   },
+   "totalPages": {
+    "description": "Pages at this per_page, at most the 50 the Federal Register serves; 0 when nothing matched.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when more documents matched than 50 pages reach at this per_page, so some are on no page \u2014 set on every page of such a set.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "regulations_search_rules"
+}

@@ -1,0 +1,57 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Capture the selected renderer surface accessibility tree: interactive elements (and landmarks) with role, name, state, bbox, and a stable ref. Pass since:\"last\" for only what changed since the previous snapshot (added/removed/changed + ref_map), interactiveOnly to drop landmarks, maxEntries to cap. format:\"text\" returns a compact one-line-per-entry rendering instead of JSON (5-10x fewer tokens): `[ref] role \"name\" value=\u2026 flags`, ~ marks recently-changed, [-] marks landmarks. Diffs default to a compact encoding (changed fields only; diffFormat:\"full\" restores complete prev/curr entries) and accept budgetTokens for server-side truncation that keeps interactive entries first. Each response carries renderer_reloaded so stale refs are detectable (P10). Refs are tagged on the DOM (data-sw-ref) so later interaction tools can act by ref. Closed shadow roots are opaque unless the app opts in: push each root onto window.__stagewright_closedShadowRoots at attachShadow time (or implement window.__stagewright_inspectShadow); their entries carry state.shadow_closed: true. Returns: { ok, surface_id, kind: \"full\" | \"diff\", snapshot?, diff?, snapshot_text?, diff_text?, diff_format?, renderer_reloaded, truncated }. Errors: NOT_RUNNING (no session \u2014 call electron_launch first; not retryable), BAD_ARGUMENT (multiple sessions live \u2014 pass sessionId).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "budgetTokens": {
+    "description": "Server-side token cap for a since:'last' diff payload. Lowest-value entries (non-interactive removed/changed first) are dropped until the estimate fits; _meta.truncated_entries reports how many were omitted.",
+    "maximum": 9007199254740991,
+    "minimum": 50,
+    "type": "integer"
+   },
+   "diffFormat": {
+    "description": "Encoding for since:'last' diffs. 'compact' (default) carries only the changed fields per entry; 'full' carries complete prev/curr entries. Ignored when format:'text'.",
+    "enum": [
+     "compact",
+     "full"
+    ],
+    "type": "string"
+   },
+   "format": {
+    "description": "Payload encoding. 'json' (default) returns the structured snapshot/diff objects. 'text' returns a compact one-line-per-entry rendering (5-10x fewer tokens): ref, role, quoted name, non-empty value/placeholder, and only NON-default state flags; ~ prefixes recently-changed entries, [-] marks non-targetable landmarks.",
+    "enum": [
+     "json",
+     "text"
+    ],
+    "type": "string"
+   },
+   "interactiveOnly": {
+    "description": "Return only interactive elements (drops landmarks) to save tokens.",
+    "type": "boolean"
+   },
+   "maxEntries": {
+    "description": "Cap the number of entries returned. Defaults to 2000.",
+    "maximum": 10000,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "sessionId": {
+    "description": "Target session id. Omit when a single session is running.",
+    "type": "string"
+   },
+   "since": {
+    "const": "last",
+    "description": "Return only the delta since the previous snapshot for this session.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "electron_snapshot",
+ "title": "Snapshot renderer accessibility tree"
+}

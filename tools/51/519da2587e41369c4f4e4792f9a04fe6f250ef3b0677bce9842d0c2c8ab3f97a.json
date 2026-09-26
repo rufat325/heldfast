@@ -1,0 +1,192 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search the Eurostat catalogue by keyword. Returns matching datasets with codes, descriptions, period coverage, and theme breadcrumbs. Use this to discover dataset codes before calling eurostat_get_dataset_info, then eurostat_query_dataset for a slice of a dataset or eurostat_download_dataset for the whole of one. Results are limited to datasets and predefined tables \u2014 folders are excluded. The catalogue joins two sources: the dissemination table of contents, and the Comext host's dataflow list, which adds the DS-* collections \u2014 detailed trade by CN8, HS, SITC, BEC and CPA, and PRODCOM \u2014 filed under \"International trade in goods - detailed data (Comext)\" and \"Statistics on the production of manufactured goods (PRODCOM)\". Comext entries report a last-update date but no period coverage or observation count. A collection on neither list, such as the legacy PRODCOM DS-056120, is not disseminated and cannot be reached through this server.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cursor": {
+    "description": "Opaque pagination cursor from a previous call's nextCursor. Omit for the first page; pass it back \u2014 with the same query \u2014 to fetch the next page of matches over a stable order. A cursor is bound to the query that produced it and to the catalogue snapshot in effect at that time, so reusing one with a different query, or after the catalogue refreshes, is rejected rather than silently paging a different result set.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Page size \u2014 maximum datasets returned per page (1\u2013100). Default is 20. To retrieve matches beyond one page, pass the returned nextCursor back as cursor; the page size is fixed by this first call.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Search terms \u2014 at least one non-whitespace token is required. Split on whitespace into tokens; every token must match (AND), case-insensitively, somewhere across the dataset label, theme breadcrumb, or code. Word order does not matter, so \"business demography NUTS 3\" or \"regional economic accounts\" resolve without naming a label verbatim.",
+    "minLength": 1,
+    "pattern": "\\S",
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "eurostat_search_datasets",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "datasets",
+     "query",
+     "totalMatches",
+     "truncated"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "datasets": {
+    "description": "Matching datasets for the current page, up to the requested limit.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A matched dataset entry.",
+     "properties": {
+      "code": {
+       "description": "Dataset code (e.g., \"nama_10_gdp\"). Use this in eurostat_get_dataset_info, eurostat_query_dataset, and eurostat_download_dataset.",
+       "type": "string"
+      },
+      "dataEnd": {
+       "description": "Most recent data period available (e.g., \"2025\"). Omitted when not reported by Eurostat.",
+       "type": "string"
+      },
+      "dataStart": {
+       "description": "Earliest data period available (e.g., \"1975\"). Omitted when not reported by Eurostat.",
+       "type": "string"
+      },
+      "label": {
+       "description": "Human-readable dataset title.",
+       "type": "string"
+      },
+      "lastUpdated": {
+       "description": "Date of last data update (e.g., \"22.05.2026\"). Omitted when not reported.",
+       "type": "string"
+      },
+      "obsCount": {
+       "description": "Approximate number of observations. Omitted when not reported by Eurostat.",
+       "type": "number"
+      },
+      "themePath": {
+       "description": "Breadcrumb path from root theme to this dataset (e.g., [\"Database by themes\", \"Economy and finance\"]). Eurostat files some datasets under several branches; this is the first branch that matched the query. Empty for top-level entries.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "type": {
+       "description": "Entry type: \"dataset\" for standard datasets, \"table\" for predefined tables.",
+       "enum": [
+        "dataset",
+        "table"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "label",
+      "type",
+      "themePath"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_match`: No datasets matched the query string \u2014 including a query naming a DS-* code that neither the dissemination table of contents nor the Comext dataflow list carries, which is a collection Eurostat does not disseminate. `invalid_cursor`: The cursor is malformed, came from a different query, or came from a catalogue snapshot that has since refreshed. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_match",
+         "invalid_cursor"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "nextCursor": {
+    "description": "Opaque cursor for the next page of matches. Pass it back as cursor with the same query; it stops working once the catalogue refreshes. Omitted on the last page.",
+    "type": "string"
+   },
+   "nextStep": {
+    "description": "Suggested next action based on these results. Populated when there is a clear follow-up call.",
+    "type": "string"
+   },
+   "query": {
+    "description": "Search terms as submitted.",
+    "type": "string"
+   },
+   "totalMatches": {
+    "description": "Total distinct dataset codes matching the query across all pages, before the page limit.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when more matches remain beyond this page \u2014 pass nextCursor as cursor to fetch them.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search Eurostat Datasets"
+}

@@ -1,0 +1,409 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Flagship workflow: map a domain's external attack surface end to end. Discovers subdomains from Certificate Transparency logs, resolves each to find live hosts, and (at standard+ depth) characterizes each live host's DNS records, TLS posture, and HTTP security headers and technology stack, plus optional RDAP/WHOIS registration. At thorough depth with a Shodan key it adds per-IP Shodan enrichment. Returns a structured surface map and a defensive assessment of observable facts (expiring certs, missing security headers, weak TLS) \u2014 never an exploitation plan. All work is passive (public records and the target's own published responses) and SSRF-guarded. Assess only assets you own or are explicitly authorized to test.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "depth": {
+    "default": "standard",
+    "description": "\"quick\" = subdomains + liveness only; \"standard\" = + DNS/TLS/HTTP posture; \"thorough\" = + Shodan enrichment (when keyed).",
+    "enum": [
+     "quick",
+     "standard",
+     "thorough"
+    ],
+    "type": "string"
+   },
+   "domain": {
+    "description": "Apex domain to map (e.g. \"example.com\").",
+    "type": "string"
+   },
+   "includeRegistration": {
+    "default": true,
+    "description": "When true (and depth is standard+), include RDAP/WHOIS registration for the apex.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "domain"
+  ],
+  "type": "object"
+ },
+ "name": "attacksurface_map_domain",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "domain",
+     "depth",
+     "subdomainCount",
+     "liveHostCount",
+     "liveHosts",
+     "unresolvedSubdomains",
+     "registration",
+     "assessment",
+     "notes"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "assessment": {
+    "description": "Observable posture findings synthesized across the surface.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "cap": {
+    "description": "The ATTACKSURFACE_MAX_SUBDOMAINS cap applied.",
+    "type": "number"
+   },
+   "depth": {
+    "description": "Depth that was executed.",
+    "enum": [
+     "quick",
+     "standard",
+     "thorough"
+    ],
+    "type": "string"
+   },
+   "domain": {
+    "description": "Apex domain mapped (normalized).",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_domain`: The supplied domain is not a syntactically valid registrable domain. `no_surface`: No subdomains were discovered and the apex did not resolve. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_domain",
+         "no_surface"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "liveHostCount": {
+    "description": "Count of subdomains that resolved to an address.",
+    "type": "number"
+   },
+   "liveHosts": {
+    "description": "Per-live-host posture.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Posture summary for one live host.",
+     "properties": {
+      "addresses": {
+       "description": "Resolved IP addresses.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "host": {
+       "description": "Subdomain hostname.",
+       "type": "string"
+      },
+      "http": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "finalStatus": {
+           "description": "Final HTTP status after redirects.",
+           "type": "number"
+          },
+          "finalUrl": {
+           "description": "Final URL after redirects.",
+           "type": "string"
+          },
+          "securityFindings": {
+           "description": "Security-header findings.",
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "technologies": {
+           "description": "Technology detections (name/category/version).",
+           "items": {
+            "additionalProperties": false,
+            "description": "A detected technology (name/category/version).",
+            "properties": {
+             "category": {
+              "description": "Detection category.",
+              "type": "string"
+             },
+             "name": {
+              "description": "Technology name.",
+              "type": "string"
+             },
+             "version": {
+              "description": "Version when disclosed.",
+              "type": "string"
+             }
+            },
+            "required": [
+             "name",
+             "category"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "required": [
+          "finalStatus",
+          "finalUrl",
+          "securityFindings",
+          "technologies"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "HTTP posture summary (standard+ depth), or null when not probed/unreachable."
+      },
+      "shodan": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "lastUpdate": {
+           "description": "Shodan scan timestamp.",
+           "type": "string"
+          },
+          "ports": {
+           "description": "Open ports per Shodan's last scan.",
+           "items": {
+            "type": "number"
+           },
+           "type": "array"
+          }
+         },
+         "required": [
+          "ports"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Shodan enrichment (thorough depth + key), or null otherwise."
+      },
+      "tls": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "cipher": {
+           "description": "Negotiated cipher.",
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "daysUntilExpiry": {
+           "description": "Days until certificate expiry.",
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "findings": {
+           "description": "TLS posture findings.",
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "issuer": {
+           "description": "Certificate issuer common name.",
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "protocol": {
+           "description": "Negotiated TLS protocol.",
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "validationAuthorized": {
+           "description": "Whether the chain validated against the trust store.",
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "protocol",
+          "cipher",
+          "issuer",
+          "daysUntilExpiry",
+          "validationAuthorized",
+          "findings"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "TLS posture summary (standard+ depth), or null when not inspected/handshake failed."
+      }
+     },
+     "required": [
+      "host",
+      "addresses",
+      "tls",
+      "http",
+      "shodan"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notes": {
+    "description": "Operational notes (skipped sources, degraded steps, Shodan absence).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance when no subdomains or live hosts were found.",
+    "type": "string"
+   },
+   "registration": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "expiry": {
+        "description": "Expiration date when present.",
+        "type": "string"
+       },
+       "nameservers": {
+        "description": "Nameservers (domain lookups).",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "registrar": {
+        "description": "Registrar (domain lookups).",
+        "type": "string"
+       },
+       "source": {
+        "description": "Source that answered.",
+        "enum": [
+         "rdap",
+         "whois"
+        ],
+        "type": "string"
+       },
+       "statuses": {
+        "description": "Registry status codes.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "source",
+       "statuses",
+       "nameservers"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Apex registration summary, or null."
+   },
+   "shown": {
+    "description": "Number of subdomains resolved after the cap.",
+    "type": "number"
+   },
+   "subdomainCount": {
+    "description": "Total distinct subdomains discovered.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when subdomain resolution was capped.",
+    "type": "boolean"
+   },
+   "unresolvedSubdomains": {
+    "description": "Discovered names that did not resolve.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "attacksurface_map_domain"
+}

@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Registry rulings (m\u00e4\u00e4rused) of an Estonian company from the official e-Business Register open data (RIK, CC BY 4.0, DAILY national photo): registry entries, orders to remedy defects, warnings of striking-off for an unfiled annual report, warnings of compulsory dissolution for insufficient net assets, and annual-report fines \u2014 each with its date, extra deadline, status and force date, Estonian codes and labels as published. An `alerte` flag marks the CLOSED list of warning/fine types returned with the answer; `nombre_alertes` excludes only rulings whose `etat_code` is EXPLICITLY known as resolved (currently `L` only) \u2014 a qualified ruling later resolved that way keeps `alerte: true` but no longer counts, while every other state (including `J`, `K`, or any code not yet seen) still counts, fail-closed on the unknown. `types_non_qualifies` lists this entity's other rule types, so a zero is never read as \u201cno warning\u201d. A still-registered entity with no ruling returns an explicit positive answer, dated with the photo actually served (`photo_le`); a struck-off entity leaves the open data entirely and returns 404 instead of a false clean sheet. Paid via x402 ($0.02 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "registrikood": {
+    "description": "8-digit Estonian registry code (registrikood, e-Business Register), e.g. 10003666",
+    "pattern": "^\\d{8}$",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "registrikood"
+  ],
+  "type": "object"
+ },
+ "name": "get_estonian_company_registry_rulings",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Estonian registry rulings"
+}

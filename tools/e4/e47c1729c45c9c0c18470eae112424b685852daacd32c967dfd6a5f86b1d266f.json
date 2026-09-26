@@ -1,0 +1,361 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Evaluate one commitment\u2019s cancellation/refund reversibility from transaction-specific checkout terms plus maintained policy evidence, without charging or creating durable state. Use before a purchase, booking, subscription, rental, service, ticket, digital purchase, or deposit when exit deadlines or loss matter; use list_supported_policies only for maintained-overlay coverage, and create_exit_manifest only after paidExitManifestAvailable=true. Do not use for purchase desirability, legal advice, chargeback decisions, or executing a cancellation. Supply checkout_terms whenever available because they control the transaction-specific assessment; expected_commitment_at moves deadline evaluation forward when the commitment is future-dated, and missing or conflicting evidence can return assessment=unknown rather than inventing an exit right.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "description": "One contemplated or existing commitment to evaluate. merchant, commitment_type, and amount are required. Transaction-specific checkout_terms are the strongest input when available; maintained policy evidence can add context but never overrides conflicting transaction-specific terms.",
+  "properties": {
+   "amount": {
+    "description": "Commitment amount in major currency units, for example 125.50 for USD 125.50. Must be non-negative and uses currency below for all monetary interpretation.",
+    "minimum": 0,
+    "type": "number"
+   },
+   "checkout_terms": {
+    "additionalProperties": false,
+    "description": "Transaction-specific cancellation, refund, renewal, charge, and loss terms observed for this exact commitment. Supply these whenever available; they control the transaction-specific assessment while maintained policy evidence remains contextual.",
+    "properties": {
+     "auto_renews": {
+      "description": "Whether the supplied transaction terms explicitly state that the commitment renews automatically.",
+      "type": "boolean"
+     },
+     "cancellable": {
+      "description": "Whether the supplied transaction terms explicitly state that the commitment can be canceled.",
+      "type": "boolean"
+     },
+     "cancellation_deadline": {
+      "description": "RFC 3339 timestamp with explicit timezone for the stated cancellation deadline, even when cancellation may involve a loss.",
+      "format": "date-time",
+      "type": "string"
+     },
+     "cancellation_method": {
+      "description": "Recorded method or path for cancellation/refund, such as an account page, support channel, or merchant instruction. This can make a later exit pack actionable.",
+      "maxLength": 240,
+      "type": "string"
+     },
+     "cancellation_penalty_amount": {
+      "description": "Stated cancellation penalty in major units of currency. Mutually exclusive with cancellation_penalty_percent.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "cancellation_penalty_percent": {
+      "description": "Stated cancellation penalty as a percentage from 0 to 100. Mutually exclusive with cancellation_penalty_amount.",
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+     },
+     "charge_timing": {
+      "description": "When the merchant states the charge will occur, such as immediately, at check-in, or 24 hours before renewal.",
+      "maxLength": 160,
+      "type": "string"
+     },
+     "free_cancellation_until": {
+      "description": "RFC 3339 deadline with explicit timezone through which the supplied terms state cancellation is free.",
+      "format": "date-time",
+      "type": "string"
+     },
+     "nonrefundable_amount": {
+      "description": "Amount explicitly stated as nonrefundable, in major units of currency.",
+      "minimum": 0,
+      "type": "number"
+     },
+     "observed_at": {
+      "description": "RFC 3339 timestamp with explicit timezone for when the caller observed these checkout terms.",
+      "format": "date-time",
+      "type": "string"
+     },
+     "refundable": {
+      "description": "Whether the supplied transaction terms explicitly state that the committed amount is refundable.",
+      "type": "boolean"
+     },
+     "renewal_interval": {
+      "description": "Human-readable renewal interval from the supplied terms, such as monthly or annually. Use only when auto-renewal terms are stated.",
+      "maxLength": 80,
+      "type": "string"
+     },
+     "source_url": {
+      "description": "HTTP(S) source URL for the supplied transaction terms. ExitProof removes credentials, query parameters, and fragments before storing the URL.",
+      "maxLength": 500,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "client_reference": {
+    "description": "Optional caller-owned correlation reference. ExitProof stores only a SHA-256 hash; do not place secrets or sensitive personal data here.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "commitment_type": {
+    "description": "Closest category for the commitment being evaluated. This affects policy matching and should describe what the user is committing to, not the payment method.",
+    "enum": [
+     "subscription",
+     "reservation",
+     "ticket",
+     "service",
+     "software",
+     "digital_purchase",
+     "rental",
+     "deposit",
+     "other"
+    ],
+    "type": "string"
+   },
+   "country": {
+    "description": "Optional two-letter ISO 3166-1 alpha-2 country code, such as US. Used to scope maintained policy rules when geography matters.",
+    "maxLength": 2,
+    "minLength": 2,
+    "pattern": "^[A-Za-z]{2}$",
+    "type": "string"
+   },
+   "currency": {
+    "default": "USD",
+    "description": "Three-letter ISO 4217 currency code for amount and all monetary checkout terms. Defaults to USD.",
+    "maxLength": 3,
+    "minLength": 3,
+    "pattern": "^[A-Za-z]{3}$",
+    "type": "string"
+   },
+   "event_type": {
+    "default": "initial",
+    "description": "Lifecycle event for this commitment. Use renewal for a recurring renewal, reservation for a booking event, deposit for a deposit event, or leave omitted for an initial commitment.",
+    "enum": [
+     "initial",
+     "renewal",
+     "purchase",
+     "reservation",
+     "deposit",
+     "other"
+    ],
+    "type": "string"
+   },
+   "expected_commitment_at": {
+    "description": "RFC 3339 timestamp with explicit timezone for when the commitment is expected to occur. ExitProof evaluates time windows at the later of now and this timestamp.",
+    "format": "date-time",
+    "type": "string"
+   },
+   "merchant": {
+    "description": "Merchant, platform, provider, or counterparty name exactly enough to identify the commitment. Used to match maintained policy overlays; do not include account numbers, credentials, or secrets.",
+    "maxLength": 160,
+    "minLength": 1,
+    "type": "string"
+   },
+   "purchase_channel": {
+    "default": "unknown",
+    "description": "Where the commitment is being made or billed. Use apple or google_play when that billing platform controls cancellation/refund rules; use direct for the merchant itself.",
+    "enum": [
+     "direct",
+     "apple",
+     "google_play",
+     "marketplace",
+     "travel_agency",
+     "other",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "region": {
+    "description": "Optional state, province, or region label when the commitment or merchant terms are region-specific.",
+    "maxLength": 80,
+    "type": "string"
+   }
+  },
+  "required": [
+   "merchant",
+   "commitment_type",
+   "amount"
+  ],
+  "type": "object"
+ },
+ "name": "check_reversibility",
+ "outputSchema": {
+  "additionalProperties": true,
+  "description": "Bounded reversibility assessment with evidence, loss/deadline information, limitations, and paid-operation eligibility flags.",
+  "properties": {
+   "amountMinor": {
+    "description": "Commitment amount in minor currency units.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "assessment": {
+    "description": "Evidence-bounded reversibility classification. unknown means current evidence is insufficient or conflicting.",
+    "enum": [
+     "fully_reversible",
+     "conditionally_reversible",
+     "low_reversibility",
+     "effectively_irreversible",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "caseDigest": {
+    "description": "Stable digest of the normalized commitment inputs used for this assessment.",
+    "type": "string"
+   },
+   "commitmentType": {
+    "description": "Normalized commitment type.",
+    "type": "string"
+   },
+   "currency": {
+    "description": "Normalized three-letter currency code.",
+    "type": "string"
+   },
+   "currentExitEstablished": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Whether current evidence establishes an exit route."
+   },
+   "decisionSupport": {
+    "additionalProperties": true,
+    "description": "Decision-support summary that does not decide whether the user should make the commitment.",
+    "type": "object"
+   },
+   "evaluatedAt": {
+    "description": "Timestamp at which the commitment was evaluated.",
+    "type": "string"
+   },
+   "evidence": {
+    "description": "Evidence items supporting or limiting the assessment.",
+    "items": {
+     "additionalProperties": true,
+     "description": "One evidence item used by ExitProof.",
+     "properties": {
+      "authority": {
+       "description": "Authority label for the source.",
+       "type": "string"
+      },
+      "evidenceOrigin": {
+       "description": "Origin classification, such as caller_supplied or maintained_policy.",
+       "type": "string"
+      },
+      "independentlyVerified": {
+       "description": "Whether ExitProof independently verified this evidence item.",
+       "type": "boolean"
+      },
+      "observedAt": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "When the evidence was observed, when available."
+      },
+      "sourceUrl": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Source URL when one is available."
+      },
+      "type": {
+       "description": "Evidence type, such as checkout_terms or official_policy.",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "evidenceBasis": {
+    "description": "Whether the assessment is based on checkout terms, maintained policy, both, or insufficient evidence.",
+    "type": "string"
+   },
+   "evidenceConflict": {
+    "description": "True when evidence conflicts and cannot safely support a confident paid result.",
+    "type": "boolean"
+   },
+   "evidenceState": {
+    "description": "Current evidence state, such as established, incomplete, conflicting, expired, or missing.",
+    "type": "string"
+   },
+   "exitPackEligibility": {
+    "additionalProperties": true,
+    "description": "Reasoned actionability status for a future exit pack.",
+    "type": "object"
+   },
+   "limitations": {
+    "description": "Important limits on what the assessment proves.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "maximumStatedLossMinor": {
+    "anyOf": [
+     {
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Maximum stated loss in minor currency units when safely established, otherwise null."
+   },
+   "merchant": {
+    "description": "Normalized merchant or platform name.",
+    "type": "string"
+   },
+   "paidExitManifestAvailable": {
+    "description": "Whether current evidence passes the preflight required before create_exit_manifest can be challenged for payment.",
+    "type": "boolean"
+   },
+   "paidExitPackAvailable": {
+    "description": "Whether the current evidence appears actionable enough for a later exit pack after a manifest exists.",
+    "type": "boolean"
+   },
+   "reason": {
+    "description": "Concise evidence-grounded explanation of the assessment.",
+    "type": "string"
+   },
+   "reversibleUntil": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Recorded exit deadline when established, otherwise null."
+   },
+   "schemaVersion": {
+    "const": "exitproof-reversibility.v1",
+    "description": "ExitProof reversibility result schema version."
+   }
+  },
+  "required": [
+   "schemaVersion",
+   "assessment",
+   "merchant",
+   "commitmentType",
+   "amountMinor",
+   "currency",
+   "evaluatedAt",
+   "reason",
+   "evidence",
+   "limitations",
+   "paidExitManifestAvailable",
+   "paidExitPackAvailable",
+   "caseDigest"
+  ],
+  "type": "object"
+ },
+ "title": "Check reversibility"
+}

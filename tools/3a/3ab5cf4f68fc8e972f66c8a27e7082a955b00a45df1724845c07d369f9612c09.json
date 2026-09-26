@@ -1,0 +1,72 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "USE WHEN an agent or a builder is about to launch a token and wants the venue chosen on published facts, with the fee disclosed before anything is signed. Venues covered: Clanker v4, Bankr, Virtuals, Zora creator coins.\n\nRULE ENFORCED: a launch route is a RECOMMENDATION. `chosen_by` names every fact it was chosen on, each with the venue page it was read from and the date it was read (`facts_as_of`). A fee schedule says nothing about what a token will do after it launches, and nothing here is a security review or an audit. `null` is unknown and never zero \u2014 a venue that publishes no per-party fee split is unread, not generous.\n\nNON-CUSTODIAL: this tool NEVER deploys, signs, holds keys or moves funds. For the Clanker lane it returns a PREPARED CONFIG in the documented clanker-sdk v4 `deploy()` shape (the SDK is deliberately not a dependency of this service) which the caller reads and signs itself. Other venues are recommend-only: named, with a stated reason why no config is emitted.\n\nTHE FEE: Sato's slice is one entry in the venue's own reward-recipient list \u2014 the deployer takes `10000 - bps`, Sato takes `bps`, and the two always total 10000. It is disclosed in `fee` on EVERY response, including when it is 0, and at 0 no Sato recipient appears in the config at all. A launch that is never signed pays nothing.\n\nReturns (json): { route_id, goal, chain, venue: { slug, name, lane, pool_fee_pct, creator_share_pct, programmable_fee_split, facts: [{ fact, source_url, as_of }], unconfirmed, docs_url }, reason, chosen_by: [{ signal, value, source_field }], checked_at, alternatives: [{ slug, name, behind_on }], fee: { bps, recipient, basis, disclosed }, prepared_deploy, prepared_deploy_unavailable, facts_as_of, caveat, rules }. When no venue documents the chain: { unavailable, tried, supported_chains, supported_goals, checked_at, caveat }.\n\nExample: { chain: \"Base\", goal: \"agent_token\", name: \"Example Agent\", symbol: \"EXMPL\", deployer: \"0x\u2026\" }",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "chain": {
+    "description": "Chain display name as the directory writes it, e.g. 'Base', 'Arbitrum'.",
+    "maxLength": 40,
+    "minLength": 1,
+    "type": "string"
+   },
+   "deployer": {
+    "description": "The 0x address that will sign the deploy and hold the creator reward share. Without it no config is prepared \u2014 it cannot be inferred.",
+    "maxLength": 64,
+    "type": "string"
+   },
+   "goal": {
+    "description": "What is being launched. Matched against what each venue's own documentation covers.",
+    "enum": [
+     "agent_token",
+     "creator_coin",
+     "meme",
+     "utility"
+    ],
+    "type": "string"
+   },
+   "max_pool_fee_pct": {
+    "description": "Reject venues whose PUBLISHED pool fee exceeds this percentage. A venue that publishes no fee is not excluded \u2014 unknown is not disqualifying.",
+    "type": "number"
+   },
+   "name": {
+    "description": "Token name. Required for a prepared deploy config; the caller's to choose, never invented here.",
+    "maxLength": 64,
+    "type": "string"
+   },
+   "require_programmable_fee_split": {
+    "description": "Only venues documenting a programmable third-party recipient split.",
+    "type": "boolean"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: 'markdown' (default) or 'json'.",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "symbol": {
+    "description": "Token symbol. Required for a prepared deploy config.",
+    "maxLength": 16,
+    "type": "string"
+   }
+  },
+  "required": [
+   "chain",
+   "goal"
+  ],
+  "type": "object"
+ },
+ "name": "onchain_agent_route_launch",
+ "title": "Choose a launch venue, with the fee disclosed and a config prepared"
+}

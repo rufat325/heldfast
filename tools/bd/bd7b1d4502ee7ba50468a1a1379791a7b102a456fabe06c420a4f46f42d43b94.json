@@ -1,0 +1,137 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Update segment"
+ },
+ "description": "Modify an existing segment's name and/or filter definition. Call this after nevent_get_segment to inspect the current definition before changing it. At least one of name or definition must be provided. After update, call nevent_segment_preview to confirm the new audience count before scheduling a campaign.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "definition": {
+    "additionalProperties": false,
+    "description": "Replacement segment DSL. The full definition is replaced when provided. Criteria in the same stanza are OR-combined: a fan matches the stanza if ANY criterion matches. Stanzas are AND-combined: a fan must match EVERY stanza. Omit to leave the existing definition unchanged.",
+    "properties": {
+     "stanzas": {
+      "description": "Array of stanzas. Stanzas are AND-combined: a fan must match EVERY stanza. Criteria inside one stanza are OR-combined, so a fan matching ANY of them matches that stanza.",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "criteria": {
+         "description": "Criteria in the same stanza are OR-combined: a fan matches the stanza if ANY criterion matches. Stanzas are AND-combined, so a fan must match EVERY stanza.",
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "criterion_id": {
+            "description": "Criterion identifier from nevent_segmentation_criteria. Examples: total_spent, attended_event, user_gender, user_age, campaign_opened, nevent_temperature",
+            "type": "string"
+           },
+           "filters": {
+            "additionalProperties": {},
+            "description": "Only needed for user_custom_field criterion. Pass { \"property_name\": \"field_name\" } to specify which custom field.",
+            "type": "object"
+           },
+           "id": {
+            "description": "Optional stable ID for UI/cross-request correlation. If omitted, the MCP client auto-generates one before sending to the API.",
+            "type": "string"
+           },
+           "modifiers": {
+            "additionalProperties": false,
+            "description": "ADVANCED: Usually OMIT this field entirely. Only include when the user explicitly asks for:\n- \"at least X times\" \u2192 { frequency: { count: X, operator: \"gte\" } }\n- \"in the last X days\" \u2192 { time_range: { value: X, unit: \"days\" } } (value MUST be > 0; unit is one of days, weeks, months, years)\nIf not asked for frequency or recency, DO NOT include modifiers.",
+            "properties": {
+             "frequency": {
+              "additionalProperties": false,
+              "properties": {
+               "count": {
+                "type": "number"
+               },
+               "operator": {
+                "type": "string"
+               }
+              },
+              "required": [
+               "count",
+               "operator"
+              ],
+              "type": "object"
+             },
+             "time_range": {
+              "additionalProperties": false,
+              "properties": {
+               "unit": {
+                "type": "string"
+               },
+               "value": {
+                "minimum": 1,
+                "type": "number"
+               }
+              },
+              "required": [
+               "value",
+               "unit"
+              ],
+              "type": "object"
+             }
+            },
+            "type": "object"
+           },
+           "operator": {
+            "description": "Comparison operator. Rules by data type:\n- ENTITY: \"is\" and \"is_not\" accept a single string ID OR an array of string IDs (valueType=array per API). \"is_set\", \"is_not_set\" also supported.\n- TEXT: \"eq\", \"neq\", \"contains\", \"starts_with\", \"ends_with\", \"is_set\", \"is_not_set\"\n- NUMBER/CURRENCY: \"eq\", \"neq\", \"gt\", \"gte\", \"lt\", \"lte\", \"is_set\", \"is_not_set\"\n- BOOLEAN: \"is_true\", \"is_false\". NEVER use \"eq\" with \"true\"/\"false\" strings.\n- DATE: \"before\", \"after\", \"between\", \"eq\", \"is_set\", \"is_not_set\"",
+            "type": "string"
+           },
+           "value": {
+            "description": "Value to match. IMPORTANT rules:\n- ENTITY operators (is/is_not): accepts a single string ID OR an array of string IDs (e.g. \"event_123\" or [\"event_1\", \"event_2\"]).\n- NUMBER: must be a number (not string)\n- BOOLEAN operators (is_true/is_false): no value needed, omit this field.\n- DATE \"between\": array of 2 ISO date strings [start, end]"
+           }
+          },
+          "required": [
+           "criterion_id",
+           "operator"
+          ],
+          "type": "object"
+         },
+         "minItems": 1,
+         "type": "array"
+        },
+        "id": {
+         "description": "Optional stable ID for the stanza. If omitted, the MCP client auto-generates one before sending to the API. Provide your own only if you need stable references across requests.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "criteria"
+       ],
+       "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "stanzas"
+    ],
+    "type": "object"
+   },
+   "name": {
+    "description": "New human-readable name for the segment. Omit to leave unchanged.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "segment_id": {
+    "description": "Identifier of the segment to update. Use nevent_list_segments to get valid segment IDs.",
+    "minLength": 1,
+    "pattern": "^[a-f0-9]{24}$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "segment_id"
+  ],
+  "type": "object"
+ },
+ "name": "nevent_update_segment"
+}

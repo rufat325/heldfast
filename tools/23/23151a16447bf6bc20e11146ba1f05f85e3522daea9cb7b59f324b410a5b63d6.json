@@ -1,0 +1,300 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Creates a delivery claim. IMPORTANT: the claim is NOT dispatched immediately \u2014 it goes through estimation (status: new \u2192 estimating \u2192 ready_for_approval) and must then be confirmed with accept_claim, or pass auto_accept=true. Returns id (claim_id), status, version, route_points, pricing, created_ts. Verify success via get_claim: estimation errors can arrive as an error_messages array inside a 200 response. request_id makes the call idempotent: a retry with the same request_id returns the same claim, not a duplicate.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "auto_accept": {
+    "description": "true \u2014 confirm the claim automatically after successful estimation (no accept_claim needed).",
+    "type": "boolean"
+   },
+   "callback_properties": {
+    "additionalProperties": true,
+    "description": "Webhook for claim status changes.",
+    "properties": {
+     "callback_url": {
+      "description": "URL that receives claim status-change notifications.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "callback_url"
+    ],
+    "type": "object"
+   },
+   "client_requirements": {
+    "additionalProperties": true,
+    "description": "Delivery requirements. Optional per the docs, but always passing taxi_class is safest.",
+    "properties": {
+     "cargo_loaders": {
+      "description": "Number of loaders (for cargo).",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "cargo_type": {
+      "description": "Vehicle body type (for cargo): van, lcv_m, lcv_l.",
+      "enum": [
+       "van",
+       "lcv_m",
+       "lcv_l"
+      ],
+      "type": "string"
+     },
+     "pro_courier": {
+      "description": "true \u2014 experienced (pro) courier.",
+      "type": "boolean"
+     },
+     "taxi_class": {
+      "description": "Delivery class: courier, express or cargo.",
+      "enum": [
+       "courier",
+       "express",
+       "cargo"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "taxi_class"
+    ],
+    "type": "object"
+   },
+   "comment": {
+    "description": "Comment for the courier (up to 7000 characters).",
+    "maxLength": 7000,
+    "type": "string"
+   },
+   "due": {
+    "description": "Desired courier arrival time (ISO-8601), e.g. 2026-08-10T12:00:00+05:00.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+    "type": "string"
+   },
+   "emergency_contact": {
+    "additionalProperties": true,
+    "description": "Contact to reach if there is a problem with the delivery.",
+    "properties": {
+     "name": {
+      "description": "Contact name.",
+      "type": "string"
+     },
+     "phone": {
+      "description": "Contact phone.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "phone"
+    ],
+    "type": "object"
+   },
+   "items": {
+    "description": "Items to deliver.",
+    "items": {
+     "additionalProperties": true,
+     "properties": {
+      "cost_currency": {
+       "description": "ISO 4217 currency code, e.g. \"UZS\".",
+       "type": "string"
+      },
+      "cost_value": {
+       "description": "Price per unit as a decimal string, e.g. \"350.00\".",
+       "type": "string"
+      },
+      "dropoff_point": {
+       "description": "point_id of the drop-off point from route_points.",
+       "type": "integer"
+      },
+      "extra_id": {
+       "description": "External SKU / item id in the merchant's system.",
+       "type": "string"
+      },
+      "pickup_point": {
+       "description": "point_id of the pickup point from route_points.",
+       "type": "integer"
+      },
+      "quantity": {
+       "description": "Number of units.",
+       "minimum": 1,
+       "type": "integer"
+      },
+      "size": {
+       "additionalProperties": false,
+       "description": "Dimensions of one unit, meters.",
+       "properties": {
+        "height": {
+         "description": "Height, meters.",
+         "type": "number"
+        },
+        "length": {
+         "description": "Length, meters.",
+         "type": "number"
+        },
+        "width": {
+         "description": "Width, meters.",
+         "type": "number"
+        }
+       },
+       "required": [
+        "length",
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      "title": {
+       "description": "Item name.",
+       "type": "string"
+      },
+      "weight": {
+       "description": "Weight of one unit, kg.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "title",
+      "quantity",
+      "cost_value",
+      "cost_currency"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "optional_return": {
+    "description": "true \u2014 the courier does not return items to the sender when hand-over fails.",
+    "type": "boolean"
+   },
+   "request_id": {
+    "description": "Idempotency token (1\u2013128 characters, a query parameter). A UUID is generated automatically when omitted.",
+    "maxLength": 128,
+    "minLength": 1,
+    "type": "string"
+   },
+   "route_points": {
+    "description": "Route points (at least 2): a source and a destination at minimum.",
+    "items": {
+     "additionalProperties": true,
+     "properties": {
+      "address": {
+       "additionalProperties": true,
+       "description": "Point address.",
+       "properties": {
+        "coordinates": {
+         "description": "Coordinates [longitude, latitude] \u2014 improve geocoding accuracy.",
+         "items": {
+          "type": "number"
+         },
+         "maxItems": 2,
+         "minItems": 2,
+         "type": "array"
+        },
+        "fullname": {
+         "description": "Full address as a string.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "fullname"
+       ],
+       "type": "object"
+      },
+      "contact": {
+       "additionalProperties": true,
+       "description": "Contact at the point.",
+       "properties": {
+        "email": {
+         "description": "Contact person email.",
+         "type": "string"
+        },
+        "name": {
+         "description": "Contact person name.",
+         "type": "string"
+        },
+        "phone": {
+         "description": "Phone in international format, e.g. +998901234567.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "phone"
+       ],
+       "type": "object"
+      },
+      "point_id": {
+       "description": "Point id, unique within the claim.",
+       "type": "integer"
+      },
+      "type": {
+       "description": "Point type: source \u2014 pickup, destination \u2014 hand-over, return \u2014 return point.",
+       "enum": [
+        "source",
+        "destination",
+        "return"
+       ],
+       "type": "string"
+      },
+      "visit_order": {
+       "description": "Visit order, starting from 1.",
+       "minimum": 1,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "point_id",
+      "type",
+      "visit_order",
+      "contact",
+      "address"
+     ],
+     "type": "object"
+    },
+    "minItems": 2,
+    "type": "array"
+   },
+   "same_day_data": {
+    "additionalProperties": {},
+    "description": "Same-day delivery settings: {delivery_interval: {from, to}} (a non-Russia feature).",
+    "type": "object"
+   },
+   "shipping_document": {
+    "description": "Accompanying shipping document reference.",
+    "type": "string"
+   },
+   "skip_act": {
+    "description": "true \u2014 do not generate a handover act.",
+    "type": "boolean"
+   },
+   "skip_client_notify": {
+    "description": "true \u2014 do not send SMS/push notifications to the recipient.",
+    "type": "boolean"
+   },
+   "skip_door_to_door": {
+    "description": "true \u2014 no door-to-door: hand over at the entrance.",
+    "type": "boolean"
+   },
+   "skip_emergency_notify": {
+    "description": "true \u2014 do not notify the emergency contact.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "items",
+   "route_points"
+  ],
+  "type": "object"
+ },
+ "name": "create_claim",
+ "title": "Create a delivery claim"
+}

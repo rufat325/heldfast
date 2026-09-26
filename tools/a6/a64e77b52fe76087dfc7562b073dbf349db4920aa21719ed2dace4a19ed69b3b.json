@@ -1,0 +1,56 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Check a PDF against constraints mapped from ISO 32000-1/-2 clauses \u2014 the body of the PDF specification itself, not PDF/A or PDF/UA.\n\nThis covers what veraPDF does not look at. veraPDF judges PDF/A and PDF/UA profiles; a document can pass those and still violate ISO 32000 (for example embedding a CFF font program under /FontFile2, which Table 124 forbids).\n\nThe mapping and its evaluation live in @shuji-bonji/pdf-constraints; this tool reports which version decided the result. Same file plus same given facts always produce the same result.\n\nBundled domains: font-embedding, document-metadata, annotation\n\nArgs:\n  - file_path (string): Absolute path to a local PDF file\n  - response_format ('markdown' | 'json'): Output format (default: 'markdown')\n  - domains (string[], optional): Restrict to specific domains\n  - given (object, optional): External facts, e.g. { \"isSubset\": true }\n\nReturns:\n  Every report begins with a \"scope\" object - how far the reading got, not a verdict: whether the cross-reference chain could be walked to the end (chainStop), whether this tool had to rebuild the cross-reference table itself (reconstructed - when true, the table is this tool's reconstruction and not the one the file carries), how many objects and sections were read, and whether an encrypted document could be opened. Read it before the verdict: \"no violations\" over a rebuilt table is not the same statement as \"no violations\" over the file's own table.\n\n  Size (v0.29.0): results lists at most 200 entries (file order); violations and notDecided are counted over all of them and resultsTruncated = { returned, total } says when the list was cut. JSON is never cut by length.\n\n  Per-constraint results with the clause IDs they come from. Four states:\n  - pass \u2014 nothing in this constraint could be disproved\n  - fail \u2014 disproved, with the fact and its measured value as evidence\n  - not_applicable \u2014 the clause does not apply to this document\n  - needs_external_fact \u2014 a fact outside the file was not supplied, so the constraint was not decided (never defaulted into a pass)\n\nBecause these are T1 clauses, a failure can be stated plainly and the clause ID quoted \u2014 retrieve the wording with pdf-spec-mcp's get_requirements. Failures marked as traces are different: the clause addresses the PDF *processor*, so the file only shows that someone broke it, not that the last writer did.\n\nSome failures carry a Context note. Those clauses are real and the failure is real, but the industry deviates from them deliberately \u2014 text markup QuadPoints are written in Z order by nearly every writer because following the clause literally breaks rendering in major viewers. Pass the context on; a failure reported without it reads as a defect.\n\nEvery result also carries `observation` \u2014 how far the reading got: whether the revision chain could be walked to the end, how many objects the cross-reference tables list, and whether the page tree was reached. **This is the scope of the verdict, not a verdict.** A subject count of zero means \"not looked at\" when the page tree was not reached; a chain that stopped early means the constraints were applied to part of the file. Read it before the numbers.\n\n**A result with no failures is not proof of conformance** \u2014 only that nothing in the bundled constraints could be disproved.\n\nExamples:\n  - Find out why a viewer warns about a font that veraPDF considers fine\n  - Check whether Info and XMP agree on the document dates (\u00a714.3.4)\n  - Verify a generated PDF before shipping it, beyond the PDF/A profile",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "domains": {
+    "description": "Constraint domains to apply. Omit to apply all bundled domains (font-embedding, document-metadata, annotation).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "file_path": {
+    "description": "Absolute path to a local PDF file (e.g., \"/path/to/document.pdf\")",
+    "minLength": 1,
+    "type": "string"
+   },
+   "given": {
+    "additionalProperties": {
+     "type": [
+      "boolean",
+      "string",
+      "number"
+     ]
+    },
+    "description": "Facts that are NOT in the file but are needed to decide some clauses, e.g. { \"isSubset\": true }. A clause whose applicability depends on a missing fact is reported as needs_external_fact \u2014 it is never defaulted into a pass.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "Output format: \"markdown\" for human-readable, \"json\" for structured data",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "file_path"
+  ],
+  "type": "object"
+ },
+ "name": "validate_clauses",
+ "title": "Check ISO 32000 Clause Constraints"
+}

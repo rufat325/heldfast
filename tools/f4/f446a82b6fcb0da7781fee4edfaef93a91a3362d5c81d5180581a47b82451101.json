@@ -1,0 +1,25 @@
+{
+ "description": "Start recording a new flow, resetting .argent/flows/<name>.yaml to an empty flow and replacing any existing one.\nUse when you want to capture a reusable sequence of device interactions for later replay.\nReturns { message, flowFile, savedTo } and optionally { restarted, discardedSteps } if a live recording of the same flow was discarded.\nWhether this server writes that file depends on where your project is: co-located, it creates it and fails if the .argent/flows/ directory cannot be created or the file cannot be written; against a remote tool-server it writes nothing and `savedTo` is a directive your client applies (a null `savedTo` back means it did not).\n\nSeveral flows can be recorded at once \u2014 each keyed by the `name` + `project_root`\nthat every subsequent recording tool repeats \u2014 and one recording's steps never\nland in another's file. Steps still run LIVE, so give each concurrent recording\nits own device and pick a name unique to your task.\n\nAfter starting, use flow-add-step to append tool calls \u2014 each step is executed\nLIVE so you can verify it works before it gets recorded. Read each step's\n`message`: an await-ui-element whose condition never held is still recorded (it\nreturns success:false rather than failing), and a check that passes live can\nstill fail once polished into an `await:`/`assert:` directive, which resolves\nagainst a different tree. flow-add-step warns about both when you record the\nwait DIRECTLY. A wait nested inside a recorded run-sequence gets neither warning\n\u2014 that tool reports its own shape \u2014 so for those, read `toolResult`. For a self-contained\ne2e flow, record a restart-app of the app under test as the FIRST step (captured\nas the flow's `launch` step); for a reusable fragment, skip that and pass\nexecutionPrerequisite instead. Use flow-add-echo to add labels, and\nflow-add-script to run a local .mjs file and record it as a `script:` step.\nCall flow-finish-recording when done.\n\nIf a recorded step turns out to be wrong, edit the .yaml file directly to\nremove or reorder steps - after flow-finish-recording, not during the\nrecording. Against a remote client the in-memory copy is authoritative and\nevery write serializes it over your edit; in host mode the recorder re-reads\nthe file before each append, so a mid-recording edit renumbers the steps and\ncosts the finish the cross-tree verdicts anchored to them.",
+ "inputSchema": {
+  "properties": {
+   "executionPrerequisite": {
+    "description": "Fragments only: the app/device state assumed on entry (e.g. \"Settings app open on General page\"). For a self-contained e2e flow, omit this and record a `restart-app` as the first step instead \u2014 it is captured as the flow's `launch` step. restart-app has no chromium support, so a chromium flow records as a fragment; add the `launch: { chromium: <app path> }` line to the YAML afterward, deleting the executionPrerequisite line if you passed one \u2014 a flow that starts with a launch must not declare it.",
+    "type": "string"
+   },
+   "name": {
+    "description": "Name for this flow (e.g. \"settings-explore\") \u2014 letters, digits, underscore and hyphen only.",
+    "type": "string"
+   },
+   "project_root": {
+    "description": "Absolute path to the project root directory (the directory that contains or should contain `.argent/flows/`). The flow file is created at `<project_root>/.argent/flows/<name>.yaml`.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "name",
+   "project_root"
+  ],
+  "type": "object"
+ },
+ "name": "flow-start-recording"
+}

@@ -1,0 +1,609 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "[Requires login] Update settings on the authenticated user's own AniList account (about text, preferred title language, adult-content visibility, score format, notification/messaging preferences, anime/manga list options). Only set the fields you want to change \u2014 most fields are a true partial update (see `notificationOptions`/`disabledListActivity` below for two confirmed exceptions, PLUS `animeListOptions`/`mangaListOptions`'s nested `customLists` \u2014 a third: that one field's ARRAY VALUE is a full replace even though its sibling fields and the other list type merge normally).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "about": {
+    "description": "New profile 'about' text.",
+    "type": "string"
+   },
+   "activityMergeTime": {
+    "description": "Minutes within which consecutive list activity posts get merged into one. Per AniList's own schema: 0 = never merge, 20160+ (2 weeks) = always merge.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "airingNotifications": {
+    "description": "Whether to notify about new episode airings for anime on your list.",
+    "type": "boolean"
+   },
+   "animeListOptions": {
+    "description": "New anime-list display/scoring options \u2014 only the fields you set are changed (confirmed live: this is a partial merge, unlike add_list_entry's advancedScores).",
+    "properties": {
+     "advancedScoring": {
+      "description": "Advanced-scoring category names (e.g. Story, Characters, Visuals) \u2014 ordered, and the order is load-bearing: every list entry's per-category `advancedScores` is stored as a plain positional array, matched against THIS list at read time, not by name. Renaming or reordering categories here silently reinterprets every already-scored entry's stored values under the new names/positions \u2014 e.g. a score the user gave for 'Story' can start reading as their 'Characters' score, with no error and no way to detect it happened after the fact. Fetch the current order first (get_authorized_user's `mediaListOptions.animeList/mangaList.advancedScoring`) so you know the existing positions before changing anything. Only add new categories at the end, or rename in place (same position) \u2014 never reorder an account that already has scored entries.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "advancedScoringEnabled": {
+      "description": "Whether advanced (per-category) scoring is enabled for this list type.",
+      "type": "boolean"
+     },
+     "customLists": {
+      "description": "Names of this account's custom lists \u2014 REPLACES the entire array, not merged by name: any existing list name you omit here is silently deleted (confirmed live), even though sibling fields like advancedScoring/sectionOrder and the other list type (mangaList) are left untouched. Fetch the current array first (get_authorized_user's mediaListOptions.animeList/mangaList.customLists) and include every name you want to keep, not just the one you're adding.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "sectionOrder": {
+      "description": "Custom list-status section order.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "splitCompletedSectionByFormat": {
+      "description": "Split the Completed section by format (TV/Movie/etc.).",
+      "type": "boolean"
+     },
+     "theme": {
+      "description": "List-page color theme name. AniList itself marks this field experimental ('not yet fully implemented, may change without warning') \u2014 its read-back shape (see get_user_profile/get_full_user_info/get_authorized_user/update_user's own response) is an untyped value, not guaranteed to be the string you set.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "disabledListActivity": {
+    "description": "ALL 6 list statuses, every time \u2014 confirmed live: AniList rejects this with a 400 error if any status is missing (\"Incorrect number of disabled list activity options\"), it's not a partial per-status update. Fetch the current list first (get_authorized_user's `options.disabledListActivity`) and resend it in full with just your changes applied.",
+    "items": {
+     "properties": {
+      "disabled": {
+       "description": "Whether posting activity for this status is suppressed. Optional in the schema, but NOT safe to omit: confirmed live, leaving it out on even one of the 6 statuses makes the whole call fail with a 500 Internal Server Error on AniList's side (not a clean validation error, and not this server's bug) \u2014 always pass an explicit true/false for every status.",
+       "type": "boolean"
+      },
+      "type": {
+       "description": "List status this toggle applies to.",
+       "enum": [
+        "CURRENT",
+        "PLANNING",
+        "COMPLETED",
+        "DROPPED",
+        "PAUSED",
+        "REPEATING"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "displayAdultContent": {
+    "description": "Whether to show adult content in search/browse.",
+    "type": "boolean"
+   },
+   "donatorBadge": {
+    "description": "Custom donator badge text, up to 24 characters per AniList's own schema (only takes effect on a donator account).",
+    "maxLength": 24,
+    "type": "string"
+   },
+   "mangaListOptions": {
+    "description": "New manga-list display/scoring options \u2014 same partial-merge behavior as `animeListOptions` above.",
+    "properties": {
+     "advancedScoring": {
+      "description": "Advanced-scoring category names (e.g. Story, Characters, Visuals) \u2014 ordered, and the order is load-bearing: every list entry's per-category `advancedScores` is stored as a plain positional array, matched against THIS list at read time, not by name. Renaming or reordering categories here silently reinterprets every already-scored entry's stored values under the new names/positions \u2014 e.g. a score the user gave for 'Story' can start reading as their 'Characters' score, with no error and no way to detect it happened after the fact. Fetch the current order first (get_authorized_user's `mediaListOptions.animeList/mangaList.advancedScoring`) so you know the existing positions before changing anything. Only add new categories at the end, or rename in place (same position) \u2014 never reorder an account that already has scored entries.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "advancedScoringEnabled": {
+      "description": "Whether advanced (per-category) scoring is enabled for this list type.",
+      "type": "boolean"
+     },
+     "customLists": {
+      "description": "Names of this account's custom lists \u2014 REPLACES the entire array, not merged by name: any existing list name you omit here is silently deleted (confirmed live), even though sibling fields like advancedScoring/sectionOrder and the other list type (mangaList) are left untouched. Fetch the current array first (get_authorized_user's mediaListOptions.animeList/mangaList.customLists) and include every name you want to keep, not just the one you're adding.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "sectionOrder": {
+      "description": "Custom list-status section order.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "splitCompletedSectionByFormat": {
+      "description": "Split the Completed section by format (TV/Movie/etc.).",
+      "type": "boolean"
+     },
+     "theme": {
+      "description": "List-page color theme name. AniList itself marks this field experimental ('not yet fully implemented, may change without warning') \u2014 its read-back shape (see get_user_profile/get_full_user_info/get_authorized_user/update_user's own response) is an untyped value, not guaranteed to be the string you set.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "notificationOptions": {
+    "description": "ALL 20 notification types, every time \u2014 confirmed live this is a full replace, not a partial merge: AniList silently drops every type you don't list (not just resets it to default, removes it) with no error. Fetch the account's current list first (get_authorized_user's `options.notificationOptions`) and resend it in full with just your changes applied.",
+    "items": {
+     "properties": {
+      "enabled": {
+       "description": "Whether this notification type is on. Optional per entry, but not really \u2014 omitting it doesn't error and doesn't inherit the previous value either; confirmed live it's written as `enabled: null`, effectively unsetting the type. Always pass an explicit true/false for every one of the 20 types.",
+       "type": "boolean"
+      },
+      "type": {
+       "description": "Notification type to configure.",
+       "enum": [
+        "ACTIVITY_MESSAGE",
+        "ACTIVITY_REPLY",
+        "FOLLOWING",
+        "ACTIVITY_MENTION",
+        "THREAD_COMMENT_MENTION",
+        "THREAD_SUBSCRIBED",
+        "THREAD_COMMENT_REPLY",
+        "AIRING",
+        "ACTIVITY_LIKE",
+        "ACTIVITY_REPLY_LIKE",
+        "THREAD_LIKE",
+        "THREAD_COMMENT_LIKE",
+        "ACTIVITY_REPLY_SUBSCRIBED",
+        "RELATED_MEDIA_ADDITION",
+        "MEDIA_DATA_CHANGE",
+        "MEDIA_MERGE",
+        "MEDIA_DELETION",
+        "MEDIA_SUBMISSION_UPDATE",
+        "STAFF_SUBMISSION_UPDATE",
+        "CHARACTER_SUBMISSION_UPDATE"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "profileColor": {
+    "description": "Profile accent color (name or hex). Confirmed live: AniList silently ignores an unrecognized value instead of erroring \u2014 the account's existing color is left unchanged, with no error surfaced and no way to detect the value was rejected other than re-checking with get_authorized_user.",
+    "type": "string"
+   },
+   "restrictMessagesToFollowing": {
+    "description": "Only allow message activity from users you follow.",
+    "type": "boolean"
+   },
+   "rowOrder": {
+    "description": "Internal list-table row ordering key \u2014 reads back from `mediaListOptions.rowOrder` in the profile tools/this tool's own response. Confirmed live: AniList validates this server-side and rejects an unrecognized value with a clear error (\"The selected row order is invalid.\") rather than silently ignoring it \u2014 unlike `profileColor` below.",
+    "type": "string"
+   },
+   "scoreFormat": {
+    "description": "Preferred list score format. It affects how scores DISPLAY on anilist.co only: every score crossing this server stays on its own documented scale whatever this is set to, so no conversion is needed on your end. A personal list-entry score is 0-10 both on write (add_list_entry/update_list_entry) and on read (get_user_list, get_media's `mediaListEntry`); `averageScore`/`meanScore` and the search filters are 0-100.",
+    "enum": [
+     "POINT_100",
+     "POINT_10_DECIMAL",
+     "POINT_10",
+     "POINT_5",
+     "POINT_3"
+    ],
+    "type": "string"
+   },
+   "staffNameLanguage": {
+    "description": "Preferred staff/character name display language.",
+    "enum": [
+     "ROMAJI_WESTERN",
+     "ROMAJI",
+     "NATIVE"
+    ],
+    "type": "string"
+   },
+   "timezone": {
+    "description": "Display timezone as an offset, in AniList's own documented \"-?HH:MM\" format (e.g. \"09:00\", \"-05:00\"). Confirmed live that AniList validates this server-side and rejects a malformed value with a clear error (\"The timezone format is invalid.\") \u2014 whether a leading \"+\" is also accepted wasn't tested live (this tool has no way to explicitly clear timezone back to unset, so a wrong guess here risked an unrevertable change); this regex follows AniList's own literal grammar, which mentions only an optional leading minus.",
+    "pattern": "^-?\\d{2}:\\d{2}$",
+    "type": "string"
+   },
+   "titleLanguage": {
+    "description": "Preferred title display language.",
+    "enum": [
+     "ROMAJI",
+     "ENGLISH",
+     "NATIVE",
+     "ROMAJI_STYLISED",
+     "ENGLISH_STYLISED",
+     "NATIVE_STYLISED"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "update_user",
+ "outputSchema": {
+  "$defs": {
+   "__schema0": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "number"
+     },
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     },
+     {
+      "items": {
+       "$ref": "#/$defs/__schema0"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {
+       "$ref": "#/$defs/__schema0"
+      },
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     }
+    ]
+   }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "user": {
+    "additionalProperties": {},
+    "properties": {
+     "about": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "donatorBadge": {
+      "description": "AniList returns \"Donator\" here even for a non-donator (donatorTier 0); it's an upstream default label, not proof the user donates. A user's donatorTier (0 = non-donator) is the real signal.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "id": {
+      "exclusiveMinimum": 0,
+      "maximum": 2147483647,
+      "type": "integer"
+     },
+     "mediaListOptions": {
+      "anyOf": [
+       {
+        "additionalProperties": {},
+        "properties": {
+         "animeList": {
+          "anyOf": [
+           {
+            "additionalProperties": {},
+            "properties": {
+             "advancedScoring": {
+              "anyOf": [
+               {
+                "items": {
+                 "type": "string"
+                },
+                "type": "array"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "advancedScoringEnabled": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "customLists": {
+              "anyOf": [
+               {
+                "items": {
+                 "type": "string"
+                },
+                "type": "array"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "sectionOrder": {
+              "anyOf": [
+               {
+                "items": {
+                 "type": "string"
+                },
+                "type": "array"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "splitCompletedSectionByFormat": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "theme": {
+              "anyOf": [
+               {
+                "$ref": "#/$defs/__schema0"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             }
+            },
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "mangaList": {
+          "anyOf": [
+           {
+            "additionalProperties": {},
+            "properties": {
+             "advancedScoring": {
+              "anyOf": [
+               {
+                "items": {
+                 "type": "string"
+                },
+                "type": "array"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "advancedScoringEnabled": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "customLists": {
+              "anyOf": [
+               {
+                "items": {
+                 "type": "string"
+                },
+                "type": "array"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "sectionOrder": {
+              "anyOf": [
+               {
+                "items": {
+                 "type": "string"
+                },
+                "type": "array"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "splitCompletedSectionByFormat": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "theme": {
+              "anyOf": [
+               {
+                "$ref": "#/$defs/__schema0"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             }
+            },
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "rowOrder": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "scoreFormat": {
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "name": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "options": {
+      "anyOf": [
+       {
+        "additionalProperties": {},
+        "properties": {
+         "activityMergeTime": {
+          "anyOf": [
+           {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "airingNotifications": {
+          "type": [
+           "boolean",
+           "null"
+          ]
+         },
+         "disabledListActivity": {
+          "anyOf": [
+           {
+            "items": {
+             "additionalProperties": {},
+             "properties": {
+              "disabled": {
+               "type": [
+                "boolean",
+                "null"
+               ]
+              },
+              "type": {
+               "type": [
+                "string",
+                "null"
+               ]
+              }
+             },
+             "type": "object"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "displayAdultContent": {
+          "type": [
+           "boolean",
+           "null"
+          ]
+         },
+         "notificationOptions": {
+          "anyOf": [
+           {
+            "items": {
+             "additionalProperties": {},
+             "properties": {
+              "enabled": {
+               "type": [
+                "boolean",
+                "null"
+               ]
+              },
+              "type": {
+               "type": [
+                "string",
+                "null"
+               ]
+              }
+             },
+             "type": "object"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "profileColor": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "restrictMessagesToFollowing": {
+          "type": [
+           "boolean",
+           "null"
+          ]
+         },
+         "staffNameLanguage": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "timezone": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "titleLanguage": {
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "user"
+  ],
+  "type": "object"
+ },
+ "title": "Update your AniList account settings"
+}

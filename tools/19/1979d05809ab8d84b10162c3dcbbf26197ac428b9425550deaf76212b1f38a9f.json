@@ -1,0 +1,207 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Free eligibility check for filedproof.reconcile_financial_fact. Use this before the $1 specialist operation when issuer identity, filing selection, supported metric, fiscal-period dates, annual-versus-quarter context, required SEC Company Facts contexts, or an optional SEC-filed 8-K earnings-release number comparison may be uncertain. It validates applicability without revealing the filing value, comparison source value, later revision values, evidence, or arithmetic. For general filing lookup or narrative research, use filedproof.resolve_issuer, filedproof.list_filings, or filedproof.search_evidence instead.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "required": [
+     "identifier"
+    ]
+   },
+   {
+    "required": [
+     "cik"
+    ]
+   }
+  ],
+  "properties": {
+   "anchor_accession": {
+    "description": "Optional 10-Q/10-K accession, including amendments. If omitted, FiledProof selects the earliest compatible filing for the requested period.",
+    "pattern": "^\\d{10}-\\d{2}-\\d{6}$",
+    "type": "string"
+   },
+   "as_of_date": {
+    "description": "Optional historical cutoff. The selected anchor filing must have been filed on or before this date; later values never replace the primary answer.",
+    "format": "date",
+    "type": "string"
+   },
+   "cik": {
+    "description": "Legacy/direct SEC CIK input. Prefer identifier when starting from a ticker or company name.",
+    "pattern": "^(?:CIK)?\\d{1,10}$",
+    "type": "string"
+   },
+   "comparison_accession": {
+    "description": "Optional SEC 8-K/8-K/A accession containing an earnings-release exhibit to compare with the filing-anchored GAAP fact. Provide comparison_value with it.",
+    "pattern": "^\\d{10}-\\d{2}-\\d{6}$",
+    "type": "string"
+   },
+   "comparison_exhibit": {
+    "description": "Optional exact EX-99 exhibit filename or safe relative path when an 8-K contains multiple candidate earnings-release exhibits.",
+    "maxLength": 240,
+    "minLength": 1,
+    "type": "string"
+   },
+   "comparison_value": {
+    "description": "Actual-unit integer value claimed from the SEC-filed earnings-release exhibit. FiledProof must find this value in metric context before the comparison is eligible.",
+    "pattern": "^-?\\d+$",
+    "type": "string"
+   },
+   "identifier": {
+    "description": "Issuer ticker, exact company name, CIK, or CIK-prefixed identifier. FiledProof resolves this to the durable SEC CIK before research and payment.",
+    "maxLength": 200,
+    "minLength": 1,
+    "type": "string"
+   },
+   "include_subsequent_revisions": {
+    "default": true,
+    "description": "When true, report later different values for the same SEC concept, unit, and period separately from the primary anchored value.",
+    "type": "boolean"
+   },
+   "metric": {
+    "description": "Financial metric to reconcile: revenue, net income, or operating cash flow.",
+    "enum": [
+     "revenue",
+     "net_income",
+     "operating_cash_flow"
+    ],
+    "type": "string"
+   },
+   "period_end": {
+    "description": "Requested fiscal-period end date.",
+    "format": "date",
+    "type": "string"
+   },
+   "period_start": {
+    "description": "Requested fiscal-period start date.",
+    "format": "date",
+    "type": "string"
+   },
+   "period_type": {
+    "default": "standalone_fiscal_quarter",
+    "description": "Whether the requested value is one standalone fiscal quarter or the full fiscal year.",
+    "enum": [
+     "standalone_fiscal_quarter",
+     "fiscal_year"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "metric",
+   "period_start",
+   "period_end"
+  ],
+  "type": "object"
+ },
+ "name": "filedproof.preflight_financial_fact",
+ "outputSchema": {
+  "additionalProperties": true,
+  "properties": {
+   "canonicalRequest": {
+    "type": "object"
+   },
+   "checks": {
+    "additionalProperties": false,
+    "properties": {
+     "anchorFilingValid": {
+      "type": "boolean"
+     },
+     "comparisonRequested": {
+      "type": "boolean"
+     },
+     "comparisonSourceAvailable": {
+      "type": "boolean"
+     },
+     "issuerValid": {
+      "type": "boolean"
+     },
+     "metricSupported": {
+      "type": "boolean"
+     },
+     "requestedPeriodPlausible": {
+      "type": "boolean"
+     },
+     "requiredContextDataAvailable": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "issuerValid",
+     "anchorFilingValid",
+     "metricSupported",
+     "requestedPeriodPlausible",
+     "comparisonRequested",
+     "comparisonSourceAvailable",
+     "requiredContextDataAvailable"
+    ],
+    "type": "object"
+   },
+   "disclosureBoundary": {
+    "type": "string"
+   },
+   "eligible": {
+    "type": "boolean"
+   },
+   "operation": {
+    "const": "filedproof.reconcile_financial_fact"
+   },
+   "paymentMethods": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "price": {
+    "additionalProperties": false,
+    "properties": {
+     "cents": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "currency": {
+      "maxLength": 3,
+      "minLength": 3,
+      "type": "string"
+     }
+    },
+    "required": [
+     "cents",
+     "currency"
+    ],
+    "type": "object"
+   },
+   "reason": {
+    "type": "string"
+   },
+   "schemaVersion": {
+    "const": "financial-fact-preflight.v1"
+   },
+   "status": {
+    "enum": [
+     "eligible",
+     "ineligible"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "schemaVersion",
+   "operation",
+   "canonicalRequest",
+   "status",
+   "eligible",
+   "checks",
+   "price",
+   "paymentMethods",
+   "disclosureBoundary"
+  ],
+  "type": "object"
+ },
+ "title": "Check financial fact applicability"
+}

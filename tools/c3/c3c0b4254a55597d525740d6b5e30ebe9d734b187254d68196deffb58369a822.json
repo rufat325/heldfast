@@ -1,0 +1,376 @@
+{
+ "_meta": {
+  "openai/widgetAccessible": true,
+  "ui": {
+   "resourceUri": "ui://ris-mcp/trefferliste"
+  },
+  "ui/resourceUri": "ui://ris-mcp/trefferliste"
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search Austrian court decisions (Judikatur).\n\nUse this tool to find court decisions from Austrian courts. Choose the\njurisdiction via \"gerichtsbarkeit\" (which court system to search).\n\nRIS distinguishes two document kinds, controlled by \"dokumenttyp\":\n  - Rechtssatz: abstract legal principle / headnote (Leitsatz) distilled from a decision\n  - Entscheidungstext: the full decision text including reasoning (Begruendung)\nThe default \"beide\" searches both for the most complete results.\n\nExample queries:\n  - gerichtsbarkeit=\"Vfgh\", suchworte=\"Grundrecht\" -> Constitutional Court decisions\n  - suchworte=\"Schadenersatz\", gericht=\"OGH\" -> Only Supreme Court (OGH) decisions\n  - norm=\"1295 ABGB\" -> Which decisions cite \u00a71295 ABGB?\n  - gerichtsbarkeit=\"Justiz\", fachgebiet=\"Arbeitsrecht\", sortierung=\"datum_ab\" -> Newest labor-law decisions",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "dokumenttyp": {
+    "default": "beide",
+    "description": "Which document kind to search: \"rechtssatz\" (abstract headnotes only), \"entscheidungstext\" (full decision texts only), or \"beide\" (both, default). The RIS API otherwise searches only Rechtss\u00e4tze.",
+    "enum": [
+     "rechtssatz",
+     "entscheidungstext",
+     "beide"
+    ],
+    "type": "string"
+   },
+   "entscheidungsart": {
+    "description": "Type of decision. Allowed values differ by jurisdiction, e.g. Vfgh/Vwgh/Bvwg: \"Beschluss\", \"Erkenntnis\"; Lvwg also \"Bescheid\"; Justiz: \"Verst\u00e4rkter Senat\", \"Ordentliche Erledigung (Sachentscheidung)\".",
+    "maxLength": 100,
+    "type": "string"
+   },
+   "entscheidungsdatum_bis": {
+    "description": "Decision date to (YYYY-MM-DD)",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "entscheidungsdatum_von": {
+    "description": "Decision date from (YYYY-MM-DD)",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+    "type": "string"
+   },
+   "fachgebiet": {
+    "description": "Subject area of OGH case law (e.g., \"Arbeitsrecht\", \"Insolvenzrecht\"). Applies to gerichtsbarkeit=\"Justiz\" and only matches full decision texts (requires dokumenttyp \"entscheidungstext\" or \"beide\").",
+    "enum": [
+     "Amtsdelikte/Korruption",
+     "Amtshaftung inkl. StEG",
+     "Anfechtungsrecht",
+     "Arbeitsrecht",
+     "Bestandrecht",
+     "Datenschutzrecht",
+     "Erbrecht und Verlassenschaftsverfahren",
+     "Erwachsenenschutzrecht",
+     "Exekutionsrecht",
+     "Familienrecht (ohne Unterhalt)",
+     "Finanzstrafsachen",
+     "Gewerblicher Rechtsschutz",
+     "Grundbuchsrecht",
+     "Grundrechte",
+     "Insolvenzrecht",
+     "Internationales Privat- und Zivilverfahrensrecht",
+     "Jugendstrafsachen",
+     "Kartellrecht",
+     "Klauselentscheidungen",
+     "Konsumentenschutz und Produkthaftung",
+     "Medienrecht",
+     "Pers\u00f6nlichkeitsschutzrecht",
+     "Schadenersatz nach Verkehrsunfall",
+     "Schlepperei/FPG",
+     "Schiedsverfahrensrecht",
+     "Sexualdelikte",
+     "Sozialrecht",
+     "Suchtgiftdelikte",
+     "Transportrecht",
+     "Unionsrecht",
+     "Unterbringungs- und Heimaufenthaltsrecht",
+     "Unterhaltsrecht inkl. UVG",
+     "Unternehmens-, Gesellschafts- und Wertpapierrecht",
+     "Urheberrecht",
+     "Versicherungsvertragsrecht",
+     "Wirtschaftsstrafsachen",
+     "Wohnungseigentumsrecht",
+     "Zivilverfahrensrecht"
+    ],
+    "type": "string"
+   },
+   "gericht": {
+    "description": "Filter by the actual court within the jurisdiction (e.g., \"OGH\", \"OLG Wien\"). Applies to gerichtsbarkeit=\"Justiz\".",
+    "maxLength": 100,
+    "type": "string"
+   },
+   "gerichtsbarkeit": {
+    "default": "Justiz",
+    "description": "Court system / data collection to search (maps to the RIS \"Applikation\"): \"Justiz\" (OGH/OLG/LG/BG, default), \"Vfgh\" (Constitutional), \"Vwgh\" (Administrative), \"Bvwg\", \"Lvwg\", \"Dsk\" (Data Protection), \"AsylGH\", \"Normenliste\", \"Pvak\", \"Gbk\", \"Dok\", plus historical (dissolved 2014, stock still searchable): \"Verg\", \"Uvs\", \"Ubas\", \"Umse\", \"Bks\"",
+    "enum": [
+     "Justiz",
+     "Vfgh",
+     "Vwgh",
+     "Bvwg",
+     "Lvwg",
+     "Dsk",
+     "AsylGH",
+     "Normenliste",
+     "Pvak",
+     "Gbk",
+     "Dok",
+     "Verg",
+     "Uvs",
+     "Ubas",
+     "Umse",
+     "Bks"
+    ],
+    "type": "string"
+   },
+   "geschaeftszahl": {
+    "description": "Case number (e.g., \"5Ob234/20b\")",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "limit": {
+    "anyOf": [
+     {
+      "const": 10,
+      "type": "number"
+     },
+     {
+      "const": 20,
+      "type": "number"
+     },
+     {
+      "const": 50,
+      "type": "number"
+     },
+     {
+      "const": 100,
+      "type": "number"
+     }
+    ],
+    "default": 20,
+    "description": "Results per page: 10, 20, 50 or 100 (default: 20). Every hit costs about 1k characters of structured payload, so prefer 20 for browsing and 50 for a broad survey; a page that would exceed the payload budget is delivered at the next smaller page size and says so (page_size, query.limit and notice)."
+   },
+   "norm": {
+    "description": "Search by legal norm (e.g., \"1319a ABGB\")",
+    "maxLength": 500,
+    "type": "string"
+   },
+   "rechtsgebiet": {
+    "description": "Broad legal area: \"Zivilrecht\" or \"Strafrecht\". Applies to gerichtsbarkeit=\"Justiz\".",
+    "enum": [
+     "Zivilrecht",
+     "Strafrecht"
+    ],
+    "type": "string"
+   },
+   "response_format": {
+    "default": "markdown",
+    "description": "\"markdown\" or \"json\"",
+    "enum": [
+     "markdown",
+     "json"
+    ],
+    "type": "string"
+   },
+   "sammlungsnummer": {
+    "description": "Collection number: VfSlg (gerichtsbarkeit=\"Vfgh\") or VwSlg (gerichtsbarkeit=\"Vwgh\").",
+    "maxLength": 100,
+    "type": "string"
+   },
+   "seite": {
+    "default": 1,
+    "description": "Page number",
+    "maximum": 9007199254740991,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "sortierung": {
+    "description": "Sort by decision date: \"datum_auf\" (oldest first) or \"datum_ab\" (newest first).",
+    "enum": [
+     "datum_auf",
+     "datum_ab"
+    ],
+    "type": "string"
+   },
+   "suchworte": {
+    "description": "Full-text search in decisions",
+    "maxLength": 1000,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "ris_judikatur",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "documents": {
+    "description": "The documents on this page",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "applikation": {
+       "type": "string"
+      },
+      "citation": {
+       "additionalProperties": false,
+       "properties": {
+        "ausserkrafttreten": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "eli": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "inkrafttreten": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "kundmachungsorgan": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "langtitel": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "paragraph": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "type": "object"
+      },
+      "citation_display": {
+       "description": "Preformatted citation line as shown in the text output",
+       "type": "string"
+      },
+      "content_urls": {
+       "additionalProperties": false,
+       "properties": {
+        "html": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "pdf": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "type": "object"
+      },
+      "dokument_url": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "dokumentnummer": {
+       "type": "string"
+      },
+      "entscheidungsdatum": {
+       "description": "Decision date as YYYY-MM-DD (Judikatur documents only)",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "gericht": {
+       "description": "Deciding court or authority (Judikatur documents only)",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "gesamte_rechtsvorschrift_url": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "geschaeftszahl": {
+       "description": "Case number(s), semicolon-separated when several (Judikatur documents only)",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "rechtssatznummer": {
+       "description": "Rechtssatz number, e.g. \"RS0018547\" (Judikatur Rechtssatz documents only)",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "titel": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "dokumentnummer",
+      "applikation",
+      "titel",
+      "citation",
+      "citation_display",
+      "content_urls"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "has_more": {
+    "description": "Whether further result pages are available",
+    "type": "boolean"
+   },
+   "notice": {
+    "description": "Present when the page was delivered at a smaller size than requested to fit the payload budget \u2014 page, page_size and query already describe the delivered page; page with query.limit",
+    "type": "string"
+   },
+   "page": {
+    "description": "Page number of this result set (1-based)",
+    "type": "number"
+   },
+   "page_size": {
+    "description": "Number of documents per page",
+    "type": "number"
+   },
+   "query": {
+    "additionalProperties": {},
+    "description": "Echo of the validated search parameters alongside the tool name \u2014 re-issue the call with an incremented \"seite\" for the next page",
+    "properties": {
+     "tool": {
+      "description": "Name of the tool that produced this result \u2014 call it again to paginate",
+      "type": "string"
+     }
+    },
+    "required": [
+     "tool"
+    ],
+    "type": "object"
+   },
+   "total_hits": {
+    "description": "Total number of documents in RIS matching the search",
+    "type": "number"
+   }
+  },
+  "required": [
+   "total_hits",
+   "page",
+   "page_size",
+   "has_more",
+   "documents"
+  ],
+  "type": "object"
+ },
+ "title": "Judikatur durchsuchen"
+}

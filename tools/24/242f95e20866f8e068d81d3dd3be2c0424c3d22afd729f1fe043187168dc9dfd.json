@@ -1,0 +1,45 @@
+{
+ "description": "Return every resolved caller / importer / inheritor of a single symbol from the code graph \u2014 the refactor-safety tool. Use before renaming or deleting a symbol to see exactly who depends on it.\n\nUnlike query_symbols (which takes a NAME and returns candidate symbols), find_references takes a KNOWN symbol_id and walks edges backward (toSymbolId = symbol_id) to find inbound references. Unlike get_symbol_neighbors (which does BFS to depth N in both directions), find_references only returns direct callers (depth 1, inbound) and is cheaper. Safer than grep because it uses the resolved call graph, not plain text \u2014 it will not confuse \"log\" the method with \"log\" the string. Set include_unresolved=true to also get short-name text matches that couldn't be resolved to a specific symbol (noisier; useful for broad audits but not for rename plans).\n\nPrerequisites: Tentra API auth + a symbol_id from query_symbols + the matching snapshot_id. Read-only. Response: { target, resolvedCount, unresolvedCount, fileScopeCount, references: [{ kind: 'resolved'|'unresolved', edgeType, fromQualifiedName, fromKind, filePath, startLine, endLine, callCount }] }.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "include_tests": {
+    "default": true,
+    "description": "Include references from test/fixture files (default true). Safe renames usually need these.",
+    "type": "boolean"
+   },
+   "include_unresolved": {
+    "default": false,
+    "description": "Also include unresolved callers (matched by short name but not by graph). Noisy \u2014 leave off for rename plans, enable for broad audits.",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 200,
+    "description": "Max references per bucket (resolved / unresolved)",
+    "exclusiveMinimum": 0,
+    "maximum": 500,
+    "type": "integer"
+   },
+   "snapshot_id": {
+    "description": "Snapshot ID to query against",
+    "minLength": 1,
+    "type": "string"
+   },
+   "symbol_id": {
+    "description": "Symbol ID whose references to find (from query_symbols)",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "symbol_id",
+   "snapshot_id"
+  ],
+  "type": "object"
+ },
+ "name": "find_references"
+}

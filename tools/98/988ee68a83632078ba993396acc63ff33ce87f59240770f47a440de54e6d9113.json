@@ -1,0 +1,108 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Cherche un \u00e9tablissement de sant\u00e9 par son NOM (\u00ab Institut Gustave Roussy \u00bb, \u00ab H\u00f4pital Foch \u00bb, \u00ab Clinique Pasteur \u00bb) et rend ses fiches FINESS avec coordonn\u00e9es exactes. \u00c0 APPELER AVANT tout g\u00e9ocodage d\u00e8s que le lieu cit\u00e9 est un h\u00f4pital, une clinique, un centre, un institut, un EHPAD\u2026 : l'annuaire d'adresses (BAN / `geocode_adresse`) ne conna\u00eet que des rues et renverrait une \u00ab rue Gustave \u00bb n'importe o\u00f9 en France. Passer le nom PROPRE de l'\u00e9tablissement (le sigle \u00ab IGR \u00bb n'est pas dans FINESS) et, si connue, la commune (`nom_commune` ou `code_insee` \u2014 Paris/Lyon/Marseille accept\u00e9s en ville enti\u00e8re) ou le `departement`.\n\nSortie : `statut` = `unique` (une fiche) | `ambigu` (plusieurs : homonymes OU plusieurs fiches d'un m\u00eame campus \u2014 l'IGR en a 4 : CLCC, site EFS, service de sant\u00e9 au travail, site de Chevilly-Larue) | `aucun`. `candidats[]` (\u2265 seuil de similarit\u00e9 0,8, tri\u00e9s : similarit\u00e9, puis h\u00f4pitaux/cliniques avant pharmacies/CMP/EFS homonymes, puis libell\u00e9 le plus court) avec `coords`, `geo_precision`, `categorie.famille`, `similarite`. `commune_prouvee` = la commune (commune-m\u00e8re pour Paris/Lyon/Marseille) quand TOUS les candidats y sont \u2014 c'est le fait \u00e0 utiliser pour ancrer une analyse territoriale ; `null` avec `raison_commune: 'communes_divergentes'` sinon (\u00ab Clinique Pasteur \u00bb sans commune = 16 fiches dans 9 villes \u2192 demander la commune, ne JAMAIS prendre le premier). Le point \u00e0 utiliser = premier candidat avec `coords` non null (2,4 % des fiches n'ont pas de point). `meilleure_similarite` sous 0,8 sur `aucun` : le nom FINESS diff\u00e8re (abr\u00e9viations administratives : \u00ab HOP EUROPEEN G POMPIDOU \u00bb) \u2192 relancer avec la partie distinctive (\u00ab Pompidou \u00bb) + la commune ; `meilleure_similarite: null` = AUCUNE ligne dans le territoire demand\u00e9 \u2192 v\u00e9rifier la commune/le d\u00e9partement avant de conclure que le nom n'existe pas. `tronque: true` (autant de lignes que `limit`) \u2192 la commune n'est PAS prouv\u00e9e (`raison_commune: 'tronque'`) : monter `limit` ou pr\u00e9ciser le territoire. `lignes_rejetees` > 0 = lignes RPC illisibles \u00e9cart\u00e9es. Source : FINESS / ANS (flux quotidien, ing\u00e9r\u00e9 le 1\u1d49\u02b3 et le 15 ; \u00e9tablissements EN SERVICE uniquement). Chaque r\u00e9sultat porte `geo_precision: \"adresse\"` d\u00e8s que `coords` est pr\u00e9sent (point WGS84 ANS ou point BAN de l'adresse, jamais un centro\u00efde ; un \u00e9tablissement sans `coords` n'a pas de point connu et est invisible des recherches par rayon) et `siret_ans` (SIRET d\u00e9clar\u00e9 par l'ANS, fait brut non v\u00e9rifi\u00e9 SIRENE \u2014 pour le verdict : reconcilier_finess_sirene / verifier_site_actif). Note : champ `email` toujours `null` (non expos\u00e9 par FINESS public).",
+ "inputSchema": {
+  "properties": {
+   "code_insee": {
+    "description": "Code INSEE de la commune (5 caract\u00e8res). Paris/Lyon/Marseille : 75056 / 69123 / 13055 accept\u00e9s (ville enti\u00e8re) comme un arrondissement. XOR avec `nom_commune` et `departement`.",
+    "type": "string"
+   },
+   "departement": {
+    "description": "Code d\u00e9partement (ex : '94', '2A', '971'). Seul = filtre d\u00e9partement ; avec `nom_commune` = hint de d\u00e9sambigu\u00efsation.",
+    "type": "string"
+   },
+   "include_freshness": {
+    "default": false,
+    "description": "Si true, ajoute un champ `data_freshness` au payload (dans `query_metadata` si pr\u00e9sent, sinon \u00e0 la racine) listant, par source (FINESS, Ameli, RPPS, CDS, IRIS), la derni\u00e8re ingestion r\u00e9ussie (`last_success_at`, `staleness_days`) ET la derni\u00e8re fois que la donn\u00e9e a r\u00e9ellement chang\u00e9 (`last_data_change_at`, `data_age_days` \u2014 un run court-circuit\u00e9 \u00ab fichier amont identique \u00bb compte comme succ\u00e8s mais ne rajeunit pas la donn\u00e9e ; c'est `data_age_days` qui dit l'\u00e2ge r\u00e9el de ce qui est servi). Opt-in pour ne pas alourdir les payloads par d\u00e9faut. Cache 5min c\u00f4t\u00e9 serveur \u2014 co\u00fbt n\u00e9gligeable.",
+    "type": "boolean"
+   },
+   "limit": {
+    "default": 50,
+    "description": "Candidats bruts lus avant seuil et tri (1-200, d\u00e9faut 50). Monter si le nom est tr\u00e8s partag\u00e9 (\u00ab Saint Antoine \u00bb : 42 fiches).",
+    "maximum": 200,
+    "minimum": 1,
+    "type": "number"
+   },
+   "nom": {
+    "description": "Nom de l'\u00e9tablissement tel qu'on le dit (3 caract\u00e8res min). Accents, casse et ponctuation indiff\u00e9rents. Sans le nom de la commune (le mettre dans `nom_commune`).",
+    "type": "string"
+   },
+   "nom_commune": {
+    "description": "Nom officiel de la commune o\u00f9 se trouve l'\u00e9tablissement (r\u00e9solu via geo.api.gouv.fr). Ex : \"Villejuif\", \"Paris\". Combinable avec `departement` comme hint de d\u00e9sambigu\u00efsation. XOR avec `code_insee`.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "nom"
+  ],
+  "type": "object"
+ },
+ "name": "etablissement_finess_by_nom",
+ "outputSchema": {
+  "description": "R\u00e9sultat de recherche par nom : statut, candidats tri\u00e9s, preuve de commune.",
+  "properties": {
+   "candidats": {
+    "type": "array"
+   },
+   "commune_prouvee": {
+    "description": "{ code_insee, ville } quand tous les candidats sont dans la m\u00eame commune (commune-m\u00e8re PLM), sinon null.",
+    "type": [
+     "object",
+     "null"
+    ]
+   },
+   "communes_candidates": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "lignes_rejetees": {
+    "type": "number"
+   },
+   "meilleure_similarite": {
+    "type": [
+     "number",
+     "null"
+    ]
+   },
+   "query_normalisee": {
+    "type": "string"
+   },
+   "raison_commune": {
+    "enum": [
+     "un_seul_candidat",
+     "candidats_meme_commune",
+     "communes_divergentes",
+     "tronque",
+     "aucun_candidat"
+    ],
+    "type": "string"
+   },
+   "statut": {
+    "enum": [
+     "unique",
+     "ambigu",
+     "aucun"
+    ],
+    "type": "string"
+   },
+   "tronque": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "statut",
+   "candidats",
+   "commune_prouvee",
+   "raison_commune",
+   "tronque"
+  ],
+  "type": "object"
+ }
+}

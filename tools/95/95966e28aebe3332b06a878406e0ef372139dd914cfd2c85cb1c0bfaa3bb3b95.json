@@ -1,0 +1,91 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Retourne la fra\u00eecheur des dumps de donn\u00e9es ing\u00e9r\u00e9s c\u00f4t\u00e9 serveur : FINESS / ANS (flux quotidien, ing\u00e9r\u00e9 le 1er et le 15 du mois), Annuaire Sant\u00e9 Ameli (hebdomadaire), RPPS / Annuaire Sant\u00e9 ANS (mensuel), Centres de Sant\u00e9 CNAM (hebdomadaire), IRIS INSEE (annuel), permis de construire Sit@del / SDES (mensuel, cron le 10). Pour chaque source : `last_data_change_at` + `data_age_days` (dernier run ayant R\u00c9ELLEMENT chang\u00e9 la donn\u00e9e servie, et son \u00e2ge en jours \u2014 C'EST LE CHAMP \u00c0 LIRE), `last_success_at` + `staleness_days` (dernier run r\u00e9ussi, y compris un run court-circuit\u00e9 \u00ab fichier amont identique \u00bb \u2014 ne mesure PAS l'\u00e2ge de la donn\u00e9e), `last_success_row_count`, `last_attempt_at`, `last_attempt_status`, `cadence_hint` (cadence attendue).\n\nUsage typique : avant un audit territorial ou une analyse temporelle, le caller appelle ce tool pour savoir si les donn\u00e9es sont \u00e0 jour. Juger sur `data_age_days`, JAMAIS sur `staleness_days` seul : en 2026 la source FINESS s'est tarie 4 mois pendant que `staleness_days` restait \u00e0 quelques jours (runs \u00ab fichier identique \u00bb compt\u00e9s comme succ\u00e8s). R\u00e8gle d'alerte : `data_age_days > expected_max_age_days` (seuil par source, expos\u00e9 dans chaque ligne \u2014 ne pas le recopier) ; `data_age_days: null` = jamais ing\u00e9r\u00e9.\n\nLes sources LIVE (DINUM Recherche Entreprises, INSEE SIRENE V3.11, ANS FHIR live) ne sont PAS list\u00e9es ici puisqu'elles n'ont pas de cycle d'ingestion \u2014 leur fra\u00eecheur est celle des API amont (live, ~secondes).\n\nCache serveur : 5 minutes. Co\u00fbt : 1 SELECT sur `ingest_log` au pire (sinon hit cache).",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object"
+ },
+ "name": "data_freshness",
+ "outputSchema": {
+  "properties": {
+   "sources": {
+    "items": {
+     "properties": {
+      "cadence_hint": {
+       "type": "string"
+      },
+      "data_age_days": {
+       "description": "\u00c2ge de la donn\u00e9e servie, en jours, depuis last_data_change_at. C'est CE champ qui dit si la donn\u00e9e est p\u00e9rim\u00e9e (post-mortem FINESS 2026-09 : staleness_days=4 pour une donn\u00e9e de 113 jours).",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "expected_max_age_days": {
+       "description": "\u00c2ge maximal attendu de la donn\u00e9e pour cette source, en jours. R\u00e8gle d'alerte : data_age_days > expected_max_age_days.",
+       "type": "number"
+      },
+      "last_attempt_at": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "last_attempt_status": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "last_data_change_at": {
+       "description": "ISO timestamp du dernier run ayant R\u00c9ELLEMENT chang\u00e9 la donn\u00e9e servie (success/partial sans court-circuit). null si aucune ingestion r\u00e9elle n'a jamais abouti.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "last_success_at": {
+       "description": "ISO timestamp du dernier run dont le swap a r\u00e9ussi \u2014 statut `success` OU `partial` (swap OK, couche secondaire matview/canary en \u00e9chec : la donn\u00e9e est servie). null si aucun succ\u00e8s enregistr\u00e9 (1er d\u00e9ploiement).",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "last_success_row_count": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "source": {
+       "description": "Identifiant source (finess, ameli_ps, rpps).",
+       "type": "string"
+      },
+      "staleness_days": {
+       "description": "Jours depuis le dernier run r\u00e9ussi \u2014 y compris un run court-circuit\u00e9 \u00ab fichier amont identique \u00bb. NE mesure PAS l'\u00e2ge de la donn\u00e9e : utiliser data_age_days. null si la source n'a jamais \u00e9t\u00e9 synchronis\u00e9e (signal alarmant \u00e0 propager au caller).",
+       "type": [
+        "number",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "source"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "sources"
+  ],
+  "type": "object"
+ }
+}

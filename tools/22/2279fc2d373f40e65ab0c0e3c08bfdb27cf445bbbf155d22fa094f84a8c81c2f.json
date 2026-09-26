@@ -1,0 +1,263 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Search arXiv papers by query with category and sort filters. Returns paper metadata including title, authors, abstract, categories, and links.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "category": {
+    "description": "Restrict results to an arXiv category. A leaf code (\"cs.CL\", \"math.AG\") matches exactly. A bare archive code (\"astro-ph\", \"cond-mat\", \"cs\", \"math\") matches the whole archive \u2014 its subject classes plus the legacy flat papers filed before the archive was subdivided. Note \"physics\" is the general-physics archive (physics.*), not the wider physics group: astro-ph, cond-mat, hep-*, quant-ph and the rest are separate archive codes. Use arxiv_list_categories to discover subject classes.",
+    "type": "string"
+   },
+   "max_results": {
+    "default": 10,
+    "description": "Maximum results to return (1-50). Default 10. Each result includes title, authors, abstract, and metadata \u2014 keep low to limit response size.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Search query. Field prefixes: ti: (title), au: (author \u2014 token-based; quote multi-token names like au:\"hinton g\" or pair with a topical clause to disambiguate common surnames), abs: (abstract), cat: (category \u2014 a leaf code matches exactly, a bare archive code such as cat:astro-ph matches its whole subtree), co: (comment), jr: (journal ref), all: (all fields). Boolean operators: AND, OR, ANDNOT. Examples: \"au:bengio AND ti:attention\", \"all:transformer AND cat:cs.CL\".",
+    "maxLength": 1000,
+    "minLength": 1,
+    "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]*$",
+    "type": "string"
+   },
+   "sort_by": {
+    "default": "relevance",
+    "description": "Sort criterion. Use \"submitted\" for newest papers, \"relevance\" for best query matches.",
+    "enum": [
+     "relevance",
+     "submitted",
+     "updated"
+    ],
+    "type": "string"
+   },
+   "sort_order": {
+    "default": "descending",
+    "description": "Sort direction. \"descending\" returns newest/most relevant first.",
+    "enum": [
+     "ascending",
+     "descending"
+    ],
+    "type": "string"
+   },
+   "start": {
+    "default": 0,
+    "description": "Pagination offset (0-10000). Use with max_results to page through results. E.g., start=10 with max_results=10 returns results 11-20. Matches beyond offset 10000 + max_results are unreachable by paging \u2014 carve the search into submitted_from/submitted_to windows and page within each.",
+    "maximum": 10000,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "submitted_from": {
+    "description": "Earliest submission date to include, inclusive, as a UTC YYYY-MM-DD date. Omit for no lower bound.",
+    "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$",
+    "type": "string"
+   },
+   "submitted_to": {
+    "description": "Latest submission date to include, inclusive, as a UTC YYYY-MM-DD date. Omit for no upper bound. Both bounds are inclusive, so consecutive windows (\"2024-01-01\"..\"2024-01-15\" then \"2024-01-16\"..\"2024-01-31\") cover the matches with no gap; a paper submitted at exactly the midnight seam between two windows appears in both, so de-duplicate collected results by paper id. That is the way to reach matches past the start ceiling: split the date range, then page within each window.",
+    "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "arxiv_search",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "papers",
+     "effectiveQuery",
+     "totalFound",
+     "pageStart"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The max_results limit applied to this page.",
+    "type": "number"
+   },
+   "effectiveQuery": {
+    "description": "The query as actually searched, carrying every filter applied \u2014 the category subtree and submitted-date window folded into arXiv syntax alongside the supplied terms. Replaying it as `query` with no other filters reproduces this exact result set.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `unknown_category`: Provided category code is not part of the arXiv taxonomy. `rate_limited`: arXiv has throttled requests (HTTP 429 or \"Rate exceeded.\" body). `invalid_request`: arXiv rejected the request (HTTP 4xx other than 429), typically malformed query syntax. `unsupported_query_syntax`: Query translates to a mirror FTS5 expression the search engine cannot parse, typically two operands juxtaposed across a parenthesized group without an explicit operator. `invalid_date_range`: submitted_from or submitted_to is not a real UTC calendar date, or the window starts after it ends. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "unknown_category",
+         "rate_limited",
+         "invalid_request",
+         "unsupported_query_syntax",
+         "invalid_date_range"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Recovery guidance when results are empty or paging overshot. Absent on successful pages.",
+    "type": "string"
+   },
+   "pageStart": {
+    "description": "Pagination offset of this result page.",
+    "type": "number"
+   },
+   "papers": {
+    "description": "Matching papers with full metadata.",
+    "items": {
+     "additionalProperties": false,
+     "description": "arXiv paper metadata \u2014 identifier, title, authors, abstract, categories, and links.",
+     "properties": {
+      "abstract": {
+       "description": "Full abstract text.",
+       "type": "string"
+      },
+      "abstract_url": {
+       "description": "arXiv abstract page URL.",
+       "type": "string"
+      },
+      "authors": {
+       "description": "Author names.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "categories": {
+       "description": "All arXiv categories assigned to this paper.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "comment": {
+       "description": "Author comment (e.g., page count, conference).",
+       "type": "string"
+      },
+      "doi": {
+       "description": "DOI if available.",
+       "type": "string"
+      },
+      "id": {
+       "description": "arXiv paper ID (e.g., \"2401.12345v1\").",
+       "type": "string"
+      },
+      "journal_ref": {
+       "description": "Journal reference if published.",
+       "type": "string"
+      },
+      "pdf_url": {
+       "description": "Direct PDF download URL.",
+       "type": "string"
+      },
+      "primary_category": {
+       "description": "Primary arXiv category (e.g., \"cs.CL\").",
+       "type": "string"
+      },
+      "published": {
+       "description": "Original submission date (ISO 8601).",
+       "type": "string"
+      },
+      "title": {
+       "description": "Paper title.",
+       "type": "string"
+      },
+      "updated": {
+       "description": "Last update date (ISO 8601).",
+       "type": "string"
+      }
+     },
+     "required": [
+      "id",
+      "title",
+      "authors",
+      "abstract",
+      "primary_category",
+      "categories",
+      "published",
+      "updated",
+      "pdf_url",
+      "abstract_url"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Papers returned on this page.",
+    "type": "number"
+   },
+   "totalFound": {
+    "description": "Total matching papers reported by arXiv (before pagination).",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when more matching papers exist beyond this page (totalFound > start + shown).",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Arxiv Search"
+}

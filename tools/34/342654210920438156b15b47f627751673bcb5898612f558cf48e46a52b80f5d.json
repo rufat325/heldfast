@@ -1,0 +1,219 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Find Bluesky accounts by name or handle fragment. Returns ranked profiles with handle, DID, displayName, bio, pronouns when the account set them, and Bluesky verification status \u2014 which tells a verified account from a look-alike handle. Follower, following, and post counts and the website are not on this view \u2014 bsky_get_profile returns them for one account. Use before bsky_get_profile or bsky_get_author_feed when you have a name but not a confirmed handle. Supports cursor-based pagination for browsing beyond the first page of results.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "cursor": {
+    "description": "Opaque pagination cursor from a previous response to the same query. Omit for the first page.",
+    "maxLength": 2048,
+    "type": "string"
+   },
+   "limit": {
+    "default": 25,
+    "description": "Maximum number of actors to return (1\u2013100). Default 25.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Name or handle fragment to search for, e.g. \"alice\" or \"nytimes.com\". Must not be blank.",
+    "maxLength": 500,
+    "minLength": 1,
+    "pattern": "\\S",
+    "type": "string"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "type": "object"
+ },
+ "name": "bsky_search_actors",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "actors",
+     "totalReturned"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "actors": {
+    "description": "Matching actor profiles, ranked by relevance.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A Bluesky actor profile summary.",
+     "properties": {
+      "avatar": {
+       "description": "URL of the profile avatar image.",
+       "type": "string"
+      },
+      "description": {
+       "description": "Biography / about text.",
+       "type": "string"
+      },
+      "did": {
+       "description": "Decentralized Identifier \u2014 permanent portable identity key.",
+       "type": "string"
+      },
+      "displayName": {
+       "description": "Display name set by the user.",
+       "type": "string"
+      },
+      "handle": {
+       "description": "Human-readable username, e.g. \"alice.bsky.social\".",
+       "type": "string"
+      },
+      "labels": {
+       "description": "Moderation labels applied to this actor.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A moderation label applied to this actor.",
+        "properties": {
+         "src": {
+          "description": "DID of the labeling service.",
+          "type": "string"
+         },
+         "val": {
+          "description": "Label value (content warning or moderation tag).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "val"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "pronouns": {
+       "description": "Free-form pronouns the account set, e.g. \"they/he\". Absent when it set none. Account-authored text bounded only by length, not a fixed vocabulary \u2014 read it as written rather than parsing it.",
+       "type": "string"
+      },
+      "verification": {
+       "additionalProperties": false,
+       "description": "Bluesky verification of this account \u2014 what tells it from a look-alike handle. Absent when Bluesky sent none. Who issued it is on bsky_get_profile.",
+       "properties": {
+        "trustedVerifierStatus": {
+         "description": "Whether this account is itself a trusted verifier \u2014 same values as verifiedStatus.",
+         "type": "string"
+        },
+        "verifiedStatus": {
+         "description": "Whether a trusted verifier verified this account: \"valid\", \"invalid\" (verified once, no longer holds), or \"none\". Passed through as Bluesky sends it, so another value may appear.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "verifiedStatus",
+        "trustedVerifierStatus"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "did",
+      "handle"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "cap": {
+    "description": "The limit applied to this page.",
+    "type": "number"
+   },
+   "cursor": {
+    "description": "Opaque cursor for the next page \u2014 pass it back with the same query. Absent on the last page.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_cursor`: Bluesky could not continue from the cursor the request carried \u2014 it answers a cursor it cannot decode with HTTP 400. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_cursor"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance when the result set is empty or constrained.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of actors returned on this page.",
+    "type": "number"
+   },
+   "totalReturned": {
+    "description": "Number of actors in this response page.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when Bluesky returned a cursor for another page, whatever this page held \u2014 pages often hold fewer actors than limit and still continue.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search Bluesky Actors"
+}

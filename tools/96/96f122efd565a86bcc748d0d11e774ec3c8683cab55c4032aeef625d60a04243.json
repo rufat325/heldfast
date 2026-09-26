@@ -1,0 +1,443 @@
+{
+ "annotations": {
+  "access": "paid",
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "maturity": "mature",
+  "openWorldHint": false,
+  "pricing_url": "https://dchub.cloud/pricing/upgrade?tool=list_transactions&ref=mcp-tools-list",
+  "problem": "data-center M&A and deals",
+  "readOnlyHint": true,
+  "title": "M&A Transactions",
+  "upgrade_relay": "Call the tool first: a gated result carries a session-bound checkout link (dchub.cloud/go/c/<token>) and a human relay (dchub.cloud/upgrade/h/<token>) minted for THIS session \u2014 relay those verbatim. This URL is only the fallback for a client that renders annotations before any call."
+ },
+ "description": "M&A and capital transactions in the data center sector \u2014 1,600+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by date range (date_from/date_to, ISO-8601), min_value_usd, region, buyer, or seller. Answers \"which data-center deals closed this year\", \"what was that acquisition worth\". Try: list_transactions date_from=2026-01-01 min_value_usd=1000000000. There is no `year` parameter \u2014 use date_from/date_to. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {
+   "buyer": {
+    "description": "Filter by acquiring company name, e.g. Blackstone, KKR, Digital Realty",
+    "type": "string"
+   },
+   "date_from": {
+    "description": "Earliest deal date, ISO-8601 (YYYY-MM-DD)",
+    "type": "string"
+   },
+   "date_to": {
+    "description": "Latest deal date, ISO-8601 (YYYY-MM-DD)",
+    "type": "string"
+   },
+   "deal_type": {
+    "description": "Deal type filter, e.g. acquisition, jv, refinance, recap",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Max results to return (1-500; default varies by tool)",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "max_value_usd": {
+    "description": "Maximum disclosed deal value in US dollars",
+    "type": "number"
+   },
+   "min_value_usd": {
+    "description": "Minimum disclosed deal value in US dollars, e.g. 1000000000 for $1B+",
+    "type": "number"
+   },
+   "offset": {
+    "description": "Pagination offset, 0-based (skip this many results)",
+    "maximum": 100000,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "region": {
+    "description": "Geographic region filter, e.g. us, eu, apac, americas",
+    "type": "string"
+   },
+   "seller": {
+    "description": "Filter by selling/target company name, e.g. CyrusOne",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "list_transactions",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "Data-center M&A / capital transactions: `transactions` rows with buyer/seller/value/date \u2014 alongside the DC Hub envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "cached": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Whether the response was served from cache"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "count": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Rows returned in THIS response"
+   },
+   "data_source": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Where the deal set comes from"
+   },
+   "note": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Serving note"
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   },
+   "success": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "true when the deal query succeeded"
+   },
+   "tier": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Tier the response was served at"
+   },
+   "total_count": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Total deals matching the filter"
+   },
+   "total_value": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Aggregate disclosed value across the returned set (null when not computed)"
+   },
+   "total_value_unit": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Unit of total_value"
+   },
+   "transactions": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "buyer": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Acquirer"
+        },
+        "date": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Deal date (ISO-8601)"
+        },
+        "id": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Deal id"
+        },
+        "market": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Market the deal touches"
+        },
+        "mw": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Capacity involved, MW, when disclosed"
+        },
+        "region": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Region (us | eu | apac | americas \u2026)"
+        },
+        "seller": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Seller / target"
+        },
+        "type": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "acquisition | jv | refinance | recap \u2026"
+        },
+        "value": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Deal value when disclosed (see value_unit)"
+        },
+        "value_confirmed": {
+         "anyOf": [
+          {
+           "type": "boolean"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Whether the value is confirmed vs reported"
+        },
+        "value_display": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Human-formatted value, e.g. \"$9.2B\" or \"Undisclosed\""
+        },
+        "value_unit": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Unit of `value` (e.g. USD)"
+        },
+        "year": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Deal year"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "M&A / capital-transaction rows"
+   }
+  },
+  "type": "object"
+ },
+ "title": "M&A Transactions"
+}

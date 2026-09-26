@@ -1,0 +1,169 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Resolve a preprint DOI to its full journal publication record \u2014 journal DOI, journal name, published date, and corresponding author details. Use when the preprint's `publishedJournalDoi` field from biorxiv_get_preprint is present and you need the full crosswalk metadata. bioRxiv and medRxiv share their DOI prefixes, so server=\"both\" (the default) checks both in parallel and the response reports which server answered. Works for 10.1101/ and 10.64898/ DOIs alike; when the crosswalk holds no record for a published preprint, the journal DOI still comes back from the preprint's own record, without journal name or date, and a notice says so. Returns a not-found error only when no server holds the preprint or it lists no journal version at all.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "doi": {
+    "description": "Preprint DOI to resolve (e.g. 10.1101/2024.01.15.575123 or 10.64898/2026.05.07.723463). A doi.org or biorxiv.org/medrxiv.org article URL, a doi: prefix, or a vN / .full suffix is accepted and stripped to the bare DOI.",
+    "type": "string"
+   },
+   "server": {
+    "default": "both",
+    "description": "Server the preprint was posted on. \"both\" (default) checks bioRxiv and medRxiv in parallel \u2014 use it when the DOI alone does not tell you which server holds the preprint.",
+    "enum": [
+     "biorxiv",
+     "medrxiv",
+     "both"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "doi"
+  ],
+  "type": "object"
+ },
+ "name": "biorxiv_get_published_version",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "preprintDoi",
+     "server"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `doi_not_found`: No attempted server holds the preprint, or neither the crosswalk nor its preprint record lists a journal version. `invalid_doi_format`: The input DOI does not match the 10.NNNN/ pattern, even after URL, doi:, and suffix stripping. `upstream_unavailable`: No published record was established and at least one crosswalk or preprint lookup failed against api.biorxiv.org. `rate_limited`: No published record was established and at least one crosswalk or preprint lookup was rejected with HTTP 429 by api.biorxiv.org. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "doi_not_found",
+         "invalid_doi_format",
+         "upstream_unavailable",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Present when publishedDoi came from the preprint's own record because the crosswalk had none: says why publishedJournal and publishedDate are absent.",
+    "type": "string"
+   },
+   "preprintAbstract": {
+    "description": "Preprint abstract.",
+    "type": "string"
+   },
+   "preprintAuthorCorresponding": {
+    "description": "Corresponding author name.",
+    "type": "string"
+   },
+   "preprintAuthorCorrespondingInstitution": {
+    "description": "Corresponding author institution.",
+    "type": "string"
+   },
+   "preprintAuthors": {
+    "description": "Preprint author list.",
+    "type": "string"
+   },
+   "preprintCategory": {
+    "description": "Subject category.",
+    "type": "string"
+   },
+   "preprintDate": {
+    "description": "Date the preprint was first posted.",
+    "type": "string"
+   },
+   "preprintDoi": {
+    "description": "The preprint DOI that was resolved, in bare form.",
+    "type": "string"
+   },
+   "preprintTitle": {
+    "description": "Title of the preprint.",
+    "type": "string"
+   },
+   "publishedDate": {
+    "description": "Journal publication date (YYYY-MM-DD). Absent when the crosswalk holds no record for this preprint \u2014 see notice.",
+    "type": "string"
+   },
+   "publishedDoi": {
+    "description": "The journal publication DOI.",
+    "type": "string"
+   },
+   "publishedJournal": {
+    "description": "Name of the publishing journal. Absent when the crosswalk holds no record for this preprint \u2014 see notice.",
+    "type": "string"
+   },
+   "server": {
+    "description": "The server that returned this published record \u2014 never \"both\".",
+    "enum": [
+     "biorxiv",
+     "medrxiv"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Published Journal Version"
+}

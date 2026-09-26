@@ -1,0 +1,80 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Launch an Electron app and start a driving session. Provide main (absolute path to the main-process entry) or executablePath. Set runtime:\"project\" to resolve Electron only from the operator-configured --app-root (requires main when resolving that runtime); explicit executablePath takes precedence. Executable-only launches are treated as packaged apps and use a transport-owned, loopback CDP endpoint; main-based development launches use Playwright. A server started with --demo supplies its packaged demo entry when both are omitted. Returns: { ok, session_id, transport, windows, renderer_ready, runtime_source, launch_mode, capabilities }. Packaged launches default credentialStore to \"testing\": macOS receives --use-mock-keychain and Linux receives --password-store=basic so OS credential prompts cannot wedge automation. Use credentialStore:\"system\" when assertions must verify genuine safeStorage sealing. Waits (up to readyTimeoutMs, default 5000) for the renderer DOM to finish its initial render, so a snapshot/find right after launch sees a populated app; renderer_ready:false means it was not confirmed in time (the session is still usable \u2014 retry the read, or wait_for_selector on an expected element). By default refuses a second launch while a session is live (pass allowMultiple: true to override). Errors: ALREADY_RUNNING (a session is live, or the concurrent-session cap is reached \u2014 stop one or pass allowMultiple; not retryable), ABSOLUTE_PATH_REQUIRED / FILE_NOT_FOUND (preflight; not retryable), BAD_ARGUMENT (neither main nor executablePath given; runtime:\"project\" without main when no executablePath is given, or without --app-root when resolving that runtime; a runtime-altering env var like NODE_OPTIONS; instrumentNative without main; or, when the server set --app-root, a main/executablePath/cwd outside that root), FUSES_BLOCK_LAUNCH (a main-based development launch selected a binary that disables the Node CLI inspect channel Playwright requires; not retryable \u2014 use executablePath without main for packaged CDP launch, attach over CDP, or use a compatible development build), SINGLE_INSTANCE_LOCK (another app instance holds the lock; not retryable), LAUNCH_FAILED (the packaged app could not start or exited before a driveable renderer; not retryable), LAUNCH_TIMEOUT (first window did not appear; retryable), TRANSPORT_UNSUPPORTED (no launch-capable transport).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "allowMultiple": {
+    "description": "Allow launching when a session already exists. Default false (single instance).",
+    "type": "boolean"
+   },
+   "args": {
+    "description": "Extra CLI args appended after the entry.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "credentialStore": {
+    "description": "Packaged executable only. Default \"testing\" avoids blocking credential prompts with --use-mock-keychain on macOS or --password-store=basic on Linux. Use \"system\" to verify genuine safeStorage behavior.",
+    "enum": [
+     "testing",
+     "system"
+    ],
+    "type": "string"
+   },
+   "cwd": {
+    "description": "Working directory for the spawned process.",
+    "type": "string"
+   },
+   "env": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Environment variables for the spawned process.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "executablePath": {
+    "description": "Absolute path to an Electron/app binary. Defaults to the bundled Electron.",
+    "type": "string"
+   },
+   "instrumentNative": {
+    "description": "Wrap the app main entry with fixed hooks installed before it runs, so startup Tray state is readable/invokable (native_trays / native_tray_invoke) and startup notifications can be captured with beforeArm. Off by default; runs no agent code. Requires main; executablePath-only launches cannot be instrumented. Launch transport only.",
+    "type": "boolean"
+   },
+   "main": {
+    "description": "Absolute path to the app main-process JS entry. Required unless executablePath is given or the server configured a default demo entry.",
+    "type": "string"
+   },
+   "readyTimeoutMs": {
+    "description": "Max wait (ms) for the renderer DOM to finish its initial render before returning. Default 5000; 0 returns immediately with renderer_ready reflecting the instantaneous state. Capped at 60000 to stay under the dispatch timeout backstop.",
+    "maximum": 60000,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "runtime": {
+    "description": "Use Electron resolved from the operator-configured --app-root. Resolving that runtime requires main; an explicit executablePath takes precedence. Default: the launch transport runtime.",
+    "enum": [
+     "project"
+    ],
+    "type": "string"
+   },
+   "timeoutMs": {
+    "description": "Max wait for the first window.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "electron_launch",
+ "title": "Launch Electron app"
+}

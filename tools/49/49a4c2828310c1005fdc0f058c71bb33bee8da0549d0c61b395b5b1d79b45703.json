@@ -1,0 +1,142 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Run a read-only SQL SELECT against tables staged on a Eurostat dataframe canvas \u2014 the way to reach observations past the 5,000-row inline cap of eurostat_query_dataset and past the inline preview of a eurostat_download_dataset bulk download, and to aggregate, group, or join across staged tables without re-fetching from Eurostat. Call eurostat_dataframe_describe first for the table and column names, which differ between the tools that stage them. Only a single SELECT statement runs: statement chaining, non-SELECT verbs, and functions that read files or external data are rejected. Columns are flat \u2014 every dimension is a code column named after the dimension, the measure is obs_value, the observation flag is obs_flag / obs_flag_label and the confidentiality marker is conf_status / conf_status_label; a \"_label\" companion per dimension exists only on tables eurostat_query_dataset staged. Both observation stagers write the same five measure columns with the same codes, so join their tables on dimension codes and time and compare obs_flag or conf_status across them directly; a DS-* table also carries obs_value_text, a value published as text (e.g. a PRODCOM unit \"KG\"). A value list eurostat_get_dimension_values staged has two columns, code and label: join it to the code column of a download (e.g. JOIN df_x g ON d.geo = g.code) to label that table.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Canvas identifier returned as canvasId by eurostat_query_dataset, eurostat_download_dataset, or eurostat_get_dimension_values. Identifies the workspace holding the staged tables.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   },
+   "sql": {
+    "description": "A single read-only SELECT statement. Reference tables by the names eurostat_dataframe_describe reports. Example: SELECT geo, geo_label, AVG(obs_value) AS mean FROM df_a1b2c3d4 WHERE time >= '2020' GROUP BY geo, geo_label ORDER BY mean DESC.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "canvas_id",
+   "sql"
+  ],
+  "type": "object"
+ },
+ "name": "eurostat_dataframe_query",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "canvasId",
+     "columns",
+     "rows",
+     "rowCount",
+     "truncated"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "canvasId": {
+    "description": "Canvas identifier the query ran against.",
+    "type": "string"
+   },
+   "columns": {
+    "description": "Column names in projection order.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `canvas_disabled`: This deployment runs without a dataframe canvas, so there is nothing to query. `canvas_not_found`: The canvas_id is unknown or its lifetime has elapsed. `missing_table`: The SQL names a table that is not staged on this canvas, or that has expired. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "canvas_disabled",
+         "canvas_not_found",
+         "missing_table"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "rowCount": {
+    "description": "Rows materialized into this response. Equals the full result size unless truncated is true.",
+    "type": "number"
+   },
+   "rows": {
+    "description": "Result rows, each keyed by column name. Bounded by the canvas row limit. 64-bit integer results \u2014 COUNT(*) among them \u2014 arrive as strings so values outside the JSON number range survive intact; cast to DOUBLE in the SQL if a number is wanted.",
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "truncated": {
+    "description": "True when the result exceeded the canvas row limit and was cut short. Add a LIMIT, an aggregate, or a narrower WHERE clause to see the rest.",
+    "type": "boolean"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Query Eurostat Dataframes"
+}

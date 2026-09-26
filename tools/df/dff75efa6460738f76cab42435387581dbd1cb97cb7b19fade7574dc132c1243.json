@@ -1,0 +1,174 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Fetch full metadata for one or more Census variable codes \u2014 label, concept group, predicate type, the table's universe, and margin-of-error sibling references. Use to confirm a variable code before building a query, or to look up what a known code means. On ACS datasets it returns estimate_code and moe_code sibling references so you can request both without a separate search, and a margin-of-error code carries attribute_of and attribute_type MARGIN_OF_ERROR as the Census publishes them; the ACS comparison profiles (acs/acs5/cprofile, acs/acs1/cprofile) and the other dataset families publish no margins of error and carry none of these fields. It also resolves the annotation and flag columns the data tools accept, such as B19013_001EA or EMP_F, naming the column each one belongs to, and predicate codes such as NAICS2017 or SEX, confirming a filter dimension exists in a dataset before a query uses it \u2014 for the values a dimension accepts rather than the dimension itself, call census_list_predicate_values.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "dataset": {
+    "description": "Dataset the variables belong to (default: \"acs/acs5\"). Use census_list_datasets to discover valid values. Case is ignored, and a two-part code can be given by its last part alone \u2014 \"acs5\" is acs/acs5, \"pl\" is dec/pl. Three-part codes such as acs/acs5/profile must be given in full. The response echoes the resolved code.",
+    "type": "string"
+   },
+   "variables": {
+    "description": "One or more variable codes to look up (e.g., [\"B19013_001E\", \"B19013_001M\"]). Codes are trimmed and matched regardless of case, and the response echoes the dataset's own spelling \u2014 uppercase everywhere except the comparison profiles' significance columns (e.g., CP03_2024to2019_062SS).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "year": {
+    "description": "Vintage year (default: latest available for the dataset).",
+    "type": "number"
+   }
+  },
+  "required": [
+   "variables"
+  ],
+  "type": "object"
+ },
+ "name": "census_get_variable",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "variables",
+     "dataset",
+     "year"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "dataset": {
+    "description": "Dataset queried.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `variable_not_found`: One or more variable codes were not found in the dataset and year. `dataset_not_found`: Dataset code is not recognized, even after case and shorthand resolution. `year_not_available`: The dataset does not serve the requested vintage year. `variables_unavailable`: Variable metadata \u2014 the dataset's variables.json, groups.json, or an attribute column's own entry \u2014 could not be fetched or parsed. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "variable_not_found",
+         "dataset_not_found",
+         "year_not_available",
+         "variables_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "variables": {
+    "description": "Variable metadata in the same order as the input array.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Full metadata for a single Census variable.",
+     "properties": {
+      "attribute_of": {
+       "description": "For an annotation, flag, or margin-of-error column, the column it belongs to, as the Census publishes it (e.g., \"B19013_001E\" for B19013_001EA or B19013_001M). Absent on ordinary variables.",
+       "type": "string"
+      },
+      "attribute_type": {
+       "description": "For an annotation, flag, or margin-of-error column, its kind as the Census publishes it (e.g., \"ANNOTATION\", \"FLAG\", \"MARGIN_OF_ERROR\"). Absent on ordinary variables.",
+       "type": "string"
+      },
+      "concept": {
+       "description": "Concept of the table the variable belongs to. Absent for a column shared across tables, such as GEO_ID, whose concept joins every table it appears in, and for a column the dataset publishes no concept for, such as STATE.",
+       "type": "string"
+      },
+      "estimate_code": {
+       "description": "Estimate sibling variable code when this is a margin-of-error variable. ACS datasets only, apart from the comparison profiles \u2014 no other dataset publishes margins of error.",
+       "type": "string"
+      },
+      "label": {
+       "description": "Human-readable label from the Census data dictionary.",
+       "type": "string"
+      },
+      "moe_code": {
+       "description": "Margin-of-error sibling code when this is an estimate variable. Include both in census_query_data for complete data. ACS datasets only, apart from the comparison profiles (acs/acs5/cprofile, acs/acs1/cprofile) \u2014 there and on other families an E-final code has no margin-of-error sibling, so the field is absent.",
+       "type": "string"
+      },
+      "predicate_type": {
+       "description": "Data type (e.g., \"int\", \"string\", \"float\").",
+       "type": "string"
+      },
+      "universe": {
+       "description": "Universe of the variable's table (e.g., \"Households\", \"Population 25 years and over\"). Absent when the table publishes none \u2014 the ACS subject, profile, and selected population profile tables, dec/dp, the business datasets, pep/charv, and every ACS and dec/pl vintage before 2020 publish none \u2014 and for a column that belongs to no single table.",
+       "type": "string"
+      },
+      "variable_code": {
+       "description": "Census variable code (e.g., \"B19013_001E\").",
+       "type": "string"
+      }
+     },
+     "required": [
+      "variable_code",
+      "label",
+      "predicate_type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "year": {
+    "description": "Vintage year queried.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Census Variable Metadata"
+}

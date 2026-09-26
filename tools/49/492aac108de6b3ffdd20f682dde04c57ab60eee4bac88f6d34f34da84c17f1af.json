@@ -1,0 +1,51 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Compare l'adresse d'un centre de sant\u00e9 c\u00f4t\u00e9 CNAM (Annuaire sant\u00e9 Ameli) vs FINESS DREES pour un m\u00eame num_finess. Primitive brute SANS interpr\u00e9tation m\u00e9tier \u2014 retourne les deux adresses, un `score_dice` (0..1, informatif ; `null` si non comparable car `finess_absent`) et un `statut`. Le caller d\u00e9cide quoi faire de la divergence.\n\nUtilit\u00e9 : signaler un d\u00e9m\u00e9nagement propag\u00e9 par une source mais pas (encore) par l'autre (ex: CNAM '5 RUE DE L'ARQUEBUSE AUTUN' vs FINESS '15 BD BERNARD GIBERSTEIN AUTUN' pour le m\u00eame FINESS). \u00c9quivalent c\u00f4t\u00e9 centre de sant\u00e9 de `compare_raison_sociale_finess_vs_rpps`.\n\n**Statut** (pr\u00e9sent uniquement sur `found: true`) :\n- `match` : adresses strictement \u00e9gales apr\u00e8s normalisation\n- `match_after_abbreviation_normalization` : \u00e9gales apr\u00e8s expansion des abr\u00e9viations de voie FR (R/RUE, BD/BOULEVARD, AV/AVENUE\u2026) \u2014 M\u00caME adresse, simple abr\u00e9viation DREES vs CNAM, PAS un d\u00e9m\u00e9nagement\n- `divergent_after_normalization` : adresses r\u00e9ellement diff\u00e9rentes (d\u00e9m\u00e9nagement non synchronis\u00e9 entre sources)\n- `finess_absent` : le CDS existe c\u00f4t\u00e9 CNAM mais le num_finess est absent de FINESS DREES (latence sync bimensuelle)\n\nFormat : objet `LookupResult` discrimin\u00e9 par `found`. Si le num_finess n'est PAS un centre de sant\u00e9 CNAM, le tool retourne `{found: false, lookupStatus: 'not_found', message}` (utiliser `etablissement_by_finess` pour un \u00e9tablissement non-CDS).",
+ "inputSchema": {
+  "properties": {
+   "num_finess": {
+    "description": "Num\u00e9ro FINESS exact (9 chiffres).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "num_finess"
+  ],
+  "type": "object"
+ },
+ "name": "compare_adresse_cnam_vs_finess",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

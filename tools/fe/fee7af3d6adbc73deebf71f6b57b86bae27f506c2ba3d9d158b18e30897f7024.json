@@ -1,0 +1,185 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "JOIN of the official release calendar (econ data, the FOMC, FDA decisions, SEC rules) against LIVE Polymarket/Kalshi markets \u2014 which scheduled releases land in the next N hours, and which live markets resolve on them. This is a POSITIONING tool, not a speed product: results are cached like every other pack (\u2264 60s TTL) and there is no push/webhook \u2014 do not use this to try to beat a release, use it to see what is coming and what is already priced. CATEGORIES: econ (CPI, Employment Situation/jobs report, GDP, PCE, PPI, retail sales, housing starts, jobless claims \u2014 via fred_release_dates per known release_id, since FRED's own cross-release calendar mostly returns recent actuals, not future dates), fed (the next FOMC meeting's rate decision, via fomc_calendar), fda (PDUFA action dates + FDA advisory-committee meetings, via pdufa_catalysts / fda_adcom_calendar), sec (SEC final rules whose own DATES clause names an effective date in the window, via federal-register recent_rules \u2014 usually finds nothing in a short window since SEC rules typically take effect 30\u201360 days out, which is an accurate answer, not a bug), court (ALWAYS EMPTY today \u2014 court-listener has no forward-looking scheduled-hearing calendar, only filing/termination dates, so this category returns zero releases with unsupported:true rather than fabricate one). Omit `categories` or pass \"all\" for every category. MATCHING AND ITS HONESTY CONTRACT: every release is returned even when it has ZERO matched markets \u2014 a release is never dropped just because nothing on Polymarket or Kalshi resolves on it (most FDA/SEC releases will show markets:[]; that is signal, not a gap). Every matched market carries resolves_on_this_release: \"true\" (the venue's own close/end date sits within ~36h of the release AND the question passed a subject filter \u2014 econ and fed only), \"likely\" (same subject filter, but the venue closes days away from the release date), or \"unclear\" (a keyword hit with no date to anchor against \u2014 always true for the fda category, which has no ladder structure to check a date against). matched_by names the mechanism (a Kalshi series ticker, a Polymarket search query, or an FDA keyword probe) so a caller can judge the match rather than trust a label. scheduled_at carries both `utc` and `et`; econ releases use the standing BLS/Census 8:30am ET convention (FRED's calendar itself has no clock time), FOMC decisions use the 2:00pm ET convention, and FDA/SEC dates are date_only:true (no reliable clock time exists for either). DO NOT treat a matched market as a real arbitrage or a settled fact on its own \u2014 a market question sharing tokens with a release name is not proof it settles on that release's own published number. Call resolution_audit / resolution_diff (fleet #1909) on a specific market before sizing anything here. An empty window (zero releases across every requested category) returns error:\"no_releases_in_window\" with a widen-the-window hint rather than an empty array \u2014 econ releases especially cluster on specific dates each month, so a 48h window often straddles a dead stretch.",
+ "inputSchema": {
+  "examples": [
+   {
+    "hours": 72
+   },
+   {
+    "categories": "econ,fed",
+    "hours": 100
+   }
+  ],
+  "properties": {
+   "categories": {
+    "description": "Comma or space separated subset of econ|fed|fda|sec|court, or \"all\" (default). E.g. \"econ,fed\" or \"fda\".",
+    "type": "string"
+   },
+   "hours": {
+    "description": "Look-ahead window in hours from now. Default 48. Capped at 720 (30 days) \u2014 econ/fed releases are dated weeks apart, so a short window is often empty; widen rather than assume nothing is scheduled.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "name": "release_calendar_markets",
+ "outputSchema": {
+  "properties": {
+   "as_of": {
+    "type": "string"
+   },
+   "categories": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "notes": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "release_count": {
+    "type": "number"
+   },
+   "releases": {
+    "items": {
+     "properties": {
+      "markets": {
+       "items": {
+        "properties": {
+         "hours_to_release": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "matched_by": {
+          "type": "string"
+         },
+         "price": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "question": {
+          "type": "string"
+         },
+         "resolves_on_this_release": {
+          "enum": [
+           "true",
+           "likely",
+           "unclear"
+          ],
+          "type": "string"
+         },
+         "slug_or_ticker": {
+          "type": "string"
+         },
+         "venue": {
+          "enum": [
+           "kalshi",
+           "polymarket"
+          ],
+          "type": "string"
+         },
+         "volume": {
+          "type": [
+           "number",
+           "null"
+          ]
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "release": {
+       "properties": {
+        "category": {
+         "enum": [
+          "econ",
+          "fed",
+          "fda",
+          "sec",
+          "court"
+         ],
+         "type": "string"
+        },
+        "date_only": {
+         "type": "boolean"
+        },
+        "hours_to_release": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "name": {
+         "type": "string"
+        },
+        "scheduled_at": {
+         "properties": {
+          "et": {
+           "type": "string"
+          },
+          "utc": {
+           "type": "string"
+          }
+         },
+         "type": [
+          "object",
+          "null"
+         ]
+        },
+        "source_pack": {
+         "type": "string"
+        },
+        "source_tool": {
+         "type": "string"
+        },
+        "time_source": {
+         "type": "string"
+        },
+        "what_it_publishes": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "releases_with_matched_markets": {
+    "type": "number"
+   },
+   "window": {
+    "properties": {
+     "hours": {
+      "type": "number"
+     },
+     "since": {
+      "type": "string"
+     },
+     "until": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Release Calendar Markets",
+ "version": "v1.962670c8"
+}

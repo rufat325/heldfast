@@ -1,0 +1,72 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true,
+  "title": "Get track-record performance summary by tier and league"
+ },
+ "description": "Return Olympus Bets Analytics live performance, split by tier and league.\n\n    Aggregates the public, timestamped, correction-audited resolved-pick\n    record into the canonical\n    all/free/premium tier split, with by-league and by-confidence breakdowns.\n\n    Tier semantics:\n        - ``all`` \u2014 every resolved projection, free + premium combined\n        - ``free`` \u2014 only the publicly-published projections (anyone can see them)\n        - ``premium`` \u2014 subscriber-tier projections (core sim engine + Olympus\n          Oracle combined; kept for backward compatibility)\n        - ``premium_ex_oracle`` \u2014 premium projections with Olympus Oracle\n          (prediction-market whale-signal) rows excluded \u2014 the core sim-engine\n          premium record. Use this (not ``premium``) when the question is\n          \"how good is the core model,\" since Oracle has historically diverged\n          sharply from it (e.g. core +30.16u vs oracle -18.43u over the same\n          window) and quoting the blended ``premium`` number for that question\n          silently mixes the two.\n        - ``oracle`` \u2014 Olympus Oracle picks only (always premium-tier),\n          reported as its own segment for the same reason.\n        - ``premium_leans`` \u2014 Premium Leans: flat 0.5u model disagreements\n          with the price, published daily whether or not a Kelly-sized Play\n          cleared qualification gates. Its own segment; NEVER counted inside\n          ``premium`` or ``all`` (see ``services.track_record_stats.row_tier`` /\n          ``services.performance_split.resolved_row_tier``, the single tier\n          rule every surface \u2014 page, MCP, digest \u2014 shares).\n\n    Honest framing: all-time and rolling regimes are both available. Core\n    Premium and Oracle are separated so legacy or source-specific performance\n    cannot obscure the current production system. Both are published.\n\n    Args:\n        tier: Optional tier filter. Omit to return all six segments.\n        league: Optional league filter applied inside each requested tier.\n        detail: ``summary`` omits breakdowns; ``full`` includes all breakdowns.\n        window: ``all`` preserves the historical contract; rolling windows use\n            the same canonical ledger, grading, tier, and source rules.\n\n    Returns:\n        Tier dict containing total_picks, wins, losses, pushes, win_rate,\n        units_won, roi_percent, by_league, by_confidence. The\n        ``premium_leans`` segment additionally carries a ``note`` field\n        explaining its flat-stake, own-column semantics.\n    ",
+ "inputSchema": {
+  "properties": {
+   "detail": {
+    "default": "summary",
+    "enum": [
+     "summary",
+     "full"
+    ],
+    "title": "Detail",
+    "type": "string"
+   },
+   "league": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "League"
+   },
+   "tier": {
+    "anyOf": [
+     {
+      "enum": [
+       "all",
+       "free",
+       "premium",
+       "premium_ex_oracle",
+       "oracle",
+       "premium_leans"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Tier"
+   },
+   "window": {
+    "default": "all",
+    "enum": [
+     "all",
+     "30d",
+     "60d",
+     "90d"
+    ],
+    "title": "Window",
+    "type": "string"
+   }
+  },
+  "title": "get_performance_summaryArguments",
+  "type": "object"
+ },
+ "name": "get_performance_summary",
+ "outputSchema": {
+  "additionalProperties": true,
+  "title": "get_performance_summaryDictOutput",
+  "type": "object"
+ }
+}

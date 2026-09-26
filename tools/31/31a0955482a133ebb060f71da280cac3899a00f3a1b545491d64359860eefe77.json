@@ -1,0 +1,245 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Generate AI media (image or animation)"
+ },
+ "description": "Generate an AI image or canvas-code-based animation directly into a clip.\n\n- kind=\"image\": text-to-image. Pass `prompt`. Optional: `animation_setting` (entry/exit \u2014 set it HERE, see below), `style_id` (from find type='image_gen_style_packs'), `reference_image_url` or `mcp_upload_id` for image-to-image grounding.\n- kind=\"animation\": canvas-code animation rendered from a prompt. Pass `prompt`. Optional: `voiceover_text` (drives timing), `base_component_id` (reuse a saved animation as the starting point), `reference_image_url` or `mcp_upload_id` for visual grounding.\n\nGeneration is asynchronous: the element is created immediately with a stable `element_id` and rendered in the background. Poll `get_clip(select:['busy'])` \u2014 an EMPTY `busy` means the render has landed. (This previously said to watch the `phantom` flag; `phantom` has never been a key get_clip returns, so there was nothing to poll.)\n\nSet presentation up front. `animation_setting` is applied to the element as it is created, so the image enters correctly the first time it renders. Doing it afterwards with `update_elements` means writing to the element that is still generating, which is the write most likely to be refused while the generation holds it.\n\n`group` is NOT accepted here, unlike `add_elements`: a generated element is built in the background, and the grouping would be overwritten when the render lands. Add it ungrouped, then call `update_elements` with `group` once it appears.\n\nTip: use this tool whenever the user asks for a \"generated\", \"AI\", or \"create me a\" visual. For uploaded photos / logos / icons / GIFs, use `add_elements` with `element_type='image'` and a `src` or `mcp_upload_id` instead.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "properties": {
+   "animation_setting": {
+    "description": "Image only. Entry/exit animation, same shape as add_elements' type_data.animation_setting. The design guide asks AI images to enter with `masked_reveal` or a slow fade, so set it here rather than following up with update_elements \u2014 that follow-up targets the element while it is still generating. Ignored for kind='animation', which animates through its generated code.",
+    "properties": {
+     "entry": {
+      "description": "Entry (appear) animation phase.",
+      "properties": {
+       "apply_to_unit": {
+        "description": "Granularity. 'typewriter' is restricted to 'char'.",
+        "enum": [
+         "char",
+         "word",
+         "line",
+         "box"
+        ],
+        "type": "string"
+       },
+       "direction": {
+        "description": "Slide direction for this phase. Ignored by fade/scale/pop/typewriter; pass 'none' when the preset has no direction.",
+        "enum": [
+         "left",
+         "right",
+         "top",
+         "bottom",
+         "center_all",
+         "center_vertically",
+         "center_horizontally",
+         "none"
+        ],
+        "type": "string"
+       },
+       "duration_per_unit_ms": {
+        "description": "NAME IS MISLEADING \u2014 this is the TOTAL duration of the phase in ms (NOT per unit). The renderer splits it across all N units with ~50% overlap. For a perceptible per-unit rhythm scale UP with the unit count (e.g. typewriter on N chars \u2248 N \u00d7 100\u2013200 ms). For applyToUnit='box' it's just the phase duration. Omit it and you get 400ms, the same default the editor creates with.",
+        "minimum": 0,
+        "type": "number"
+       },
+       "preset": {
+        "description": "Preset for this phase. 'typewriter' is char-only and has no direction.",
+        "enum": [
+         "slide",
+         "fade",
+         "pop",
+         "scale",
+         "masked_reveal",
+         "typewriter",
+         "none"
+        ],
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "exit": {
+      "description": "Exit (disappear) animation phase.",
+      "properties": {
+       "apply_to_unit": {
+        "description": "Granularity. 'typewriter' is restricted to 'char'.",
+        "enum": [
+         "char",
+         "word",
+         "line",
+         "box"
+        ],
+        "type": "string"
+       },
+       "direction": {
+        "description": "Slide direction for this phase. Ignored by fade/scale/pop/typewriter; pass 'none' when the preset has no direction.",
+        "enum": [
+         "left",
+         "right",
+         "top",
+         "bottom",
+         "center_all",
+         "center_vertically",
+         "center_horizontally",
+         "none"
+        ],
+        "type": "string"
+       },
+       "duration_per_unit_ms": {
+        "description": "NAME IS MISLEADING \u2014 this is the TOTAL duration of the phase in ms (NOT per unit). The renderer splits it across all N units with ~50% overlap. For a perceptible per-unit rhythm scale UP with the unit count (e.g. typewriter on N chars \u2248 N \u00d7 100\u2013200 ms). For applyToUnit='box' it's just the phase duration. Omit it and you get 400ms, the same default the editor creates with.",
+        "minimum": 0,
+        "type": "number"
+       },
+       "preset": {
+        "description": "Preset for this phase. 'typewriter' is char-only and has no direction.",
+        "enum": [
+         "slide",
+         "fade",
+         "pop",
+         "scale",
+         "masked_reveal",
+         "typewriter",
+         "none"
+        ],
+        "type": "string"
+       }
+      },
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "aspect_ratio": {
+    "description": "Image only. Overrides the ratio inferred from width/height. Leave it off and the box decides, which is usually what you want \u2014 set it when the box is a placeholder and you know the shape you need. Still clamped to what the model accepts: gpt-image-1/1.5 only do 1:1, 4:3 and 3:4; the gpt-image-2.5 pair adds 16:9 and 9:16; gpt-image-2 has no 3:2 or 2:3, so those become 4:3 and 3:4. The response does not report the ratio used.",
+    "enum": [
+     "1:1",
+     "4:3",
+     "3:4",
+     "16:9",
+     "9:16",
+     "3:2",
+     "2:3"
+    ],
+    "type": "string"
+   },
+   "background": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "enum": [
+       "0",
+       "1",
+       "true",
+       "false",
+       "yes",
+       "no"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "Image only, and only honoured by `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gpt-image-1` and `gpt-image-1.5` \u2014 every other model is always opaque and ignores this. Pass `false` for a cut-out with no background: icons, logos, stickers, anything meant to sit ON the composition rather than behind it. You MUST set `model` to one of those four in the same call; `gpt-image-2.5-flare` is the one to default to, since the older pair cannot frame wide. Asking for transparency in the PROMPT instead does not work \u2014 the model paints a grey-and-white checkerboard as real pixels."
+   },
+   "base_component_id": {
+    "description": "Animation only. Reuse a saved animation component as the starting point (from find(type='element_components')). To re-skin its tunable parameters, set parameter_values via update_elements after it renders.",
+    "type": "string"
+   },
+   "clip_id": {
+    "description": "Clip ID to place the generated element into.",
+    "type": "string"
+   },
+   "end_time": {
+    "description": "Disappear at (seconds).",
+    "minimum": 0,
+    "type": "number"
+   },
+   "height": {
+    "description": "Height in pixels.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "kind": {
+    "description": "'image' = AI text-to-image; 'animation' = canvas-code-based motion graphic.",
+    "enum": [
+     "image",
+     "animation"
+    ],
+    "type": "string"
+   },
+   "mcp_upload_id": {
+    "description": "mcp_upload_id from the upload flow. Resolved server-side to a presigned URL before generation.",
+    "type": "string"
+   },
+   "model": {
+    "description": "Image only. Which image model renders it. Default `gemini-3-pro-image-preview` (Nano Banana Pro), a strong general choice \u2014 leave it off unless you want one of the specifics below. `gemini-3.1-flash-image-preview` (Nano Banana 2) and `gemini-2.5-flash-image` are faster and cheaper. `gpt-image-2.5-flare` is OpenAI's fast one, `gpt-image-2.5-sunburst` its most precise editor, and `gpt-image-2` is the one to reach for when the image must carry legible text or follow several reference images. `gpt-image-1` / `gpt-image-1.5` are the older pair and only accept square-ish framing \u2014 a wide box is snapped to 4:3 rather than honoured, so do not pick them for a banner. An unlisted value is rejected here rather than silently swapped for the default, which is what the backend does with one.",
+    "enum": [
+     "gemini-3-pro-image-preview",
+     "gemini-3.1-flash-image-preview",
+     "gemini-2.5-flash-image",
+     "gpt-image-2.5-flare",
+     "gpt-image-2.5-sunburst",
+     "gpt-image-2",
+     "gpt-image-1.5",
+     "gpt-image-1"
+    ],
+    "type": "string"
+   },
+   "project_id": {
+    "description": "Project ID.",
+    "type": "string"
+   },
+   "prompt": {
+    "description": "Generation prompt. For animations, be SPECIFIC: name the UI elements, interaction sequence, timing feel, and visual style. Vague prompts produce bad output.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "reference_image_url": {
+    "description": "Public URL of a reference image. Mutually exclusive with mcp_upload_id.",
+    "type": "string"
+   },
+   "start_time": {
+    "description": "Appear at (seconds).",
+    "minimum": 0,
+    "type": "number"
+   },
+   "style_id": {
+    "description": "Image only. Style preset ID from find(type='image_gen_style_packs'). See resource clueso://docs/generation-styles.",
+    "type": "string"
+   },
+   "voiceover_text": {
+    "description": "Animation only. Paces the motion to the spoken script \u2014 and as a side effect sets this clip's voiceover text and triggers speech generation for the clip.",
+    "type": "string"
+   },
+   "width": {
+    "description": "Width in pixels.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "x": {
+    "description": "Top-left X in canvas pixels.",
+    "type": "number"
+   },
+   "y": {
+    "description": "Top-left Y in canvas pixels.",
+    "type": "number"
+   }
+  },
+  "required": [
+   "kind",
+   "project_id",
+   "clip_id",
+   "prompt",
+   "x",
+   "y",
+   "width",
+   "height"
+  ],
+  "type": "object"
+ },
+ "name": "generate_media",
+ "title": "Generate AI media (image or animation)"
+}

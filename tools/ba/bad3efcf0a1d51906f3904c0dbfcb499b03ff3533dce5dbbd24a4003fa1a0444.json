@@ -1,0 +1,583 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "ADR 1.1.3.6 Exemption Calculator"
+ },
+ "description": "Calculate ADR 1.1.3.6 \"small load\" exemption points for a dangerous-goods load. Each substance's transport category (0-4) sets a points multiplier (category 1 x50, 2 x3, 3 x1, 4 x0; the nine ADR 1.1.3.6.3 note-a entries UN 0081/0082/0084/0241/0331/0332/0482/1005/1017 are x20 with a 50 kg per-transport-unit cap); points = quantity x multiplier, and a load totalling 1,000 points or less qualifies for reduced ADR requirements. Transport category 0 substances can NEVER use this exemption \u2014 has_category_zero flags them.\n\nProvide un_number + quantity for a single substance, or items[] for a mixed load (items takes precedence if both are given). Quantities are in kg or litres per the substance's ADR unit.\n\nMulti-variant UNs: a UN number with more than one ADR Table A row (packing group / concentration variant \u2014 e.g. UN 1789 PG II vs PG III have different transport categories) needs packing_group (I|II|III) or variant_index (from adr_lookup) to pin one row. A packing_group that still leaves several rows is enough when those rows agree on class, transport category, scope and the 1.1.3.6.3 counted dimension (UN 1790 PG I: two concentration bands, both category 1) \u2014 the verdict is returned with items[].equivalent_variants + variant_note naming the rows it holds for; only when the rows DISAGREE (UN 2215 PG III: MOLTEN is category 0, the solid category 3) does it still ask for variant_index, and candidates[] then lists only that packing group's rows. With no disambiguator at all: a single-line call, or a load where EVERY line is ambiguous, returns blocking_errors[AMBIGUOUS_UN_VARIANT] + human_review_required + candidates[] (each candidate's item_index, un_number, variant_index, packing_group, proper_shipping_name, transport_category, multiplier) and NO verdict; a MIXED load withholds only the ambiguous line (items[].withheld true, points null, row fields null) while every other line keeps its points; total_points is null (1.1.3.6.4 sums every line, one term is unknown) and exempt is null UNLESS the resolved lines alone already disqualify the load \u2014 a CARRIAGE PROHIBITED entry, a category 0 entry, a per-substance maximum exceeded, or a partial sum already over 1,000 \u2014 in which case exempt is false with the ladder message (and carriage_prohibited true where that is the reason), because no packing group can undo those. warnings state the resolved lines' partial sum, candidates[] carry expected_unit (the 1.1.3.6.3 counted dimension \u2014 the only difference for UN 3375 PG II, liquid in L vs solid in kg), and the envelope carries human_review_required + candidates[] plus one AMBIGUOUS_UN_VARIANT warning per withheld line. Never a silently guessed row. Single-row UNs are unchanged.\n\nScope verdicts: Table A rows listed \"NOT SUBJECT TO ADR\" or \"CARRIAGE PROHIBITED\" never enter the points math. An all-not-subject load (e.g. UN 1845 dry ice) returns not_subject_to_adr true with a dedicated message (\"Not subject to ADR (road). Section 5.5.3 applies: ...\") and, for dry ice, conditions[] quoting the ADR 2025 section 5.5.3 requirements verbatim (ventilation, package marking, warning mark, documentation, training). A load containing a CARRIAGE PROHIBITED entry returns exempt false with carriage_prohibited true. In a mixed load, not-subject items are excluded from the points and the exclusion is stated in warnings.\n\nBehavior: deterministic points arithmetic over ADR 2025 reference data; a UN that cannot be found returns blocking_errors (NOT_FOUND); exempt is the overall verdict. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: items[] (each with packing_group, variant_index, transport_category, multiplier, points, quantity_unit/quantity_basis/expected_unit when a unit or basis was declared, scope flags where applicable, withheld + ambiguity_reason on an unpinned multi-variant line, and equivalent_variants + variant_note when a packing group resolved by equivalence), total_points (NULL when no verdict was reached), threshold (1000), exempt (NULL when no verdict was reached \u2014 never false as a stand-in), has_category_zero, has_quantity_exceedance, warnings, message, human_review_required + candidates[] when any line is withheld, and \u2014 on scope verdicts \u2014 not_subject_to_adr/conditions_ref/conditions[]/carriage_prohibited under result \u2014 or, when every line is ambiguous, human_review_required + candidates[] with blocking_errors, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: a deterministic calculation over reference data, not legal advice \u2014 even exempt loads keep core duties (packaging, marking, documentation), and mixed-packing rules still apply; verify against the current UNECE ADR text.\n\nRelated: adr_lookup (per-substance data incl. transport category + variant_index), adr_lq_eq_check (the LQ/EQ relief routes instead of 1.1.3.6).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "basis": {
+    "description": "OPTIONAL. ADR 1.1.3.6.3 counts the dangerous goods themselves, never the packaging, so a quantity declared 'gross' returns no points in ANY unit \u2014 send the net figure instead.",
+    "enum": [
+     "net",
+     "gross"
+    ],
+    "type": "string"
+   },
+   "items": {
+    "description": "Mixed-load items (use INSTEAD of un_number/quantity).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "basis": {
+       "description": "OPTIONAL. ADR 1.1.3.6.3 counts the dangerous goods themselves, never the packaging, so a quantity declared 'gross' returns no points in ANY unit \u2014 send the net figure instead.",
+       "enum": [
+        "net",
+        "gross"
+       ],
+       "type": "string"
+      },
+      "packing_group": {
+       "description": "Packing group for a multi-variant UN.",
+       "enum": [
+        "I",
+        "II",
+        "III"
+       ],
+       "type": "string"
+      },
+      "quantity": {
+       "description": "Quantity in kg or litres per the substance's ADR unit.",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      },
+      "un_number": {
+       "description": "UN number \u2014 4 digits, optionally \"UN\"-prefixed. Example: \"1263\".",
+       "pattern": "^(UN)?\\d{4}$",
+       "type": "string"
+      },
+      "unit": {
+       "description": "OPTIONAL. The dimension `quantity` is stated in. Omit it and the number is taken as already on the ADR 1.1.3.6.3 basis (unchanged behaviour). Supply it and it is CHECKED against the dimension 1.1.3.6.3 counts for that Table A row \u2014 litres for liquids and for compressed or adsorbed gases, kilograms for solids, liquefied/refrigerated/dissolved gases and articles. A mismatch returns total_points null, exempt null and items[].basis_mismatch true, naming the dimension the entry is counted in.",
+       "enum": [
+        "L",
+        "kg"
+       ],
+       "type": "string"
+      },
+      "variant_index": {
+       "description": "ADR Table A variant index for a multi-variant UN.",
+       "minimum": 0,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "un_number",
+      "quantity"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "packing_group": {
+    "description": "Packing group (I, II or III) \u2014 only needed to disambiguate a UN with more than one ADR Table A row (e.g. UN 1789). Ignored for single-row UNs. Single-substance form only.",
+    "enum": [
+     "I",
+     "II",
+     "III"
+    ],
+    "type": "string"
+   },
+   "quantity": {
+    "description": "Quantity for the single-substance check, in kg or litres per the substance's ADR unit. Example: 100.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "un_number": {
+    "description": "UN number for a single-substance check \u2014 4 digits, optionally \"UN\"-prefixed. Example: \"1203\".",
+    "pattern": "^(UN)?\\d{4}$",
+    "type": "string"
+   },
+   "unit": {
+    "description": "OPTIONAL. The dimension `quantity` is stated in. Omit it and the number is taken as already on the ADR 1.1.3.6.3 basis (unchanged behaviour). Supply it and it is CHECKED against the dimension 1.1.3.6.3 counts for that Table A row \u2014 litres for liquids and for compressed or adsorbed gases, kilograms for solids, liquefied/refrigerated/dissolved gases and articles. A mismatch returns total_points null, exempt null and items[].basis_mismatch true, naming the dimension the entry is counted in.",
+    "enum": [
+     "L",
+     "kg"
+    ],
+    "type": "string"
+   },
+   "variant_index": {
+    "description": "ADR Table A variant index (as returned by adr_lookup) \u2014 pins one row when a UN has several variants that share a packing group (concentration bands). Ignored for single-row UNs. Single-substance form only.",
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "adr_exemption_calculator",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "candidates": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": true,
+           "properties": {
+            "item_index": {
+             "type": [
+              "number",
+              "null"
+             ]
+            },
+            "multiplier": {
+             "type": [
+              "number",
+              "null"
+             ]
+            },
+            "packing_group": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "proper_shipping_name": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "transport_category": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "un_number": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "variant_index": {
+             "type": [
+              "number",
+              "null"
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "carriage_prohibited": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "conditions": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": true,
+           "properties": {
+            "heading": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "note": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "ref": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "requirement": {
+             "type": [
+              "string",
+              "null"
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "conditions_ref": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "exempt": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "has_category_zero": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "has_quantity_exceedance": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "human_review_required": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "items": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": true,
+           "properties": {
+            "carriage_prohibited": {
+             "type": [
+              "boolean",
+              "null"
+             ]
+            },
+            "class": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "conditions_ref": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "multiplier": {
+             "type": [
+              "number",
+              "null"
+             ]
+            },
+            "not_subject_to_adr": {
+             "type": [
+              "boolean",
+              "null"
+             ]
+            },
+            "packing_group": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "points": {
+             "type": [
+              "number",
+              "null"
+             ]
+            },
+            "proper_shipping_name": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "quantity": {
+             "type": [
+              "number",
+              "null"
+             ]
+            },
+            "transport_category": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "un_number": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "variant_index": {
+             "type": [
+              "number",
+              "null"
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "message": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "not_subject_to_adr": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "threshold": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "total_points": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "warnings": {
+        "anyOf": [
+         {
+          "items": {},
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

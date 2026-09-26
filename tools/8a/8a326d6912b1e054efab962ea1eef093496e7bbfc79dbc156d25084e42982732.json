@@ -1,0 +1,34 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Panorama sant\u00e9 d'une commune fran\u00e7aise en 1 appel (V0.9). Agr\u00e8ge en parall\u00e8le : population (INSEE Melodi), densit\u00e9s m\u00e9decins + infirmiers + pharmaciens avec comparaison nationale (m\u00e9thodo DREES), nombre d'\u00e9tablissements FINESS par famille (default [\"labo\",\"pharmacie\",\"ehpad\",\"mco\",\"msp_cpts\"]), et un bloc DEMANDE (V0.22.0 \u2014 profil d\u00e9mographique de la commune agr\u00e9g\u00e9 depuis ses IRIS : \u00e2ge, CSP, familles, revenu pond\u00e9r\u00e9, \u00e0 CROISER avec l'OFFRE ci-dessus pour l'aide \u00e0 l'implantation ; `demande: null` si commune hors couverture IRIS (DOM non ing\u00e9r\u00e9) \u2014 pour le d\u00e9tail au quartier ou un bassin par rayon, utiliser `profil_iris`).\n\nRemplace 7-10 appels MCP individuels par 1 seul. Ne renvoie AUCUNE interpr\u00e9tation m\u00e9tier (pas de qualification automatique 'd\u00e9sert m\u00e9dical') \u2014 le caller LLM applique sa grille.\n\nV0.19.0 : accepte `nom_commune` (string) comme alternative \u00e0 `code_insee`. `departement` (V0.19) = hint resolver UNIQUEMENT (panorama ne calcule pas par dept ; un `departement` seul l\u00e8ve une erreur explicite).\n\n**Granularit\u00e9 mixte** : les densit\u00e9s professionnels et la population sont calcul\u00e9es au niveau **commune** ; le d\u00e9compte FINESS est agr\u00e9g\u00e9 au niveau **d\u00e9partement** d\u00e9riv\u00e9 du code INSEE (limitation V0.9 \u2014 pas de RPC count_finess_by_commune encore). Le champ `niveauEtablissements` du r\u00e9sultat indique `\"departement\"` (succ\u00e8s), `\"indisponible\"` (dept ind\u00e9rivable, ex code DOM tronqu\u00e9) \u2014 utiliser cette information pour ne pas confondre ratios commune et dept.\n\nParis/Marseille/Lyon NON support\u00e9 : le panorama par commune d\u00e9pend de la densit\u00e9 par commune, indisponible pour ces villes (INSEE n'expose la population qu'\u00e0 la commune enti\u00e8re, les praticiens RPPS aux arrondissements). Un code PLM (commune-m\u00e8re 75056 ou arrondissement) l\u00e8ve une RangeError. Pour ces villes, interroger les tools individuels au niveau `code_dept` (75/69/13).\n\nAlias accept\u00e9s : `codeInsee`/`insee`/`code` \u2192 `code_insee`.\n\nSources : RPPS / Annuaire Sant\u00e9 ANS (mensuel), FINESS DREES (bimensuel), INSEE Melodi (PMUN 2023).",
+ "inputSchema": {
+  "properties": {
+   "code_insee": {
+    "description": "Code INSEE de la commune 5 caract\u00e8res. Ex: \"59009\" Villeneuve-d'Ascq, \"33063\" Bordeaux, \"2A004\" Ajaccio. Paris/Lyon/Marseille NON support\u00e9 (voir description). XOR avec `nom_commune`.",
+    "type": "string"
+   },
+   "departement": {
+    "description": "Code d\u00e9partement INSEE (V0.19, hint resolver UNIQUEMENT). \u00c0 utiliser EN COMBINAISON avec `nom_commune` pour d\u00e9sambiguer les homonymes. Seul, l\u00e8ve une erreur (panorama = calcul commune uniquement, utiliser `code_insee` ou `nom_commune`).",
+    "type": "string"
+   },
+   "finess_familles": {
+    "description": "Familles FINESS \u00e0 inclure dans le d\u00e9compte \u00e9tablissements. Default [\"labo\",\"pharmacie\",\"ehpad\",\"mco\",\"msp_cpts\"]. Passer [] pour omettre le d\u00e9compte FINESS (renvoie uniquement population + densit\u00e9s PS).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "nom_commune": {
+    "description": "Nom officiel de commune (alternative \u00e0 `code_insee`, V0.19). Ex: \"Lille\", \"Saint-\u00c9tienne\". Combinable avec `departement` comme hint de d\u00e9sambigu\u00efsation pour homonymes (ex \"Saint-Martin\" + dept \"65\"). Abr\u00e9viations type \"St-Martin\" non reconnues.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "panorama_sante_territoire"
+}

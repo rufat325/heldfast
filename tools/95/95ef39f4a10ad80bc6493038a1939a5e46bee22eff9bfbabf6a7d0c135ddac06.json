@@ -1,0 +1,59 @@
+{
+ "description": "Sets a property or calls a method on a node in the running game. Needs the game running with the runtime addon. The answer carries elapsed_usec, how long the call or the write took inside the game, measured around it there: the round trip to the game is a second or more, so timing from outside measures that instead. A call that takes longer than timeoutMs is not cancelled: the answer is pending: true with a requestId, the call goes on and does everything it was asked, and op result with that requestId collects its reply once it comes. Operations: set (needs nodePath, property, value): set a property, on a node or on an object it holds; call (needs nodePath, method): call a method, on a node or on an object it holds, and return its result; result (needs requestId): collect the reply to a set or call whose wait ran out, by the requestId it answered with.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "args": {
+    "description": "call: the arguments, fitted to the method's parameter types. A parameter typed as an object takes a path naming one the game holds and is handed that instance: a colon path read from nodePath, \"_game:run:wares:3\", or one starting at a node, \"/root/Main/Hud\" or \"/root/Main:_game:run\". A path that reaches no object, or an object of another class than the parameter declares, is refused. A parameter typed as a list or map, such as Array[int] or Array[Gear], is built from a JSON list or object element by element, objects named by their paths.",
+    "type": "array"
+   },
+   "method": {
+    "description": "call: which one to call. Colons call through what a node holds, \"_game:run:advance\", the same way a property is written through them, a list or a map is stepped into by index or key, \"_game:run:roster:0:retire\", and a step written as a call walks through what a method taking no arguments returned, \"get_viewport():gui_get_focus_owner\".",
+    "type": "string"
+   },
+   "nodePath": {
+    "description": "Absolute node path, such as \"/root/Main/Player\".",
+    "type": "string"
+   },
+   "op": {
+    "description": "What to do.",
+    "enum": [
+     "set",
+     "call",
+     "result"
+    ],
+    "type": "string"
+   },
+   "pid": {
+    "description": "Which game, when several are running from one project, such as a bench and its workers: its process id, as editor_status lists under runtimes. Without it the game this server started or plays is the one asked when it is among them, and the answer says so under answeredBy; with one game per project it is not needed at all.",
+    "type": "number"
+   },
+   "projectPath": {
+    "description": "Which game, when more than one is running: the project directory it was started from. The pick without it, in order: the game this server started or is playing when it is among those running, named under answeredBy where there was a choice; else the only game there is; else a refusal naming every game and which argument tells them apart, pid when they are all one project and projectPath when they are not. Not needed with one game, nor for a call to this server's own.",
+    "type": "string"
+   },
+   "property": {
+    "description": "set: which one to write. Colons write through what a node holds, \"_game:run:day\", and a number or a key steps into a list or a map on the way, \"_game:run:roster:0:name\", a negative number counting from the end, and a step written as a call, \"get_viewport():gui_embed_subwindows\", walks through what a method taking no arguments returned. The answer reads back off the same holder, and a write that leaves the property as it was, because the engine would not take it, is refused and says what the property still holds.",
+    "type": "string"
+   },
+   "requestId": {
+    "description": "result: the requestId a pending answer gave.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "timeoutMs": {
+    "description": "set, call: how long to wait for the answer before answering pending with a requestId, which does not stop the call. Default 10000, or GDHARNESS_RUNTIME_TIMEOUT_MS. Give a longer one for a call known to take a while, such as one that plays many turns in one go.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "value": {
+    "description": "set: the value, fitted to the property's type. \"\" writes an empty string. A property typed as or holding an object takes a path naming one the game holds, the way call's args do, and holds that instance. A typed list or map, such as Array[int] or Dictionary[String, int], takes a JSON list or object with each element fitted to its element type, and an element that cannot become one is refused by its index or key."
+   }
+  },
+  "required": [
+   "op"
+  ],
+  "type": "object"
+ },
+ "name": "runtime_invoke"
+}

@@ -1,0 +1,272 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Download a Eurostat dataset in bulk through the SDMX 2.1 TSV endpoint and stage every observation as a SQL table on the dataframe canvas \u2014 the route to a whole dataset, where eurostat_query_dataset is the route to a slice of one. The TSV wire format is roughly half the bytes of the JSON-stat body eurostat_query_dataset reads, so it reaches datasets that would otherwise time out, and it is expanded here into one row per observation. Filters take the same dimension-code map eurostat_query_dataset uses and are applied server-side by Eurostat; call eurostat_get_dataset_info first for the dimension codes and eurostat_get_dimension_values for their values. Narrow with since_period/until_period rather than asking for the most recent N periods \u2014 the TSV layout keeps a column for every period whichever is requested, so a period range is what actually shrinks the response. Transfers are bounded by a byte budget enforced while streaming: when it is spent the download stops and budgetExceeded is set, leaving a prefix of the dataset rather than an error. Only preview_limit rows come back inline. When a table is staged, call eurostat_dataframe_describe first to confirm its columns, then eurostat_dataframe_query; without a canvas, rows past the preview are not retained.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Reuse an existing dataframe canvas so this download lands beside earlier results and can be joined against them. Pass the canvasId a previous eurostat_download_dataset or eurostat_query_dataset response returned; omit to start a fresh canvas. Ignored on deployments without a dataframe canvas. A download that carries no observations fails as no_results and leaves the canvas untouched.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   },
+   "dataset_code": {
+    "description": "Dataset code (e.g., \"nama_10_gdp\"). Required. A DS-* code \u2014 Comext detailed trade or PRODCOM, in any case \u2014 is served by the Comext host, which refuses an unfiltered download of its large collections as extraction_too_big: filter it, including freq on the trade flows, which mix annual and monthly series.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "filters": {
+    "additionalProperties": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "default": {},
+    "description": "Dimension filters as a map of dimension code \u2192 array of accepted values, applied by Eurostat before the body is sent. Example: {\"unit\": [\"CP_MEUR\"], \"na_item\": [\"B1G\"], \"geo\": [\"DE\", \"FR\"]}. Omit a dimension or pass an empty array to accept every value for it. Dimension codes match in any case (\"GEO\" is geo). Do not put \"time\" here \u2014 use since_period/until_period. Naming a dimension the dataset does not have is rejected with the dataset's dimension list rather than silently ignored.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "preview_limit": {
+    "default": 50,
+    "description": "How many observations to echo inline, from the start of the download. Caps at 500. The full download is on the canvas table when one was staged; this is orientation, not the result set.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "since_period": {
+    "description": "Start of the period range, inclusive, sent as startPeriod. Accepted forms: YYYY, YYYY-MM, YYYY-MM-DD, YYYY-Qn (1\u20134), YYYY-Sn (1\u20132), YYYY-Tn (1\u20133), YYYY-Mnn (01\u201312), YYYY-Wnn (a week the year has, up to 53) or YYYY-Dnnn (a day the year has, up to 366) (e.g., \"2020\", \"2023-Q1\", \"2024-01\"). Extra leading zeros after the letter are dropped (\"2020-W001\" is sent as \"2020-W01\"), a day of the year is sent as three digits (\"2026-D1\" as \"2026-D001\"), YYYY-A1 is sent as YYYY, and a period of another frequency is mapped onto the dataset's own. A malformed or non-existent period (e.g., \"2020-13\") is rejected as invalid_period. The most effective way to shrink a bulk response: it removes period columns from the TSV rather than blanking their cells.",
+    "type": "string"
+   },
+   "until_period": {
+    "description": "End of the period range, inclusive (e.g., \"2024\"), sent as endPeriod, in the same forms as since_period. Omit for data through the latest available period. The range must hold at least one day: a since_period that starts after until_period ends is rejected as invalid_period, while pairs of different frequencies are fine (\"2020-06\" to \"2020\").",
+    "type": "string"
+   }
+  },
+  "required": [
+   "dataset_code"
+  ],
+  "type": "object"
+ },
+ "name": "eurostat_download_dataset",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "datasetCode",
+     "dimensionsUsed",
+     "rowCount",
+     "missingCount",
+     "periodRange",
+     "bytesRead",
+     "compressed",
+     "budgetExceeded",
+     "observations",
+     "totalCount",
+     "appliedQuery"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "appliedQuery": {
+    "additionalProperties": false,
+    "description": "The bulk request as the server built it.",
+    "properties": {
+     "filters": {
+      "additionalProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "description": "Dimension filters sent to Eurostat. Empty arrays are dropped.",
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "sincePeriod": {
+      "description": "startPeriod applied, if any.",
+      "type": "string"
+     },
+     "untilPeriod": {
+      "description": "endPeriod applied, if any.",
+      "type": "string"
+     },
+     "url": {
+      "description": "The SDMX request URL, so the download can be reproduced.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "filters",
+     "url"
+    ],
+    "type": "object"
+   },
+   "budgetExceeded": {
+    "description": "True when the byte budget stopped the transfer before the dataset ended, making the rows a prefix rather than the whole thing. Narrow with filters or a period range, or raise EUROSTAT_BULK_MAX_BYTES.",
+    "type": "boolean"
+   },
+   "bytesRead": {
+    "description": "Decoded TSV bytes read from Eurostat \u2014 after gzip decompression when the body arrived compressed, so it measures the payload rather than the wire.",
+    "type": "number"
+   },
+   "canvasId": {
+    "description": "Dataframe canvas holding the staged download. Pass to eurostat_dataframe_describe, eurostat_dataframe_query, or a later staging call. Omitted when nothing was staged.",
+    "type": "string"
+   },
+   "compressed": {
+    "description": "True when Eurostat sent the body gzip-compressed. It does so without a Content-Encoding header on large responses, so this reports what the stream actually carried.",
+    "type": "boolean"
+   },
+   "datasetCode": {
+    "description": "Dataset code as provided.",
+    "type": "string"
+   },
+   "dimensionsUsed": {
+    "description": "Dimension codes carried by the downloaded rows, in the order Eurostat keys them (e.g., [\"freq\", \"unit\", \"na_item\", \"geo\"]). Read from the TSV header, so it reflects the response rather than metadata. The period lives in the separate \"time\" column.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `not_found`: The dataset code is not available for dissemination (HTTP 404, SDMX faultcode 100). `invalid_dimension`: A filter names a dimension the dataset does not have, or a value or period range Eurostat rejects (SDMX faultcode 150). `filter_arity`: Eurostat rejected the positional dimension key because it carried the wrong number of positions (SDMX faultcode 140, INVALID_QUERY_NB_FILTERS), meaning the dataset structure has changed since the metadata call. `invalid_period`: since_period or until_period is not a period literal, or names a month, quarter, semester, trimester, week or day that does not exist, or since_period starts after until_period ends. Checked before any request \u2014 the bulk endpoint would otherwise roll an out-of-range period into a neighbouring one, and answer an inverted range with the whole series \u2014 and SDMX faultcode 140 TIME_PERIOD_FILTER_SPEC_INVALID maps here too. `async_queued`: Eurostat answered HTTP 200 with a SOAP syncResponse queue ticket (status SUBMITTED) instead of data, because the extraction was too costly to serve synchronously. `no_results`: The download completed but carried no populated observation cells. Nothing is staged, and no canvas is created or touched. `extraction_too_big`: Eurostat refused the extraction as too large (SDMX faultcode 413, HTTP 413): past its 5,000,000-row extraction limit, or an unfiltered download of a large DS-* Comext collection, which Eurostat serves only filtered. Covers every dataset, on either host. `upstream_fault`: The SDMX endpoint returned a fault this server does not model, or a body that is not a TSV table. `canvas_not_found`: A canvas_id was supplied for staging but is unknown or its lifetime has elapsed. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "not_found",
+         "invalid_dimension",
+         "filter_arity",
+         "invalid_period",
+         "async_queued",
+         "no_results",
+         "extraction_too_big",
+         "upstream_fault",
+         "canvas_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "missingCount": {
+    "description": "Downloaded observations carrying no numeric value (obs_value is null).",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance on every download: the staged table with the required eurostat_dataframe_describe then eurostat_dataframe_query sequence (or, without a canvas, what was returned inline and what was discarded), preceded by byte-budget disclosure when the budget stopped the transfer and by the inline-preview length when preview_limit returns fewer rows than were downloaded.",
+    "type": "string"
+   },
+   "observations": {
+    "description": "The first preview_limit observations of the download, in the order Eurostat streamed them. A prefix of the staged table, not a sample.",
+    "items": {
+     "additionalProperties": {
+      "type": [
+       "string",
+       "number",
+       "null"
+      ]
+     },
+     "description": "One observation as a flat row: one column per dimension holding its code, \"time\" for the period, then obs_value, obs_flag, obs_flag_label, conf_status, conf_status_label. A label column is null when Eurostat publishes no label for that code. Rows of a DS-* dataset also carry obs_value_text after obs_value: a value Eurostat published as text, such as a PRODCOM quantity unit (\"KG\"), kept verbatim with obs_value null; a PRODCOM \":C\" arrives as conf_status \"C\" instead.",
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "periodRange": {
+    "additionalProperties": false,
+    "description": "Period coverage of the rows actually downloaded. Narrower than the dataset when budgetExceeded is true or a period range was applied.",
+    "properties": {
+     "end": {
+      "description": "Latest period carrying an observation. Omitted when nothing was downloaded.",
+      "type": "string"
+     },
+     "start": {
+      "description": "Earliest period carrying an observation. Omitted when nothing was downloaded.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "rowCount": {
+    "description": "Observations expanded from the download \u2014 one per populated cell, counting those Eurostat reports as unavailable.",
+    "type": "number"
+   },
+   "stagedRowCount": {
+    "description": "Rows written to the canvas table. Matches rowCount. Omitted alongside tableName.",
+    "type": "number"
+   },
+   "tableName": {
+    "description": "Canvas table holding every downloaded observation. Call eurostat_dataframe_describe with canvasId first to confirm the table and columns, then eurostat_dataframe_query. Omitted when this deployment runs without a dataframe canvas, in which case only the inline preview survives the call.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Observations the download produced \u2014 equal to rowCount. The inline observations array holds only the first preview_limit of them; budgetExceeded, not this count, says whether the download is the whole dataset.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Download Eurostat Dataset"
+}

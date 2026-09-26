@@ -1,0 +1,114 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Set voiceover scripts"
+ },
+ "description": "Set voiceover text and/or trigger speech generation for any number of clips in a single call.\n\nEach entry chooses its own action:\n- \"set_text\"          \u2014 set transcript for a clip (clip_index + text)\n- \"generate_speech\"   \u2014 async TTS for a clip (returns immediately)\n- \"set_and_generate\"  \u2014 set text and kick off TTS in one entry (+ text)\n\nAddress a clip the same way as everywhere else: `clip_index`. Pass `clip_id` instead if you already have it \u2014 it survives clips being inserted or reordered mid-build \u2014 but you never need both; whichever you omit is looked up once for the whole call.\n\nEntries within one call are applied in order. Returns one result object per input entry. All text-set actions land in ONE save; the TTS for generate/set_and_generate runs async per clip after.\n\nIMPORTANT \u2014 generating speech RESCALES the whole clip, it does not clamp it: when audio is generated (generate_speech / set_and_generate), the clip's duration is reset to the spoken audio length, and then EVERY element on that clip is retimed proportionally by (new duration \u00f7 old duration). start_time, end_time and every keyframe timestamp are multiplied by that factor. Nothing is merely truncated \u2014 on a 6s clip that becomes 1.02s, an animation you placed at [0, 1.6] ends up at [0, 0.27]. Zoom elements whose window falls under the minimum after scaling are DROPPED entirely. Generation is async, so this lands AFTER this call has already returned success. So: generate speech BEFORE placing time-sensitive elements, or size them against estimate_duration first \u2014 then re-read the clip and check what your elements actually became, not just the clip duration.\n\nConcurrency: parallel-safe (conflict domain: a clip's voiceover). The server merges each clip's voiceover under a per-guide lock and preserves that clip's elements, so you can fan voiceover work out across subagents by clip \u2014 and it's safe to run alongside element edits. Two concurrent edits to the SAME clip's voiceover do not last-write-win \u2014 both claim that clip's voiceover path, so the later one is REJECTED and nothing is written; re-read and re-apply. Do NOT run concurrently with whole-clip/whole-project mutations on the same guide (update_clips on that clip, structural clip ops, add_audio, update_project).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "entries": {
+    "description": "Voiceover entries \u2014 at least one.",
+    "items": {
+     "oneOf": [
+      {
+       "properties": {
+        "action": {
+         "const": "set_text",
+         "description": "Write the voiceover transcript onto the clip without generating audio.",
+         "type": "string"
+        },
+        "clip_index": {
+         "description": "Zero-based clip index",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Voiceover transcript",
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "action",
+        "clip_index",
+        "text"
+       ],
+       "type": "object"
+      },
+      {
+       "properties": {
+        "action": {
+         "const": "generate_speech",
+         "description": "Generate speech audio from the transcript already set on the clip.",
+         "type": "string"
+        },
+        "clip_id": {
+         "description": "Clip ID. Give this or clip_index.",
+         "minLength": 1,
+         "type": "string"
+        },
+        "clip_index": {
+         "description": "Zero-based clip index. Give this or clip_id.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      },
+      {
+       "properties": {
+        "action": {
+         "const": "set_and_generate",
+         "description": "Write the transcript and generate its speech audio in one step.",
+         "type": "string"
+        },
+        "clip_id": {
+         "description": "Clip ID. Give this or clip_index.",
+         "minLength": 1,
+         "type": "string"
+        },
+        "clip_index": {
+         "description": "Zero-based clip index. Give this or clip_id.",
+         "maximum": 9007199254740991,
+         "minimum": 0,
+         "type": "integer"
+        },
+        "text": {
+         "description": "Voiceover transcript",
+         "minLength": 1,
+         "type": "string"
+        }
+       },
+       "required": [
+        "action",
+        "text"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "project_id": {
+    "description": "Project ID",
+    "type": "string"
+   }
+  },
+  "required": [
+   "project_id",
+   "entries"
+  ],
+  "type": "object"
+ },
+ "name": "voiceover_batch",
+ "title": "Set voiceover scripts"
+}

@@ -1,0 +1,182 @@
+{
+ "_meta": {
+  "openai/outputTemplate": "ui://widget/ad-result-3aaebd7196.html",
+  "openai/toolInvocation/invoked": "Video ready",
+  "openai/toolInvocation/invoking": "Rendering your video\u2026"
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Generate video"
+ },
+ "description": "Render a RAW video clip from your own prompt and return its served mp4 URL. For finished brand ADS prefer render_ad (it runs the Studio quality pipeline \u2014 composited text, clean speech, end card, music); use this for raw/experimental clips or precise manual control. ONE generation = one continuous clip up to the model\u2019s longest listed duration \u2014 the longest-clip model in the catalog today renders a full multi-beat spot of up to 30 SECONDS in ONE unbroken take with native synchronized audio, so never assume a generic 8\u201310s cap and never stitch something that fits one clip; durationSeconds must be one of the model\u2019s durations from hermoso_capabilities, which is the live list. TO GET A SPECIFIC MODEL, NAME IT in `model`: an unnamed render is routed by the server\u2019s own auto-pool, which is narrower than the catalog, so the longest-clip and highest-resolution models are reached by naming them. Renders take 1\u20133 min. refImage anchors the opening frame; ttsScript adds a voiceover. AUDIO IS NOT FREE AND NOT OPTIONAL BY DEFAULT: a clip delivered with no audio of its own gets a music bed composed and CHARGED on top of the render (see musicMood and audio) \u2014 on a cheap short draft the bed can cost as much as the clip. Pass refVideo (a clip URL) to EDIT an existing video instead \u2014 the omni engine transforms that clip per your prompt, inheriting its canvas + length (aspectRatio/durationSeconds are ignored for an edit). RAW MODEL ACCESS: by default a few small guards are appended (packaging/label safety with no reference image, a negative prompt where the model takes one, reference-binding lines) and hex colour codes become colour names; raw:true dispatches your prompt to the model BYTE-IDENTICAL \u2014 no rewriting, no appended guidance, no negative prompt, no brand references attached on your behalf. Credits, the durable delivery of the finished asset and the per-model validation are unchanged. Spends credits (Starter plan is video-blocked server-side).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "aspectRatio": {
+    "description": "default '9:16'",
+    "type": "string"
+   },
+   "audio": {
+    "description": "default true. false = render SILENT: no native model audio, no music bed, and no bed charge held or billed. This is the ONLY way to decline the automatic bed (see musicMood) \u2014 leave it alone for anything that should have sound, and do not combine it with ttsScript.",
+    "type": "boolean"
+   },
+   "cameraMove": {
+    "description": "A named camera move around the still in refImage, spelled exactly as the enum gives it: an orbit (a quarter turn, the default), orbiting left, a half turn or a full turntable, a rise, a crane up, a push in, a pull back, or a reveal. Only the camera-controls model renders one (minimax-h3-max-camera, listed with its moves in hermoso_capabilities): pass it with model omitted and that model is picked, or with that model named; any other named model is refused by name with nothing charged. Needs refImage.",
+    "enum": [
+     "orbit",
+     "orbit_left",
+     "orbit_half",
+     "orbit_full",
+     "rise",
+     "crane_up",
+     "push_in",
+     "pull_back",
+     "reveal"
+    ],
+    "type": "string"
+   },
+   "cameraTrajectory": {
+    "description": "Your own ordered camera path, 2 to 12 keyframes, for the camera-controls model only (same rule as cameraMove; overrides it). The first pose is held until its time and the last pose is held to the end. A value outside these bounds is refused by name, nothing charged.",
+    "items": {
+     "properties": {
+      "azimuth": {
+       "description": "horizontal angle around the subject in degrees (0 = where the still was taken; the sign turns the camera the other way; at most 32 full turns of total travel)",
+       "type": "number"
+      },
+      "distance": {
+       "description": "distance from the subject in scene units, 1 = the distance of the still; smaller is closer",
+       "exclusiveMinimum": 0,
+       "type": "number"
+      },
+      "elevation": {
+       "description": "vertical angle in degrees, -90 (below) to 90 (straight above)",
+       "maximum": 90,
+       "minimum": -90,
+       "type": "number"
+      },
+      "time": {
+       "description": "when this pose is reached, 0 = start of the clip, 1 = end",
+       "maximum": 1,
+       "minimum": 0,
+       "type": "number"
+      }
+     },
+     "required": [
+      "time",
+      "azimuth",
+      "elevation",
+      "distance"
+     ],
+     "type": "object"
+    },
+    "maxItems": 12,
+    "minItems": 2,
+    "type": "array"
+   },
+   "durationSeconds": {
+    "description": "length of THIS ONE clip in seconds \u2014 pick one of the CHOSEN model\u2019s listed durations from hermoso_capabilities (never a generic guess: the lists differ per model, from 4\u20138s on the short models up to 30s on the longest-clip one). This is a single continuous generation, so it CANNOT exceed that model\u2019s longest clip: a longer ask is REFUSED with nothing rendered and nothing charged (it is never quietly truncated). Past ~15s only the long-clip models qualify, and an unnamed render is routed by the narrower auto-pool \u2014 so NAME the model in `model` when you are asking for a long single take. For a spot longer than any one clip, use plan_ad with durationSeconds then render_ad, which stitches acts of at most one model clip each (on a 15s-clip model, 40s = 15+15+10).",
+    "type": "number"
+   },
+   "endImage": {
+    "description": "local path or URL of the LAST frame: the clip travels from refImage (required with it) to this image. Only models with endFrame true in hermoso_capabilities take it; any other named model is refused by name, nothing charged.",
+    "type": "string"
+   },
+   "extend": {
+    "description": "true = EXTEND refVideo: the same clip continues per your prompt for durationSeconds more (each model\u2019s extend.minSeconds..maxSeconds in hermoso_capabilities), delivered as ONE clip, source then continuation. Needs model named (a model with extend in hermoso_capabilities).",
+    "type": "boolean"
+   },
+   "interactionId": {
+    "description": "with extend:true on an Omni model: the interactionId returned by an earlier render on that model \u2014 continues it from its own stored context instead of re-uploading refVideo.",
+    "type": "string"
+   },
+   "loop": {
+    "description": "true = a seamless loop whose last frame flows back into its first. Only models with loop true in hermoso_capabilities; needs refImage and cannot be combined with endImage.",
+    "type": "boolean"
+   },
+   "model": {
+    "description": "video model id from hermoso_capabilities; a named model is never swapped without asking. Omit to let the router pick",
+    "type": "string"
+   },
+   "musicMood": {
+    "description": "WHICH mood the music bed is composed in (upbeat / calm / warm / epic / tense / playful / elegant / hype / chill / dramatic). It does NOT decide WHETHER there is one: a clip that comes back with no audio track \u2014 every model hermoso_capabilities lists as \"silent\", plus any audio model that returned mute \u2014 gets a bed composed and CHARGED automatically, at the flat per-track fee hermoso_capabilities reports as explainerMusicCredits, and omitting this field only means the mood defaults to \"warm\". Pass audio:false for a genuinely silent clip with no bed and no bed charge.",
+    "type": "string"
+   },
+   "prompt": {
+    "description": "the video prompt / shot description (for a refVideo edit, this is the transformation instruction)",
+    "type": "string"
+   },
+   "raw": {
+    "description": "RAW MODEL ACCESS: dispatch this prompt to the model BYTE-IDENTICAL \u2014 no appended packaging/label guidance, no negative prompt, no reference-binding lines, no hex-to-colour-name rewrite. Use it when you want the model itself rather than Hermoso's render craft. Two vendor-required fixes still apply: extra @ImageN tokens are dropped and an over-long prompt is trimmed at a sentence. Billing, durable delivery and per-model validation are unchanged.",
+    "type": "boolean"
+   },
+   "refImage": {
+    "description": "local path or URL to anchor the first frame; a real person\u2019s photo here or in refImages confirms their likeness consent",
+    "type": "string"
+   },
+   "refImages": {
+    "description": "SEVERAL reference images (local paths or URLs) \u2014 a person, products, a place \u2014 that must all appear in the clip. Only models whose `refs.max` in hermoso_capabilities is above 1 use more than one, and each uses at most that many; with `refs.promptAddressed` true, name them in your prompt as Image 1, Image 2\u2026 in this order. minimax-h3-max-ref takes up to 9 and keeps each one as a reference rather than a first frame. On a model that takes one image, only the first is used.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "refVideo": {
+    "description": "URL of an existing video to EDIT rather than generate from scratch \u2014 the clip is transformed per your prompt, inheriting the SOURCE clip\u2019s canvas (aspect ratio) and, on every model hermoso_capabilities marks `sourceLength`, its LENGTH too: those endpoints have no duration parameter, their listed `durations` are the per-second price ladder, and a durationSeconds you send is reported back as unused rather than silently dropped. Trim the source to change the length. Omit `model` for the default editor, or name a model whose videoEdit is true in hermoso_capabilities (a named model that cannot edit is refused, nothing charged); refImage rides along as the look of what the edit adds. With extend:true this is instead the clip to EXTEND. Omit to generate a fresh clip.",
+    "type": "string"
+   },
+   "resolution": {
+    "description": "'1080p' default (what we ship and bill for); '480p'/'720p' = cheaper draft passes, '4k' = premium final delivery (more credits). NOT EVERY MODEL OFFERS EVERY TIER \u2014 this enum is what the tool accepts, and each model's OWN `resolutions` list in hermoso_capabilities is what it can actually render. Ask for a tier the chosen model does not list and it is rendered at that model's best available tier instead, with nothing in the reply saying so \u2014 so check `resolutions` before promising anyone 1080p or 4k.",
+    "enum": [
+     "480p",
+     "720p",
+     "1080p",
+     "4k"
+    ],
+    "type": "string"
+   },
+   "shots": {
+    "description": "MULTI-SHOT: one clip cut into these shots, in order. The seconds must add up to a length the model renders; replaces `prompt` (send either). Only models with multiShot true in hermoso_capabilities.",
+    "items": {
+     "properties": {
+      "prompt": {
+       "description": "what happens in this shot",
+       "type": "string"
+      },
+      "seconds": {
+       "description": "this shot\u2019s length in whole seconds",
+       "maximum": 15,
+       "minimum": 1,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "prompt",
+      "seconds"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "ttsScript": {
+    "description": "voiceover script to speak",
+    "type": "string"
+   },
+   "ttsVoice": {
+    "description": "voice name, e.g. Rachel / George",
+    "type": "string"
+   }
+  },
+  "required": [
+   "prompt"
+  ],
+  "type": "object"
+ },
+ "name": "generate_video",
+ "title": "Generate video"
+}

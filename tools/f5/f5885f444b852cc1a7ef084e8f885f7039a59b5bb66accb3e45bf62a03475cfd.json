@@ -1,0 +1,224 @@
+{
+ "description": "Forecast the cost of a prompt across candidate models before the call. Returns a cheapest-first ranking with assumptions. Offline.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "candidates": {
+    "description": "Candidate models (alias or id); defaults to all chat-capable.",
+    "items": {
+     "type": "string"
+    },
+    "maxItems": 50,
+    "type": "array"
+   },
+   "charsPerToken": {
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "contextTokens": {
+    "description": "Known context tokens already loaded.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "expectedOutputTokens": {
+    "description": "Exact output tokens; else inferred from taskClass/model.",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "includeLocal": {
+    "type": "boolean"
+   },
+   "inputTokens": {
+    "description": "Exact input tokens (skips prompt estimation).",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "prompt": {
+    "description": "The prompt to forecast; estimated to tokens if inputTokens absent.",
+    "maxLength": 2000000,
+    "type": "string"
+   },
+   "providers": {
+    "description": "Axis 1: provider availability allowlist (spec 5.4).",
+    "items": {
+     "enum": [
+      "anthropic",
+      "gemini",
+      "openai",
+      "local"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "target": {
+    "description": "Axis 2: \"self\" (default) applies the client scope; \"code\" considers all providers.",
+    "enum": [
+     "self",
+     "code"
+    ],
+    "type": "string"
+   },
+   "taskClass": {
+    "description": "Drives the default output cap.",
+    "enum": [
+     "slot_fill",
+     "classify_route",
+     "draft_short",
+     "summarise",
+     "plan_decompose",
+     "synthesise",
+     "reason_hard",
+     "gate_safety"
+    ],
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "predict_cost",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "asOf": {
+    "type": "string"
+   },
+   "catalogVersion": {
+    "type": "string"
+   },
+   "cheaperIfAvailable": {
+    "additionalProperties": false,
+    "properties": {
+     "cost": {
+      "additionalProperties": false,
+      "properties": {
+       "usd": {
+        "type": "number"
+       },
+       "usdMicros": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "usd",
+       "usdMicros"
+      ],
+      "type": "object"
+     },
+     "model": {
+      "type": "string"
+     },
+     "provider": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "model",
+     "provider",
+     "cost",
+     "reason"
+    ],
+    "type": "object"
+   },
+   "cheapest": {
+    "anyOf": [
+     {
+      "$ref": "#/properties/forecasts/items"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "forecasts": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "assumptions": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "cost": {
+       "additionalProperties": false,
+       "properties": {
+        "usd": {
+         "type": "number"
+        },
+        "usdMicros": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "usd",
+        "usdMicros"
+       ],
+       "type": "object"
+      },
+      "model": {
+       "type": "string"
+      },
+      "predictedInputTokens": {
+       "type": "number"
+      },
+      "predictedOutputTokens": {
+       "type": "number"
+      },
+      "provider": {
+       "type": "string"
+      },
+      "tier": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "model",
+      "provider",
+      "tier",
+      "predictedInputTokens",
+      "predictedOutputTokens",
+      "cost",
+      "assumptions"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notes": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "providerScope": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "scopeSource": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "forecasts",
+   "cheapest",
+   "providerScope",
+   "scopeSource",
+   "notes",
+   "catalogVersion",
+   "asOf"
+  ],
+  "type": "object"
+ },
+ "title": "Predict cost"
+}

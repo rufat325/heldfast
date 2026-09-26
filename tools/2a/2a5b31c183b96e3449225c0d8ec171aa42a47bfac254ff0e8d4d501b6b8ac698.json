@@ -1,0 +1,175 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "mode": "online",
+     "pdfBase64": "<signed-pdf-base64>"
+    },
+    "title": "Collect OCSP/CRL through the configured provider"
+   },
+   {
+    "input": {
+     "certificatesDerBase64": [
+      "<intermediate-ca-der-base64>"
+     ],
+     "crlsDerBase64": [
+      "<crl-der-base64>"
+     ],
+     "mode": "offline",
+     "pdfBase64": "<signed-pdf-base64>"
+    },
+    "title": "Air-gapped: embed exported material"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "PAdES B-LT: embed a Document Security Store (/DSS + per-signature /VRI) with the certificates and OCSP/CRL material future verifiers need ('LTV enabled' in Adobe Reader once the root is trusted). Ladder step 3: sign_pdf (profile:'pades', timestamp:true) \u2192 add_ltv \u2192 timestamp_pdf. mode 'online' (default) fetches through the OPERATOR revocation provider (PDFNATIVE_MCP_REVOCATION + PDFNATIVE_MCP_NETWORK_ALLOWED_HOSTS; REVOCATION_NOT_CONFIGURED otherwise \u2014 no network without it); mode 'offline' embeds caller-supplied DER certificates / OCSP responses / CRLs with zero network. Incremental (existing /DSS merged). Needs \u2265 1 signed signature; unencrypted PDFs only.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "certificatesDerBase64": {
+    "description": "offline: DER X.509 certificates to embed in /DSS /Certs.",
+    "items": {
+     "maxLength": 1400000,
+     "minLength": 4,
+     "type": "string"
+    },
+    "maxItems": 64,
+    "type": "array"
+   },
+   "crlsDerBase64": {
+    "description": "offline: DER CertificateList (RFC 5280) blobs to embed in /DSS /CRLs.",
+    "items": {
+     "maxLength": 1400000,
+     "minLength": 4,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "extraCertificatesDerBase64": {
+    "description": "online: additional DER certificates (intermediates / roots) to complete chains the CMS does not carry.",
+    "items": {
+     "maxLength": 1400000,
+     "minLength": 4,
+     "type": "string"
+    },
+    "maxItems": 32,
+    "type": "array"
+   },
+   "mode": {
+    "default": "online",
+    "description": "'online': fetch OCSP/CRL through the operator provider (PDFNATIVE_MCP_REVOCATION + allow-list; REVOCATION_NOT_CONFIGURED otherwise). 'offline': embed the caller-supplied DER material, zero network.",
+    "enum": [
+     "online",
+     "offline"
+    ],
+    "type": "string"
+   },
+   "ocspResponsesDerBase64": {
+    "description": "offline: DER OCSPResponse (RFC 6960) blobs to embed in /DSS /OCSPs.",
+    "items": {
+     "maxLength": 1400000,
+     "minLength": 4,
+     "type": "string"
+    },
+    "maxItems": 64,
+    "type": "array"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default) returns the PDF inline; 'file' writes it inside the PDFNATIVE_MCP_OUTPUT_DIR sandbox (SECURITY_VIOLATION when the sandbox is not configured).",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Relative path inside PDFNATIVE_MCP_OUTPUT_DIR (required when outputMode='file').",
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded SIGNED PDF (unencrypted). Sign with sign_pdf (profile=pades recommended) first.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "preferOcsp": {
+    "default": true,
+    "description": "online: try OCSP before CRL for each certificate (default true).",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "pdfBase64"
+  ],
+  "type": "object"
+ },
+ "name": "add_ltv",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Result of a PDF-producing tool. base64 mode: the PDF arrives as an embedded `resource` content block (not duplicated here); file mode: `filePath`.",
+  "properties": {
+   "diagnostics": {
+    "description": "Engine diagnostics (when includeDiagnostics=true).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "severity"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "filePath": {
+    "description": "Sandboxed absolute path (file mode).",
+    "type": "string"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "sizeBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "summary": {
+    "additionalProperties": true,
+    "description": "Tool-specific summary, when produced.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "sizeBytes"
+  ],
+  "type": "object"
+ },
+ "title": "Embed LTV validation material (PAdES B-LT)"
+}

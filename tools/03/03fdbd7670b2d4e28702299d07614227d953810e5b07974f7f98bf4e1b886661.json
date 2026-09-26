@@ -1,0 +1,259 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch full metadata, abstract, all revision history, JATS XML full-text links, and published-journal DOI for one or more preprints by DOI. Each DOI returns all revisions in one response. When server=\"both\" (default), each DOI is checked against both bioRxiv and medRxiv; the response includes which server the preprint was found on. Failed lookups are reported per-DOI in failed[] rather than aborting the batch, each carrying a reason (not_found, invalid_doi_format, upstream_unavailable, rate_limited) and a retryable flag; a rate_limited entry also carries the wait in seconds the origin asked for. DOIs must match the pattern 10.NNNN/\u2026; a doi.org or article URL, a doi: label, and a trailing vN / .full suffix are stripped first, and results report the bare DOI.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "dois": {
+    "description": "One or more preprint DOIs to look up (max 10).",
+    "items": {
+     "description": "Preprint DOI (e.g. 10.1101/2024.01.15.575123 or 10.64898/2026.05.07.723463). A doi.org or biorxiv.org/medrxiv.org article URL, a doi: prefix, or a vN / .full suffix is accepted and stripped to the bare DOI; every revision is returned either way.",
+     "type": "string"
+    },
+    "maxItems": 10,
+    "minItems": 1,
+    "type": "array"
+   },
+   "server": {
+    "default": "both",
+    "description": "Server to query. \"both\" checks bioRxiv and medRxiv in parallel for each DOI.",
+    "enum": [
+     "biorxiv",
+     "medrxiv",
+     "both"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "dois"
+  ],
+  "type": "object"
+ },
+ "name": "biorxiv_get_preprint",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "preprints",
+     "failed"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `doi_not_found`: ALL requested DOIs resolve to empty collections on all requested servers, with every server answering. `invalid_doi_format`: Every input DOI fails to match the 10.NNNN/ pattern, even after URL, doi:, and suffix stripping. `upstream_unavailable`: No DOI resolved and at least one lookup failed against api.biorxiv.org, so absence could not be established for any requested DOI. `rate_limited`: No DOI resolved and at least one lookup was rejected with HTTP 429 by api.biorxiv.org. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "doi_not_found",
+         "invalid_doi_format",
+         "upstream_unavailable",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "failed": {
+    "description": "DOIs that could not be resolved, with per-DOI error details.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A DOI that failed to resolve.",
+     "properties": {
+      "doi": {
+       "description": "DOI that failed to resolve \u2014 in bare form, or exactly as sent for invalid_doi_format.",
+       "type": "string"
+      },
+      "error": {
+       "description": "Error description.",
+       "type": "string"
+      },
+      "reason": {
+       "description": "Why this DOI failed: not_found (every attempted server answered with an empty collection), invalid_doi_format (the DOI does not match 10.NNNN/\u2026), upstream_unavailable (a server never answered, so absence could not be established), or rate_limited (api.biorxiv.org returned HTTP 429 \u2014 the same as upstream_unavailable except that the origin named a wait).",
+       "enum": [
+        "not_found",
+        "invalid_doi_format",
+        "upstream_unavailable",
+        "rate_limited"
+       ],
+       "type": "string"
+      },
+      "retryAfter": {
+       "description": "Seconds api.biorxiv.org asked the caller to wait before the next request. Present only on a rate_limited entry whose response carried a usable Retry-After header.",
+       "type": "number"
+      },
+      "retryable": {
+       "description": "True when retrying this DOI may succeed \u2014 set for upstream_unavailable and rate_limited. A not_found or invalid_doi_format entry will not change on retry.",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "doi",
+      "error",
+      "reason",
+      "retryable"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "preprints": {
+    "description": "Successfully resolved preprints with their full revision history.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A preprint and all its revisions.",
+     "properties": {
+      "doi": {
+       "description": "The requested DOI in bare form (any URL, doi: prefix, or suffix removed).",
+       "type": "string"
+      },
+      "revisions": {
+       "description": "All revisions for this preprint, earliest first.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A single preprint revision.",
+        "properties": {
+         "abstract": {
+          "description": "Abstract text.",
+          "type": "string"
+         },
+         "authorCorresponding": {
+          "description": "Corresponding author name.",
+          "type": "string"
+         },
+         "authorCorrespondingInstitution": {
+          "description": "Corresponding author institution.",
+          "type": "string"
+         },
+         "authors": {
+          "description": "Author list.",
+          "type": "string"
+         },
+         "awards": {
+          "description": "Grant award numbers from the funding statement, verbatim and deduplicated \u2014 one value can hold several grants run together without a separator. Absent when none. Funder names are not included: api.biorxiv.org attributes them to unrelated organizations.",
+          "items": {
+           "description": "One award value as upstream records it.",
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "category": {
+          "description": "Subject category.",
+          "type": "string"
+         },
+         "date": {
+          "description": "Revision date (YYYY-MM-DD).",
+          "type": "string"
+         },
+         "doi": {
+          "description": "Preprint DOI.",
+          "type": "string"
+         },
+         "jatsxmlUrl": {
+          "description": "URL to the JATS XML full-text.",
+          "type": "string"
+         },
+         "license": {
+          "description": "License identifier.",
+          "type": "string"
+         },
+         "publishedJournalDoi": {
+          "description": "Published journal DOI when accepted.",
+          "type": "string"
+         },
+         "server": {
+          "description": "Source server (biorxiv or medrxiv).",
+          "type": "string"
+         },
+         "title": {
+          "description": "Title.",
+          "type": "string"
+         },
+         "type": {
+          "description": "Preprint type.",
+          "type": "string"
+         },
+         "version": {
+          "description": "Revision version number.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "doi"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "doi",
+      "revisions"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Preprint by DOI"
+}

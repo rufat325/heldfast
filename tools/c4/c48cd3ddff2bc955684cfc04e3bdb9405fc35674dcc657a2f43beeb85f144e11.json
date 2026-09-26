@@ -1,0 +1,94 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Use agentid_renew to renew an Agent ID: a fresh Agent ID, same identity chain, new expiry; old one retired. revocation_signature over agent-id-revoke:<OLD_agent_id> (64-char lowercase ID) \u2014 same contract as retiring: EIP-191 personal_sign (envelope required; raw ECDSA fails), 0x 65-byte hex; or ed25519 nacl.sign.detached, 64-byte hex. Signer: principal or Embassy-for-cause. POST the tool inputs as JSON to paid_url with an x402 v2 PAYMENT-SIGNATURE header. See https://docs.cdp.coinbase.com/x402 Paid tool \u2014 $0.25, USDC on Base or Arbitrum One. Paid URL: https://aemb.pro/v1/agent-id/renew.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "agent_id": {
+    "description": "The Agent ID string returned at issuance (64 hex characters; case-insensitive). Unknown IDs are rejected",
+    "type": "string"
+   },
+   "idempotency_key": {
+    "description": "Optional idempotency key: UUID v4 (client-generated; published example keys are rejected). When provided, replaying the same key returns the original receipt instead of re-running the action; when omitted, no dedupe occurs. Keys are scoped per tool and per payer account: the same key on another tool \u2014 or from another wallet \u2014 is unrelated.",
+    "type": "string"
+   },
+   "revocation_signature": {
+    "description": "Hex signature over the exact UTF-8 message agent-id-revoke:<OLD_agent_id> (64-char lowercase ID, no trailing newline) \u2014 the signature covers the OLD Agent ID being retired. EIP-191: personal_sign the message STRING (personal_sign envelope REQUIRED \u2014 raw ECDSA will not verify), 0x 65-byte hex r||s||v (v=27/28). ed25519: nacl.sign.detached over the message bytes, 64-byte hex. Signer: the principal's on-file revocation key, or the Embassy signer for cause",
+    "type": "string"
+   },
+   "validity_days": {
+    "description": "Days until the renewed Agent ID expires; integer 1-730. Defaults to the Embassy standard when omitted",
+    "type": "number"
+   }
+  },
+  "required": [
+   "agent_id",
+   "revocation_signature"
+  ],
+  "type": "object"
+ },
+ "name": "agentid_renew",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "asset": {
+    "description": "Settlement asset",
+    "type": "string"
+   },
+   "facilitator": {
+    "description": "x402 facilitator",
+    "type": "string"
+   },
+   "how": {
+    "description": "How to pay: POST the tool inputs as JSON to paid_url with an x402 v2 PAYMENT-SIGNATURE header",
+    "type": "string"
+   },
+   "networks": {
+    "description": "EVM CAIP-2 network ids accepted",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "paid_url": {
+    "description": "x402-paid HTTPS URL to POST the tool inputs to",
+    "type": "string"
+   },
+   "payment_required": {
+    "const": true,
+    "description": "Always true: this MCP tool is a payment pointer; the tool itself is monetized via x402.",
+    "type": "boolean"
+   },
+   "price": {
+    "description": "Exact price, e.g. \"$0.15\"",
+    "type": "string"
+   },
+   "tool": {
+    "description": "Tool name, e.g. verified_check",
+    "type": "string"
+   }
+  },
+  "required": [
+   "payment_required",
+   "tool",
+   "paid_url",
+   "price",
+   "networks",
+   "asset",
+   "facilitator",
+   "how"
+  ],
+  "type": "object"
+ },
+ "title": "Agent ID \u2014 Renew"
+}

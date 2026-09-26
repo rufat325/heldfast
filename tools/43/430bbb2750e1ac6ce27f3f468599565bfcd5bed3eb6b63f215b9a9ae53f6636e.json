@@ -1,0 +1,90 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "readOnlyHint": false,
+  "title": "Complete a task and issue a receipt"
+ },
+ "description": "Step 5 of the Tango working agreement (finish). Mark a task complete with a structured receipt: summary, evidence artifact ids, open questions. Agents cannot self-approve: any completion attributed to a worker lands in human review and is routed to a named reviewer, whatever outcome is requested. Outcome 'done' self-approves for humans only. Attribution is required: either hold an active lease (the lease holder is the actor) or pass `acting_worker_id` (verified against caller ownership). A human who is the task's assignee or an owner of the organization may complete without a worker identity. With none of those, the call is rejected with 422 and nothing is written \u2014 the actor is never guessed from the assignee. Completion atomically releases the lease. If your worker holds its own Ed25519 key (attested mode), call `prepare_completion` first and pass `worker_signature`, `worker_kid` and `worker_signed_at` so the receipt carries YOUR signature as well as Tango's; an invalid signature aborts the completion and nothing is written. Delegated workers get a platform-produced signature automatically.",
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "acting_worker_id": {
+    "description": "Optional. Self-asserted worker completing this task. Ignored if a lease is active (lease holder wins). Verified against caller ownership; never inferred from the assignee.",
+    "format": "uuid",
+    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+    "type": "string"
+   },
+   "decompose_outcome": {
+    "description": "For tasks of type 'decompose' only. 'unblock' (default) drops the decompose\u2192original dependency so the original becomes workable. 'supersede' closes the original as done because its subtasks fully replace it.",
+    "enum": [
+     "unblock",
+     "supersede"
+    ],
+    "type": "string"
+   },
+   "evidence_artifact_ids": {
+    "description": "Artifact ids that back the summary.",
+    "items": {
+     "format": "uuid",
+     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "open_questions": {
+    "description": "Questions the next reviewer or agent should answer.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "outcome": {
+    "description": "'review' hands to a human. 'done' self-approves and is available to humans only \u2014 an agent's 'done' is recorded as 'review'.",
+    "enum": [
+     "review",
+     "done"
+    ],
+    "type": "string"
+   },
+   "summary": {
+    "description": "What was done, in plain language.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "task_id": {
+    "description": "Task id, or a pasted Tango task URL.",
+    "type": "string"
+   },
+   "transparency_hash": {
+    "description": "The transparency anchor hash you signed (from prepare_completion).",
+    "type": "string"
+   },
+   "transparency_seq": {
+    "description": "The transparency anchor seq you signed (from prepare_completion).",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "worker_kid": {
+    "description": "The kid of the registered worker key that produced worker_signature.",
+    "type": "string"
+   },
+   "worker_signature": {
+    "description": "Attested mode only. Detached JWS ('header..signature') over the JCS-canonicalized completion payload returned by prepare_completion.",
+    "type": "string"
+   },
+   "worker_signed_at": {
+    "description": "The exact `signed_at` value used inside the signed payload (ISO 8601).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "task_id",
+   "outcome",
+   "summary"
+  ],
+  "type": "object"
+ },
+ "name": "complete_task",
+ "title": "Complete a task and issue a receipt"
+}

@@ -1,0 +1,298 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get a USGS site's current reading ranked against its full period-of-record daily-mean percentiles for the same calendar day \u2014 a \"how unusual is this\" percentileClass (record-high to record-low), not a flood-stage or drought determination (this tool fetches no authoritative thresholds). The reading is instantaneous but the percentiles are daily-mean, so the ranking is approximate (see historicalContext.comparisonBasis). When the record is too short to rank, returns the reading with historicalContext=null instead of an error. A reading NWIS reports as no data (a seasonal, discontinued, dry, or malfunctioning gage) returns an empty currentValue with the qualifiers naming why, and is not ranked. When the site measures the parameter with several sensors (methods), one reading is used and named by methodId/methodDescription \u2014 from the sensor its percentile series is described as when one is, otherwise the most recent across them; water_get_readings lists every method. Use water_find_sites and water_list_parameters to resolve inputs.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "parameterCd": {
+    "description": "5-digit USGS parameter code (e.g. \"00060\" for discharge, \"00065\" for gage height). Use water_list_parameters to discover codes.",
+    "pattern": "^\\d{5}$",
+    "type": "string"
+   },
+   "site": {
+    "description": "USGS site number (8\u201315 digits, e.g. \"01646500\" for Potomac River at Little Falls). Use water_find_sites to discover valid site numbers.",
+    "pattern": "^\\d{8,15}$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "site",
+   "parameterCd"
+  ],
+  "type": "object"
+ },
+ "name": "water_get_conditions",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "siteNumber",
+     "siteName",
+     "parameterCd",
+     "parameterName",
+     "unitCode",
+     "methodId",
+     "methodDescription",
+     "currentValue",
+     "currentDateTime",
+     "qualifiers",
+     "historicalContext",
+     "historicalContextStatus"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "currentDateTime": {
+    "description": "ISO 8601 date-time of the most recent observation.",
+    "type": "string"
+   },
+   "currentValue": {
+    "description": "Most recent observed value as a string. Empty string when NWIS reported no value for the reading \u2014 qualifiers then give the reason, and historicalContext does not rank it. A method with a measured latest reading is preferred over one whose latest reading has no value.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_data_for_parameter`: NWIS returned no IV data \u2014 the site may not exist, or may not measure the requested parameter. NWIS returns the same empty response for both cases. `invalid_request`: NWIS rejected the request. Input formats are validated against NWIS-accepted patterns before the call, so this surfaces a value that is well-formed but unacceptable upstream. `upstream_error`: The NWIS IV endpoint returned a 5xx error, timed out, or sent a response body that is not valid WaterML-JSON (cut off mid-document), and retrying did not clear it. A stat-endpoint failure does not raise this \u2014 it is reported as historicalContextStatus \"unavailable\". Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_data_for_parameter",
+         "invalid_request",
+         "upstream_error"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "historicalContext": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "comparisonBasis": {
+        "description": "Fixed disclosure that percentileClass ranks an instantaneous reading against approved daily-mean percentiles \u2014 a cross-granularity approximation, not a flood-stage or drought determination. Present whenever historicalContext is non-null.",
+        "type": "string"
+       },
+       "methodMatched": {
+        "description": "True when statSeriesDescription equals the reported methodDescription, which is how the percentiles are matched to the sensor that produced the reading. False when the descriptions differ but the series was still used \u2014 it is the only statistics series whose description matches once the bracketed label the statistics service appends (e.g. \"[BASE GAGE]\") is set aside, or the only statistics series at the site; note says which. The percentiles may then come from a different sensor or location than the reading.",
+        "type": "boolean"
+       },
+       "p05": {
+        "description": "5th percentile value in unitCode for this calendar month+day, based on the period of record. Null if that threshold is unavailable.",
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "p10": {
+        "description": "10th percentile value in unitCode for this calendar month+day. Null if unavailable.",
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "p25": {
+        "description": "25th percentile (lower quartile) in unitCode. Null if unavailable.",
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "p50": {
+        "description": "Median (50th percentile) in unitCode for this calendar month+day. Null if unavailable.",
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "p75": {
+        "description": "75th percentile (upper quartile) in unitCode. Null if unavailable.",
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "p95": {
+        "description": "95th percentile value in unitCode for this calendar month+day. Null if unavailable.",
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "percentileClass": {
+        "description": "Classification relative to the full period-of-record: record-high (\u2265 p95), above-normal (p75\u2013p95), normal (p25\u2013p75), below-normal (p10\u2013p25), low (p05\u2013p10), record-low (< p05). Decided by the thresholds NWIS published: with p95 blank a value \u2265 p75 is above-normal, and with p10 or p05 blank a value below p25 or p10 is below-normal or low. normal requires both p25 and p75; a value the published thresholds cannot place is unknown, as is a reading NWIS reported as no data (currentValue empty). See percentileLabel for the threshold in plain language.",
+        "enum": [
+         "record-high",
+         "above-normal",
+         "normal",
+         "below-normal",
+         "low",
+         "record-low",
+         "unknown"
+        ],
+        "type": "string"
+       },
+       "percentileLabel": {
+        "description": "Plain-language threshold for percentileClass (e.g. \"25th\u201375th percentile\"). When the class was decided without an unpublished threshold, the label names it (e.g. \"\u2265 75th percentile; 95th not published\") \u2014 the value may lie past it. An unknown class names the published thresholds either side and the blank ones between (e.g. \"25th\u201395th percentile; 75th not published\"), or, for a reading with no value, says so and names its qualifiers. The record-high and record-low classes mark percentile-of-record extremes (\u2265 p95 / < p05), not verified all-time records \u2014 this field says so where the class name does not.",
+        "type": "string"
+       },
+       "periodOfRecord": {
+        "description": "Range of years used to compute the percentile statistics (e.g. \"1930\u20132025\").",
+        "type": "string"
+       },
+       "statSeriesDescription": {
+        "description": "Location description NWIS gives that statistics series (e.g. \"From multiparameter sonde\"). Null when blank.",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "statSeriesId": {
+        "description": "NWIS statistics time-series ID (ts_id) the percentiles were computed from. A daily-mean series ID, numbered independently of the IV methodId. Null when NWIS omits it.",
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "percentileClass",
+       "percentileLabel",
+       "p05",
+       "p10",
+       "p25",
+       "p50",
+       "p75",
+       "p95",
+       "periodOfRecord",
+       "comparisonBasis",
+       "statSeriesId",
+       "statSeriesDescription",
+       "methodMatched"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Historical percentile context for the observation's calendar day. Non-null only when historicalContextStatus is \"available\"; see that field for why it is otherwise absent."
+   },
+   "historicalContextStatus": {
+    "description": "Why historicalContext is or is not populated. 'available': percentiles for the observation's calendar day are present. 'no_matching_day': the stat table has rows but none for that calendar day. 'no_matching_method': the stat table covers several sensor series at this site and none is identified by the reported method's description \u2014 exactly, or apart from a bracketed label \u2014 so no series is picked to rank against (note lists them). 'no_record': the stat table is empty \u2014 a new site, or a record too short to compute percentiles. 'unavailable': the statistics service call failed \u2014 a transient upstream error, not a statement about the site's record; retry shortly.",
+    "enum": [
+     "available",
+     "no_matching_day",
+     "no_matching_method",
+     "no_record",
+     "unavailable"
+    ],
+    "type": "string"
+   },
+   "methodDescription": {
+    "description": "NWIS description of that method (e.g. \"From multiparameter sonde\", \"[(2)]\"). Null when NWIS leaves it blank, as it does for the default series at most single-sensor sites.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "methodId": {
+    "description": "NWIS method ID of the sensor series the current reading comes from. When the site reports the parameter from several, a method with a measured latest reading is preferred, then one whose description a statistics series carries exactly (so reading and percentiles come from one sensor), then the most recent. Null only when NWIS returned the series with no method block.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "note": {
+    "description": "Informational note explaining why historicalContext is null or incomplete, that NWIS reported no value for the current reading, or which statistics series the percentiles came from when methodMatched is false. Absent when the reading is measured and ranked against a statistics series described exactly as its method.",
+    "type": "string"
+   },
+   "parameterCd": {
+    "description": "5-digit USGS parameter code that was queried (e.g. \"00060\").",
+    "type": "string"
+   },
+   "parameterName": {
+    "description": "Human-readable parameter name with units (e.g. \"Streamflow, ft\u00b3/s\").",
+    "type": "string"
+   },
+   "qualifiers": {
+    "description": "Data qualifier codes for the current reading. When currentValue is empty they name why NWIS has no value (e.g. \"Ssn\" seasonal, \"Dis\" discontinued, \"Dry\", \"Eqp\" equipment malfunction).",
+    "items": {
+     "description": "A USGS data qualifier code (e.g. \"P\" = provisional).",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "siteName": {
+    "description": "Human-readable USGS site name.",
+    "type": "string"
+   },
+   "siteNumber": {
+    "description": "USGS site number (8\u201315 digits, e.g. \"01646500\").",
+    "type": "string"
+   },
+   "unitCode": {
+    "description": "Unit of measure for currentValue and the historical percentiles (e.g. \"ft3/s\", \"ft\").",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Water Get Conditions"
+}

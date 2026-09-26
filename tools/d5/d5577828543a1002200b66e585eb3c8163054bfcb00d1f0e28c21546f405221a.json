@@ -1,0 +1,74 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Query congressional STOCK Act trades (Free+, plan-clamped disclosure window). Returns a paginated JSON list of congressional periodic-transaction-report trades, most recently DISCLOSED first, with non-superseded rows only (amended-away rows never appear). COVERAGE \u2014 HOUSE ONLY TODAY: every trade in this dataset comes from the U.S. House Clerk's PTR index. Senate eFD (efdsearch.senate.gov) returns 403 to datacenter traffic, so no Senate filings are ingested yet. chamber=Senate remains a valid filter but matches nothing and returns the response header X-Coverage-Note: chamber-not-covered, so an empty result is never ambiguous. Scanning by chamber should treat that header as \"not covered\", not as \"no trades\". PLAN-CLAMPED WINDOW: this endpoint is open to every plan, but how far back you can see is clamped on disclosureDate \u2014 Free sees only trades disclosed in the last 30 days, Starter the last 366 days, Pro/Business/Enterprise unlimited history. Passing an older disclosure_date_from than your plan allows does not extend the window \u2014 the floor always wins. Filters: ticker, politician (bioguideId, exact), party (free-text, case-insensitive exact match \u2014 not a fixed enum), chamber (House|Senate \u2014 see the coverage note above), state (2-letter code), transaction_type (purchase|sale|partial_sale|exchange), min_amount (range-aware \u2014 matches AmountLow >= value, never a fabricated midpoint), transaction_date_from/to, disclosure_date_from/to. Every row always carries BOTH amountLow and amountHigh (STOCK Act discloses ranges, never exact figures) and disclosureLagDays = (disclosureDate - transactionDate) \u2014 the STOCK Act allows up to 45 days of lag, so \"real-time\" here means minutes-after-disclosure, not minutes-after-trade. For per-politician or per-ticker rollups use GET /v1/congress/politicians, /v1/congress/politicians/{idOrSlug}, or /v1/congress/tickers/{ticker} (all Pro+). To check whether an insider cluster-buy lines up with a congressional purchase in the same ticker, use GET /v1/signals/convergence (Pro+); for the company's own profile use GET /v1/companies/{ticker} (Free). `limit` is accepted as an alias for `per_page`. Query runs live against the database \u2014 no caching.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "chamber": {
+    "description": "\"House\" or \"Senate\", case-insensitive. COVERAGE: this dataset currently holds House PTRs only \u2014 Senate eFD blocks datacenter traffic, so chamber=Senate is a valid filter over data we do not yet have and returns an empty array with the response header X-Coverage-Note: chamber-not-covered.",
+    "type": "string"
+   },
+   "disclosure_date_from": {
+    "description": "Inclusive start of the disclosure-date window, format YYYY-MM-DD. Subject to the plan-clamped floor below \u2014 a Free/Starter caller cannot page back further than their plan allows even by passing an older date here.",
+    "type": "string"
+   },
+   "disclosure_date_to": {
+    "description": "Inclusive end of the disclosure-date window, format YYYY-MM-DD.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Alias for per_page.",
+    "type": "integer"
+   },
+   "min_amount": {
+    "description": "Minimum disclosed amount, range-aware: matches trades whose AmountLow >= this value. Never matched against a fabricated midpoint \u2014 see the amountLow/amountHigh honesty rule.",
+    "type": "number"
+   },
+   "page": {
+    "description": "1-based page number. Defaults to 1.",
+    "type": "integer"
+   },
+   "party": {
+    "description": "Party as disclosed by the source, case-insensitive exact match (e.g. \"D\", \"R\", \"Democratic\"). Free-text \u2014 not a fixed enum, so this matches whatever string the source reported.",
+    "type": "string"
+   },
+   "per_page": {
+    "description": "Trades per page. Defaults to 100, maximum 500. `limit` is accepted as an alias; if both are given, per_page wins.",
+    "type": "integer"
+   },
+   "politician": {
+    "description": "Politician's bioguide ID, exact match (e.g. \"P000197\").",
+    "type": "string"
+   },
+   "state": {
+    "description": "Two-letter US state/territory code, case-insensitive exact match (e.g. \"CA\").",
+    "type": "string"
+   },
+   "ticker": {
+    "description": "Ticker symbol, case-insensitive exact match (e.g. \"AAPL\").",
+    "type": "string"
+   },
+   "transaction_date_from": {
+    "description": "Inclusive start of the transaction-date window, format YYYY-MM-DD.",
+    "type": "string"
+   },
+   "transaction_date_to": {
+    "description": "Inclusive end of the transaction-date window, format YYYY-MM-DD.",
+    "type": "string"
+   },
+   "transaction_type": {
+    "description": "\"purchase\", \"sale\", \"partial_sale\", or \"exchange\", case-insensitive.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "list_congress_trades"
+}

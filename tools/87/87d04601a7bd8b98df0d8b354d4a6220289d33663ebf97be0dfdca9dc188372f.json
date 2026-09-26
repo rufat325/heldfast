@@ -1,0 +1,65 @@
+{
+ "description": "Search the indexed code graph for symbols (functions, classes, methods, interfaces, types, variables) by name or qualified name. The structural-search entry point: returns resolved symbol IDs (with fanIn/fanOut ranking) that every other read-path tool accepts \u2014 grep returns text matches, query_symbols returns graph nodes.\n\nTwo match modes: \"trigram\" (default, pg_trgm similarity \u2014 best for fuzzy / typo-tolerant / unique-symbol lookups), \"substring\" (ILIKE %q% \u2014 best for broad listings like every \"Handler\" or \"Controller\" in the repo; results ranked by fanIn + fanOut so central ones float to the top).\n\nUse this as the STARTING POINT for any code-graph question, because it returns symbol IDs that every other read-path tool needs. Unlike find_references (which takes a known symbol_id and returns its callers), query_symbols searches by NAME and returns candidates. Unlike get_symbol_neighbors (which takes a symbol_id and walks the call graph), query_symbols does no traversal \u2014 it only matches names. Unlike find_similar_code (vector cosine over embeddings), query_symbols is literal/fuzzy text matching.\n\nPrerequisites: Tentra API auth + a snapshot_id from a completed index_code run. Read-only. Response: { symbols: [{ id, kind, name, qualifiedName, startLine, endLine, fanIn, fanOut, isGodNode, semanticRole, filePath }] }.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "exclude_tests": {
+    "default": true,
+    "description": "Hide symbols defined in test/fixture files (default true)",
+    "type": "boolean"
+   },
+   "kind": {
+    "description": "Filter by symbol kind",
+    "enum": [
+     "function",
+     "class",
+     "method",
+     "interface",
+     "variable",
+     "type"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "default": 50,
+    "description": "Max results to return (default 50)",
+    "exclusiveMinimum": 0,
+    "maximum": 100,
+    "type": "integer"
+   },
+   "mode": {
+    "default": "trigram",
+    "description": "Match mode. \"trigram\" (default) ranks by pg_trgm similarity \u2014 best for fuzzy / unique lookups. \"substring\" uses ILIKE %q% \u2014 best for broad listings like \"Handler\" or \"Controller\"; results ranked by fan-in + fan-out.",
+    "enum": [
+     "trigram",
+     "substring"
+    ],
+    "type": "string"
+   },
+   "q": {
+    "description": "Search query (symbol name or qualified name). Default is fuzzy trigram match; pass mode=\"substring\" for case-insensitive contains.",
+    "minLength": 1,
+    "type": "string"
+   },
+   "role": {
+    "description": "Filter by semantic role slug (e.g. \"service\", \"repository\")",
+    "type": "string"
+   },
+   "snapshot_id": {
+    "description": "Snapshot ID to query against",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "snapshot_id",
+   "q"
+  ],
+  "type": "object"
+ },
+ "name": "query_symbols"
+}

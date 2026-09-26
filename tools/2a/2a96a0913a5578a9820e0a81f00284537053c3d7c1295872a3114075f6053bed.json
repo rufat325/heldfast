@@ -1,0 +1,116 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Get clip details"
+ },
+ "description": "Read one clip: its elements (positions/sizes in canvas pixels), voiceover (text, voice, duration, voiceover_volume), background and transition. Pass `render` to also get a PNG of the frame.\n\nASK FOR WHAT YOU NEED. A full read is large \u2014 on a dense clip the per-word voiceover array and the element type_data blobs dominate it, and repeated full reads are the main way a long session runs out of context. `select` returns exactly the parts you name:\n\n  select: ['elements.x','elements.y','elements.width','elements.height']   \u2192 geometry only, to fix a layout\n  select: ['elements.name','elements.start_time','elements.end_time']      \u2192 a timing pass\n  select: ['voiceover_words']                                              \u2192 word timings only, to sync visuals to narration\n  select: ['elements.textdata','voiceover_words']                          \u2192 rewrite copy against the VO\n  select: ['elements']                                                     \u2192 whole element rows, no words\n  select: ['groups']                                                       \u2192 group rows only, to get a group_id for update_groups\n  select: []                                                               \u2192 no JSON at all (pair with render for the PNG alone \u2014 smallest read)\n  (omit select)                                                            \u2192 everything; fine for a first look, expensive to repeat\n\n`render` is the other output, and it is separate from `select`: `select` shapes the JSON, `render` produces a PNG.\n\n  render: {}                                     \u2192 the frame at t=0\n  render: { timestamps: 2.5 }                    \u2192 the frame 2.5s into the clip\n  render: { timestamps: [0.5, 2, 4] }            \u2192 those three moments as ONE labelled grid\n  render: { timestamps: [...], layout:'separate'} \u2192 the same moments as full-size images (~4x the tokens)\n  render: { save: true }                         \u2192 also uploads the frame and returns presigned_url\n  render: { max_width: 1280 }                    \u2192 a sharper frame when you must read small print\n  select: [], render: {}                         \u2192 the PNG alone, no JSON\n  select: ['elements'], render: {}                \u2192 element rows AND the frame\n\nA single frame renders 960px wide by default \u2014 legible for this design system and about half the tokens of a 1280 frame. A GRID defaults to 1280, because that is the width of the whole grid and a third of 960 would leave each cell unreadable. Either way `max_width` caps the image you get back; raise it only to read genuinely small print.\n\nOmitting `render` renders nothing. `timestamps`, `layout` and `save` live inside it because they only mean anything for a render \u2014 there is no way to ask for them without asking for the image.\n\n`element_ids` is the other axis: it picks WHICH element rows come back, independently of `select`. Combine them for the leanest read \u2014 e.g. element_ids: ['el_9'], select: ['elements.x','elements.y'].\n\nElement shape: universal wrapper fields (id, element_type, name, x, y, width, height, start_time, end_time, rotation) plus type-specific data (textdata/shapedata/imagedata/videodata/zoomdata) plus an optional `keyframes` array when animated. Keyframes come back in the same flat wire shape add_elements takes \u2014 { timestamp, positionX?, positionY?, width?, height?, interpolation? } in canvas pixels \u2014 so you can round-trip read \u2192 edit \u2192 update_elements without reshaping.\n\nClip-level fields include `transition` (the current transition object \u2014 sibling of the update_clips `transition` arg; null if none) and `voiceover_words` (per-word timestamps, `{word, start, end, punctuated_word}` with start/end in SECONDS; null on clips with no transcription).\n",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "clip_index": {
+    "description": "Zero-based clip index",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "element_ids": {
+    "description": "WHICH element rows to return \u2014 all others are dropped. Independent of `select`, which chooses the sections/keys. Use it to re-inspect just what you added or updated; most add_elements/update_elements already echo the element's resolved layout, so often you don't need this at all.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "project_id": {
+    "description": "The project ID",
+    "type": "string"
+   },
+   "render": {
+    "additionalProperties": false,
+    "description": "Render the clip as an image. Presence of this object IS the request to render \u2014 omit it and nothing is rendered. `{}` renders at t=0. Independent of `select`, which only shapes the JSON: pair `select: []` with `render: {}` for the PNG alone (smallest read). CHECKING YOUR WORK: pass `timestamps` with SEVERAL mid-clip moments, not the t=0 default \u2014 text and image elements have entry animations (a ~0.4s slide/fade by default), so at t=0 they have not arrived yet and a correct edit renders as an empty frame, while shapes have no entry animation and do show at t=0. That mix is what makes a single t=0 render actively misleading: some elements appear and others don't. A list comes back as one grid for about a quarter of the tokens of the same frames separately, so checking several moments is the cheap option, not the expensive one. `animations: false` draws everything settled if you would rather not pick moments at all.",
+    "properties": {
+     "animations": {
+      "description": "Whether entry/exit animations play at this timestamp. Default true \u2014 the frame as the video will show it, which is what you want to judge motion. Pass false to draw every element settled at its final position and full opacity: use that to check COMPOSITION, because with staggered starts and short windows there may be no single timestamp at which nothing is mid-flight, and an element part-way through a slide reads as mis-positioned when it is fine.",
+      "type": "boolean"
+     },
+     "layout": {
+      "description": "Only meaningful when `timestamps` holds several. 'sheet' (default) tiles them into one image; 'separate' returns them full-size, which costs ~4x more \u2014 use it only when a grid cell is too small to judge.",
+      "enum": [
+       "sheet",
+       "separate"
+      ],
+      "type": "string"
+     },
+     "max_width": {
+      "description": "Width in px of the IMAGE you get back \u2014 for a grid that is the whole grid, not each cell, so a cell is roughly a third of it. Default 960 for a single frame, 1280 for a grid. An image costs roughly (w\u00d7h)/750 tokens, so 1280 is ~1229 and 960 ~691; above 1568 nothing is gained because the model downscales to that anyway. The default is legible for this design system's type scale \u2014 a 40px canvas caption lands at ~20px. Raise it only to read genuinely small print, such as UI text inside a pasted screenshot.",
+      "maximum": 1568,
+      "minimum": 320,
+      "type": "integer"
+     },
+     "save": {
+      "description": "Also upload the rendered image to S3 and return presigned_url, which you can pass as source_url to update_clueprint (files=[{path, source_url}]). Uploads ONE image, so it works with a single frame or a grid but not with layout:'separate' \u2014 there is one URL and several frames.",
+      "type": "boolean"
+     },
+     "timestamps": {
+      "anyOf": [
+       {
+        "minimum": 0,
+        "type": "number"
+       },
+       {
+        "items": {
+         "minimum": 0,
+         "type": "number"
+        },
+        "maxItems": 15,
+        "minItems": 1,
+        "type": "array"
+       }
+      ],
+      "description": "Which moment(s) of the clip to render, in seconds (default 0). Pass several \u2014 [0.5, 2, 4] \u2014 and they come back as one labelled grid costing about a quarter of what those frames cost individually. Prefer several whenever you are checking rather than reading: entry animations mean no single moment shows everything, so one frame is usually the wrong question. A grid cell is a third of the width, so for small print pass a single number. Max 15; duplicates dropped, sorted into time order."
+     }
+    },
+    "type": "object"
+   },
+   "select": {
+    "description": "Ask for exactly the JSON you want, GraphQL-style. Omit for everything; pass [] for none.\n  Sections: 'elements' (whole element rows), 'voiceover_words' (per-word VO timings; returns the key of the same name, holding `{word, start, end, punctuated_word}` with start/end in SECONDS \u2014 null on a clip with no transcription), 'groups' (group rows: id, name, parent_id, bounds_px, anchor_px, keyframes), 'busy' (generations still writing to this clip, as `[{entity_path, job_type}]` \u2014 EMPTY means nothing is pending, which is how you know a voiceover or AI image has landed; it is the same lock that would refuse your write, so a non-empty list also tells you what not to touch yet). Each section returns the key it is named after. Rendering is `render`, not a value here.\n  Per-key: 'elements.<key>' projects element rows to just those keys (id is always kept). Keys: name, element_type, x, y, width, height, start_time, end_time, rotation, keyframes, textdata, shapedata, imagedata, videodata, zoomdata, codedata, parent_id, dropShadows. y_top is text-only and present ONLY when alignment is 'center' \u2014 the unambiguous TOP edge, which is exactly the case where `y` is NOT the top but the vertical CENTRE. To put that position back, send it as `y` with y_anchor:'top'.\n  Examples: ['elements.x','elements.y','elements.width','elements.height'] to read geometry; ['elements.name','elements.start_time','elements.end_time'] for a timing pass; ['voiceover_words'] to sync visuals to narration; ['groups'] to resolve a group id for update_groups; [] with render:{} returns the PNG with no JSON (smallest read); ['elements.textdata','voiceover_words'] to rewrite copy against the VO.\n  Mixing 'elements' with 'elements.<key>' returns whole rows. Use element_ids to choose WHICH rows \u2014 that is independent of this.",
+    "items": {
+     "enum": [
+      "elements",
+      "voiceover_words",
+      "groups",
+      "busy",
+      "elements.name",
+      "elements.element_type",
+      "elements.x",
+      "elements.y",
+      "elements.width",
+      "elements.height",
+      "elements.start_time",
+      "elements.end_time",
+      "elements.rotation",
+      "elements.keyframes",
+      "elements.textdata",
+      "elements.shapedata",
+      "elements.imagedata",
+      "elements.videodata",
+      "elements.zoomdata",
+      "elements.codedata",
+      "elements.parent_id",
+      "elements.dropShadows"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "project_id",
+   "clip_index"
+  ],
+  "type": "object"
+ },
+ "name": "get_clip",
+ "title": "Get clip details"
+}

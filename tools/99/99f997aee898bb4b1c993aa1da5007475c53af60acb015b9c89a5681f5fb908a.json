@@ -1,0 +1,378 @@
+{
+ "description": "Put ONE block on a page, or inside a layout's column \u2014 any block in the catalogue, chosen by `type` for what the content IS: a passage of prose (paragraphs, headings, lists, a quote \u2014 `content`, one line per block, no type needed); items (a box, steps, a timeline\u2026 \u2014 `entries`); headline figures (`entries` with a value); pictures and video (`entries` with a src); a table (`table`); a chart of numbers that are COMPARED (`chart`); a diagram of what connects to what (`diagram`); or a LAYOUT, whose region ids then take blocks of their own. Send the ONE payload the type takes \u2014 the others are refused by name. Choose its look on the same call (variant, arrangement, mark), because a block that merely fits is not finished. A page is usually a heading and ONE OR TWO blocks that answer each other \u2014 a chart beside the sentence about it, figures over the story behind them \u2014 or one block on a page LOOK from set_page: a surface, or an accent picture running down one side (never a block). A cover is a page with a title, a subtitle and an accent.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {},
+  "properties": {
+   "arrangement": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The SHAPE the block lays its entries out in \u2014 same fields, same count, a different layout, and a shape changes how much text fits. Per block: box: grid, list | steps: across, list, staircase, funnel, pyramid, ring; or a FIGURE \u2014 road (3\u20134), climb (3\u20135), core (3) | text: md, lg, xl, hero, sm. A figure is an illustrated shape whose count range is a LIMIT rather than guidance \u2014 a write outside it is refused \u2014 and a block wears one shape OR one figure, never both. For a chart it is WHICH KIND to draw: column \u2014 Vertical bars, one group per category. | bar \u2014 The same comparison lying on its side. | line \u2014 A value followed ACROSS the categories rather than compared between them \u2014 months, quarters, versions, anything with an order a reader already knows. | area \u2014 The line with the ground under it filled in, for a total that ACCUMULATES rather than a value that merely moves \u2014 revenue by quarter, users by month, anything where the area under the curve is itself a quantity. | pie \u2014 ONE series, drawn as parts of a whole. | donut \u2014 The pie with its middle removed, and it says the same thing: ONE series, drawn as parts of a whole that add up. | waterfall \u2014 THE VALUES ARE STEPS, NOT TOTALS \u2014 this is the one shape on the shelf where that is true, and typing running totals into it draws the wrong picture entirely. | heatmap \u2014 THE MATRIX THE PAYLOAD HAS BEEN ALL ALONG: one ROW per series, one COLUMN per category, and each cell shaded by its value. Omit to leave it alone; pass '' for the default."
+   },
+   "axisX": {
+    "description": "What the categories ARE \u2014 the label under the axis, like 'Product line'. Omit to leave it alone; '' to clear.",
+    "type": "string"
+   },
+   "axisY": {
+    "description": "What the numbers ARE, including the unit \u2014 like 'Revenue ($M)'. Reads up the side of the plot. Omit to leave it alone; '' to clear.",
+    "type": "string"
+   },
+   "before": {
+    "description": "Block id on that page to insert before. Omit to append.",
+    "type": "string"
+   },
+   "chart": {
+    "additionalProperties": {},
+    "description": "The whole chart as {categories, series}. `categories` are the axis labels and each entry in `series` is one named line of numbers lining up with them exactly. Echo back the shape get_document gave you and change what you mean. The chart's TITLE and its two AXIS TITLES are not in here \u2014 they are three arguments of their own on this same tool.",
+    "properties": {
+     "categories": {
+      "description": "The labels along the axis, in the order they should read \u2014 one per column of numbers. These are what a reader compares: product lines, quarters, teams.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "series": {
+      "description": "At most 6 \u2014 that is how many colours a theme is required to answer for, so a seventh would repeat one.",
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "as": {
+         "const": "line",
+         "description": "Draw this one series as a line over the bars. That combination IS a combo chart; omit it for the block's own drawing.",
+         "type": "string"
+        },
+        "name": {
+         "description": "What this line of numbers IS. It labels the series in the legend, so name the measure and its unit \u2014 \"Revenue ($M)\", not \"Series 1\".",
+         "type": "string"
+        },
+        "values": {
+         "description": "The numbers, in the SAME ORDER as `categories` and EXACTLY as many. Use null for a gap \u2014 a short list is refused, because \"the rest are missing\" and \"I mis-pasted a column\" cannot be told apart.",
+         "items": {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "type": "array"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "content": {
+    "description": "A whole passage, in order \u2014 ONE CALL, however many paragraphs. Each line is {kind, text} and each becomes its own block: text, heading, bullets, numbered, quote, checklist, separator, code. Consecutive `bullets` (or `numbered`) lines join into a single list; everything else stands alone, so two `text` lines are two paragraphs that can be moved and restyled separately. A quote line carries its source in its own `attribution` field. THIS IS WHERE MARKDOWN LANDS: a heading takes a `level` 1\u20136, a `separator` is `---` and takes no text, a `code` line takes a `language`, and a nested list item takes a `depth`.",
+    "items": {
+     "additionalProperties": {},
+     "properties": {
+      "arrangement": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "This block's shape, where its kind has more than one \u2014 text takes md, lg, xl, hero, sm. Omit to leave it alone; null clears it back to the default."
+      },
+      "attribution": {
+       "description": "A quote's source, on the SAME line as its text \u2014 only the 'quote' kind draws it. Echo it back on an update or it is removed.",
+       "type": "string"
+      },
+      "checked": {
+       "description": "Whether a 'checklist' line is ticked. Defaults to unticked; only that kind stores it. Echo it back on an update or the tick is cleared.",
+       "type": "boolean"
+      },
+      "depth": {
+       "description": "How deep a list item is nested. 0 is the outermost and is the default. A depth more than one deeper than the line before it is clamped, never refused. Only list kinds use it.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "id": {
+       "description": "Echo an id from get_document to update that entry in place. Omit to create one.",
+       "type": "string"
+      },
+      "kind": {
+       "description": "One of: text, heading, bullets, numbered, quote, checklist, separator, code. Omit for an ordinary paragraph ('text').",
+       "type": "string"
+      },
+      "language": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "A code fence's language, such as js, python or sql. Only the 'code' kind stores it. Nothing colours it (there is no syntax highlighter); it travels with the document and out to markdown again."
+      },
+      "level": {
+       "description": "A heading's level, 1 to 6, exactly as markdown's # to ###### are. Defaults to 3. Only 'heading' draws it. Echo it back on an update or the heading returns to 3.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "text": {
+       "description": "The line itself, as plain text. No markdown, no HTML \u2014 the theme owns the look. A newline is a real line break. A 'separator' takes none and is refused if you send one.",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "diagram": {
+    "additionalProperties": {},
+    "description": "Mermaid text. The FIRST LINE names the kind of diagram and is the commonest thing to get wrong: flowchart TD (or LR) for a process, sequenceDiagram for an exchange over time, stateDiagram-v2 for states and transitions, erDiagram for things and how they relate, mindmap for one idea and its branches, gantt for bars on a calendar, quadrantChart, timeline, kanban, block-beta and venn-beta. After that, write the RELATIONSHIPS and let the layout engine place everything: there are no coordinates to set. Labels are plain TEXT, with no HTML tags and nothing that loads a picture. Newlines are real, so send the source exactly as it should read.",
+    "properties": {
+     "source": {
+      "description": "The mermaid text. The whole diagram, as one string with real newlines.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "entries": {
+    "description": "items (box, steps, timeline): meta, title, body, icon, emphasis | stats (stat-row): label, value, note \u2014 value required | media (image, image-grid, image-with-text, people, youtube): caption, title, body, src, alt, focusX, focusY, zoom \u2014 src required. One flat array whatever the block; the server knows the archetype from the type. A block only DRAWS the slots in its `renders` list (describe_block); the rest are stored and reappear if you swap the type.",
+    "items": {
+     "additionalProperties": {},
+     "properties": {
+      "alt": {
+       "description": "What the picture shows, for someone who cannot see it. Not printed on the page.",
+       "type": "string"
+      },
+      "body": {
+       "description": "A sentence or two under the title. Markdown: a newline is a line break, a blank line starts a new paragraph, and lines led by \"- \" or \"1. \" become a list.",
+       "type": "string"
+      },
+      "caption": {
+       "description": "A line printed under the picture, read by everyone.",
+       "type": "string"
+      },
+      "emphasis": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Set true on the ONE entry this page is about; its siblings then recede. Not ordinal \u2014 the entry that matters is often not the first. Leave it off entirely when none stands out."
+      },
+      "focusX": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Framing, a HUMAN's: how far across the picture the part worth showing is, 0 to 100. Pass back whatever get_document gave you. Do not invent one \u2014 you cannot see the photograph."
+      },
+      "focusY": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Framing, a HUMAN's: how far down the picture, 0 to 100. Pass back what you were given."
+      },
+      "icon": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Icon name. Only blocks whose `renders` lists icon will draw it."
+      },
+      "id": {
+       "description": "Echo an id from get_document to update that entry in place. Omit to create one.",
+       "type": "string"
+      },
+      "label": {
+       "description": "What the figure measures, e.g. \"Median query\".",
+       "type": "string"
+      },
+      "meta": {
+       "description": "Secondary label \u2014 a date, phase or category.",
+       "type": "string"
+      },
+      "note": {
+       "description": "A qualifying line under the figure.",
+       "type": "string"
+      },
+      "src": {
+       "description": "REQUIRED. The full https:// address of an image that is already online. There is no upload here, and a file path, a relative path or a data: URL is refused.",
+       "type": "string"
+      },
+      "title": {
+       "description": "The entry heading.",
+       "type": "string"
+      },
+      "value": {
+       "description": "REQUIRED. The large figure itself, e.g. \"340ms\".",
+       "type": "string"
+      },
+      "zoom": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Framing, a HUMAN's: how close in, 1 or more (1 fills the frame). Pass back what you were given. Omit all three and the middle of the picture shows, which is the normal case."
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "iconPosition": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Where a block's icons sit: top, lead, none. 'lead' puts it in a gutter beside the title, 'top' above it \u2014 a gutter spends width, a stacked icon spends height, so this changes how much text fits. Omit to leave it alone; pass '' for the shape's own default. REFUSED on a block that draws no icon \u2014 check `renders` in describe_block first, since a block may store an icon it never shows."
+   },
+   "mark": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "What this block's items are marked with. Per block, the first named being its default \u2014 steps: numeral, icon, none | timeline: dot, icon. `icon` puts each item's own icon in the mark's place; SETTING IT FILLS IN A STARTER ICON on any entry that has none, so choose each entry's `icon` yourself unless you want them identical. Omit to leave it alone; pass '' for the block's default. REFUSED where nothing is marked."
+   },
+   "pageId": {
+    "description": "A page id from get_document \u2014 or a layout REGION id, to put this block inside one column of a layout. add_block with a layout type returns its region ids.",
+    "type": "string"
+   },
+   "reveal": {
+    "description": "How the text shows while presenting: words (one at a time), type (typewriter), click (each item a step). none clears it.",
+    "enum": [
+     "words",
+     "type",
+     "click",
+     "none"
+    ],
+    "type": "string"
+   },
+   "stack": {
+    "anyOf": [
+     {
+      "enum": [
+       "none",
+       "stacked",
+       "proportional"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "How several series share a bar. 'none' puts them side by side; 'stacked' puts them in one bar so the height is the total; 'proportional' makes every bar the same height so what is read is the SHARE rather than the total. It is a SEPARATE axis from the drawing itself, so it combines with whatever `arrangement` names. Omit to leave it alone; 'none' for side by side."
+   },
+   "table": {
+    "additionalProperties": {},
+    "description": "The whole table as {headers, rows}. `rows` is a list of rows, each a list of cell text. Echo back the shape get_document gave you and change the cells you mean: a cell whose text is unchanged is not rewritten, so formatting a person applied to it survives. Adding or removing a row or a column is just sending a longer or shorter list.",
+    "properties": {
+     "headers": {
+      "description": "The top row of column headings, left to right. Send an empty array for a table with no header row. There is no header COLUMN here \u2014 a person can make the first column headings in the editor, but this payload has one axis for them, so write those cells as ordinary text in each row.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "rows": {
+      "description": "The body rows, each an array of cell text in the SAME ORDER as `headers`. Every row needs the same number of cells; use '' for a blank one. Plain text only \u2014 no markdown.",
+      "items": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "title": {
+    "description": "The chart's title, as ordinary editable text above the plot. Omit to leave it alone; pass '' to clear it.",
+    "type": "string"
+   },
+   "treatment": {
+    "anyOf": [
+     {
+      "enum": [
+       "tint",
+       "mono"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "How the theme paints every picture in this block: `tint` drains them and dyes them in the theme's own colour, so photographs from different sources read as one deck; `mono` only drains. null shows them as they came. Prefer `tint` on stock photographs."
+   },
+   "type": {
+    "description": "ITEMS \u2014 box \u2014 Parallel things with no order and no dates \u2014 features, capabilities, sources, destinations. | steps \u2014 Ordered stages where the order is the point \u2014 a process, an onboarding, a how-it-works. | timeline \u2014 Events anchored to a date or period, in chronological order. \u2016 STATS \u2014 stat-row \u2014 Headline numbers \u2014 metrics, traction, results. \u2016 MEDIA \u2014 image \u2014 A photograph, screenshot or diagram that carries the point on its own. | image-grid \u2014 Several pictures that belong together \u2014 a set of screenshots, product shots, or places. | image-with-text \u2014 A picture that needs explaining \u2014 a screenshot with the point spelled out, a photograph with its story. | people \u2014 People, when there are several of them \u2014 a team, a board, a speaker line-up, the customers on a logo wall, the contributors to a release. | youtube \u2014 A YouTube video that carries the point \u2014 a demo, a talk, a customer saying it themselves. \u2016 TABLE \u2014 table \u2014 Values that only make sense at the crossing of two things \u2014 a specification, a price list, a schedule, a set of measurements. \u2016 CHART \u2014 chart \u2014 Numbers that are COMPARED rather than listed \u2014 a trend, a split, a ranking. \u2016 DIAGRAM \u2014 diagram \u2014 A flowchart, a sequence, an org chart, a state machine, an entity diagram \u2014 anything whose meaning is in what connects to what. \u2016 LAYOUT \u2014 two-cols, three-cols, four-cols, five-cols, lead-and-rest: columns that other blocks go inside; its region ids come back, and each takes blocks where a pageId does. \u2016 PROSE needs no type: send `content`, each line carrying its own kind.",
+    "type": "string"
+   },
+   "variant": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The block's style, a NAME the theme paints alike under every theme: plain \u2014 the theme's own default | accent-bar \u2014 a bar down the leading edge | soft-fill \u2014 a tinted plane, no border | outlined \u2014 a border on four sides, no fill | top-rule \u2014 a coloured line across the top | side-rule \u2014 tinted, bordered, with a bar on the leading edge | raised-card \u2014 a lifted card with a soft shadow | gradient-card \u2014 a card over a gradient | solid-accent \u2014 filled in the accent colour, ink flipped | leaf-corner \u2014 three corners round, one square | banded \u2014 alternate rows tinted (table) | header-band \u2014 the header row on its own plane (box, table) | accent-header \u2014 eyebrow and title on the accent, body on paper (box) | marked \u2014 the numeral or dot in a filled disc (steps, timeline) | tinted \u2014 a plane in the theme's own hue, ink to match. Omit to leave styling alone; pass '' for 'plain'."
+   }
+  },
+  "required": [
+   "pageId"
+  ],
+  "type": "object"
+ },
+ "name": "add_block",
+ "title": "Add a block to a page"
+}

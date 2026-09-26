@@ -1,0 +1,276 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true,
+  "title": "Scrape a web page"
+ },
+ "description": "Scrape a single web page through a residential proxy and return it as clean Markdown (or HTML/text). Uses a real Chrome TLS fingerprint by default and only spins up a headless browser if the page is bot-challenged. Optionally run structured extraction (CSS selectors) or AI extraction (natural-language prompt). Markdown keeps the complete page by default (content_mode 'smart': everything except nav/footer/cookie chrome, with GFM tables and absolutized links); to inspect a page's raw no-JS/SEO fallback use format 'html'.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "actions": {
+    "description": "Ordered browser interactions before capture (forces a render). Each is one object: {\"click\":\"#sel\"}, {\"clickText\":\"Accept\"} (click by visible text \u2014 dismiss a consent wall without knowing its CSS), {\"type\":{\"selector\":\"#q\",\"text\":\"shoes\"}}, {\"scroll\":\"bottom\"}, {\"wait\":1000}, {\"waitForSelector\":\".results\"}. Add \"optional\":true to skip a miss, or \"timeoutMs\":N to bound one action.",
+    "items": {
+     "additionalProperties": {},
+     "type": "object"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "ai_prompt": {
+    "description": "Natural-language instruction \u2014 the LLM turns the page into structured JSON",
+    "type": "string"
+   },
+   "ai_schema": {
+    "additionalProperties": {},
+    "description": "JSON Schema for deterministic AI extraction; returned under payload.ai.data",
+    "type": "object"
+   },
+   "app_state": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "enum": [
+       "auto",
+       "raw"
+      ],
+      "type": "string"
+     }
+    ],
+    "description": "Mine the page's own hydration state (Next.js __NEXT_DATA__, Nuxt, embedded JSON islands) into payload.metadata.appState. This is where SPAs keep the real data \u2014 prices behind a picker, stock, download counts, listings \u2014 even when the DOM shows only a shell, so it often answers the question without a browser render. true/'auto': pruned to the informative parts (recommended). 'raw': the complete blobs, up to 512KB."
+   },
+   "chunk": {
+    "additionalProperties": false,
+    "description": "Segment the output into payload.chunks[] for RAG/vector-DB ingestion \u2014 each chunk carries its heading path and token count. Fences and tables are never split.",
+    "properties": {
+     "by": {
+      "enum": [
+       "heading",
+       "sentence",
+       "tokens"
+      ],
+      "type": "string"
+     },
+     "overlap": {
+      "maximum": 100000,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "size": {
+      "maximum": 100000,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "content_mode": {
+    "description": "smart (default): whole page minus nav/footer/cookie chrome. article: Readability main article only (news/blogs). full: entire body as-is.",
+    "enum": [
+     "smart",
+     "article",
+     "full"
+    ],
+    "type": "string"
+   },
+   "content_modes": {
+    "description": "Return several content scopes from ONE fetch under payload.contents (e.g. compare smart vs full)",
+    "items": {
+     "enum": [
+      "smart",
+      "article",
+      "full"
+     ],
+     "type": "string"
+    },
+    "maxItems": 3,
+    "type": "array"
+   },
+   "context": {
+    "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\"",
+    "type": "string"
+   },
+   "cookies": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "description": "Cookies to send as name\u2192value \u2014 the simple way to scrape behind a login",
+    "type": "object"
+   },
+   "country": {
+    "description": "ISO country code for the proxy exit, e.g. 'us'",
+    "maxLength": 2,
+    "minLength": 2,
+    "type": "string"
+   },
+   "engine": {
+    "description": "auto (default): TLS tier, escalate to browser on block. tls: never escalate \u2014 exactly what a pure HTTP bot (no JS) sees, right for SEO checks. render: force browser.",
+    "enum": [
+     "auto",
+     "tls",
+     "fetch",
+     "render"
+    ],
+    "type": "string"
+   },
+   "extract": {
+    "additionalProperties": {},
+    "description": "Structured-extraction schema: { field: \"css selector\" | { selector, attr, all, fns } }. `fns` is a transform pipeline run on the value \u2014 e.g. { \"price\": { \"selector\": \".price\", \"fns\": [\"amount_from_string\"] } } returns a number, not text. Functions: amount_from_string, amount_range_from_string, convert_to_float/int/str, trim, lower, upper, {regex_search|regex_find_all: \"pat\"}, {replace:{from,to}}, {join:\",\"}, {select_nth:0}, length, unique, max, min, average, product.",
+    "type": "object"
+   },
+   "fetch_resource": {
+    "description": "Regex matched against the page's network requests: the first matching response's BODY becomes the result instead of the page HTML (e.g. '/api/products' to get an SPA's JSON directly). Forces a render. Fails with 504 if nothing matches.",
+    "maxLength": 500,
+    "type": "string"
+   },
+   "format": {
+    "description": "Output format (default markdown)",
+    "enum": [
+     "markdown",
+     "html",
+     "text"
+    ],
+    "type": "string"
+   },
+   "formats": {
+    "description": "Additional formats to return together in payload.formats, e.g. ['markdown','text']",
+    "items": {
+     "enum": [
+      "markdown",
+      "html",
+      "text"
+     ],
+     "type": "string"
+    },
+    "maxItems": 3,
+    "type": "array"
+   },
+   "frontmatter": {
+    "description": "Prepend YAML front-matter (title, url, canonical, description, author, date) so the markdown is self-contained for RAG/Obsidian pipelines",
+    "type": "boolean"
+   },
+   "highlights": {
+    "description": "With `query`: also return the N most relevant passages in payload.highlights",
+    "maximum": 20,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "html": {
+    "description": "Convert HTML you already have instead of fetching: no proxy bandwidth is used, and the full parser pipeline still applies. Pass `url` too if you want relative links absolutized.",
+    "type": "string"
+   },
+   "images_mode": {
+    "description": "inline (default) keeps ![alt](url); 'alt' keeps only alt text; 'strip' removes images",
+    "enum": [
+     "inline",
+     "alt",
+     "strip"
+    ],
+    "type": "string"
+   },
+   "include_links": {
+    "description": "Return all de-duplicated absolute page links in payload.links",
+    "type": "boolean"
+   },
+   "links_mode": {
+    "description": "Link rendering. inline (default): [text](url). footnote: URLs moved to a numbered reference list at the end. strip: keep only the link text \u2014 cuts 30-48% of the tokens on link-dense pages when you only need the prose.",
+    "enum": [
+     "inline",
+     "footnote",
+     "strip"
+    ],
+    "type": "string"
+   },
+   "llm_model": {
+    "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" \u2014 never guess.",
+    "type": "string"
+   },
+   "max_tokens": {
+    "description": "Cap the markdown at ~this many tokens, cutting at a section boundary (never inside a table or code block) and noting how much was omitted",
+    "maximum": 2000000,
+    "minimum": 200,
+    "type": "integer"
+   },
+   "mode": {
+    "description": "summary: return only metadata (title, description, canonical, contentLength, status, engine, bytes) with no page content \u2014 use this when auditing pages instead of reading them",
+    "enum": [
+     "summary"
+    ],
+    "type": "string"
+   },
+   "parser": {
+    "additionalProperties": false,
+    "description": "Your own parsing rules, as CSS selector lists \u2014 use these when you know the page and don't want to rely on heuristics. include: keep ONLY these subtrees (targeted extraction, e.g. ['article.post']). exclude: delete site-specific chrome we kept. keep: protect a section (sidebar, dialog, form) that smart mode would strip.",
+    "properties": {
+     "exclude": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 25,
+      "type": "array"
+     },
+     "include": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 25,
+      "type": "array"
+     },
+     "keep": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 25,
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "preset_id": {
+    "description": "Run a stored parser preset (see save_parser_preset) instead of passing `extract` selectors. Results land in payload.data exactly the same way, and the run is scored so the preset can detect decay and self-heal.",
+    "type": "string"
+   },
+   "query": {
+    "description": "What you are looking for on the page. Keeps only the relevant sections (BM25 scoring over blocks, headings preserved) \u2014 the way to read one fact off a huge page without spending its whole token budget.",
+    "maxLength": 512,
+    "type": "string"
+   },
+   "render": {
+    "description": "Force the headless browser (JS execution)",
+    "type": "boolean"
+   },
+   "reveal_hidden": {
+    "description": "Render tier only: before capturing, open <details>/accordions and click through every tab, appending each revealed panel to the page. Use it for tabbed code samples or spec accordions where a plain render captures only the visible variant.",
+    "type": "boolean"
+   },
+   "summary_sections": {
+    "description": "Append 'Links on this page' / 'Images on this page' sections \u2014 handy when deciding the next hop",
+    "type": "boolean"
+   },
+   "toc": {
+    "description": "Prepend a table of contents built from the page headings",
+    "type": "boolean"
+   },
+   "url": {
+    "description": "The page URL to scrape (optional only when you pass `html` to convert)",
+    "format": "uri",
+    "type": "string"
+   },
+   "xhr": {
+    "description": "Record the page's XHR/fetch traffic (URL, method, status, response body) into payload.xhr. Forces a browser render. An SPA's own JSON API is usually far cleaner than its DOM \u2014 use this to DISCOVER the API, then fetch_resource to return it directly.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "context",
+   "llm_model"
+  ],
+  "type": "object"
+ },
+ "name": "scrape"
+}

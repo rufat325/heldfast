@@ -1,0 +1,452 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Compare 2-10 named companies across 1-8 XBRL concepts, aligned on calendar periods. This is the middle shape between secedgar_get_financials (one company, one concept, full history) and secedgar_fetch_frames (one concept, one period, every reporting company) \u2014 reach for it when the question names the companies. One companyfacts read per company, resolved through the same frame dedup and tag priority as secedgar_get_financials so the numbers agree. Balance-sheet and entity-info concepts are filed as point-in-time values and align on the calendar year (annual) or quarter (quarterly) their snapshot falls in, so they sit in the same matrix as income-statement lines. The inline matrix covers the most recent periods up to `periods`, trimmed further when companies x concepts x periods is too large to return in one response; the full aligned series is materialized as df_<id> for growth rates and spreads \u2014 inspect it with secedgar_dataframe_describe, then analyze it with secedgar_dataframe_query. A company that fails to resolve is reported in failed_companies and the comparison proceeds with the rest, and a company that does not report a concept is reported in gaps with the tags that were tried \u2014 never interpolated or zero-filled. A company that reports a concept only for periods older than the inline window is named in caveats with its newest period. A concept that is neither a friendly name nor an XBRL tag is reported once in unknown_concepts with the closest supported names, and fails the call only when every concept is one. Off-calendar filers and unit mismatches are surfaced in caveats rather than silently mixed.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "companies": {
+    "description": "Companies to compare, as ticker symbols (preferred) or CIK numbers. A company that does not resolve is reported in failed_companies and the rest of the comparison still runs.",
+    "items": {
+     "description": "Ticker symbol or CIK number.",
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 10,
+    "minItems": 2,
+    "type": "array"
+   },
+   "concepts": {
+    "description": "Concepts to compare \u2014 friendly names like \"revenue\" or \"net_income\" (discover them with secedgar_search_concepts) or raw XBRL tags.",
+    "items": {
+     "description": "Friendly concept name or raw XBRL tag.",
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 8,
+    "minItems": 1,
+    "type": "array"
+   },
+   "period_type": {
+    "default": "annual",
+    "description": "Align on full calendar years (annual) or calendar quarters (quarterly). Quarterly comparisons of off-calendar filers are missing at least one calendar quarter per year \u2014 see caveats.",
+    "enum": [
+     "annual",
+     "quarterly"
+    ],
+    "type": "string"
+   },
+   "periods": {
+    "default": 4,
+    "description": "Upper bound on how many recent periods the inline matrix covers, newest first \u2014 not a guarantee. The matrix is companies x concepts x periods cells, and the inline window drops further older periods when that product is too large to return in one response. The full aligned series is always registered to the dataframe, so dropped periods stay queryable via secedgar_dataframe_query.",
+    "maximum": 12,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "taxonomy": {
+    "default": "us-gaap",
+    "description": "XBRL taxonomy to resolve concepts under. Use ifrs-full only when every company in the list reports under IFRS; mixing IFRS and US GAAP filers in one call resolves them all under the same taxonomy.",
+    "enum": [
+     "us-gaap",
+     "ifrs-full"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "companies",
+   "concepts"
+  ],
+  "type": "object"
+ },
+ "name": "secedgar_compare_companies",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "period_type",
+     "taxonomy",
+     "periods",
+     "companies",
+     "failed_companies",
+     "concepts",
+     "cells",
+     "gaps",
+     "unknown_concepts",
+     "caveats"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The periods cap applied.",
+    "type": "number"
+   },
+   "caveats": {
+    "description": "Comparability warnings: a filer missing one or two calendar quarters from the frame-tagged series, a concept whose values stop at least two full years behind the rest of that company's reporting (either an XBRL tag SEC has retired, or a current tag the filer stopped using), period ends that differ inside one aligned period, concepts whose unit differs across companies, and \u2014 one line per concept \u2014 the companies that report a concept but have no value inside the inline periods, each with its newest period (its values are in the dataframe), and the concept inputs merged because they name the same concept. Company-specific warnings are prefixed with the company name. Empty when nothing needs flagging.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "cells": {
+    "description": "Inline matrix values, covering the periods listed in periods[].",
+    "items": {
+     "additionalProperties": false,
+     "description": "One company-concept-period value.",
+     "properties": {
+      "accession_number": {
+       "description": "Source filing accession number \u2014 pass to secedgar_get_filing.",
+       "type": "string"
+      },
+      "cik": {
+       "description": "Company CIK, zero-padded to 10 digits.",
+       "type": "string"
+      },
+      "company": {
+       "description": "Company name.",
+       "type": "string"
+      },
+      "concept": {
+       "description": "Concept the value belongs to.",
+       "type": "string"
+      },
+      "form": {
+       "description": "Source filing type (10-K, 10-Q, 20-F).",
+       "type": "string"
+      },
+      "frame": {
+       "description": "Underlying XBRL frame, which differs from period for point-in-time concepts (e.g. frame CY2024Q3I under period CY2024).",
+       "type": "string"
+      },
+      "period": {
+       "description": "Aligned calendar period key (e.g. \"CY2024\", \"CY2024Q2\").",
+       "type": "string"
+      },
+      "period_end": {
+       "description": "Period end date (YYYY-MM-DD). Differs across off-calendar filers within one aligned period.",
+       "type": "string"
+      },
+      "tag": {
+       "description": "XBRL tag this value was reported under \u2014 one concept can walk several tags, so it can differ between periods of the same company.",
+       "type": "string"
+      },
+      "taxonomy": {
+       "description": "Taxonomy the value was read from.",
+       "type": "string"
+      },
+      "unit": {
+       "description": "Unit of measure for this value.",
+       "type": "string"
+      },
+      "value": {
+       "description": "Reported value.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "cik",
+      "company",
+      "concept",
+      "period",
+      "value",
+      "unit",
+      "taxonomy",
+      "tag",
+      "frame",
+      "period_end",
+      "form",
+      "accession_number"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "companies": {
+    "description": "Companies included in the comparison.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One company that resolved and contributed to the matrix.",
+     "properties": {
+      "cik": {
+       "description": "Resolved CIK, zero-padded to 10 digits.",
+       "type": "string"
+      },
+      "input": {
+       "description": "The company string as supplied.",
+       "type": "string"
+      },
+      "name": {
+       "description": "Resolved entity name (SEC-conformed).",
+       "type": "string"
+      },
+      "ticker": {
+       "description": "Ticker symbol when SEC lists one.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "input",
+      "cik",
+      "name"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "concepts": {
+    "description": "Concepts covered, in the order supplied. Inputs that name the same concept (revenue and Revenue, or one raw tag spelled twice) appear once, under the first spelling.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One requested concept and the units it resolved to.",
+     "properties": {
+      "concept": {
+       "description": "Concept as supplied \u2014 friendly name or raw XBRL tag.",
+       "type": "string"
+      },
+      "label": {
+       "description": "Human-readable concept label.",
+       "type": "string"
+      },
+      "units": {
+       "description": "Distinct units this concept resolved to across the companies. More than one means the values are not directly comparable \u2014 see caveats.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "concept",
+      "label",
+      "units"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "dataset": {
+    "additionalProperties": false,
+    "description": "Canvas dataframe holding the full aligned series across every period, not just the inline window. Columns match cells[]. Absent when canvas is unavailable.",
+    "properties": {
+     "expires_at": {
+      "description": "ISO 8601 expiry timestamp.",
+      "type": "string"
+     },
+     "name": {
+      "description": "Dataframe handle (df_XXXXX_XXXXX) \u2014 inspect its columns with secedgar_dataframe_describe, then query it with secedgar_dataframe_query.",
+      "type": "string"
+     },
+     "row_count": {
+      "description": "Rows materialized in the dataframe.",
+      "type": "number"
+     }
+    },
+    "required": [
+     "name",
+     "row_count",
+     "expires_at"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `no_companies_resolved`: None of the supplied company inputs resolved to a CIK. `no_comparable_data`: Companies resolved but not one of them reports any of the requested concepts for the requested period type. `unknown_concept`: Every requested concept is neither a supported friendly name nor shaped like an XBRL tag, so no request is sent. `rate_limited`: SEC is rate-limiting this server's IP \u2014 SEC answered 429, or the call was refused without being sent while the cool-down after one runs. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "no_companies_resolved",
+         "no_comparable_data",
+         "unknown_concept",
+         "rate_limited"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "failed_companies": {
+    "description": "Companies excluded from the matrix. The comparison proceeds with the rest rather than failing the whole call.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One company that could not be included, with a machine-readable reason.",
+     "properties": {
+      "input": {
+       "description": "The company string as supplied.",
+       "type": "string"
+      },
+      "message": {
+       "description": "What went wrong and how to fix this one input.",
+       "type": "string"
+      },
+      "reason": {
+       "description": "Machine-readable failure. not_found: the input matched no CIK. ambiguous: it matched several, and the message lists them. no_company_facts: it resolved but the filer reports no XBRL. Match on this rather than the message.",
+       "enum": [
+        "not_found",
+        "ambiguous",
+        "no_company_facts"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "input",
+      "reason",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "gaps": {
+    "description": "Company-concept pairs with no value in any period. Deliberately explicit \u2014 a missing value is never interpolated or zero-filled. A pair with values only in periods older than the inline window is not a gap; caveats names it.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One company-concept pair with no reported value.",
+     "properties": {
+      "cik": {
+       "description": "Company CIK that reports nothing for this concept.",
+       "type": "string"
+      },
+      "company": {
+       "description": "Company name.",
+       "type": "string"
+      },
+      "concept": {
+       "description": "Concept with no value for this company.",
+       "type": "string"
+      },
+      "tags_tried": {
+       "description": "XBRL tags attempted, in priority order, before giving up.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "cik",
+      "company",
+      "concept",
+      "tags_tried"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "notice": {
+    "description": "Guidance when the inline matrix dropped periods, or when the full aligned series is staged as a dataframe.",
+    "type": "string"
+   },
+   "period_type": {
+    "description": "Period alignment used, echoed from input.",
+    "type": "string"
+   },
+   "periods": {
+    "description": "Calendar period keys covered by the inline matrix, newest first. Shorter than the requested periods when the cell count forced the window to shrink \u2014 the enrichment trailer reports the drop.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Number of periods shown inline.",
+    "type": "number"
+   },
+   "taxonomy": {
+    "description": "Taxonomy the concepts were resolved under, echoed from input.",
+    "type": "string"
+   },
+   "truncated": {
+    "description": "True when the aligned series has more periods than the inline matrix shows.",
+    "type": "boolean"
+   },
+   "unknown_concepts": {
+    "description": "Requested concepts that are neither a supported friendly name nor an XBRL tag (UpperCamelCase, e.g. NetIncomeLoss), reported once each rather than as a gap per company \u2014 secedgar_search_concepts lists every supported name. Empty when every concept resolved.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One requested concept that was not queried for any company.",
+     "properties": {
+      "concept": {
+       "description": "Concept as supplied (trimmed) \u2014 neither a supported friendly name nor an XBRL tag.",
+       "type": "string"
+      },
+      "derivation": {
+       "description": "How to build it from supported concepts when it is a standard combination, e.g. \"operating_cash_flow \u2212 capex\".",
+       "type": "string"
+      },
+      "suggestions": {
+       "description": "Up to three closest supported friendly names. Empty when a derivation applies or no name is close.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "concept",
+      "suggestions"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Secedgar Compare Companies"
+}

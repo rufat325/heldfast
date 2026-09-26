@@ -1,0 +1,37 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Cheaply confirm whether the local cache still matches OurFamilyWizard, WITHOUT running a full sync. Use this before asserting anything about current state \u2014 especially \"draft X is still sitting unsent\". Costs one OFW request for the folder check plus one per messageId. For each folder it returns the live server count next to the cached count. For each id it returns a LIVE lifecycle `state` \u2014 \"draft\" | \"sent\" | \"received\" | \"deleted\" | \"unknown\" \u2014 alongside `folder`, `sentAt`, `existsOnServer` and a content comparison. `state` is the field that answers \"is this still a draft?\": a draft that has been SENT still exists on the server, so existsOnServer:true never distinguished the two. A cached draft whose state is no longer \"draft\" reports inSync:false even when its text is byte-identical. Content is compared by revision hash, because OFW draft timestamps do NOT change when a draft is edited in the web app. Does not fetch bodies into the cache, does not touch attachments, and does not depend on sync state. For draftKeys, or a full live draft inventory, use ofw_status.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "allowMarkRead": {
+    "description": "Default false. Probing an id whose cached state cannot rule out an unread INBOX message requires fetching its detail, which marks it READ on OurFamilyWizard and stamps a co-parent-visible \"First Viewed\" time \u2014 irreversible. Such ids are skipped (reason:\"WOULD_MARK_READ\") unless you set this to true. The server-wide OFW_ALLOW_MARK_READ=false is a ceiling this cannot raise.",
+    "type": "boolean"
+   },
+   "folders": {
+    "description": "Folders to compare cached vs live counts for. Defaults to all three when messageIds is not given. Must be non-empty if given.",
+    "items": {
+     "enum": [
+      "inbox",
+      "sent",
+      "drafts"
+     ],
+     "type": "string"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "messageIds": {
+    "description": "Specific ids to verify against OFW (max 25). Ids cached as drafts, as sent messages, or as already-read inbox messages are probed freely \u2014 none of those can stamp the record. Anything else is skipped \u2014 see allowMarkRead.",
+    "items": {
+     "type": "number"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "name": "ofw_check_freshness"
+}

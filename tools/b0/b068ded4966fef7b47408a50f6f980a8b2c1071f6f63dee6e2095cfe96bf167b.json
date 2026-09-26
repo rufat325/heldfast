@@ -1,0 +1,107 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Pro/Teams: first-pass specification-quality review of a WRITTEN SPEC (proposal, design doc, task breakdown, or an OpenSpec-style change bundle) against the 8 laws of the Spec Quality Blueprint. The what-to-build lens of the doctrine trio, applied BEFORE code exists: where architect.validate scores built agentic ARCHITECTURE and design.validate scores the rendered SURFACE, spec.validate scores the written intent the team will build from (outcome framing, scope boundary, testable acceptance, decision trail, handoff completeness, doctrine-upfront, task traceability, risk and reversibility). ON CLIENT TIMEOUT: DO NOT RETRY. Long-running LLM call (~60-180s at high reasoning effort, single-pass). The server mints a run_id, emits it in the FIRST progress event at t=0s (before the LLM call), and persists the run: so on a client timeout, capture that run_id and call me.validation_history(run_id='<that-id>') to fetch the persisted result instead of retrying (a retry re-runs the full 60-180s call). Runs appear in your validation-history dashboard tagged as the 'spec' dimension, distinct from the 'architecture' and 'surface' runs; pass repository to group them per project. Pass private_session=true to skip the stored run (persistence + recovery disabled); operational security + cost logs are still kept. v1 is single-pass: no certification or consensus mode yet (those stay architect.validate-only). Returns spec_classification (spec_document vs non_spec: source code or UI artefacts are marked not_applicable, NOT failed; submit those to architect.validate or design.validate instead), per-law findings (verdict, severity_score 0-100, severity_class, cited evidence, recommendation), and severity-weighted readiness (score, grade, tier) computed by the SAME scorer the other two lenses use, so all three grade on one rubric. TESTABILITY IS THE FLOOR: a load-bearing requirement with no observable acceptance signal, or an irreversible step with no named human gate, is a production_blocker, not polish. WHEN TO CALL: the user wants a governance/quality review or a readiness grade on a spec they are about to build from (proposal, requirements, task plan). WHEN NOT TO CALL: built code or a rendered surface, those return tier=not_applicable; use the sibling validators instead. INPUTS: send the FULL spec text verbatim as implementation_context (for an OpenSpec change, concatenate proposal.md + design.md + tasks.md + delta specs; no truncation, no '\u2026' placeholders, they are read as literal content). Auth: sign-in required, with an active Pro, Pro Plus, Teams, Enterprise, beta, or trial plan. Data at rest in the UK; OpenAI (US) processing (no-training); prompt-injection text inside the spec is treated as inert untrusted data. TYPED FAILURES: same as architect.validate (timed_out, rate_limited, dependency_unavailable, schema_mismatch, each carries retryable + next_action); the services raise the identical typed envelopes on this lens. CALIBRATION DISCLOSURE: the scoring prompt is a v1 first-cut mirroring the architect's contract structure; its score calibration is not yet tuned against a corpus of real runs the way architect.validate was. Treat the grade as directional quality signal, not a certified verdict. DOCTRINE: the eight laws, each law's definition, rationale, anti-patterns, and the validator questions this tool scores against, live in content/spec-quality-laws.json (the what-to-build companion to the experience-design laws).",
+ "inputSchema": {
+  "properties": {
+   "files": {
+    "anyOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "File paths relevant to the spec, for context.",
+    "title": "Files"
+   },
+   "goals": {
+    "anyOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Specific quality goals to weight (e.g. 'ready for an agent to build unattended', 'tight scope').",
+    "title": "Goals"
+   },
+   "implementation_context": {
+    "description": "The specification under review. SEND FULL TEXT VERBATIM: the reviewer cites specific requirements, decisions, and tasks; any compression destroys evidence and produces findings on content that isn't there. For an OpenSpec change, concatenate proposal.md + design.md + tasks.md + delta specs. Do NOT truncate; if very large, split into MULTIPLE calls scoped by document.",
+    "title": "Implementation Context",
+    "type": "string"
+   },
+   "private_session": {
+    "default": false,
+    "description": "Set true to disable persistence AND run_id recovery for this call (a private one-shot that does not appear in the dashboard). The request is also not persisted in the model provider's response store; the provider's abuse-monitoring retention still applies. Default false.",
+    "title": "Private Session",
+    "type": "boolean"
+   },
+   "repository": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Project/repository key. Groups this run with prior spec.validate runs on the same project in your validation-history dashboard (the same grouping the other lenses use), under the 'spec' dimension.",
+    "title": "Repository"
+   },
+   "session_id": {
+    "anyOf": [
+     {
+      "type": "integer"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "Optional Governed Session to attach this run to (GEP-M2). Must reference a session YOU own (list via me.sessions; sessions are created in the web app at /app/sessions): foreign ids are refused before any model call. The run then appears on the session's timeline alongside the other lenses. With private_session=true no run is stored so nothing attaches, but the ownership check still runs FIRST: a session id you don't own fails the call either way.",
+    "title": "Session Id"
+   },
+   "task": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "description": "What this spec is for (e.g. 'the closed-beta apply flow rework'). Adds evaluation context.",
+    "title": "Task"
+   }
+  },
+  "required": [
+   "implementation_context"
+  ],
+  "title": "validate_specificationArguments",
+  "type": "object"
+ },
+ "name": "spec.validate",
+ "outputSchema": {
+  "additionalProperties": true,
+  "title": "validate_specificationDictOutput",
+  "type": "object"
+ },
+ "title": "Validate Specification Quality"
+}

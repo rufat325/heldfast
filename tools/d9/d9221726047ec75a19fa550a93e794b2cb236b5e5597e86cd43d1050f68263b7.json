@@ -1,0 +1,269 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "Search consumer safety complaints filed with NHTSA for a specific vehicle. Returns a component breakdown over all matching complaints plus a paginated slice of the most recent complaints. Use for common problems, failure patterns, or owner-reported issues.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "component": {
+    "description": "Filter to a specific component (uppercase, e.g., \"ENGINE\", \"AIR BAGS\", \"ELECTRICAL SYSTEM\"). Matches within comma-separated component lists. Omit to see all.",
+    "type": "string"
+   },
+   "limit": {
+    "description": "Max complaint narratives to return. Defaults to 20; max 50. componentBreakdown always reflects all matching complaints.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "make": {
+    "description": "Vehicle manufacturer.",
+    "type": "string"
+   },
+   "model": {
+    "description": "Vehicle model.",
+    "type": "string"
+   },
+   "modelYear": {
+    "description": "Model year, a whole number.",
+    "maximum": 9007199254740991,
+    "minimum": -9007199254740991,
+    "type": "integer"
+   },
+   "offset": {
+    "description": "Pagination offset into the filing-date-descending complaint list. Defaults to 0. componentBreakdown is unaffected by pagination.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "make",
+   "model",
+   "modelYear"
+  ],
+  "type": "object"
+ },
+ "name": "nhtsa_search_complaints",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "totalCount",
+     "returned",
+     "offset",
+     "limit",
+     "componentBreakdown",
+     "complaints",
+     "effectiveQuery"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "complaints": {
+    "description": "Paginated slice of the most recent complaints, date-descending",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single consumer complaint",
+     "properties": {
+      "components": {
+       "description": "Affected components (comma-separated)",
+       "type": "string"
+      },
+      "crash": {
+       "description": "Involved a crash",
+       "type": "boolean"
+      },
+      "dateComplaintFiled": {
+       "description": "Date complaint was filed (ISO YYYY-MM-DD)",
+       "type": "string"
+      },
+      "dateOfIncident": {
+       "description": "Date the incident occurred (ISO YYYY-MM-DD)",
+       "type": "string"
+      },
+      "fire": {
+       "description": "Involved a fire",
+       "type": "boolean"
+      },
+      "numberOfDeaths": {
+       "description": "Number of deaths",
+       "type": "number"
+      },
+      "numberOfInjuries": {
+       "description": "Number of injuries",
+       "type": "number"
+      },
+      "odiNumber": {
+       "description": "NHTSA complaint ID",
+       "type": "number"
+      },
+      "summary": {
+       "description": "Consumer-reported description",
+       "type": "string"
+      },
+      "unreliableIncidentDate": {
+       "additionalProperties": false,
+       "description": "An incident date NHTSA reported that this complaint's own filing date or model year rules out \u2014 report it as contradicted, never as when the incident happened. Appears in place of dateOfIncident, never alongside it; both absent means NHTSA reported no incident date at all.",
+       "properties": {
+        "reason": {
+         "description": "What the reported date contradicts: \"postdates_filing\" \u2014 it falls after this complaint was filed; \"predates_model_year\" \u2014 it falls before a vehicle of this model year existed.",
+         "enum": [
+          "postdates_filing",
+          "predates_model_year"
+         ],
+         "type": "string"
+        },
+        "reported": {
+         "description": "The incident date NHTSA reported, ISO YYYY-MM-DD",
+         "type": "string"
+        }
+       },
+       "required": [
+        "reported",
+        "reason"
+       ],
+       "type": "object"
+      },
+      "vin": {
+       "description": "VIN prefix (partial)",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "componentBreakdown": {
+    "description": "Complaints grouped by component, sorted by frequency",
+    "items": {
+     "additionalProperties": false,
+     "description": "Complaint counts for a single component",
+     "properties": {
+      "component": {
+       "description": "Component name",
+       "type": "string"
+      },
+      "count": {
+       "description": "Number of complaints",
+       "type": "number"
+      },
+      "crashCount": {
+       "description": "Complaints involving crashes",
+       "type": "number"
+      },
+      "deathCount": {
+       "description": "Total deaths reported",
+       "type": "number"
+      },
+      "fireCount": {
+       "description": "Complaints involving fires",
+       "type": "number"
+      },
+      "injuryCount": {
+       "description": "Total injuries reported",
+       "type": "number"
+      }
+     },
+     "required": [
+      "component",
+      "count",
+      "crashCount",
+      "fireCount",
+      "injuryCount",
+      "deathCount"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "effectiveQuery": {
+    "description": "\"make model modelYear\" with optional component filter applied, as the server used it.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode.",
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "limit": {
+    "description": "Pagination limit used for this page",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance when no complaints match the vehicle, or when the requested page overshoots the result set.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Pagination offset used for this page",
+    "type": "number"
+   },
+   "returned": {
+    "description": "Number of complaints in this page",
+    "type": "number"
+   },
+   "totalCount": {
+    "description": "Total complaints matching criteria",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Nhtsa Search Complaints"
+}

@@ -1,0 +1,75 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Invoice verification for France \u2014 use when you HOLD an invoice (or its extracted fields) and must check that the identifiers it displays belong together before paying it. Cross-checks in ONE call: the SIREN against the official registry (existence and active status, live), the VAT number printed on the invoice against the one computed from the SIREN (the French key is deterministic) AND live against VIES, and the IBAN's ISO 13616 form + key digits with the bank identified. Returns a deterministic verdict coherent/incoherent/inverifiable with closed-list reasons traced to their source \u2014 flags a VAT number that belongs to ANOTHER company, a ceased supplier, or a key-invalid IBAN. A VIES outage yields `inverifiable`, never a false invalid. NOT a payee verification: the bank leg checks form only \u2014 a valid-but-swapped IBAN is not detectable, and `non_verifie` says so next to the verdict. At least one of tva/iban is required (a SIREN alone is a profile, not a cross-check). Paid via x402 ($0.02 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "iban": {
+    "description": "IBAN printed on the invoice (spaces tolerated) \u2014 form + key + bank identification, never a holder-name check. At least one of tva/iban is required",
+    "maxLength": 40,
+    "minLength": 15,
+    "type": "string"
+   },
+   "siren": {
+    "description": "9-digit SIREN printed on the invoice (digits only)",
+    "pattern": "^\\d{9}$",
+    "type": "string"
+   },
+   "tva": {
+    "description": "VAT number printed on the invoice, e.g. FR27552032534 \u2014 cross-checked against the SIREN and live against VIES. At least one of tva/iban is required",
+    "maxLength": 20,
+    "minLength": 4,
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "siren"
+  ],
+  "type": "object"
+ },
+ "name": "verify_french_invoice",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Verify a French invoice"
+}

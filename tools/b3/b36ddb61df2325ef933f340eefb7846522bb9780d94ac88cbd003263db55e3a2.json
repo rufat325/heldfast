@@ -1,0 +1,69 @@
+{
+ "annotations": {
+  "cost": {
+   "all": 3
+  },
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Reconcile a set of Wikidata items against OpenStreetMap features of a given tag \u2014 the join Wikidata<->OSM community mapping efforts need before editing anything. Give either explicit Q-ids (\"qids\") or a SPARQL query that selects them (\"sparql\", must bind ?item to a wd:Q... URI \u2014 used to discover an arbitrary class, e.g. \"every power station in country X\"), plus an OSM tag filter (\"osm_filter\", e.g. \"power=plant\"). Fetches each item's coordinate (P625) and labels in the requested languages, searches OSM within radius_m of each, and scores candidates on THREE signals: an existing `wikidata=` tag (ground truth when present), cross-lingual name agreement, and distance. Returns one of four DISTINCT states per item: \"matched\" (confident link + evidence), \"ambiguous\" (2+ plausible candidates, ALL returned with scores \u2014 never auto-resolved), \"unmatched\" (the OSM search completed and found nothing plausible), or \"error\" (the search did NOT complete \u2014 no Wikidata coordinate, the item didn't resolve, or the Overpass call failed/timed out/was capped). \"error\" is never collapsed into \"unmatched\": a failed lookup is not evidence a thing is missing from OSM. Read-only \u2014 this does not write to Wikidata, Wikipedia or OpenStreetMap.",
+ "inputSchema": {
+  "examples": [
+   {
+    "languages": "ka,ru,en",
+    "osm_filter": "power=plant",
+    "qids": [
+     "Q162887",
+     "Q3650523",
+     "Q4501177"
+    ],
+    "radius_m": 2000
+   }
+  ],
+  "properties": {
+   "languages": {
+    "description": "Comma/pipe-joined language codes to compare, e.g. \"ka,ru,en\" \u2014 the shape needed when the same real-world place has different names in different languages (his own example: a Georgian power station named differently in Georgian, Russian and English). Every requested language's label is fetched and compared against every OSM name tag (name, name:<lang>, alt_name, int_name, official_name); a match in ANY requested language counts as name agreement, and the response says which one. Default \"en\" \u2014 pass the full set you actually need, an English-only comparison both misses real matches and can manufacture false ones.",
+    "type": "string"
+   },
+   "osm_filter": {
+    "description": "OSM tag filter(s) candidates must carry, as key=value, e.g. \"power=plant\" \u2014 or several alternatives comma-joined, e.g. \"power=plant,power=generator\" (OR-ed together). Required.",
+    "type": "string"
+   },
+   "overpass_timeout_s": {
+    "description": "Timeout passed to the Overpass query itself, 5-180 seconds (default 25). Lower it to fail fast over a large area rather than wait.",
+    "type": "number"
+   },
+   "qids": {
+    "description": "Wikidata Q-ids to reconcile, up to 200 \u2014 an array of strings or a comma/pipe-joined string (e.g. [\"Q162887\",\"Q3650523\"] or \"Q162887,Q3650523\"). Provide this OR \"sparql\".",
+    "oneOf": [
+     {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     {
+      "type": "string"
+     }
+    ]
+   },
+   "radius_m": {
+    "description": "Search radius in metres around each item's coordinate, 10-20000 (default 300). An OSM feature carrying a matching wikidata= tag is still recognised as \"matched\" even if it falls outside this radius \u2014 the tag is ground truth.",
+    "type": "number"
+   },
+   "sparql": {
+    "description": "A SPARQL SELECT that binds ?item to the Wikidata items to reconcile (up to 200 used) \u2014 e.g. \"SELECT ?item WHERE { ?item wdt:P31/wdt:P279* wd:Q159719 . ?item wdt:P17 wd:Q230 . }\" for every power station (Q159719) in Georgia (Q230). Labels and coordinates are fetched separately per item, so this query only needs to pick the set \u2014 it does not need to select labels or coordinates itself. Provide this OR \"qids\".",
+    "type": "string"
+   }
+  },
+  "required": [
+   "osm_filter"
+  ],
+  "type": "object"
+ },
+ "name": "reconcile_wikidata_osm",
+ "title": "Reconcile Wikidata Osm",
+ "version": "v1.fca873ea"
+}

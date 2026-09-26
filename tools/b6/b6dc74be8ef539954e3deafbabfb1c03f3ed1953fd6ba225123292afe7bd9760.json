@@ -1,0 +1,924 @@
+{
+ "annotations": {
+  "access": "free",
+  "connect_url": "https://dchub.cloud/connect?ref=mcp-tools-list&tool=get_grid_scoreboard",
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "maturity": "unknown",
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Grid Scoreboard"
+ },
+ "description": "GLOBAL grid scoreboard \u2014 9 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE, BPA, TVA) + Great Britain (NESO) + the European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe \u2014 via ENTSO-E; the exact live-vs-configured count is in counts_basis.eu_zones_live / eu_zones_configured, measured per call rather than asserted here) + Taiwan (Taipower) + Japan (OCCTO areas) + South Korea (KPX) + Brazil SIN (ONS), ranked side-by-side on each feed's LATEST PUBLISHED reading: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. \u2605FRESHNESS IS NOT UNIFORM and every row says so: each carries mix_period, mix_age_hours and freshness_basis. The US rows come from EIA hourly RTO, which publishes the FUEL-TYPE BREAKDOWN several hours behind aggregate demand \u2014 an overnight mix reading is routinely 18-24h old (it will show near-zero solar) while demand on the same row is ~1-2h old. Read mix_age_hours before narrating any row as current, and NEVER describe a row as the mix \"right now\" unless its mix_age_hours is small; demand_period and mix_period are separate clocks and the row reports both plus demand_vs_mix_lag_hours. One call answers \"which grid worldwide is greenest, or most gas-reliant, for siting a data center?\" \u2014 vs compare_isos (pairwise) or get_grid_data (single ISO). Every ranked grid scores renewable_share_pct as wind+solar+hydro (apples-to-apples across all feeds; geothermal is reported separately and, where it exists, also as renewable_share_incl_geothermal_pct \u2014 note get_grid_intelligence uses that geothermal-inclusive figure for US ISOs); Brazil ranks by renewable share but reports NO gas share (ONS bundles gas/coal/oil/biomass into one thermal figure \u2014 never presented as gas); Australia NEM (AEMO) + Singapore (EMA) are listed unranked in partial_grids (no full fuel split \u2014 kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; TW = Taipower; JP = TSO eria_jukyu CSVs; KR = KPX real-time; BR = ONS Balan\u00e7o de Energia; AU = AEMO NEM; SG = EMA NEMS \u2014 all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Answers \"which grid is cleanest right now\", \"how is ERCOT doing at this moment\". Try: get_grid_scoreboard.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "properties": {},
+  "type": "object"
+ },
+ "name": "get_grid_scoreboard",
+ "outputSchema": {
+  "additionalProperties": {},
+  "description": "Live global grid scoreboard: ranked `grids` + unranked `partial_grids`, fuel mix + demand right now, alongside the DC Hub envelope keys.",
+  "properties": {
+   "_entity": {
+    "description": "Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) \u2014 branch on this before parsing the rest.",
+    "type": "string"
+   },
+   "_front_door": {
+    "additionalProperties": {},
+    "description": "In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.",
+    "properties": {},
+    "type": "object"
+   },
+   "_return_loop": {
+    "additionalProperties": {},
+    "description": "Suggested next-session delta call (get_changes since=24h) so you pull only what changed.",
+    "properties": {},
+    "type": "object"
+   },
+   "citation": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "string"
+     }
+    ],
+    "description": "Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself."
+   },
+   "count": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Ranked grids \u2014 the long-standing alias of zones_ranked (NOT grids.length, which also carries the unrankable rows)"
+   },
+   "counts_basis": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "What each count actually counts, plus per_source rows, eu_zones_live vs eu_zones_configured, and the unranked/unavailable tallies"
+   },
+   "coverage": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Coverage line GENERATED from the rows that actually ranked \u2014 a feed that returned nothing is absent from it"
+   },
+   "deep_intelligence": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Pointers to the deeper per-ISO / per-site tools to call next"
+   },
+   "eu_gas_context": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "EU gas-flow context: {active_countries, total_throughput_gwh_per_day, unit, source, note}"
+   },
+   "freshness": {
+    "anyOf": [
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Rows are each feed's LATEST PUBLISHED reading, NOT a synchronized snapshot: {basis, us_mix_source, stale_mix_threshold_hours, stale_mix_rows[], how_to_read}. Read this before narrating any row as current"
+   },
+   "grids": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "avg_price_usd_per_mwh": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Average wholesale price in USD/MWh (where the feed carries price)"
+        },
+        "country": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Country (code or name)"
+        },
+        "demand_age_hours": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Age of the demand reading against the current UTC clock"
+        },
+        "demand_mw": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Current demand in MW"
+        },
+        "demand_period": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Period of the demand reading \u2014 a DIFFERENT clock from mix_period on US rows"
+        },
+        "demand_vs_mix_lag_hours": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "How far the fuel mix trails demand WITHIN this row. Non-zero means the two figures are from different hours"
+        },
+        "freshness_basis": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Which clock the ages on this row are measured against"
+        },
+        "fuel_mw": {
+         "anyOf": [
+          {
+           "additionalProperties": {},
+           "properties": {},
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Fuel mix in MW, e.g. {gas, nuclear, coal, wind, solar, hydro, \u2026}"
+        },
+        "gas_share_pct": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Gas share of generation, % (null where the feed cannot honestly split gas out, e.g. Brazil ONS thermal)"
+        },
+        "generation_total_mw": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Total generation in MW"
+        },
+        "iso": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Grid operator / bidding-zone code, e.g. PJM, ERCOT, NESO, DE, JP-TOKYO"
+        },
+        "mix_age_hours": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "How old the fuel-mix reading is against the CURRENT UTC clock. US rows are routinely 18-24h overnight \u2014 check this before calling a row current"
+        },
+        "mix_is_stale": {
+         "anyOf": [
+          {
+           "type": "boolean"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Set when mix_age_hours is at or over the stale threshold \u2014 do not narrate this row as the mix \"right now\""
+        },
+        "mix_note": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Plain-language warning composed for a stale mix reading"
+        },
+        "mix_period": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Timestamp / period of the fuel-mix reading"
+        },
+        "mix_vs_demand_warning": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Present when generation and demand are hours apart: their difference is a clock gap, NOT net imports"
+        },
+        "note": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Per-grid caveat"
+        },
+        "partial_feed": {
+         "description": "Set when the feed is partial (no full fuel split) \u2014 why the grid is unranked"
+        },
+        "region": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Human-readable region name"
+        },
+        "renewable_definition": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Exactly what renewable_share_pct counts, identical on every ranked feed"
+        },
+        "renewable_share_incl_geothermal_pct": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Same share WITH geothermal in the numerator \u2014 present only where geothermal > 0. This is the figure get_grid_intelligence publishes for US ISOs; renewable_share_pct above is the cross-feed-comparable one used for the ranking"
+        },
+        "renewable_share_pct": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Wind+solar+hydro share of generation, % (the ranking key)"
+        },
+        "variable_renewable_pct": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Wind+solar-only share, % (partial feeds)"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Fully-ranked grids, greenest (highest renewable share) first \u2014 US ISOs + GB + EU zones + TW + JP + KR + BR"
+   },
+   "independent_sources": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Distinct upstream feeds behind those rows \u2014 far below zones_ranked because every EU bidding zone comes from ONE feed (ENTSO-E). null when the per-source tally failed"
+   },
+   "ok": {
+    "anyOf": [
+     {
+      "type": "boolean"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "true when the scoreboard build succeeded"
+   },
+   "partial_grids": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {
+        "avg_price_usd_per_mwh": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Average wholesale price in USD/MWh (where the feed carries price)"
+        },
+        "country": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Country (code or name)"
+        },
+        "demand_age_hours": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Age of the demand reading against the current UTC clock"
+        },
+        "demand_mw": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Current demand in MW"
+        },
+        "demand_period": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Period of the demand reading \u2014 a DIFFERENT clock from mix_period on US rows"
+        },
+        "demand_vs_mix_lag_hours": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "How far the fuel mix trails demand WITHIN this row. Non-zero means the two figures are from different hours"
+        },
+        "freshness_basis": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Which clock the ages on this row are measured against"
+        },
+        "fuel_mw": {
+         "anyOf": [
+          {
+           "additionalProperties": {},
+           "properties": {},
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Fuel mix in MW, e.g. {gas, nuclear, coal, wind, solar, hydro, \u2026}"
+        },
+        "gas_share_pct": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Gas share of generation, % (null where the feed cannot honestly split gas out, e.g. Brazil ONS thermal)"
+        },
+        "generation_total_mw": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Total generation in MW"
+        },
+        "iso": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Grid operator / bidding-zone code, e.g. PJM, ERCOT, NESO, DE, JP-TOKYO"
+        },
+        "mix_age_hours": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "How old the fuel-mix reading is against the CURRENT UTC clock. US rows are routinely 18-24h overnight \u2014 check this before calling a row current"
+        },
+        "mix_is_stale": {
+         "anyOf": [
+          {
+           "type": "boolean"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Set when mix_age_hours is at or over the stale threshold \u2014 do not narrate this row as the mix \"right now\""
+        },
+        "mix_note": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Plain-language warning composed for a stale mix reading"
+        },
+        "mix_period": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Timestamp / period of the fuel-mix reading"
+        },
+        "mix_vs_demand_warning": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Present when generation and demand are hours apart: their difference is a clock gap, NOT net imports"
+        },
+        "note": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Per-grid caveat"
+        },
+        "partial_feed": {
+         "description": "Set when the feed is partial (no full fuel split) \u2014 why the grid is unranked"
+        },
+        "region": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Human-readable region name"
+        },
+        "renewable_definition": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Exactly what renewable_share_pct counts, identical on every ranked feed"
+        },
+        "renewable_share_incl_geothermal_pct": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Same share WITH geothermal in the numerator \u2014 present only where geothermal > 0. This is the figure get_grid_intelligence publishes for US ISOs; renewable_share_pct above is the cross-feed-comparable one used for the ranking"
+        },
+        "renewable_share_pct": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Wind+solar+hydro share of generation, % (the ranking key)"
+        },
+        "variable_renewable_pct": {
+         "anyOf": [
+          {
+           "anyOf": [
+            {
+             "type": "number"
+            },
+            {
+             "type": "string"
+            }
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Wind+solar-only share, % (partial feeds)"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Grids listed UNRANKED because the feed has no full fuel split (Australia NEM, Singapore EMA)"
+   },
+   "provenance": {
+    "additionalProperties": {},
+    "description": "Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.",
+    "properties": {},
+    "type": "object"
+   },
+   "quota": {
+    "additionalProperties": {},
+    "description": "Caller quota state (remaining calls, tier) when available.",
+    "properties": {},
+    "type": "object"
+   },
+   "ranked_by": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Ranking criterion (renewable share = wind+solar+hydro, greenest first) plus the full definition \u2014 identical on every feed, geothermal and biomass excluded from the numerator"
+   },
+   "site_evaluation_handoff": {
+    "anyOf": [
+     {
+      "items": {
+       "additionalProperties": {},
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     {
+      "additionalProperties": {},
+      "properties": {},
+      "type": "object"
+     }
+    ],
+    "description": "Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates \u2014 an array of {tool, parameters, why} entries."
+   },
+   "source": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Upstream feeds behind the rows in THIS response, generated (EIA hourly RTO, Elexon, ENTSO-E, Taipower, OCCTO, KPX, ONS, AEMO, EMA)"
+   },
+   "us_interconnection_queue_gw": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Total queued generation across the 7 US ISO interconnection queues, GW"
+   },
+   "zones_ranked": {
+    "anyOf": [
+     {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Grid rows carrying a live renewable_share_pct, i.e. the ranked set"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Grid Scoreboard"
+}

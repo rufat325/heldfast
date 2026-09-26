@@ -1,0 +1,565 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Resolves a DOI to its full Crossref metadata record: title, authors, editors, affiliations, abstract (when deposited), journal or container with the volume, issue, pages, and article number that locate the work in it, ISSNs and ISBNs, publication date, type, license, full-text links, and funder acknowledgements. The author list is paged: authorCount is the full deposited total, offset and limit select the page (25 authors by default), and when authors remain the response carries a nextOffset to pass back as offset \u2014 large-collaboration papers deposit thousands. Post-publication updates are relayed as Crossref records them: updatedBy names each correction, retraction, expression of concern, or new version issued against this work, with its notice DOI and whether the publisher or Retraction Watch recorded it, and updateTo names the works this record is itself a notice for. An absent updatedBy does not mean the work was never updated \u2014 coverage depends on those deposits. relations lists related identifiers, such as a preprint and its published version, grouped by relation type; only the Crossref-registered DOIs among them resolve through crossref_get_work. Outgoing references are reported as a count in referencesCount; the reference entries themselves come from crossref_get_references. The isReferencedByCount field reports the total incoming citation count from Crossref; the citing works themselves are not available through Crossref \u2014 use OpenAlex for citation graphs.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "doi": {
+    "description": "DOI in the format \"10.NNNN/suffix\", e.g. \"10.1038/nature12373\". A resolver-wrapped form \u2014 \"https://doi.org/10.1038/nature12373\", \"https://dx.doi.org/\u2026\", \"doi:10.1038/nature12373\" \u2014 is accepted and unwrapped.",
+    "pattern": "^(?:https?:\\/\\/(?:dx\\.)?doi\\.org\\/|doi:)?10\\.\\d{4,9}\\/\\S+$",
+    "type": "string"
+   },
+   "limit": {
+    "default": 25,
+    "description": "Maximum number of authors to return in one page (1\u2013500, default 25). Ordinary records fit in a single page; large-collaboration papers in particle physics and genomics deposit thousands.",
+    "maximum": 500,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Zero-based index of the first author to return. Pass the nextOffset value from the previous response to continue through a long author list. Only the author list is paged; every other field of the record is returned in full on every page.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "doi"
+  ],
+  "type": "object"
+ },
+ "name": "crossref_get_work",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "doi"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "abstract": {
+    "description": "Abstract when deposited by the publisher. Many records lack abstracts. Publishers deposit it as JATS XML, so this is the text of that deposit with markup removed and character references decoded; a link keeps its tag only where its href holds an address the text it wraps does not already carry, and each formula appears once \u2014 MathML as the TeX annotation it carries, otherwise written out linearly (x_i, A^{\u22121}, \u221a(m), (a+b)/c), and TeX deposited beside MathML in whichever notation comes first.",
+    "type": "string"
+   },
+   "articleNumber": {
+    "description": "Article number, deposited by journals that number articles instead of paging them",
+    "type": "string"
+   },
+   "authorCount": {
+    "description": "Total number of authors in the deposited list, before offset and limit were applied. Omitted alongside authors when the record deposits no author field.",
+    "type": "number"
+   },
+   "authors": {
+    "description": "Page of the author and contributor list, bounded by limit. Omitted when the record deposits no author field at all.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Author or contributor",
+     "properties": {
+      "affiliation": {
+       "description": "Institutional affiliations",
+       "items": {
+        "additionalProperties": false,
+        "description": "Affiliation",
+        "properties": {
+         "name": {
+          "description": "Affiliation name as deposited. Absent when the publisher asserted the organization by identifier alone, where ror carries it instead.",
+          "type": "string"
+         },
+         "ror": {
+          "description": "ROR identifier for the affiliated organization, when the deposit carries one. It is the whole identity of an affiliation deposited without a name.",
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "family": {
+       "description": "Family (last) name",
+       "type": "string"
+      },
+      "given": {
+       "description": "Given (first) name",
+       "type": "string"
+      },
+      "name": {
+       "description": "Name when no given/family split is available",
+       "type": "string"
+      },
+      "orcid": {
+       "description": "ORCID identifier URI",
+       "type": "string"
+      },
+      "sequence": {
+       "description": "Author order role (first, additional)",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "cap": {
+    "description": "The limit that was applied to this page of authors.",
+    "type": "number"
+   },
+   "containerTitle": {
+    "description": "Journal, book, or proceedings name containing this work",
+    "type": "string"
+   },
+   "doi": {
+    "description": "Canonical DOI",
+    "type": "string"
+   },
+   "editors": {
+    "description": "Editors of the work, or of the book or proceedings containing it, in the entry shape authors use. Returned whole \u2014 never paged by offset and limit, and never counted in authorCount. Omitted when the record deposits none.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Author or contributor",
+     "properties": {
+      "affiliation": {
+       "description": "Institutional affiliations",
+       "items": {
+        "additionalProperties": false,
+        "description": "Affiliation",
+        "properties": {
+         "name": {
+          "description": "Affiliation name as deposited. Absent when the publisher asserted the organization by identifier alone, where ror carries it instead.",
+          "type": "string"
+         },
+         "ror": {
+          "description": "ROR identifier for the affiliated organization, when the deposit carries one. It is the whole identity of an affiliation deposited without a name.",
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "family": {
+       "description": "Family (last) name",
+       "type": "string"
+      },
+      "given": {
+       "description": "Given (first) name",
+       "type": "string"
+      },
+      "name": {
+       "description": "Name when no given/family split is available",
+       "type": "string"
+      },
+      "orcid": {
+       "description": "ORCID identifier URI",
+       "type": "string"
+      },
+      "sequence": {
+       "description": "Author order role (first, additional)",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: Crossref answered HTTP 429 and the limit did not clear inside the retry budget. `upstream_unavailable`: Crossref was unreachable, returned a 5xx status, or served an HTML error page instead of JSON. `malformed_response`: Crossref returned HTTP 200 with a body that is not valid JSON. `request_timeout`: Crossref did not respond within CROSSREF_TIMEOUT_MS, or answered HTTP 408/504. `doi_not_found`: Valid DOI format but no Crossref record exists. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_unavailable",
+         "malformed_response",
+         "request_timeout",
+         "doi_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "funders": {
+    "description": "Funding acknowledgements",
+    "items": {
+     "additionalProperties": false,
+     "description": "Funding assertion",
+     "properties": {
+      "award": {
+       "description": "Grant or award numbers",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "doi": {
+       "description": "Funder DOI \u2014 the Crossref Funder Registry entry this assertion resolved to",
+       "type": "string"
+      },
+      "name": {
+       "description": "Funder name as deposited. Absent when the publisher asserted the funder by identifier alone, where ror carries it instead.",
+       "type": "string"
+      },
+      "ror": {
+       "description": "ROR identifier for the funding organization, when the deposit carries one. It is the whole identity of an assertion deposited without a name.",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "isReferencedByCount": {
+    "description": "Incoming citation count from Crossref \u2014 the count of works citing this DOI",
+    "type": "number"
+   },
+   "isbn": {
+    "description": "ISBN(s) as deposited \u2014 for a book chapter, those of the containing book. Omitted when the record deposits none.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "issn": {
+    "description": "ISSN(s) of the containing journal",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "issue": {
+    "description": "Issue of the container the work appears in",
+    "type": "string"
+   },
+   "language": {
+    "description": "Language code (ISO 639)",
+    "type": "string"
+   },
+   "licenses": {
+    "description": "License terms",
+    "items": {
+     "additionalProperties": false,
+     "description": "License entry",
+     "properties": {
+      "contentVersion": {
+       "description": "Content version (vor, am, tdm, unspecified)",
+       "type": "string"
+      },
+      "delayInDays": {
+       "description": "Embargo delay in days from publication date",
+       "type": "number"
+      },
+      "url": {
+       "description": "License URL",
+       "type": "string"
+      }
+     },
+     "required": [
+      "url"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "links": {
+    "description": "Registered full-text links",
+    "items": {
+     "additionalProperties": false,
+     "description": "Registered full-text link",
+     "properties": {
+      "contentType": {
+       "description": "MIME type of linked content",
+       "type": "string"
+      },
+      "intendedApplication": {
+       "description": "Intended use (text-mining, similarity-checking, etc.)",
+       "type": "string"
+      },
+      "url": {
+       "description": "Full-text URL",
+       "type": "string"
+      }
+     },
+     "required": [
+      "url"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "nextOffset": {
+    "description": "Offset to pass in the next call to retrieve the following page of authors. Absent when this page reaches the end of the author list.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "When updatedBy is present, the update types Crossref records for this work with the source of each, and where the notice is read. Then which authors this page covers and the offset that reaches the next ones, or an explanation when the requested offset is past the end of the author list. Both share this one string when both apply. Absent when the page holds the whole author list and no update is recorded.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Zero-based index of the first returned author within the deposited list. Omitted alongside authors when the record deposits no author field.",
+    "type": "number"
+   },
+   "page": {
+    "description": "Page range as deposited, e.g. \"357-362\"",
+    "type": "string"
+   },
+   "published": {
+    "additionalProperties": false,
+    "description": "Publication date \u2014 the first of published, published-print, published-online, and issued that names one. A component Crossref records as unknown is omitted, and so is every component below it.",
+    "properties": {
+     "day": {
+      "description": "Day of month",
+      "type": "number"
+     },
+     "month": {
+      "description": "Month (1\u201312)",
+      "type": "number"
+     },
+     "year": {
+      "description": "Year",
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "publisher": {
+    "description": "Publisher name",
+    "type": "string"
+   },
+   "referencesCount": {
+    "description": "Number of outgoing references (works cited by this paper)",
+    "type": "number"
+   },
+   "relations": {
+    "description": "Related identifiers \u2014 preprints and published versions, other versions, reviews, supplements, parts \u2014 grouped by relation type, identifier type, and asserting party, groups in Crossref's order and ids in deposited order. Returned whole. Omitted when the record deposits none.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Related identifiers sharing one relation type, identifier type, and asserting party",
+     "properties": {
+      "assertedBy": {
+       "description": "Whose deposit asserts the relation: subject (this work's depositor) or object (the related record's depositor, whose assertion Crossref shows here inverted)",
+       "type": "string"
+      },
+      "idType": {
+       "description": "Identifier scheme of ids: doi, uri, pmid, arxiv, accession, issn, isbn, or other",
+       "type": "string"
+      },
+      "ids": {
+       "description": "Related identifiers in deposited order. A DOI resolves through crossref_get_work only when Crossref registered it; one registered with another agency, such as DataCite, returns doi_not_found there.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "type": {
+       "description": "Relation type as deposited, read from this work toward ids: is-preprint-of, has-preprint, is-version-of, has-version, has-review, is-supplemented-by, references, has-part, and others",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "idType",
+      "assertedBy",
+      "ids"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Number of authors returned in this page.",
+    "type": "number"
+   },
+   "subject": {
+    "description": "Subject classification terms",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "subtitle": {
+    "description": "Subtitle when present",
+    "type": "string"
+   },
+   "title": {
+    "description": "Work title",
+    "type": "string"
+   },
+   "truncated": {
+    "description": "True when authors remain beyond this page. Absent when the page is the last.",
+    "type": "boolean"
+   },
+   "type": {
+    "description": "Work type (e.g. journal-article, book-chapter, posted-content)",
+    "type": "string"
+   },
+   "updateTo": {
+    "description": "Works this record is an update notice for, in the entry shape updatedBy uses and in deposited order. Omitted when the record is not registered as a notice.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Update link",
+     "properties": {
+      "doi": {
+       "description": "DOI on the other side of the link: the notice, in updatedBy; the updated work, in updateTo. It is this work's own DOI when the update was made to this record in place.",
+       "type": "string"
+      },
+      "recordId": {
+       "description": "Retraction Watch record ID. Present only on retraction-watch entries.",
+       "type": "string"
+      },
+      "source": {
+       "description": "Who recorded the link: publisher, or retraction-watch for an entry Crossref carries from the Retraction Watch database",
+       "type": "string"
+      },
+      "type": {
+       "description": "Crossref update type as deposited: correction, erratum, corrigendum, addendum, retraction, withdrawal, expression_of_concern, new_version, new_edition, or another code",
+       "type": "string"
+      },
+      "updated": {
+       "additionalProperties": false,
+       "description": "Date the update was issued",
+       "properties": {
+        "day": {
+         "description": "Day of month",
+         "type": "number"
+        },
+        "month": {
+         "description": "Month (1\u201312)",
+         "type": "number"
+        },
+        "year": {
+         "description": "Year",
+         "type": "number"
+        }
+       },
+       "type": "object"
+      }
+     },
+     "required": [
+      "doi",
+      "type",
+      "source"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "updatedBy": {
+    "description": "Update notices Crossref records against this work \u2014 corrections, errata, retractions, expressions of concern, withdrawals, new versions \u2014 in deposited order. Entries are never merged: the same notice DOI can appear once per source, typed differently by each. Omitted when none is recorded, which does not mean the work was never updated: coverage depends on publisher and Retraction Watch deposits.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Update link",
+     "properties": {
+      "doi": {
+       "description": "DOI on the other side of the link: the notice, in updatedBy; the updated work, in updateTo. It is this work's own DOI when the update was made to this record in place.",
+       "type": "string"
+      },
+      "recordId": {
+       "description": "Retraction Watch record ID. Present only on retraction-watch entries.",
+       "type": "string"
+      },
+      "source": {
+       "description": "Who recorded the link: publisher, or retraction-watch for an entry Crossref carries from the Retraction Watch database",
+       "type": "string"
+      },
+      "type": {
+       "description": "Crossref update type as deposited: correction, erratum, corrigendum, addendum, retraction, withdrawal, expression_of_concern, new_version, new_edition, or another code",
+       "type": "string"
+      },
+      "updated": {
+       "additionalProperties": false,
+       "description": "Date the update was issued",
+       "properties": {
+        "day": {
+         "description": "Day of month",
+         "type": "number"
+        },
+        "month": {
+         "description": "Month (1\u201312)",
+         "type": "number"
+        },
+        "year": {
+         "description": "Year",
+         "type": "number"
+        }
+       },
+       "type": "object"
+      }
+     },
+     "required": [
+      "doi",
+      "type",
+      "source"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "url": {
+    "description": "DOI resolution URL",
+    "type": "string"
+   },
+   "volume": {
+    "description": "Volume of the container the work appears in",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get Work by DOI"
+}

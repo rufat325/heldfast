@@ -1,0 +1,84 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Company monitoring for France, for when the relationship OUTLASTS the check (supplier, borrower, portfolio company): create a 30, 90 or 365-day watchlist over French companies and/or directors. Sirenic checks every target DAILY (BODACC filings, status & officer changes, sanctions and AMF-blacklist matches, PSAN/SGP status, Seveso/ICPE changes, new French & EU procurement awards, and since 2026-09-24 commercial-court decisions newly linked to the company, event decision_tcom_rattachee; for directors: new/ended public offices) and delivers events via Ed25519-signed webhook and/or e-mail digest, always pollable with the returned bearer token, plus an expiry reminder 7 days ahead. No account. Paid via x402, per target AND per duration: $0.05 for 30 days, $0.135 for 90 days, $0.50 for 365 days (amount = that unit price \u00d7 number of targets, so up to $50.00 for 100 targets over a year). No pro-rata refund. A full-size request quotes up to $50.00, above the $1.00 single-payment cap that x402 clients apply BY DEFAULT since @x402/core 2.23 (spendControls): raise spendControls.maxAmountPerPayment, or set spendControls: false, before signing \u2014 otherwise your own client rejects the quote without ever calling us.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "cibles": {
+    "description": "1-100 comma-separated targets: 9-digit SIRENs, RNA numbers (W + 9, associations \u2014 JOAFE notices) and/or dirigeant:Name entries",
+    "maxLength": 4000,
+    "minLength": 2,
+    "type": "string"
+   },
+   "duree": {
+    "description": "Watch duration in days (default 30). Sets the unit price per target: 30 = $0.05, 90 = $0.135 (-10%), 365 = $0.50 (-17.8% vs the monthly rate).",
+    "enum": [
+     "30",
+     "90",
+     "365"
+    ],
+    "type": "string"
+   },
+   "email": {
+    "description": "Optional e-mail address for digests",
+    "type": "string"
+   },
+   "webhook": {
+    "description": "Optional public https URL for signed event batches",
+    "format": "uri",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "cibles"
+  ],
+  "type": "object"
+ },
+ "name": "create_surveillance_watch",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Create a company watch"
+}

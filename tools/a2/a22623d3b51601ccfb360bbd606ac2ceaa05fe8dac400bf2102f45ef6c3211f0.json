@@ -1,0 +1,328 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Fetch incident history and scheduled maintenance windows for a vendor. Returns full incident timeline \u2014 each investigator update, affected components, and resolution. Filter by status to focus on active incidents (use before deploy), resolved history (for postmortem), or upcoming maintenance windows. Page through long histories with limit + offset \u2014 a truncated result discloses the total and returns the value to page with in nextOffset. Some vendor feeds cap their own history: when upstreamCeiling is present the vendor API returned everything it will serve, and older incidents are not reachable at a higher offset. On Atlassian Statuspage vendors, since (a date up to 24 months back) also reads the status page's quarterly history archive back to that date where the page publishes one; those records are marked source: \"history\" and carry the title, impact, start and end times, and final update message only. An empty result, or a history read that stopped short of since, explains itself in notice.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "filter": {
+    "default": "all",
+    "description": "all: incidents plus scheduled maintenances. active: only incidents with status investigating/identified/monitoring. resolved: only fully resolved incidents. scheduled: only scheduled maintenance windows. Not every vendor backend serves every filter \u2014 \"aws\" lists a resolved event only until it drops off its feed, \"azure\" lists open items only (never resolved), and \"aws\", \"azure\", \"gcp\", and \"slack\" publish no maintenance windows. An empty result names which case applied.",
+    "enum": [
+     "all",
+     "active",
+     "resolved",
+     "scheduled"
+    ],
+    "type": "string"
+   },
+   "limit": {
+    "default": 20,
+    "description": "Maximum incidents to return per call (1\u201350). Page through longer history with offset rather than raising this.",
+    "maximum": 50,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Number of matching incidents to skip before applying limit, for paging through history. 0 (default) returns the most recent page; a truncated result returns the value to use next in the nextOffset field. Raising offset past the number of matches returns an empty list and says so.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "since": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Earliest start date to include, as YYYY-MM-DD (UTC), e.g. \"2025-10-01\".",
+      "format": "date",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+      "type": "string"
+     }
+    ],
+    "description": "Earliest start date to include, as YYYY-MM-DD (UTC), at most 24 months back. Accepted with filter \"all\" or \"resolved\". Incidents that started before it are left out, and limit/offset page the rest. On Atlassian Statuspage vendors it also reads the status page's quarterly history archive back to this date, reaching incidents older than the 50 the status API serves. Omit to read only the status API."
+   },
+   "vendor": {
+    "description": "Vendor slug (e.g., \"github\", \"aws\") or raw Atlassian Statuspage base URL. Use devops_list_vendors to find slugs.",
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "vendor"
+  ],
+  "type": "object"
+ },
+ "name": "devops_get_incidents",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "vendor",
+     "name",
+     "incidents",
+     "total_returned",
+     "statuspage_url"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The limit that was applied. Present only when truncated.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `vendor_not_found`: Vendor slug not in registry and input is not a valid URL. `target_blocked`: A raw URL resolves to a private, loopback, or cloud-metadata address. `invalid_since`: since was passed with filter \"active\" or \"scheduled\", or is more than 24 months back. `statuspage_unavailable`: The vendor's status API returned an error or timed out. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "vendor_not_found",
+         "target_blocked",
+         "invalid_since",
+         "statuspage_unavailable"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "incidents": {
+    "description": "Matching incidents.",
+    "items": {
+     "additionalProperties": false,
+     "description": "An incident or scheduled maintenance entry.",
+     "properties": {
+      "affected_components": {
+       "description": "Component names affected by this incident.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "created_at": {
+       "description": "ISO 8601 timestamp when the incident was created, carrying the UTC offset the vendor published (Z, +00:00, or a local offset such as -07:00). For a history-archive record, the start time its status page displays, to the minute, in UTC.",
+       "type": "string"
+      },
+      "duration_minutes": {
+       "description": "Minutes from started_at to resolved_at. Null for active or scheduled incidents, or when the vendor-authored timestamps are missing, invalid, or inverted.",
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "id": {
+       "description": "Unique incident identifier from the vendor's status API.",
+       "type": "string"
+      },
+      "impact": {
+       "description": "Severity level: none = informational, minor = degraded performance, major = partial outage, critical = full outage, maintenance = scheduled window.",
+       "enum": [
+        "none",
+        "minor",
+        "major",
+        "critical",
+        "maintenance"
+       ],
+       "type": "string"
+      },
+      "name": {
+       "description": "Incident title.",
+       "type": "string"
+      },
+      "resolved_at": {
+       "description": "ISO 8601 timestamp, with the vendor's UTC offset, when resolved, or null if still active. For a history-archive record, to the minute, in UTC.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "scheduled_for": {
+       "description": "Present for scheduled maintenances \u2014 ISO 8601 start time with the vendor's UTC offset.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "scheduled_until": {
+       "description": "Present for scheduled maintenances \u2014 ISO 8601 end time with the vendor's UTC offset.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "shortlink": {
+       "description": "Direct URL to the incident page, or null/absent if not provided by the vendor.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "source": {
+       "description": "Where this record came from. api: the vendor's status API, with the full update timeline and affected components. history: the status page's quarterly history archive, read only when since is set \u2014 title, impact, start and end times, and the final update message, with no components and no started_at, scheduled window, or duration.",
+       "enum": [
+        "api",
+        "history"
+       ],
+       "type": "string"
+      },
+      "started_at": {
+       "description": "ISO 8601 timestamp, with the vendor's UTC offset, when the incident started, or null/absent if not set by the vendor.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "status": {
+       "description": "Current status: investigating | identified | monitoring | resolved | postmortem | scheduled | in_progress | completed | unknown. unknown marks a history-archive record with no end time, whose lifecycle stage the archive does not publish.",
+       "type": "string"
+      },
+      "updates": {
+       "description": "Chronological list of incident updates (oldest first). A history-archive record carries only its final update, dated at its end time (or its start when it has none).",
+       "items": {
+        "additionalProperties": false,
+        "description": "A single status update from the vendor.",
+        "properties": {
+         "body": {
+          "description": "Update text from the vendor.",
+          "type": "string"
+         },
+         "created_at": {
+          "description": "ISO 8601 timestamp of this update, with the vendor's UTC offset.",
+          "type": "string"
+         },
+         "status": {
+          "description": "Incident status at the time of this update.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "status",
+         "body",
+         "created_at"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "id",
+      "name",
+      "impact",
+      "status",
+      "created_at",
+      "resolved_at",
+      "scheduled_for",
+      "scheduled_until",
+      "duration_minutes",
+      "affected_components",
+      "updates",
+      "source"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "name": {
+    "description": "Display name of the vendor.",
+    "type": "string"
+   },
+   "nextOffset": {
+    "description": "The offset to pass on the next call to continue from where this page stopped, already computed as offset + the number returned. Present only when truncated \u2014 its absence means this page reached the end of what the filter matched.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Plain-language explanation of this result \u2014 how to page onward, why it came back empty (the vendor currently publishes nothing at all, a filter the backend cannot satisfy, an offset past the end, or a since date that left everything out), that the vendor feed capped the history, or how far the history archive was read when it stopped short of since. Absent when the result needs no explanation.",
+    "type": "string"
+   },
+   "shown": {
+    "description": "Number of incidents returned after applying the limit. Present only when truncated.",
+    "type": "number"
+   },
+   "statuspage_url": {
+    "description": "Status page base URL used.",
+    "type": "string"
+   },
+   "totalCount": {
+    "description": "Total incidents matching the filter, across all pages, before offset/limit windowing. Present only when the result was truncated.",
+    "type": "number"
+   },
+   "total_returned": {
+    "description": "Number of incidents in the response.",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when more incidents matched than the limit returned. Absent when the result was not capped.",
+    "type": "boolean"
+   },
+   "upstreamCeiling": {
+    "description": "Maximum incidents the vendor's own status API serves in one fetch, present only when that ceiling was reached on this call. It bounds the history independently of limit and offset: incidents older than the oldest one returned cannot be fetched at any offset. On Atlassian Statuspage vendors, since reads past it from the page's history archive. Absent when the vendor feed is unbounded, returned less than its ceiling, or since was set and the history archive was read back to it.",
+    "type": "number"
+   },
+   "vendor": {
+    "description": "Vendor slug or URL as provided.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Devops Get Incidents"
+}

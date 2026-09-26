@@ -1,0 +1,67 @@
+{
+ "description": "Detect whether the current agent session has semantically drifted from its original goal. Scores recent ledger entries against the goal using synalux's HRR embedding stack (GloVe \u2192 Gemini/Voyage \u2192 cosine similarity), then runs the rolling-window drift detector algorithm.\n\n**Triggers:**\n- `goal-drift` \u2014 cumulative alignment loss is high and monotonic (not random tangents)\n- `context-collapse` \u2014 average output quality has dropped below floor\n\n**Pre-warning:**\n- `quality-degrading` \u2014 quality slope steeply negative before collapse\n\n**Returns:** drifted, reason, warning, drift_score (0..1), goal_alignment, quality_avg, sample_count, adaptive_threshold, recommendation.\n\nUse alongside GATE 5 (60-minute drift check): call this tool instead of session_cognitive_route for goal-alignment drift detection.",
+ "inputSchema": {
+  "properties": {
+   "assessment_type": {
+    "description": "BCBA domain only: assessment instrument name (e.g. 'vb-mapp', 'vineland', 'ablls-r').",
+    "type": "string"
+   },
+   "behavior_functions": {
+    "description": "BCBA domain only: identified behavior functions for this client (e.g. ['escape-maintained', 'attention-maintained']).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "client_descriptors": {
+    "description": "BCBA domain only: client-specific terms to check for specificity (e.g. ['7-year-old', 'aggression at transitions']).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "contraindications": {
+    "description": "BCBA domain only: known medical conditions (e.g. ['epilepsy', 'pica']).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "conversation_id": {
+    "description": "Optional. Session key (same id used in session_load_context). When provided, resets the server-side drift timer for this conversation.",
+    "type": "string"
+   },
+   "domain": {
+    "description": "Optional domain for domain-specific drift signals. 'coder' adds file_entropy, summary_vagueness, test_coverage_ratio, trajectory_divergence. 'bcba' adds clinical_specificity, function_aligned, contraindication_safe (requires behavior_functions, contraindications, client_descriptors params). 'aac' is reserved for future AAC prediction drift (use the AAC-specific endpoint instead).",
+    "enum": [
+     "coder",
+     "bcba",
+     "aac"
+    ],
+    "type": "string"
+   },
+   "goal": {
+    "description": "The original session goal \u2014 the task you started this session to accomplish. Used as the semantic reference vector. Be specific: 'implement drift detection for prism-mcp' is better than 'work on prism'.",
+    "type": "string"
+   },
+   "min_directional_ratio": {
+    "description": "Directional ratio floor for the tremor filter (0..1). Random topic tangents that return to the goal are suppressed below this threshold. Default 0.2. Set to 0 to disable filter.",
+    "type": "number"
+   },
+   "project": {
+    "description": "Project identifier. Must match the project used in session_save_ledger.",
+    "type": "string"
+   },
+   "window_hours": {
+    "description": "How many hours of ledger history to evaluate. Default 1. Range 0.083\u201324 (5 min to 24 h).",
+    "type": "number"
+   }
+  },
+  "required": [
+   "project",
+   "goal"
+  ],
+  "type": "object"
+ },
+ "name": "session_detect_drift"
+}

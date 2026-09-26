@@ -1,0 +1,64 @@
+{
+ "annotations": {
+  "destructiveHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Send a message via OurFamilyWizard \u2014 the ONE irreversible operation here, so it carries the strongest guard. TO SEND AN EXISTING DRAFT (the safe default): pass draftId (or messageId \u2014 same thing). The tool re-reads the draft from OFW and sends the SERVER'S version, so what goes out is what is on OurFamilyWizard, not what this session remembers \u2014 subject/body act only as explicit overrides. It is guarded exactly like ofw_save_draft: pass expectedRevision to assert which version you are sending; if the draft changed on OFW since you read it \u2014 or no longer exists (it may already have been SENT) \u2014 the send is REFUSED with the current server content echoed back, and nothing goes out. RECIPIENTS: OurFamilyWizard does not persist recipients on drafts, so recipientIds is usually still required at send time (ids from ofw_get_profile). After the send is CONFIRMED (OFW returned the new message id and the re-fetched sent record matches what was posted), the source draft is deleted automatically; pass deleteDraftOnSuccess:false to keep it. On ANY failure or ambiguity the draft is never deleted \u2014 the response carries draftRetained:true with the reason. If the send request times out or drops without a definitive answer, the result is SEND_UNCONFIRMED: the message may already have been delivered, so do NOT retry until a sent-folder sync (or ourfamilywizard.com) shows it did not go out. TO COMPOSE FROM SCRATCH: supply subject/body/recipientIds with no draftId. If replyToId is provided (or inherited from the draft), the cache may rewrite it to the latest reply in the same thread (a note is included when this happens). ATTACHMENTS: when sending by draftId, the server draft's own attachments carry over automatically; myFileIDs (from ofw_upload_attachment) overrides or attaches files on a fresh compose. The response leads with sentMessageId and the stable draftKey, and reports threaded (whether OFW actually linked the reply) and draftDeleted. Asks the user to confirm first: a confirmation prompt where the client supports one; otherwise the first call performs NO write and returns a preview of exactly what would happen plus a confirmToken, and only a repeat call with that token proceeds (see MCP_CONFIRM_MODE).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "body": {
+    "description": "Message body text. Required unless draftId/messageId is given (then it overrides the server draft's body \u2014 omit it to send exactly what is on OurFamilyWizard).",
+    "type": "string"
+   },
+   "confirmToken": {
+    "description": "ONLY for the two-step confirmation fallback (a client without MCP elicitation). The confirmToken from this same tool's phase-1 \"confirmation-required\" response, passed back ONLY after the user has seen that preview and explicitly approved it in chat \u2014 never on the first call, never invented, never reused. Call again with the same arguments. Ignored when the client supports elicitation.",
+    "type": "string"
+   },
+   "deleteDraftOnSuccess": {
+    "description": "Default true. Delete the source draft after \u2014 and ONLY after \u2014 the send is confirmed (new message id returned and the re-fetched sent record checks out). Set false to keep the draft. On a failed or unverifiable send the draft is ALWAYS kept, regardless of this flag.",
+    "type": "boolean"
+   },
+   "draftId": {
+    "description": "ID of an existing draft to send. The draft is re-read from OurFamilyWizard and its SERVER content is sent; missing subject/body default from it. Guarded: a draft that changed since you read it, or that was already sent/deleted, refuses rather than sending blind.",
+    "type": "number"
+   },
+   "expectedRevision": {
+    "description": "With draftId: the `revision` from ofw_list_drafts / ofw_get_message / ofw_check_freshness for that draft. Asserts you are sending THAT version; if the draft changed on OFW since, the send is refused and the current server content returned. Omit and the tool compares the server against the local cache instead \u2014 omitting never means \"send whatever is there now\".",
+    "type": "string"
+   },
+   "force": {
+    "description": "Default false. Send even when the draft changed on OurFamilyWizard since you read it, or its current state could not be read. Only use after showing the user the conflict.",
+    "type": "boolean"
+   },
+   "messageId": {
+    "description": "Synonym for draftId (if both are passed they must be equal).",
+    "type": "number"
+   },
+   "myFileIDs": {
+    "description": "Attachment file ids (from ofw_upload_attachment) to attach to the message. When sending by draftId, omit it to carry the server draft's own attachments over; passing it overrides them.",
+    "items": {
+     "type": "number"
+    },
+    "type": "array"
+   },
+   "recipientIds": {
+    "description": "Array of recipient user IDs (get from ofw_get_profile). Usually required even when sending a draft: OurFamilyWizard does not persist recipients on drafts.",
+    "items": {
+     "type": "number"
+    },
+    "type": "array"
+   },
+   "replyToId": {
+    "description": "ID of the message being replied to. Defaults to the draft's stored reply target when sending by draftId.",
+    "type": "number"
+   },
+   "subject": {
+    "description": "Message subject. Required unless draftId/messageId is given (then it overrides the server draft's subject).",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "ofw_send_message"
+}

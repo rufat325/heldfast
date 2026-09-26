@@ -1,0 +1,416 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Container Lookup"
+ },
+ "description": "Get ISO shipping-container specifications, with optional load-fit maths. Covers 10 types: 20ft/40ft standard, 40ft and 45ft high-cube, 20ft/40ft reefer, 20ft/40ft open-top and 20ft/40ft flat-rack.\n\nProvide type as a slug (e.g. \"20ft-standard\", \"40ft-high-cube\") for one container's record; omit it to list all 10. Add item dimensions (item_length_cm/width_cm/height_cm, optional item_weight_kg and item_quantity) to also compute how many such items fit.\n\nBehavior: read-only reference data with per-record provenance (sources, audited_at, decision_rationale); an unknown type errors with the valid slug list. Fit calculations are geometric best-effort \u2014 they do not model load distribution, securing or mixed cargo. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: the container record \u2014 internal/external/door dimensions (cm), capacity_cbm, tare_weight_kg, max_gross_kg, max_payload_kg and euro/GMA pallet counts \u2014 under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: manufacturer-typical specs, provenance pending independent verification (the envelope's provenance_status says so) \u2014 actual equipment varies by lessor and line; confirm against the carrier's equipment guide.\n\nRelated: validate (checks a container NUMBER's ISO 6346 check digit \u2014 not specs), cbm_calculator / consignment_calculator (the cargo volume to fill it), uld_lookup (the air-freight equivalent).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "item_height_cm": {
+    "description": "Item height in cm.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "item_length_cm": {
+    "description": "Item length in cm \u2014 provide all three item dims to get a load-fit calculation.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "item_quantity": {
+    "description": "Number of items to check against the container.",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "item_weight_kg": {
+    "description": "Item weight in kg \u2014 caps the fit by max payload.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "item_width_cm": {
+    "description": "Item width in cm.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "type": {
+    "description": "Container slug. Examples: \"20ft-standard\", \"40ft-high-cube\", \"20ft-reefer\". Omit to list all 10 types.",
+    "minLength": 2,
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "container_lookup",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "audited_at": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "capacity_cbm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "containers": {
+        "anyOf": [
+         {
+          "items": {},
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "count": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "description": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "door_height_cm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "door_width_cm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "euro_pallets": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "external_height_cm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "external_length_cm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "external_width_cm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "gma_pallets": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "internal_height_cm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "internal_length_cm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "internal_width_cm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "iso_code": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "loading": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "max_gross_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "max_payload_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "name": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "notes": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "slug": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "tare_weight_kg": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "verified": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

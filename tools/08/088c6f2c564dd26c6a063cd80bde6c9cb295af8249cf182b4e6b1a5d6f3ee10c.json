@@ -1,0 +1,66 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Find out what a video IS before spending time on it: downloads nothing by default and returns title, creator, duration, chapters, a description preview and the path to full metadata. On a long video call this first, read the chapters, then analyze only the section that matters. Each item returns { status, platform, title, creator, duration, chapters, descriptionPreview, commentCount, metadataPath, cookies, videoPath?, clipStart?, clipEnd?, nextSteps }. Pass several items in videos to batch them; results come back one per item in order, and one failing does not fail the others. A single item writes into destinationPath, several into video-1/, video-2/. Set returnVideo: true to download the file too -- that takes real time. With it, pass start and end together for one section; the clip STARTS AT 0, so use the returned offset when mapping times back. Leave comments off unless needed: slow on popular videos, and written to the metadata file rather than inline. Every item reports cookies: \"none\", \"browser:<name>\", \"cookies_file\" or \"wechat_cookie\" -- what was sent, never a value. When an item fails as auth_required, auth_expired or rate_limited and its reason suggests userCookies, ASK THE USER before retrying with userCookies: true. For anything long, call this as a background task: your environment notifies you with the result when it finishes, so there is no need to poll for it. To watch progress or check it is still alive meanwhile, GET the returned statusUrl. Reach for get_status ONLY if your environment TIMED OUT the call -- the work finishes either way. Handles YouTube, TikTok, Instagram, X, Facebook, Twitch, Vimeo, Reddit, WeChat Channels, direct .mp4/.m3u8 URLs and many other sites; unsupported ones return a failure status.",
+ "execution": {
+  "taskSupport": "optional"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "destinationPath": {
+    "description": "Directory to write metadata (and the video, if requested) into. Created if missing. Re-running the same call overwrites in place.",
+    "type": "string"
+   },
+   "userCookies": {
+    "default": false,
+    "description": "Use the user's own browser session for this call only. NEVER set it on your own: ask the user first, every time -- it reads their browser's cookies, and nothing carries over to later calls. Cookies come from their default browser (or an installed one this server can read, when the default is unsupported; cookies in the reply names it) and go only to the site being fetched. If the user needs to sign in -- no yuanbao.tencent.com session for WeChat Channels, or any other site still refusing with their cookies -- the call opens a page in that browser saying which site to sign in to and why, and waits up to 3 minutes for them before returning. Tell the user to expect that. Chrome-family browsers show a macOS Keychain prompt when read. Default false.",
+    "type": "boolean"
+   },
+   "videos": {
+    "description": "One entry per video to resolve. One item = single video, flat layout; several = video-N subdirectories.",
+    "items": {
+     "properties": {
+      "comments": {
+       "default": false,
+       "description": "Also fetch comments into the metadata file. Off by default: can be very slow on popular videos.",
+       "type": "boolean"
+      },
+      "end": {
+       "description": "End second of the section to fetch. Only meaningful with returnVideo: true. Provide with start; either alone is ignored and the whole video is fetched.",
+       "type": "number"
+      },
+      "returnVideo": {
+       "default": false,
+       "description": "Download the media file as well as its metadata. Default false -- metadata only.",
+       "type": "boolean"
+      },
+      "start": {
+       "description": "Start second of the section to fetch. Only meaningful with returnVideo: true. Provide with end; either alone is ignored and the whole video is fetched.",
+       "type": "number"
+      },
+      "url": {
+       "description": "Page or direct video URL.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "url"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   }
+  },
+  "required": [
+   "destinationPath",
+   "videos"
+  ],
+  "type": "object"
+ },
+ "name": "resolve_video",
+ "title": "Resolve video (metadata, optionally the file)"
+}

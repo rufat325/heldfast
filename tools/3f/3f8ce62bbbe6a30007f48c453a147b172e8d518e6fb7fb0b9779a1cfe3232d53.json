@@ -1,0 +1,123 @@
+{
+ "_meta": {
+  "apiVersion": "1.0.0",
+  "examples": [
+   {
+    "input": {
+     "names": [
+      "docs/readme.md",
+      "../../etc/passwd",
+      "C:\\Windows\\win.ini",
+      "aux.txt",
+      "a/./b//c.txt"
+     ]
+    },
+    "title": "Which of these names are hostile?"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Apply zipnative's single traversal gate `sanitizeEntryPath()` to a list of names: the safe '/'-separated relative form each maps to (join it under your extraction root \u2014 never the raw name), or null with the rule that fired (empty, NUL byte, absolute, drive letter, UNC, '..' traversal, NTFS alternate data stream ':', Windows reserved device name CON/NUL/COM1\u2026). Use it when you extract with another tool or plan an external filesystem sink. No archive needed.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "fields": {
+    "description": "Dot-path projection applied after verbosity (e.g. ['entryCount', 'entries.name']); array segments map over elements; unmatched paths are reported in _meta.unmatchedFields.",
+    "items": {
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 16,
+    "type": "array"
+   },
+   "names": {
+    "description": "Entry names to check (as stored in an archive).",
+    "items": {
+     "maxLength": 4096,
+     "type": "string"
+    },
+    "maxItems": 10000,
+    "minItems": 1,
+    "type": "array"
+   },
+   "verbosity": {
+    "default": "full",
+    "description": "'summary' returns only the scalar verdict fields (drops arrays and payloads) \u2014 the token-frugal form.",
+    "enum": [
+     "full",
+     "summary"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "names"
+  ],
+  "type": "object"
+ },
+ "name": "sanitize_entry_paths",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Sanitized paths and rejections. Every property is optional because the result can be projected: verbosity:'summary' returns only the scalar summary fields, fields:[...] keeps a dot-path subset. Defaults return the full shape.",
+  "properties": {
+   "count": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "rejectedCount": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "rejectedNames": {
+    "description": "summary only: the rejected names.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "results": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "reason": {
+       "enum": [
+        "empty",
+        "nul",
+        "absolute",
+        "drive",
+        "unc",
+        "traversal",
+        "ads",
+        "device-name",
+        "no-segments"
+       ],
+       "type": "string"
+      },
+      "rejected": {
+       "type": "boolean"
+      },
+      "sanitized": {
+       "description": "Safe '/'-separated relative path to join under an extraction root, or null.",
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Sanitize entry paths (the traversal gate)"
+}

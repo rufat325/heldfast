@@ -1,0 +1,64 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false,
+  "title": "Self-driving optimize (dry-run default)"
+ },
+ "description": "Self-driving DBA for a local SQLite database. Derives safe maintenance and optimization actions \u2014 ANALYZE, PRAGMA optimize, missing foreign-key indexes, and (when fragmented) VACUUM / redundant-index cleanup \u2014 each explained in plain language. When queries are supplied, also flags full table scans, predicates on an expression (lower(col), date(col) \u2014 needs an expression index), and equality filters that only match a small slice of the table (needs a partial index instead of indexing the whole column). For large databases it also flags an undersized page cache (PRAGMA cache_size/mmap_size \u2014 guidance only, not stored in the file).\n\nDry-run by default (apply=false): returns the plan without changing anything. apply=true executes the safe actions and requires --allow-writes; a snapshot is taken first so the run is one litescope_restore away from undo. Risky actions (VACUUM, dropping indexes, query-derived indexes) only run with aggressive=true. Local files only.",
+ "inputSchema": {
+  "properties": {
+   "aggressive": {
+    "description": "Also run risky actions (VACUUM, drop redundant indexes, query-derived indexes).",
+    "type": "boolean"
+   },
+   "apply": {
+    "description": "Execute the safe actions. Default false (dry-run). Requires --allow-writes.",
+    "type": "boolean"
+   },
+   "queries": {
+    "description": "Real SELECT statements this session has observed running against the database. Fed to EXPLAIN QUERY PLAN to detect full scans, expression predicates, and low-selectivity equality filters.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "source": {
+    "description": "Local SQLite file path.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "source"
+  ],
+  "type": "object"
+ },
+ "name": "litescope_autopilot",
+ "outputSchema": {
+  "properties": {
+   "actions": {
+    "description": "Each action with kind, risk, SQL, status, and a plain-language reason.",
+    "type": "array"
+   },
+   "applied": {
+    "description": "True if actions were executed (apply=true); false for a dry-run plan.",
+    "type": "boolean"
+   },
+   "counts": {
+    "description": "Action counts by status: applied, proposed, skipped, failed.",
+    "type": "object"
+   },
+   "path": {
+    "description": "The optimized database.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "path",
+   "actions"
+  ],
+  "type": "object"
+ },
+ "title": "Self-driving optimize (dry-run default)"
+}

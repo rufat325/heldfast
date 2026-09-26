@@ -1,0 +1,68 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Densit\u00e9 de sant\u00e9 pour 100 000 habitants \u2014 `cible: professionnels` (RPPS) OU `cible: etablissements` (FINESS). Niveau **d\u00e9partement** (`code_dept`) OU **commune** (`code_insee` / `nom_commune`). Exactement un scope des trois requis. Croise le count (RPPS ou FINESS) et INSEE Melodi (population municipale PMUN, recensement 2023).\n\n**cible='professionnels'** (RPPS) \u2014 m\u00e9thodo DREES par d\u00e9faut : m\u00e9decins (`profession_code='10'`) en activit\u00e9 r\u00e9guli\u00e8re (mode_exercice L, S, M), hors \u00e9tudiants. Filtres : `profession_code` (60 infirmier, 21 pharmacien, 50 sage-femme\u2026), `savoir_faire_code` (ex 'SM04' Cardiologie \u2014 'SM02' = Anesth\u00e9sie-r\u00e9animation ; voir `lister_nomenclature` referentiel rpps_savoir_faire), `mode_exercice_codes` (['L'] = lib\u00e9raux seuls).\n\n**cible='etablissements'** (FINESS) \u2014 `famille` OBLIGATOIRE : labo, pharmacie, ehpad, mco, ssr, psychiatrie, dialyse, imagerie, had, msp_cpts, handicap_enfants, handicap_adultes, addictologie, pmi, prevention_sante, etc. Sans famille le ratio m\u00e9langerait labos/h\u00f4pitaux/EHPAD \u2192 non-sens.\n\n**S\u00e9mantique conditionnelle de `code_dept`** : seul = scope de calcul (dept entier) ; combin\u00e9 avec `nom_commune` = hint de r\u00e9solution UNIQUEMENT (filtre les homonymes), le calcul reste sur la commune r\u00e9solue.\n\nParis/Marseille/Lyon : densit\u00e9 par `code_insee` INDISPONIBLE (RPPS/FINESS rattach\u00e9s aux arrondissements, INSEE n'expose la population qu'\u00e0 la commune enti\u00e8re) \u2192 RangeError ; utiliser `code_dept` (75, 13, 69).\n\n`compare_national: true` ajoute la densit\u00e9 France enti\u00e8re (DOM inclus) + \u00e9cart en % (positif = sur-dot\u00e9, n\u00e9gatif = sous-dot\u00e9).\n\nAlias : `dept`/`departement` \u2192 `code_dept`, `codeInsee`/`insee` \u2192 `code_insee`. Ne renvoie AUCUNE interpr\u00e9tation m\u00e9tier (pas de seuil \"d\u00e9sert m\u00e9dical\" auto). Cat\u00e9gorie par d\u00e9faut : Civil (C, ~97 % \u2014 lib\u00e9raux, salari\u00e9s priv\u00e9s, hospitaliers contractuels). Opt-in : `include_agents_publics: true` ajoute Agents publics (M, ~0,3 % \u2014 PH titulaires, ARS, CNAM, \u00c9ducation nationale, PMI, militaires SSA) ; `include_etudiants: true` ajoute \u00c9tudiants (E, ~2,5 % \u2014 internes, externes, \u00e9l\u00e8ves IDE/SF). R\u00e9f : https://mos.esante.gouv.fr/NOS/TRE_R09-CategorieProfessionnelle/. ATTENTION nomenclatures : les codes ANS (`profession_code`, `savoir_faire_code`) sont une nomenclature DISTINCTE des codes Ameli (`specialite_code`, `type_ps_code`) \u2014 un m\u00eame nombre d\u00e9signe des choses diff\u00e9rentes (ex: '10' = M\u00e9decin c\u00f4t\u00e9 ANS, Neurochirurgien c\u00f4t\u00e9 Ameli). Ne JAMAIS passer un code Ameli \u00e0 un param\u00e8tre ANS : le filtre renverrait vide sans erreur. D\u00e9couvrir les codes ANS via `lister_nomenclature(referentiel:'rpps_savoir_faire')`. Source : Annuaire Sant\u00e9, Agence du Num\u00e9rique en Sant\u00e9 (ANS) \u2014 Licence Ouverte v2.0",
+ "inputSchema": {
+  "properties": {
+   "cible": {
+    "description": "`professionnels` = densit\u00e9 de PS (RPPS, filtres profession_code/savoir_faire_code/mode_exercice_codes) ; `etablissements` = densit\u00e9 d'\u00e9tablissements (FINESS, `famille` obligatoire).",
+    "enum": [
+     "professionnels",
+     "etablissements"
+    ],
+    "type": "string"
+   },
+   "code_dept": {
+    "description": "Code INSEE du d\u00e9partement 2-3 caract\u00e8res. Ex: \"75\" Paris, \"59\" Nord, \"2A\" Corse-du-Sud, \"971\" Guadeloupe. S\u00e9mantique conditionnelle : seul = scope dept entier ; combin\u00e9 avec `nom_commune` = hint resolver pour d\u00e9sambiguer les homonymes. XOR avec `code_insee`.",
+    "type": "string"
+   },
+   "code_insee": {
+    "description": "Code INSEE de la commune 5 caract\u00e8res. Ex: \"59009\" Villeneuve-d'Ascq, \"33063\" Bordeaux, \"2A004\" Ajaccio. Paris/Lyon/Marseille NON support\u00e9 au niveau commune (densit\u00e9 indisponible \u2014 voir description) : utiliser code_dept. XOR avec `code_dept` et `nom_commune`.",
+    "type": "string"
+   },
+   "compare_national": {
+    "default": false,
+    "description": "Ajoute le calcul France enti\u00e8re + \u00e9cart relatif en % (recommand\u00e9 pour qualifier 'sous-dot\u00e9'/'sur-dot\u00e9').",
+    "type": "boolean"
+   },
+   "famille": {
+    "description": "cible='etablissements' UNIQUEMENT (obligatoire) : famille FINESS \u00e0 compter (labo, pharmacie, ehpad, mco, ssr, psychiatrie, dialyse, imagerie, had, msp_cpts, handicap_enfants, handicap_adultes, addictologie, pmi, prevention_sante, etc.).",
+    "type": "string"
+   },
+   "include_agents_publics": {
+    "type": "boolean"
+   },
+   "include_etudiants": {
+    "type": "boolean"
+   },
+   "mode_exercice_codes": {
+    "description": "cible='professionnels' UNIQUEMENT : codes mode_exercice ANS \u00e0 inclure. Default ['L','S','M'] (lib\u00e9ral + salari\u00e9 + mixte = activit\u00e9 r\u00e9guli\u00e8re DREES). Passer ['L'] pour lib\u00e9raux seuls. Codes mode_exercice ANS : L lib\u00e9ral, S salari\u00e9, M mixte, R rempla\u00e7ant, B b\u00e9n\u00e9vole, A autre.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "nom_commune": {
+    "description": "Nom officiel de commune (alternative \u00e0 `code_insee`). Ex: \"Lille\", \"Villeneuve-d'Ascq\". Le serveur r\u00e9sout en interne via geo.api.gouv.fr. Combinable avec `code_dept` comme hint de d\u00e9sambigu\u00efsation pour homonymes (ex \"Saint-Martin\" + dept \"65\"). XOR avec `code_insee`.",
+    "type": "string"
+   },
+   "profession_code": {
+    "description": "cible='professionnels' UNIQUEMENT : code profession ANS (TRE_R94). Default '10' (M\u00e9decin). Ex : '60' Infirmier, '21' Pharmacien, '50' Sage-femme, '40' Chirurgien-dentiste, '70' Masseur-kin\u00e9sith\u00e9rapeute.",
+    "type": "string"
+   },
+   "savoir_faire_code": {
+    "description": "cible='professionnels' UNIQUEMENT : code sp\u00e9cialit\u00e9 (savoir_faire). Pertinent surtout pour profession_code=10 (m\u00e9decin). Ex : 'SM04' Cardiologie, 'SM15' Dermatologie et v\u00e9n\u00e9r\u00e9ologie, 'SM02' Anesth\u00e9sie-r\u00e9animation, 'SM26' M\u00e9decine g\u00e9n\u00e9rale. Voir lister_nomenclature(referentiel:'rpps_savoir_faire') pour la liste exhaustive.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "cible"
+  ],
+  "type": "object"
+ },
+ "name": "densite_sante"
+}

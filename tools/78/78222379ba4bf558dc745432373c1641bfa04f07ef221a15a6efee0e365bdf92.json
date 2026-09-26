@@ -1,0 +1,114 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "Score a listing that does not exist yet, on the same engine that audits the real ones, and see the gain or loss against the app's current score. WITH app_id: every field you leave out is read from that app's live listing AND its real context (rating, screenshots, age, languages), so { app_id, title } is a complete request and the delta is meaningful. This is the mode to use to answer \"is my draft better than my listing\". WITHOUT app_id: you must pass store, country and lang, and the context defaults to a listing NOBODY HAS PUBLISHED: no rating, no screenshot, one language. That deliberately floors the appeal axis, so the global score is NOT comparable to a real app's score and you must not present it as one. Compare the coverage axis instead, or pass `context` yourself to describe the app you have in mind. `context` works in both modes: any key you send overrides, any key you omit keeps the app's value (or the blank default). Returns app (null without app_id), aso_health with the three axes and the tier, delta against the app's stored score (null for a draft from scratch, and each axis is independently null when it was never computed), flags[], the saved run, and notes[] for anything wrong with the request that did not stop it (a kw_field sent for a Google Play listing, which has none, is ignored and reported there). words_probed is how many words the run weighed; words_fetched is how many of those had to be read from the store for the first time. words_fetched: 0 means everything was already known and the call was fast; a high one is why a call took several seconds, and it warms the cache for everyone afterwards. Expect a few seconds per call. Check the draft with check_metadata first, and change something meaningful between two calls rather than polling it. Re-read a past run in full with get_metadata_simulation, or list them with list_metadata_simulations.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "app_id": {
+    "description": "The application internal ID (numeric, from list_applications). Its live listing fills every field you omit, and its score is what the delta is measured against.",
+    "exclusiveMinimum": 0,
+    "type": "integer"
+   },
+   "context": {
+    "additionalProperties": false,
+    "description": "What the listing has going for it beyond its text, merged over the app's real values. Send one key alone to ask a what-if, e.g. { days_since_update: 0 } for \"what if I shipped today\".",
+    "properties": {
+     "age_months": {
+      "anyOf": [
+       {
+        "maximum": 600,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Months since release. Null is unknown."
+     },
+     "days_since_update": {
+      "description": "Days since the listing last changed. 0 is \"shipped today\".",
+      "maximum": 3650,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "has_video": {
+      "type": "boolean"
+     },
+     "language_count": {
+      "maximum": 500,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "rating": {
+      "anyOf": [
+       {
+        "maximum": 5,
+        "minimum": 0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Average store rating, 0-5. Null means nobody has rated it."
+     },
+     "rating_count": {
+      "maximum": 10000000000,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "screenshots": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "country": {
+    "description": "ISO country code. Required only without app_id.",
+    "type": "string"
+   },
+   "description": {
+    "description": "The full/long description",
+    "type": "string"
+   },
+   "kw_field": {
+    "description": "iOS keywords field, comma separated. Google Play has no such field.",
+    "type": "string"
+   },
+   "lang": {
+    "description": "BCP-47 language code. Required only without app_id.",
+    "type": "string"
+   },
+   "store": {
+    "description": "App store. Required only without app_id: with one, the market comes from the app.",
+    "enum": [
+     "GPLAY",
+     "ITUNES"
+    ],
+    "type": "string"
+   },
+   "subtitle": {
+    "description": "The subtitle on iOS, the short description on Google Play",
+    "type": "string"
+   },
+   "title": {
+    "description": "App name",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "simulate_metadata"
+}

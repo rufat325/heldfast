@@ -1,0 +1,164 @@
+{
+ "annotations": {
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "Convert a local datetime from one timezone to another. Takes a local time string (no UTC offset, e.g., \"2026-05-24T15:30:00\") interpreted as local time in the source timezone, returns the equivalent local time in the target timezone. Shows both UTC offsets so DST transitions are visible. Accepts full IANA IDs (e.g., \"Asia/Tokyo\") or unambiguous city names (e.g., \"Tokyo\").",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "datetime": {
+    "description": "Local datetime in ISO 8601 format without timezone offset (e.g., \"2026-05-24T15:30:00\"). Do not include \"Z\" or an offset suffix.",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$",
+    "type": "string"
+   },
+   "from_tz": {
+    "description": "Source IANA timezone ID or unambiguous city name (e.g., \"Asia/Tokyo\" or \"Tokyo\").",
+    "type": "string"
+   },
+   "to_tz": {
+    "description": "Target IANA timezone ID or unambiguous city name (e.g., \"America/New_York\" or \"New York\").",
+    "type": "string"
+   }
+  },
+  "required": [
+   "datetime",
+   "from_tz",
+   "to_tz"
+  ],
+  "type": "object"
+ },
+ "name": "ref_timezone_convert",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "source",
+     "target",
+     "utc_equivalent"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_timezone`: Source or target timezone ID is unrecognized. `invalid_datetime`: Datetime has out-of-range calendar components (e.g. month 13, February 30) or falls in a daylight-saving spring-forward gap that never occurs in the source timezone. (Malformed format is rejected by the input schema.). Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_timezone",
+         "invalid_datetime"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "source": {
+    "additionalProperties": false,
+    "description": "Source datetime details.",
+    "properties": {
+     "datetime": {
+      "description": "Input local datetime echoed back (e.g., \"2026-05-24T15:30:00\").",
+      "type": "string"
+     },
+     "offset": {
+      "description": "UTC offset at the source datetime (e.g., \"+09:00\").",
+      "type": "string"
+     },
+     "tz": {
+      "description": "Resolved source IANA timezone ID.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "datetime",
+     "tz",
+     "offset"
+    ],
+    "type": "object"
+   },
+   "target": {
+    "additionalProperties": false,
+    "description": "Target datetime details.",
+    "properties": {
+     "datetime": {
+      "description": "Equivalent local datetime in the target timezone.",
+      "type": "string"
+     },
+     "offset": {
+      "description": "UTC offset in the target timezone at the converted moment.",
+      "type": "string"
+     },
+     "tz": {
+      "description": "Resolved target IANA timezone ID.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "datetime",
+     "tz",
+     "offset"
+    ],
+    "type": "object"
+   },
+   "utc_equivalent": {
+    "description": "The UTC equivalent of the input datetime (ISO 8601 with Z suffix).",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Timezone Conversion"
+}

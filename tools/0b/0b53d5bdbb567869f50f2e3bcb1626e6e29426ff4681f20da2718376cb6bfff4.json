@@ -1,0 +1,51 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "V\u00e9rifie si un \u00e9tablissement de sant\u00e9 FINESS est encore en activit\u00e9 en croisant FINESS DREES \u2194 RPPS (pivot SIRET) \u2194 DINUM (liste compl\u00e8te des SIRET du SIREN, incluant les ferm\u00e9s). D\u00e9tecte les SIRET ferm\u00e9s encore list\u00e9s actifs c\u00f4t\u00e9 FINESS (DREES a 1-2 mois de retard).\n\n**V0.16 \u2014 fix succession M&A** : quand un site a chang\u00e9 d'exploitant (rachat), l'ancien SIRET ferm\u00e9 et le repreneur actif coexistent \u00e0 la m\u00eame adresse. Le resolver privil\u00e9gie d\u00e9sormais le SIRET ACTIF co-localis\u00e9 avec le FINESS (distance g\u00e9od\u00e9sique \u2264 100 m, recalibr\u00e9 V0.16.1 \u2014 le g\u00e9ocodage DREES place le point FINESS \u00e0 plusieurs dizaines de m\u00e8tres de l'adresse r\u00e9elle) \u2014 avant, le verdict pouvait \u00eatre `ferme` \u00e0 tort, le best_match \u00e9tant choisi sur la seule ressemblance d'adresse. Parmi les co-localis\u00e9s, seul l'actif de la bande la plus proche prime : un voisin actif d'une autre adresse ne bascule pas le verdict. Un site R\u00c9ELLEMENT ferm\u00e9 reste `ferme` (aucun SIRET actif co-localis\u00e9).\n\nLogique :\n1. Lookup FINESS pour r\u00e9cup\u00e9rer raison sociale + adresse + t\u00e9l\u00e9phone DREES\n2. SIRET candidats via le resolver : pivot RPPS, puis fallback g\u00e9o DINUM /near_point (r\u00e9cup\u00e8re TOUS les SIRET autour de l'adresse FINESS, actifs ET ferm\u00e9s \u2014 capte le repreneur invisible c\u00f4t\u00e9 RPPS)\n3. `best_match` = le SIRET ACTIF co-localis\u00e9 avec le FINESS s'il en existe un ; sinon le meilleur candidat (possiblement ferm\u00e9). La co-localisation est une distance g\u00e9o, pas un score textuel.\n4. **2 verdicts distincts** :\n  - `verdict_site` (`actif` / `ferme` / `indetermine`) : bas\u00e9 sur `best_match.actif`. C'est le verdict qui compte pour un audit territorial.\n  - `verdict_groupe` (`actif` / `ferme` / `indetermine`) : bas\u00e9 sur l'\u00e9tat admin de l'UL parente (champ `actif` DINUM). Une UL active peut tr\u00e8s bien avoir un site ferm\u00e9.\n\n**Format de retour** : objet `LookupResult` discrimin\u00e9 par `found`. Quand `found: true`, le payload contient `finess` (vue DREES), `candidates` (liste enrichie \u2014 chaque candidat porte `distance_finess_m`), `best_match`, `sirens_explored`, `verdict_site`, `verdict_groupe`, `succession` (`{ detected, exploitants_precedents }` \u2014 les SIRET ferm\u00e9s co-localis\u00e9s avec le repreneur ; fait brut, le tool ne qualifie PAS de \u00ab rachat \u00bb), `explication`. Quand `num_finess` est absent de FINESS DREES, le tool retourne `{found: false, lookupStatus: 'not_found', message, ...}`.\n\nCo\u00fbt : 1 RPC FINESS + 1 SELECT rpps + N appels DINUM (N = nombre de SIREN distincts, typiquement 1). DINUM g\u00e8re son propre fallback INSEE V3.11 pour les SIREN diffusion partielle.",
+ "inputSchema": {
+  "properties": {
+   "num_finess": {
+    "description": "Num\u00e9ro FINESS exact (9 chiffres).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "num_finess"
+  ],
+  "type": "object"
+ },
+ "name": "verifier_site_actif",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

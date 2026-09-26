@@ -1,0 +1,484 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Freight Emissions Calculator"
+ },
+ "description": "Estimate freight transport greenhouse-gas emissions (kgCO2e) for a shipment leg, per ISO 14083:2023 / GLEC Framework v3.2: emissions = mass x distance x a published emission-intensity factor (kgCO2e/tonne-km).\n\nProvide mass + distance_km + mode (road | rail | sea | air | inland_waterway); optionally choose sub_mode, region/authority (uk = DEFRA, us = EPA, fr = ADEME) and basis (wtw default, or ttw). IMPORTANT: pass ACTUAL GROSS MASS, not chargeable/volumetric weight (a common air-freight mistake \u2014 see mass_basis in the result). Distance must be provided \u2014 this tool does NOT route, geocode, or compute distances.\n\nBehavior: deterministic given the same factor edition; the fleet-average factor already includes average empty running (see empty_running) \u2014 do NOT add your own empty-return leg; sea and air are low-representativeness generic defaults (real emissions vary materially by vessel/aircraft, load factor and routing \u2014 see representativeness and the result summary). An unknown mode/sub_mode/region returns available:false with the covered options, never a fabricated factor. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: well-to-wheel AND tank-to-wheel emissions where the factor has both, the exact factor used (value, authority, edition), the tonne-km activity and a per-result _source citing BOTH the ISO method and the specific open factor, all under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: best-effort reference estimate from open factors (DEFRA / EPA / ADEME) \u2014 NOT a verified or audited carbon report.\n\nRelated: distinct from cbm_calculator / ldm_calculator / chargeable_weight_calculator (those size or bill a shipment; this one estimates its CO2e).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "basis": {
+    "description": "Emissions basis: wtw = well-to-wheel incl. upstream (default), ttw = tank-to-wheel / operation only.",
+    "enum": [
+     "wtw",
+     "ttw"
+    ],
+    "type": "string"
+   },
+   "distance_km": {
+    "description": "Transport distance in kilometres \u2014 you provide it; the tool does not route.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "mass": {
+    "description": "Shipment mass, expressed in mass_unit. Example: 1000.",
+    "exclusiveMinimum": 0,
+    "type": "number"
+   },
+   "mass_unit": {
+    "description": "Unit for mass. Default: kg.",
+    "enum": [
+     "kg",
+     "tonnes"
+    ],
+    "type": "string"
+   },
+   "mode": {
+    "description": "Transport mode.",
+    "enum": [
+     "road",
+     "rail",
+     "sea",
+     "air",
+     "inland_waterway"
+    ],
+    "type": "string"
+   },
+   "region": {
+    "description": "Factor source/region: uk = DEFRA, us = EPA, fr = ADEME. Default is per-mode.",
+    "enum": [
+     "uk",
+     "us",
+     "fr"
+    ],
+    "type": "string"
+   },
+   "sub_mode": {
+    "description": "Optional sub-mode / vehicle class (e.g. \"articulated\", \"container ship\", \"long-haul\"). Omit for the representative default.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "mass",
+   "distance_km",
+   "mode"
+  ],
+  "type": "object"
+ },
+ "name": "emissions_calculator",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "_source": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "available": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "available_for": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "confidence": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "disclaimer": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "emissions": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "properties": {
+           "basis_used": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "primary_kgco2e": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "ttw_kgco2e": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "wtw_kgco2e": {
+            "type": [
+             "number",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "empty_running": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "factor": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "properties": {
+           "authority": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "edition": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "id": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "mode": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "region": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "sub_mode": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "ttw": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "unit": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "wtw": {
+            "type": [
+             "number",
+             "null"
+            ]
+           }
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "inputs": {
+        "anyOf": [
+         {
+          "additionalProperties": {},
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "mass_basis": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "message": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "methodology": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "representativeness": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "summary": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "tonne_km": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

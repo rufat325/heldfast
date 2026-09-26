@@ -1,0 +1,169 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "List tables and columns staged on a DataCanvas by water_get_series or water_find_sites. Call this after water_get_series or water_find_sites returns a canvas_id to discover the exact table name and column types before writing a query. Then pass the table name to water_dataframe_query. Requires DataCanvas to be enabled on this server instance. Returns an error if DataCanvas is not available.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Canvas ID returned by water_get_series or water_find_sites. Identifies the canvas to describe.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "canvas_id"
+  ],
+  "type": "object"
+ },
+ "name": "water_dataframe_describe",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "tables",
+     "canvas_id"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "canvas_id": {
+    "description": "The canvas ID that was described \u2014 pass to water_dataframe_query.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `canvas_disabled`: DataCanvas is not enabled on this server instance. `canvas_not_found`: The canvas_id does not exist or has expired. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "canvas_disabled",
+         "canvas_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "tables": {
+    "description": "Tables and views on this canvas.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A staged canvas table or view.",
+     "properties": {
+      "columns": {
+       "description": "Column schema for this table.",
+       "items": {
+        "additionalProperties": false,
+        "description": "A column in this table.",
+        "properties": {
+         "name": {
+          "description": "Column name.",
+          "type": "string"
+         },
+         "nullable": {
+          "description": "True if the column allows NULL values.",
+          "type": "boolean"
+         },
+         "type": {
+          "description": "DuckDB column type (e.g. VARCHAR, DOUBLE).",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "type",
+         "nullable"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "kind": {
+       "description": "Whether this is a base table or a SQL view.",
+       "enum": [
+        "table",
+        "view"
+       ],
+       "type": "string"
+      },
+      "name": {
+       "description": "Table or view name \u2014 use as the FROM target in SQL.",
+       "type": "string"
+      },
+      "row_count": {
+       "description": "Approximate row count for this table (DuckDB estimate; may differ from exact count).",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "name",
+      "kind",
+      "row_count",
+      "columns"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Water Dataframe Describe"
+}

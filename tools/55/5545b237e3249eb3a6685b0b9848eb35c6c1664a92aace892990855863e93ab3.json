@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Annual accounts and financial statements data of a French company from filed accounts (revenue, EBITDA, net income, ratios \u2014 INPI/Banque de France), plus the full structured tax-form line items (liasse fiscale) from the INPI registry, for up to the 20 latest public fiscal years. Every fiscal year carries a `qualite` grade (exploitable / a_verifier / non_exploitable, with anomaly codes and doubtful fields): read it before trusting an amount; rows the source published twice or that are demonstrably wrong are served under `exercices_ecartes`, never silently dropped. Consolidated accounts come apart, graded the same way. Carries decalage_analytique: the latest statement filed at the register (INPI, live) vs the latest year in the ratio dataset, with a closed-list reason \u2014 the dataset lags filings by months, so the newest filing may be served raw in bilans_saisis_inpi while ratios, trends and scores still rest on the previous year. `interpretabilite` says whether revenue-based ratios measure this entity's activity: for a holding or head office (NAF 64.20 / 70.10) they are computable but economically limited \u2014 income comes from financial products booked after EBITDA. Since 2026-09-06 each statutory fiscal year repeats that flag next to the ratios it concerns (`exercices[].ratios_interpretabilite.<ratio> = limitee`), so a reader of the ratios alone is warned; `decalage_analytique.decalage` is the machine-readable lag flag (true when a newer filing than the analysed year is known). Paid via x402 ($0.01 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "siren": {
+    "description": "9-digit SIREN",
+    "pattern": "^\\d{9}$",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "siren"
+  ],
+  "type": "object"
+ },
+ "name": "get_french_company_financials",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "French company financials"
+}

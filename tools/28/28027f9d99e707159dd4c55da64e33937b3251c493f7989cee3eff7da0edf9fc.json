@@ -1,0 +1,423 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Search AniList for anime or manga by title and/or filters (genre, format, status, season/year), or browse term-less by ranking (top-rated, most popular, trending \u2014 see the `sort` parameter) when you don't have a title to search for. Adult (NSFW) results are included unless you set `sfw: true` \u2014 see the `sfw` parameter. Returns AniList IDs to use with get_media and other ID-based tools.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+   "averageScore_greater": {
+    "description": "Restrict to entries with an average score strictly greater than this (0-100).",
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "averageScore_lesser": {
+    "description": "Restrict to entries with an average score strictly less than this (0-100).",
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "endDate_greater": {
+    "description": "Restrict to entries whose end date is on or after this date.",
+    "properties": {
+     "day": {
+      "maximum": 31,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "month": {
+      "maximum": 12,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "year": {
+      "description": "Required \u2014 a date filter needs at least a year.",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "year"
+    ],
+    "type": "object"
+   },
+   "endDate_lesser": {
+    "description": "Restrict to entries whose end date is on or before this date.",
+    "properties": {
+     "day": {
+      "maximum": 31,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "month": {
+      "maximum": 12,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "year": {
+      "description": "Required \u2014 a date filter needs at least a year.",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "year"
+    ],
+    "type": "object"
+   },
+   "episodes_greater": {
+    "description": "Restrict to entries with more episodes/chapters than this.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "episodes_lesser": {
+    "description": "Restrict to entries with fewer episodes/chapters than this.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "format_in": {
+    "description": "Restrict to these formats. Only formats valid for the `type` you're searching match anything \u2014 e.g. NOVEL/ONE_SHOT with type: ANIME, or TV/OVA/ONA with type: MANGA, will just filter out all results, not error.",
+    "items": {
+     "enum": [
+      "TV",
+      "TV_SHORT",
+      "MOVIE",
+      "SPECIAL",
+      "OVA",
+      "ONA",
+      "MUSIC",
+      "MANGA",
+      "NOVEL",
+      "ONE_SHOT"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "genres": {
+    "description": "Restrict to entries matching ALL of these genre names (see get_genres for valid names) \u2014 an unrecognized genre name doesn't error, it just filters out all results, same silent-mismatch behavior as `format_in`/`tag_in` below.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "includeDescription": {
+    "default": false,
+    "description": "Also fetch each result's full synopsis (`description`). Kept off by default \u2014 with up to 50 results per call, always including it would burn tokens on text you may not need; use get_media for a single title's full synopsis instead.",
+    "type": "boolean"
+   },
+   "onList": {
+    "description": "[Requires login] Restrict to (true) or exclude (false) entries already on the authenticated user's own list. Omit to ignore list status entirely. Confirmed live: silently no-ops (identical results for true/false/omitted) if not logged in, since there's no list to check against \u2014 same behavior as get_recommendations_for_media's `excludeInList`.",
+    "type": "boolean"
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number for pagination. AniList's paginated connections (search results, a title's characters/staff/reviews, activity feeds, forum comments) reject a page whose page \u00d7 perPage exceeds ~5000 entries with an upstream error, so paging that deep fails rather than returning more results.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "perPage": {
+    "default": 10,
+    "description": "Results per page (max 50, AniList's own ceiling \u2014 it silently clamps anything higher).",
+    "exclusiveMinimum": 0,
+    "maximum": 50,
+    "type": "integer"
+   },
+   "popularity_greater": {
+    "description": "Restrict to entries with more list-adds than this.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "popularity_lesser": {
+    "description": "Restrict to entries with fewer list-adds than this.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "season": {
+    "description": "Restrict to this airing season. Works alone \u2014 matches every year's occurrence of that season, NOT just the current year (unlike anilist.co's own season filter UI, which implicitly assumes the current year when you don't also pick one). Combine with `seasonYear` for one specific season+year.",
+    "enum": [
+     "WINTER",
+     "SPRING",
+     "SUMMER",
+     "FALL"
+    ],
+    "type": "string"
+   },
+   "seasonYear": {
+    "description": "Restrict to this airing/release year (matches any season within it). Works alone or combined with `season` for one specific season+year \u2014 neither requires the other.",
+    "exclusiveMinimum": 0,
+    "maximum": 9007199254740991,
+    "type": "integer"
+   },
+   "sfw": {
+    "default": false,
+    "description": "Set true to exclude adult (isAdult) entries. Adult results are NOT filtered by default.",
+    "type": "boolean"
+   },
+   "sort": {
+    "description": "Sort order, most-significant key first (e.g. [\"SCORE_DESC\"] for highest-rated first, [\"POPULARITY_DESC\"] for most popular, [\"TRENDING_DESC\"] for what's hot right now). Defaults to relevance-ranked SEARCH_MATCH when a `term` is given; with no term and no explicit sort, results come back in AniList's own default order. Set an explicit sort for a term-less ranking/browse query (e.g. top-rated or most-popular).",
+    "items": {
+     "enum": [
+      "ID",
+      "ID_DESC",
+      "TITLE_ROMAJI",
+      "TITLE_ROMAJI_DESC",
+      "TITLE_ENGLISH",
+      "TITLE_ENGLISH_DESC",
+      "TITLE_NATIVE",
+      "TITLE_NATIVE_DESC",
+      "TYPE",
+      "TYPE_DESC",
+      "FORMAT",
+      "FORMAT_DESC",
+      "START_DATE",
+      "START_DATE_DESC",
+      "END_DATE",
+      "END_DATE_DESC",
+      "SCORE",
+      "SCORE_DESC",
+      "POPULARITY",
+      "POPULARITY_DESC",
+      "TRENDING",
+      "TRENDING_DESC",
+      "EPISODES",
+      "EPISODES_DESC",
+      "DURATION",
+      "DURATION_DESC",
+      "STATUS",
+      "STATUS_DESC",
+      "CHAPTERS",
+      "CHAPTERS_DESC",
+      "VOLUMES",
+      "VOLUMES_DESC",
+      "UPDATED_AT",
+      "UPDATED_AT_DESC",
+      "SEARCH_MATCH",
+      "FAVOURITES",
+      "FAVOURITES_DESC"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "source_in": {
+    "description": "Restrict to entries adapted from these source material types.",
+    "items": {
+     "enum": [
+      "ORIGINAL",
+      "MANGA",
+      "LIGHT_NOVEL",
+      "VISUAL_NOVEL",
+      "VIDEO_GAME",
+      "OTHER",
+      "NOVEL",
+      "DOUJINSHI",
+      "ANIME",
+      "WEB_NOVEL",
+      "LIVE_ACTION",
+      "GAME",
+      "COMIC",
+      "MULTIMEDIA_PROJECT",
+      "PICTURE_BOOK"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "startDate_greater": {
+    "description": "Restrict to entries whose start date is on or after this date.",
+    "properties": {
+     "day": {
+      "maximum": 31,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "month": {
+      "maximum": 12,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "year": {
+      "description": "Required \u2014 a date filter needs at least a year.",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "year"
+    ],
+    "type": "object"
+   },
+   "startDate_lesser": {
+    "description": "Restrict to entries whose start date is on or before this date.",
+    "properties": {
+     "day": {
+      "maximum": 31,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "month": {
+      "maximum": 12,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "year": {
+      "description": "Required \u2014 a date filter needs at least a year.",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "year"
+    ],
+    "type": "object"
+   },
+   "status_in": {
+    "description": "Restrict to these release statuses.",
+    "items": {
+     "enum": [
+      "FINISHED",
+      "RELEASING",
+      "NOT_YET_RELEASED",
+      "CANCELLED",
+      "HIATUS"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "tag_in": {
+    "description": "Restrict to entries matching ALL of these exact tag names (see get_media_tags for valid names \u2014 unlike `genres`, tag names are case-sensitive and more specific, e.g. \"Time Loop\" or \"Tragedy\"). An unrecognized tag name doesn't error, it just silently matches nothing (same behavior as `genres`/`format_in` above, confirmed live).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "term": {
+    "description": "Free-text search term (matches title). Omit to only filter.",
+    "type": "string"
+   },
+   "type": {
+    "description": "Whether to search anime or manga.",
+    "enum": [
+     "ANIME",
+     "MANGA"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "type"
+  ],
+  "type": "object"
+ },
+ "name": "search_media",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "results": {
+    "additionalProperties": {},
+    "properties": {
+     "media": {
+      "items": {
+       "additionalProperties": {},
+       "description": "Only `id` is guaranteed here \u2014 the real object has more fields, but their shape depends on which variant of an underlying union type this is (e.g. which activity type), so only the field common to every variant is declared.",
+       "properties": {
+        "id": {
+         "exclusiveMinimum": 0,
+         "maximum": 2147483647,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "pageInfo": {
+      "additionalProperties": {},
+      "properties": {
+       "currentPage": {
+        "anyOf": [
+         {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "hasNextPage": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "lastPage": {
+        "anyOf": [
+         {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Not currently accurate (a known AniList performance limitation) \u2014 use `hasNextPage` instead to decide whether to fetch another page."
+       },
+       "perPage": {
+        "anyOf": [
+         {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "total": {
+        "anyOf": [
+         {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Not currently accurate (a known AniList performance limitation) \u2014 don't rely on it to decide whether to fetch more pages."
+       }
+      },
+      "type": "object"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "results"
+  ],
+  "type": "object"
+ },
+ "title": "Search anime/manga"
+}

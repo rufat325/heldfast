@@ -1,0 +1,213 @@
+{
+ "_meta": {
+  "openai/toolInvocation/invoked": "Roster ready",
+  "openai/toolInvocation/invoking": "Fetching roster\u2026",
+  "securitySchemes": [
+   {
+    "scopes": [
+     "mcp:read"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get roster details for a specific team, current by default and historical on request. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, taxi, and record metadata for the selected roster. Keeper fields are additive and platform-dependent; never assume one provider's keeper fields or units exist on another. ESPN adds per-player keeperValue and keeperValueFuture plus one response-level keeperValueUnit of auction_dollars or draft_round, omitted rather than guessed when ESPN's draft type does not determine it; a historical snapshot withholds keeperValueFuture and flags keeperValueFutureAvailable false. Sleeper resolves keepers to player entries on the current roster only, passing the list through as Sleeper sends it; an empty or null list does not show that the league has no keepers. Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo. Historical snapshots: pass week for football (all platforms) and Sleeper basketball (matchup week), or as_of_date (YYYY-MM-DD) for ESPN/Yahoo baseball, basketball, and hockey, never both. An invalid selector returns a corrective error naming the right one. Every response includes a snapshot block identifying what was returned (current vs week vs date); historical responses may add limitation flags (acquisitionMetadataAvailable, reserveAndTaxiClassificationAvailable) when provider history omits those details. For \"roster during matchup week N\" questions in daily sports, ask the user for a specific date rather than guessing. One matchup spans several daily rosters. Use established session context (call get_user_session only if needed), then get_league_info for the specified league if this chat has not already loaded it, so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only. Current date is 2026-09-26.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "as_of_date": {
+    "description": "Historical calendar-day roster snapshot in YYYY-MM-DD format. ESPN and Yahoo baseball, basketball, and hockey only \u2014 football and Sleeper use week. Omit for the current roster; pass at most one of week or as_of_date.",
+    "type": "string"
+   },
+   "league_id": {
+    "description": "League ID (get from get_user_session)",
+    "type": "string"
+   },
+   "platform": {
+    "description": "Fantasy platform (e.g., \"espn\", \"yahoo\", \"sleeper\")",
+    "enum": [
+     "espn",
+     "yahoo",
+     "sleeper"
+    ],
+    "type": "string"
+   },
+   "season_year": {
+    "description": "Season start year \u2014 use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season. Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).",
+    "type": "number"
+   },
+   "sport": {
+    "description": "Sport type (e.g., \"football\", \"baseball\")",
+    "enum": [
+     "football",
+     "baseball",
+     "basketball",
+     "hockey"
+    ],
+    "type": "string"
+   },
+   "team_id": {
+    "description": "Team ID for the target roster. Recommended for all platforms; required on Yahoo and for historical Sleeper rosters. If omitted, platform behavior varies and may not resolve to the user's team.",
+    "type": "string"
+   },
+   "week": {
+    "description": "Historical weekly roster snapshot (positive integer). Football on all platforms, plus Sleeper basketball (matchup week). Not valid for ESPN/Yahoo daily sports \u2014 use as_of_date there. Omit for the current roster; pass at most one of week or as_of_date.",
+    "type": "number"
+   }
+  },
+  "required": [
+   "platform",
+   "sport",
+   "league_id",
+   "season_year"
+  ],
+  "type": "object"
+ },
+ "name": "get_roster",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+   "data": {
+    "additionalProperties": true,
+    "description": "Platform envelope. Field availability varies by platform (ESPN, Yahoo, Sleeper); absent fields are not provided by that platform.",
+    "properties": {
+     "bench": {
+      "items": {},
+      "type": "array"
+     },
+     "leagueId": {
+      "type": "string"
+     },
+     "limitations": {
+      "additionalProperties": true,
+      "properties": {},
+      "type": "object"
+     },
+     "ownerId": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "ownerName": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "players": {
+      "description": "Yahoo roster entries",
+      "items": {
+       "additionalProperties": true,
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "playersPoints": {
+      "additionalProperties": {},
+      "type": "object"
+     },
+     "points": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "record": {
+      "additionalProperties": true,
+      "properties": {},
+      "type": "object"
+     },
+     "reserve": {
+      "items": {},
+      "type": "array"
+     },
+     "roster": {
+      "description": "ESPN roster entries",
+      "items": {
+       "additionalProperties": true,
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "rosterId": {
+      "type": "number"
+     },
+     "rosters": {
+      "description": "Sleeper league-wide roster list when no team is selected",
+      "items": {
+       "additionalProperties": true,
+       "properties": {},
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "snapshot": {
+      "additionalProperties": true,
+      "description": "Identifies what was returned: current, week, or date",
+      "properties": {
+       "type": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "type"
+      ],
+      "type": "object"
+     },
+     "starters": {
+      "items": {},
+      "type": "array"
+     },
+     "taxi": {
+      "items": {},
+      "type": "array"
+     },
+     "teamId": {
+      "type": [
+       "string",
+       "number"
+      ]
+     },
+     "teamKey": {
+      "type": "string"
+     },
+     "teamName": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "success": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "success",
+   "data"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "mcp:read"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "Team Roster"
+}

@@ -1,0 +1,222 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Publish variants to one or more channels immediately"
+ },
+ "description": "Publish one or more channel variants immediately. Side effects: makes external HTTP requests to each channel platform; writes publish state to the local YAML backend; requires valid credentials in the named profile. Idempotent on (content.id, channel) \u2014 re-running with the same IDs returns cached state without re-posting. Use post_publish for immediate-only delivery; use post_schedule when any variant needs a future schedule_at; use post_drain to flush a previously built queue.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "content": {
+    "additionalProperties": false,
+    "description": "Content piece to publish: stable id (idempotency key), title, body_md, tags, and optional cover_image / canonical_url / cta_block / author fields. The id + channel pair is the deduplication key \u2014 the same id will not be re-posted.",
+    "properties": {
+     "author": {
+      "description": "Author display name; used in author metadata on channels that accept it.",
+      "type": "string"
+     },
+     "body_md": {
+      "description": "Full body in Markdown. Each channel adapter converts or truncates to platform requirements.",
+      "type": "string"
+     },
+     "canonical_url": {
+      "description": "Canonical URL of the authoritative source; set as canonical_url on DEV.to and Hashnode to signal the original for SEO; omit when publishing first to that channel.",
+      "format": "uri",
+      "type": "string"
+     },
+     "cover_image": {
+      "description": "Optional URL of a cover image; used as the header image on Hashnode and DEV.to; omit if no image is available.",
+      "format": "uri",
+      "type": "string"
+     },
+     "cta_block": {
+      "description": "Optional call-to-action block appended to the post body on channels that support it; formatted as Markdown.",
+      "type": "string"
+     },
+     "id": {
+      "description": "Stable identifier, e.g. 'my-post@2026-05-20'. Used as the idempotency key together with channel; must be unique per content piece.",
+      "type": "string"
+     },
+     "source_task_id": {
+      "description": "Optional tracing ID (e.g. Notion task ID); stored in publish state for correlation but never sent to platforms.",
+      "type": "string"
+     },
+     "subtitle": {
+      "description": "Optional subtitle; used on Hashnode and DEV.to subtitle fields; ignored by channels that do not support subtitles.",
+      "type": "string"
+     },
+     "tags": {
+      "default": [],
+      "description": "Canonical tag list; each channel adapter normalizes, truncates, or converts to platform tag syntax.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "title": {
+      "description": "Title of the content piece; used as the post title on most channels.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "body_md",
+     "author"
+    ],
+    "type": "object"
+   },
+   "profile_name": {
+    "description": "Name of the distribution profile (credentials store). Use profile_list to discover available names.",
+    "type": "string"
+   },
+   "variants": {
+    "description": "One or more channel-specific publish targets. Each entry specifies the channel slug (e.g. 'devto:main', 'reddit:ClaudeAI'), the adapted title and body, optional schedule_at for future delivery, and channel extras such as flair. Use channel_hints to check per-channel constraints before composing.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "body": {
+       "description": "Channel-adapted body in Markdown or plain text per channel. Use channel_hints to check whether the channel supports Markdown.",
+       "type": "string"
+      },
+      "canonical_url": {
+       "description": "Canonical URL override for this variant; overrides content.canonical_url for this channel only when set.",
+       "format": "uri",
+       "type": "string"
+      },
+      "channel": {
+       "description": "Channel slug in the form 'platform' or 'platform:account', e.g. 'devto:main', 'reddit:ClaudeAI', 'linkedin:personal'. Use subreddit_list for reddit subreddit options.",
+       "type": "string"
+      },
+      "cta_block": {
+       "description": "CTA block override for this variant; overrides content.cta_block for this channel only; appended to body before publishing.",
+       "type": "string"
+      },
+      "extras": {
+       "additionalProperties": {},
+       "default": {},
+       "description": "Channel-specific knobs: flair (Reddit), category (GitHub Discussions), repo and series (Hashnode). Keys and types vary by adapter; use channel_hints to discover supported extras.",
+       "type": "object"
+      },
+      "schedule_at": {
+       "description": "ISO-8601 datetime with timezone offset for future publishing, e.g. '2026-05-21T09:00:00+01:00'. Omit for immediate publishing.",
+       "type": "string"
+      },
+      "tags": {
+       "default": [],
+       "description": "Channel-specific tags for this variant; overrides content.tags when present; each adapter truncates or converts to platform limits.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": {
+       "description": "Channel-specific title for this variant; can differ from content.title to fit platform norms, e.g. shorter for DEV.to or question-form for Reddit.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "channel",
+      "title",
+      "body"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "content",
+   "variants",
+   "profile_name"
+  ],
+  "type": "object"
+ },
+ "name": "post_publish",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "results": {
+    "description": "Per-variant results, one entry per input variant in the same order.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "channel": {
+       "description": "The variant's channel slug.",
+       "type": "string"
+      },
+      "compose_url": {
+       "description": "Platform compose URL for browser-fallback channels; null when not used.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "draft_path": {
+       "description": "Local draft path for browser-fallback channels; null when not used.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "error": {
+       "description": "Failure message; null on success.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "live_url": {
+       "description": "Public URL of the live post; null when not live.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "published_at": {
+       "description": "UTC ISO-8601 publish timestamp; null when not yet published.",
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "state": {
+       "description": "Outcome of the publish attempt.",
+       "enum": [
+        "live",
+        "queued",
+        "needs_browser",
+        "failed"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "channel",
+      "state",
+      "live_url",
+      "draft_path",
+      "compose_url",
+      "error",
+      "published_at"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "results"
+  ],
+  "type": "object"
+ },
+ "title": "Publish variants to one or more channels immediately"
+}

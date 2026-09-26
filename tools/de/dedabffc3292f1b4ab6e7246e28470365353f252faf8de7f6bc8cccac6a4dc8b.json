@@ -1,0 +1,51 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "R\u00e9cup\u00e8re le d\u00e9tail d'une entreprise fran\u00e7aise par son SIREN (9 chiffres) : raison sociale, NAF, finances historiques, dirigeants, \u00e9tablissements. Source : DINUM Recherche Entreprises.\n\n**Format de retour** : objet `LookupResult` discrimin\u00e9 par `found`.\n- `found: true` \u2192 l'entreprise est retourn\u00e9e \u00e0 plat (champs `siren`, `nomComplet`, `etablissements`, `enrichmentStatus`, \u2026)\n- `found: false` \u2192 `{ found: false, key, lookupStatus: 'not_found' | 'ambiguous', message }`. `not_found` : SIREN non index\u00e9 par DINUM (souvent diffusion partielle INSEE \u2014 l'entreprise peut quand m\u00eame exister dans SIRENE). `ambiguous` : r\u00e9gression API \u00e0 signaler.\n\n\u26a0\ufe0f Quand `found: true`, la liste `etablissements` peut \u00eatre tronqu\u00e9e. Le champ `nombreEtablissements` (compt\u00e9 SIRENE) refl\u00e8te le total r\u00e9el. **Lire `enrichmentStatus`** pour savoir si la liste est compl\u00e8te :\n- `success` : `etablissements` contient tous les sites\n- `partial` : sites manquants (multi-d\u00e9partement ou NAF diff\u00e9rent du si\u00e8ge) \u2014 voir `enrichmentWarning`\n- `failed` : l'enrichissement a \u00e9chou\u00e9 (rate limit, panne API) \u2014 seul le si\u00e8ge est list\u00e9\n- `not_attempted` : entreprise monosite ou data SIRENE manquante\n\nPour \u00e9num\u00e9ration exhaustive multi-d\u00e9partement, utiliser `entreprises_in_radius` par zone g\u00e9ographique. Co\u00fbt : 1 ou 2 appels API DINUM par invocation (rate limit ~1 req/s effectif).",
+ "inputSchema": {
+  "properties": {
+   "siren": {
+    "description": "SIREN exact, 9 chiffres.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "siren"
+  ],
+  "type": "object"
+ },
+ "name": "entreprise_by_siren",
+ "outputSchema": {
+  "description": "LookupResult discrimin\u00e9 par `found`. true \u2192 payload m\u00e9tier \u00e0 plat (siren, nomComplet, etc.). false \u2192 `lookupStatus`/`key`/`message` actionnables. `lookupStatus` est toujours pr\u00e9sent runtime (valid\u00e9 par tests).",
+  "properties": {
+   "found": {
+    "type": "boolean"
+   },
+   "key": {
+    "description": "Cl\u00e9 recherch\u00e9e (SIREN, num_finess, code INSEE, \u2026).",
+    "type": "string"
+   },
+   "lookupStatus": {
+    "enum": [
+     "found",
+     "not_found",
+     "ambiguous"
+    ],
+    "type": "string"
+   },
+   "message": {
+    "description": "Explication actionnable quand `found=false` (cause probable + rem\u00e9diation).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "found",
+   "lookupStatus"
+  ],
+  "type": "object"
+ }
+}

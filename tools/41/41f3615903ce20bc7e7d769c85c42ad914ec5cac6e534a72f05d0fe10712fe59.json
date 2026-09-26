@@ -1,0 +1,285 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Discover objects across Smithsonian collections related to a given anchor object, matched on shared metadata signals \u2014 culture, period, object type, named parties, and topic terms. Each related object is tagged with the signals that connected it to the anchor; a named-party signal carries the catalog's own role for that party (maker, Collector, Donor, issuing authority, \u2026), not a fixed \"maker\" label. Matches surface across museums \u2014 an NASM aerospace anchor can pull related objects from NMNHPALEO, SAAM, and NMAH.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "id": {
+    "description": "record_id of the anchor object (e.g. \"nasm_A19670093000\") from smithsonian_search_objects or smithsonian_get_object.",
+    "type": "string"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Maximum number of related objects to return (default 10, max 20).",
+    "maximum": 20,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "start": {
+    "default": 0,
+    "description": "Pagination offset \u2014 0-indexed. Page contiguously with start = page \u00d7 limit; each signal is reachable to a depth of 5000 objects, beyond which truncated stays true but deeper pages aren't retrievable.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "required": [
+   "id"
+  ],
+  "type": "object"
+ },
+ "name": "smithsonian_find_related",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "anchor",
+     "related",
+     "search_signals_used",
+     "signals"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "anchor": {
+    "additionalProperties": false,
+    "description": "Summary of the anchor object used to drive the fan-out searches.",
+    "properties": {
+     "record_id": {
+      "description": "Smithsonian catalog record ID for the input object.",
+      "type": "string"
+     },
+     "title": {
+      "description": "Title of the input object from the catalog.",
+      "type": "string"
+     },
+     "unit_code": {
+      "description": "Museum unit code for the input object (e.g. \"NASM\").",
+      "type": "string"
+     }
+    },
+    "required": [
+     "record_id",
+     "title",
+     "unit_code"
+    ],
+    "type": "object"
+   },
+   "cap": {
+    "description": "The limit cap that was applied.",
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `not_found`: The anchor object ID does not exist in the Smithsonian catalog. `invalid_id`: The ID is empty or contains only whitespace. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "not_found",
+         "invalid_id"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "notice": {
+    "description": "Guidance naming the inputs that retrieve the related objects this page omitted \u2014 start for the next page, signals[].search_continuation for a signal past this tool's reach.",
+    "type": "string"
+   },
+   "related": {
+    "description": "Related objects interleaved across the fan-out signals so each signal contributes. Empty when no related objects were found across all fan-out searches.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A related object with its connecting metadata signals.",
+     "properties": {
+      "is_cc0": {
+       "description": "True when the object metadata is CC0 (open access). The Smithsonian Open Access corpus is CC0 throughout, so this flag rarely varies and cannot gate an image download \u2014 read thumbnail_url for that.",
+       "type": "boolean"
+      },
+      "museum_name": {
+       "description": "Full museum name. A few rarely-indexed archive sub-unit codes have no mapped name and fall back to the raw unit code.",
+       "type": "string"
+      },
+      "record_id": {
+       "description": "Object identifier \u2014 pass to smithsonian_get_object or smithsonian_get_media.",
+       "type": "string"
+      },
+      "similarity_signals": {
+       "description": "Metadata terms that connected this object to the anchor.",
+       "items": {
+        "description": "A metadata signal that connected this object to the anchor (e.g. \"culture: Plains Indian\").",
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "thumbnail_url": {
+       "description": "Thumbnail URL if available.",
+       "type": "string"
+      },
+      "title": {
+       "description": "Object title.",
+       "type": "string"
+      },
+      "unit_code": {
+       "description": "Museum unit code.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "record_id",
+      "title",
+      "unit_code",
+      "museum_name",
+      "is_cc0",
+      "similarity_signals"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "search_signals_used": {
+    "description": "Metadata fields that drove the fan-out searches.",
+    "items": {
+     "description": "A metadata signal used for a fan-out search.",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Number of related objects returned.",
+    "type": "number"
+   },
+   "signals": {
+    "description": "Per-signal breakdown of every fan-out that returned. Use search_continuation with smithsonian_search_objects to retrieve a signal's matches past this tool's 5000-per-signal reach. A signal whose upstream call failed is omitted.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One fan-out signal with its true size and its retrieval path.",
+     "properties": {
+      "row_count": {
+       "description": "True upstream match count for this signal, uncapped \u2014 it can exceed the 5000-per-signal depth this tool's own paging reaches.",
+       "type": "number"
+      },
+      "search_continuation": {
+       "additionalProperties": false,
+       "description": "Exact smithsonian_search_objects input that reproduces this signal's full match set, at any depth.",
+       "properties": {
+        "filters": {
+         "additionalProperties": false,
+         "description": "Pass verbatim as smithsonian_search_objects's filters. Omitted when the signal's constraint is already carried entirely by query.",
+         "properties": {
+          "culture": {
+           "description": "smithsonian_search_objects filters.culture value.",
+           "type": "string"
+          },
+          "date": {
+           "description": "smithsonian_search_objects filters.date value.",
+           "type": "string"
+          },
+          "name": {
+           "description": "smithsonian_search_objects filters.name value.",
+           "type": "string"
+          },
+          "object_type": {
+           "description": "smithsonian_search_objects filters.object_type value.",
+           "type": "string"
+          },
+          "topic": {
+           "description": "smithsonian_search_objects filters.topic value.",
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "query": {
+         "description": "Pass verbatim as smithsonian_search_objects's query. Empty when the signal is expressed entirely through filters.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "type": "object"
+      },
+      "signal": {
+       "description": "Matches an entry in search_signals_used and in related[].similarity_signals.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "signal",
+      "row_count",
+      "search_continuation"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "truncated": {
+    "description": "True when the related list is incomplete \u2014 either capped by the limit or more results exist upstream past the current page (advance start to retrieve them).",
+    "type": "boolean"
+   },
+   "truncationCeiling": {
+    "description": "Upper bound on the related objects reachable by paging with start. Cross-signal overlaps are not subtracted, so it can overcount. Signals larger than this tool's per-signal reach are counted at that reach \u2014 see signals[].row_count for their true size.",
+    "type": "number"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Find Related Smithsonian Objects"
+}

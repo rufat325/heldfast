@@ -1,0 +1,250 @@
+{
+ "_meta": {
+  "securitySchemes": [
+   {
+    "scopes": [
+     "email"
+    ],
+    "type": "oauth2"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Explain WHY a search returns what it does \u2014 the board's own decision trace merged with the run's outcome. Shows the parsed query (terms, exclusions, intent-lifts, alias expansions), which filters were applied vs IGNORED and why, the route and retriever chosen, the ranking regime (ranked/ring-merged/deep-page and the seam), plus the real run's route, timings, count basis and any fallback. Use this when a search returns surprising, empty, or mis-ranked results \u2014 it turns 'why?' into one call. Takes the SAME arguments as search_jobs. Needs a key or a sign-in.",
+ "inputSchema": {
+  "properties": {
+   "agentReadyOnly": {
+    "description": "Only jobs the apply agent can submit to on the user's behalf.",
+    "type": "boolean"
+   },
+   "category": {
+    "description": "Comma list of category slugs (see board_stats for the live set), max 3.",
+    "type": "string"
+   },
+   "companies": {
+    "description": "Scope to specific employers: a comma list of companyToken values from job cards (or from the site's employer pages). An employer the board does not carry simply matches nothing; tokens the board drops are named in ignoredFilters.",
+    "type": "string"
+   },
+   "country": {
+    "description": "ISO-2 codes, comma-separated, max 5. E.g. 'US,GB'.",
+    "type": "string"
+   },
+   "department": {
+    "description": "Substring match on the employer's own department/team text.",
+    "type": "string"
+   },
+   "employmentType": {
+    "description": "Comma list of: full_time, part_time, contract, temporary, internship.",
+    "type": "string"
+   },
+   "excludeAgencies": {
+    "description": "Hide postings from staffing/recruiting agencies (their job cards carry agency:true). Agencies are served by default; this is an opt-in narrowing.",
+    "type": "boolean"
+   },
+   "experience": {
+    "description": "Comma list of seniority bands the POSTING asks for: entry, mid, senior, expert. Rows whose band could not be read are excluded \u2014 use maxYears for the candidate's own side of the question.",
+    "type": "string"
+   },
+   "hasStatedPay": {
+    "description": "Only postings that state a salary (excludes the ~87% that don't).",
+    "type": "boolean"
+   },
+   "includeUnstatedPay": {
+    "description": "WIDENS an active salaryMin/salaryMax band to also admit postings that state no pay at all. Inert with no band set (unpriced rows are already included). The response says salaryStatedOnly when a band is narrowing without it.",
+    "type": "boolean"
+   },
+   "limit": {
+    "description": "Rows per page, 1-60. Default 20.",
+    "type": "number"
+   },
+   "location": {
+    "description": "City/state/metro, e.g. 'texas', 'NYC', 'berlin'.",
+    "type": "string"
+   },
+   "maxAgeDays": {
+    "description": "Only postings from the last N days (1-30).",
+    "type": "number"
+   },
+   "maxYears": {
+    "description": "Only roles asking for at most N years of experience.",
+    "type": "number"
+   },
+   "offset": {
+    "description": "Paging offset \u2014 pass back the previous response's nextOffset.",
+    "type": "number"
+   },
+   "payBasis": {
+    "description": "Restrict to hourly or salaried pay.",
+    "enum": [
+     "hourly",
+     "salaried"
+    ],
+    "type": "string"
+   },
+   "postedAfter": {
+    "description": "ISO-8601 instant; only postings the EMPLOYER dated after it. Undated rows fall out of this window (unlike maxAgeDays, which falls back to when the board first saw a posting), so this is the strict form of 'new'.",
+    "type": "string"
+   },
+   "query": {
+    "description": "Search terms. Supports exclusions: 'engineer -senior'.",
+    "type": "string"
+   },
+   "remote": {
+    "description": "Only remote-friendly roles.",
+    "type": "boolean"
+   },
+   "salaryMax": {
+    "description": "Annual USD-equivalent salary ceiling.",
+    "type": "number"
+   },
+   "salaryMin": {
+    "description": "Annual USD-equivalent salary floor. Note: only ~13% of postings state pay.",
+    "type": "number"
+   },
+   "sort": {
+    "description": "Default relevance.",
+    "enum": [
+     "relevance",
+     "newest",
+     "salary"
+    ],
+    "type": "string"
+   },
+   "vendor": {
+    "description": "Comma list of hiring-system vendors (greenhouse, lever, ashby, \u2026), max 8. Not available here: usajobs \u2014 The U.S. federal job feed is readable on resumebooster.work but may not be redistributed as a data feed under its terms of use, so no tool here returns its rows. Naming one is refused rather than answered with an empty page.",
+    "type": "string"
+   },
+   "workMode": {
+    "description": "Comma list of: remote, hybrid, onsite.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "debug_search",
+ "outputSchema": {
+  "additionalProperties": true,
+  "properties": {
+   "decision": {
+    "additionalProperties": true,
+    "description": "The board's own explain trace for this query: parsed terms, filters applied or ignored and why, route, retriever and ranking regime. Its keys are the board's and change as the board's decisions do.",
+    "type": "object"
+   },
+   "outcome": {
+    "additionalProperties": true,
+    "properties": {
+     "agenciesExcluded": {
+      "description": "Row-selecting: disclosed agency inventory is hidden from this page.",
+      "type": "boolean"
+     },
+     "countUnavailable": {
+      "description": "The board could not count this query exactly \u2014 do not report a total.",
+      "type": "boolean"
+     },
+     "didYouMean": {
+      "type": "string"
+     },
+     "excludedTerms": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "hasMore": {
+      "type": "boolean"
+     },
+     "ignoredFilters": {
+      "description": "Filters the board could NOT apply. Results answer a wider question than was asked.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "intentFilters": {
+      "description": "Words read out of the query as filters.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "nextOffset": {
+      "description": "Pass back as `offset` for the next page.",
+      "type": "integer"
+     },
+     "phaseMs": {
+      "additionalProperties": true,
+      "description": "Per-phase timings when the board reports them.",
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "rankedFellBack": {
+      "description": "True when the ranked path failed and the run fell back.",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "rowsServed": {
+      "type": "integer"
+     },
+     "salaryStatedOnly": {
+      "description": "Row-selecting: this page excludes the ~87% of postings with no stated pay.",
+      "type": "boolean"
+     },
+     "tookMs": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "topTitles": {
+      "description": "The first five titles served, for a glance at ranking.",
+      "items": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "type": "array"
+     },
+     "total": {
+      "description": "Exact match count. ABSENT with countUnavailable:true when the board refuses to guess.",
+      "type": [
+       "integer",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "rowsServed",
+     "topTitles",
+     "phaseMs",
+     "tookMs",
+     "rankedFellBack"
+    ],
+    "type": "object"
+   }
+  },
+  "required": [
+   "decision",
+   "outcome"
+  ],
+  "type": "object"
+ },
+ "securitySchemes": [
+  {
+   "scopes": [
+    "email"
+   ],
+   "type": "oauth2"
+  }
+ ],
+ "title": "Explain a search"
+}

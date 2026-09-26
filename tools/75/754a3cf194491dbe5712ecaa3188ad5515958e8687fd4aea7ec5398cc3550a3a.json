@@ -1,0 +1,215 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "algorithm": "rsa-sha256",
+     "certDerBase64": "<cert-der-base64>",
+     "pdfBase64": "<any-pdf-base64>",
+     "reason": "Approved",
+     "rsaKeyPkcs1DerBase64": "<rsa-pkcs1-der-base64>",
+     "signerName": "Alice"
+    },
+    "title": "Sign with RSA-SHA256 (auto-injects placeholder)"
+   },
+   {
+    "input": {
+     "algorithm": "ecdsa-sha256",
+     "certDerBase64": "<cert-der-base64>",
+     "ecPrivateKeyDerBase64": "<pkcs8-der-base64>",
+     "pdfBase64": "<any-pdf-base64>"
+    },
+    "title": "Sign with ECDSA-P256 (PKCS#8 DER key)"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false
+ },
+ "description": "CMS / PAdES signature in ONE call: a missing /Sig placeholder is auto-injected (prepare_signature_placeholder is optional). Inputs: pdfBase64, algorithm (rsa-sha256/384/512, ecdsa-sha256 P-256), certDerBase64 (+ certChainDerBase64 intermediates) and the DER key (rsaKeyPkcs1DerBase64 for rsa-*, ecPrivateKeyDerBase64 or ecPrivateScalarHex for ECDSA; PEM is rejected with the openssl remedy). `profile:'pades'` (ETSI EN 319 142-1 baseline) is the right choice when add_ltv / timestamp_pdf follow; `timestamp:true` = PAdES B-T through the operator TSA (TSA_NOT_CONFIGURED otherwise, no network without it). signerName/reason/location/contactInfo/signingTime are baked into the placeholder THIS call injects (a pre-built placeholder keeps its own). Several unsigned placeholders \u2192 pass fieldName (PLACEHOLDER_AMBIGUOUS); `allowMultiple:true` + a new fieldName adds a further signature. Verify with verify_pdf.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "algorithm": {
+    "description": "Signature algorithm. 'rsa-sha384' / 'rsa-sha512' (pdfnative 1.7) upgrade the whole CMS digest chain. ECDSA only supports P-256 with SHA-256.",
+    "enum": [
+     "rsa-sha256",
+     "rsa-sha384",
+     "rsa-sha512",
+     "ecdsa-sha256"
+    ],
+    "type": "string"
+   },
+   "allowMultiple": {
+    "default": false,
+    "description": "Add a NEW signature next to existing (already signed) fields instead of signing the first placeholder. Requires fieldName. Each signature is an incremental revision; earlier signatures stay valid.",
+    "type": "boolean"
+   },
+   "autoInjectPlaceholder": {
+    "default": true,
+    "description": "When true (default) and the input PDF has no /Sig widget, pdfnative.addSignaturePlaceholder is called before signing \u2014 enabling single-call signing of any PDF.",
+    "type": "boolean"
+   },
+   "certChainDerBase64": {
+    "description": "Optional intermediate CA certificates (DER base64) embedded in the CMS so verifiers and add_ltv can build the chain without fetching caIssuers.",
+    "items": {
+     "minLength": 4,
+     "type": "string"
+    },
+    "maxItems": 8,
+    "type": "array"
+   },
+   "certDerBase64": {
+    "description": "Base64 of the signer X.509 certificate in DER form. Convert from PEM with: openssl x509 -in cert.pem -outform DER | openssl base64 -A",
+    "minLength": 4,
+    "type": "string"
+   },
+   "contactInfo": {
+    "description": "/Sig /ContactInfo \u2014 baked into the placeholder when this call injects it.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "ecPrivateKeyDerBase64": {
+    "description": "Base64 of an ECDSA P-256 private key in SEC1 (RFC 5915) or PKCS#8 (RFC 5208) DER form. Convert from PEM with: openssl pkey -in key.pem -outform DER | openssl base64 -A  Mutually exclusive with ecPrivateScalarHex.",
+    "minLength": 4,
+    "type": "string"
+   },
+   "ecPrivateScalarHex": {
+    "description": "Hex-encoded P-256 private scalar `d` (exactly 64 lowercase or uppercase hex chars, no 0x prefix). Mutually exclusive with ecPrivateKeyDerBase64; either is accepted for ECDSA.",
+    "pattern": "^[0-9a-fA-F]{64}$",
+    "type": "string"
+   },
+   "fieldName": {
+    "description": "Name of the signature field to sign (required when several unsigned placeholders exist) and of the placeholder injected by this call.",
+    "pattern": "^[A-Za-z0-9_.\\- ]{1,127}$",
+    "type": "string"
+   },
+   "location": {
+    "description": "/Sig /Location \u2014 baked into the placeholder when this call injects it.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "'base64' (default) returns the PDF inline; 'file' writes it inside the PDFNATIVE_MCP_OUTPUT_DIR sandbox (SECURITY_VIOLATION when the sandbox is not configured).",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Required when outputMode='file'. Relative path inside the sandbox; must end with .pdf (no absolute paths, no '..').",
+    "type": "string"
+   },
+   "pdfBase64": {
+    "description": "Base64-encoded PDF bytes. When the PDF already contains an unsigned /Sig placeholder it is signed in place; otherwise the placeholder is auto-injected (set autoInjectPlaceholder=false to opt out).",
+    "minLength": 4,
+    "type": "string"
+   },
+   "profile": {
+    "default": "pkcs7",
+    "description": "'pkcs7' (default, adbe.pkcs7.detached) or 'pades' (ETSI EN 319 142-1 baseline; ETSI.CAdES.detached when the placeholder is injected here). Use 'pades' before timestamp / add_ltv / timestamp_pdf.",
+    "enum": [
+     "pkcs7",
+     "pades"
+    ],
+    "type": "string"
+   },
+   "reason": {
+    "description": "/Sig /Reason \u2014 baked into the placeholder when this call injects it.",
+    "maxLength": 500,
+    "type": "string"
+   },
+   "rsaKeyPkcs1DerBase64": {
+    "description": "Base64 of the RSA private key in DER form \u2014 PKCS#1 RSAPrivateKey (openssl rsa -in key.pem -outform DER -traditional | openssl base64 -A) or PKCS#8 PrivateKeyInfo (openssl pkey -in key.pem -outform DER | openssl base64 -A). NOT PEM. Required for the rsa-* algorithms.",
+    "type": "string"
+   },
+   "signerName": {
+    "description": "/Sig /Name \u2014 baked into the placeholder when this call injects it.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "signingTime": {
+    "description": "ISO-8601 signing instant \u2192 /Sig /M (only when THIS call injects the placeholder) and the CMS signing-time (pkcs7 profile). Default: now. Not trusted time \u2014 use timestamp:true for that.",
+    "format": "date-time",
+    "type": "string"
+   },
+   "timestamp": {
+    "default": false,
+    "description": "PAdES B-T: request an RFC 3161 signature timestamp from the operator-configured TSA (PDFNATIVE_MCP_TSA_URL). Fails with TSA_NOT_CONFIGURED when no TSA is configured \u2014 the server never contacts the network otherwise.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "pdfBase64",
+   "algorithm",
+   "certDerBase64"
+  ],
+  "type": "object"
+ },
+ "name": "sign_pdf",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Result of a PDF-producing tool. base64 mode: the PDF arrives as an embedded `resource` content block (not duplicated here); file mode: `filePath`.",
+  "properties": {
+   "diagnostics": {
+    "description": "Engine diagnostics (when includeDiagnostics=true).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "severity"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "filePath": {
+    "description": "Sandboxed absolute path (file mode).",
+    "type": "string"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "sizeBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "summary": {
+    "additionalProperties": true,
+    "description": "Tool-specific summary, when produced.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "sizeBytes"
+  ],
+  "type": "object"
+ },
+ "title": "Sign PDF (RSA / ECDSA, PAdES)"
+}

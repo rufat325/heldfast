@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "readOnlyHint": true
+ },
+ "description": "List bulk AP migrations\n\nDetected bulk migrations between Access Points, largest first. A cohort is a gap-\u22643-day island of (from_provider, to_provider) mover days that clears three thresholds: at least 25 participants, at least 40 % of them on the busiest day (which rejects a steady drip), and at most 20 active days for the pair over the trailing 40 days (which rejects a recurring partnership).\n\nEvery day is the PROBE-OBSERVATION day \u2014 the day the change scan saw the SMP record change, not the day the migration was executed \u2014 so a cohort is always a `[first_day, last_day]` range and `peak_day` is the busiest observation day. Render the range, never a single date.\n\n`top_country` is derived from the ICD prefix of the participant identifiers, not from business-card country fields. `merge_suspect` marks a cohort large enough (or whose source provider no longer resolves in the directory) to be a provider merge or a renamed provider rather than that many independent customer decisions \u2014 the canonical case is Sovos \u2192 Sage, 10,574 participants. Such rows are data events, not customer decisions; verify one before quoting it. The flag is a CURRENT judgment, re-evaluated on every recompute, not frozen at detection.\n\n`from`/`to` are OVERLAP bounds (a cohort counts when its range intersects the window), defaulting to the trailing 90 days the detector re-clusters. Mover history begins 2026-07-24, so no cohort predates it. `id` is a request-lifetime handle for the participant drill-down \u2014 never persist one.",
+ "inputSchema": {
+  "properties": {
+   "cursor": {
+    "description": "Opaque pagination cursor returned as `next_cursor` by the previous page.",
+    "type": "string"
+   },
+   "direction": {
+    "default": "both",
+    "description": "Which side of the `provider` filter to take: `in` = cohorts the provider received, `out` = cohorts it lost, `both` = either. Only meaningful together with `provider`.",
+    "enum": [
+     "in",
+     "out",
+     "both"
+    ],
+    "type": "string"
+   },
+   "from": {
+    "description": "Inclusive lower bound of the observation window (`YYYY-MM-DD` UTC); a cohort matches when its `last_day` is at or after it. Defaults to 90 days ago.",
+    "format": "date",
+    "type": "string"
+   },
+   "limit": {
+    "default": 50,
+    "description": "Page size, clamped to [1, 200]. Defaults to 50.",
+    "maximum": 200,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "merge_suspect": {
+    "default": "include",
+    "description": "How to treat probable provider merges / slug changes: `include` (default), `exclude` for real customer migrations only, or `only` to review the flagged rows.",
+    "enum": [
+     "include",
+     "exclude",
+     "only"
+    ],
+    "type": "string"
+   },
+   "min_participants": {
+    "default": 25,
+    "description": "Only cohorts with at least this many participants. The detector's own floor is 25, so a lower value cannot surface smaller groups.",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "provider": {
+    "description": "Only cohorts involving this Provider key (`/v1/aps/{key}`). Matches EITHER side unless `direction` narrows it.",
+    "type": "string"
+   },
+   "to": {
+    "description": "Inclusive upper bound of the observation window (`YYYY-MM-DD` UTC); a cohort matches when its `first_day` is at or before it. Defaults to today.",
+    "format": "date",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "list_cohort_moves"
+}

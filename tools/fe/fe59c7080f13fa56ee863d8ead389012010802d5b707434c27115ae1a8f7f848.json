@@ -1,0 +1,49 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Prices Kalshi daily high-temperature markets against the NWS forecast for the market's OWN settlement station, and measures whether that forecast actually beats the market. Two modes. LIVE (default): returns the full strike ladder for one city and settlement date with market_prob (mid), forecast_prob, and edge_pp per strike, plus the settlement clause verbatim. BACKTEST (`backtest_days: N`): scores an archived gridded forecast against the market on settled days and returns brier_market vs brier_forecast with a plain-English `verdict`, so the edge is MEASURED rather than asserted. READ THE WARNINGS \u2014 they are not boilerplate. (1) These markets DO NOT settle on the NWS. They settle on The Weather Company (weather.com) at a Kalshi station code such as CLINYC, which the response quotes verbatim; so part of every edge_pp is NWS-vs-Weather-Company disagreement about the same day at the same station, which is not mispricing and not tradeable. `settlement_vs_forecast_basis_f` from backtest mode is that part as a number. (2) The station is DERIVED from the settlement clause, never from the city name: Chicago settles at MIDWAY and New York at CENTRAL PARK, so a city-centre forecast would misprice a whole ladder. A station that cannot be resolved yields rows with no forecast and a reason, never a guessed coordinate. (3) forecast_prob assumes a normal distribution around the NWS high whose width is ASSUMED, not fitted (stated in `distribution_assumption`) \u2014 run backtest mode to see whether it is calibrated. (4) edge_pp is gross: no Kalshi fees, no bid-ask. MEASURED RESULT, AND IT IS NOT THE FLATTERING ONE: on the first backtest (KXHIGHNY, 13 settled days to 2026-09-11, 58 market observations) the MARKET beat the forecast \u2014 Brier 0.1008 for the market against 0.1594 for the archived gridded forecast, lower being better. So on that sample there is NO forecast edge to sell, and a large edge_pp is more likely to be the model disagreeing with a better-informed market than an opportunity. The measured settlement-vs-forecast basis was 1.7F mean absolute over 8 pinnable days, slightly warm-biased, which is a big share of a typical edge_pp on a 2-degree bracket. Re-run backtest_days before believing any edge; if a later sample reverses this, the numbers say so. NWS is US-only, so the ~30 international Kalshi weather series (London, Paris, Tokyo) return market prices with forecast_unavailable rather than a forecast. Precipitation series are listed but not yet priced. Cities: nyc, chicago, los angeles, miami, austin, houston, denver, philadelphia \u2014 or pass `series_ticker` for any other (e.g. \"KXHIGHTBOS\").",
+ "inputSchema": {
+  "examples": [
+   {
+    "city": "nyc"
+   },
+   {
+    "city": "chicago"
+   },
+   {
+    "backtest_days": 14,
+    "series_ticker": "KXHIGHNY"
+   }
+  ],
+  "properties": {
+   "backtest_days": {
+    "description": "Run measurement mode over the last N settled days (max 60) instead of pricing today. Returns brier_market vs brier_forecast, the settlement-vs-forecast basis, and per-day detail. Both sides are scored at 12:00Z on each event day \u2014 before the daily high and before resolution \u2014 because a settled market prices the known outcome at close.",
+    "type": "number"
+   },
+   "city": {
+    "description": "City to price, e.g. \"nyc\", \"chicago\", \"los angeles\", \"miami\", \"austin\", \"houston\", \"denver\", \"philadelphia\". Defaults to nyc. Unmapped cities return known_cities[] rather than a wrong series.",
+    "type": "string"
+   },
+   "date": {
+    "description": "Settlement date as YYYY-MM-DD. Defaults to the soonest open event. Daily weather markets open ~1-2 days ahead and close 05:00Z the next day.",
+    "type": "string"
+   },
+   "market_type": {
+    "description": "\"high_temp\" (default) | \"precip\". Precipitation markets return prices but no forecast_prob yet.",
+    "type": "string"
+   },
+   "series_ticker": {
+    "description": "Explicit Kalshi series, e.g. \"KXHIGHNY\" or \"KXHIGHTBOS\" (Boston). Overrides `city`; use it for any of the 121 daily weather series not in the city list.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "kalshi_weather_edge",
+ "title": "Kalshi Weather Edge",
+ "version": "v1.c379080b"
+}

@@ -1,0 +1,684 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "LOCAL PROJECT KNOWLEDGE SEARCH ONLY. With research enabled, one local broker lets multiple MCP sessions query the same knowledge base concurrently and orders writes safely. Always use this tool when the user asks to find, recall, inspect, or search information already stored in project memory, indexed local roots, papers, codebases, plans, experiments, or decisions. Use query_variants for multiple retrieval angles in one call instead of opening terminals or calling this tool repeatedly. Query embeddings are batched, candidates are fused with RRF, graph expansion starts from retrieved evidence, and the primary query is reranked once. Only bounded query-focused summaries from that final ranking are returned; stored bodies never bypass this response gate. If one retrieval lane times out, the other lanes still return and meta.degraded_lanes identifies the partial lane; do not repeat the same query automatically. Uses exact, BM25, vector, and graph retrieval. It never opens Google, a browser, or SearchApi. Use search or search_parallel only when new external information is required.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "all_projects": {
+    "description": "Search every active named project. Excludes Inbox and cannot be combined with project ids.",
+    "type": "boolean"
+   },
+   "filters": {
+    "description": "Optional project, source, type, role, lane, and recorded-time filters. Excluded lanes are not executed.",
+    "properties": {
+     "kinds": {
+      "items": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+     },
+     "recorded_after": {
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+      "type": "string"
+     },
+     "recorded_before": {
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+      "type": "string"
+     },
+     "retrieval_lanes": {
+      "items": {
+       "enum": [
+        "exact",
+        "bm25",
+        "vector",
+        "graph"
+       ],
+       "type": "string"
+      },
+      "maxItems": 4,
+      "type": "array"
+     },
+     "roles": {
+      "items": {
+       "enum": [
+        "experiment_record",
+        "result",
+        "method",
+        "log",
+        "paper",
+        "plan",
+        "config",
+        "source",
+        "report",
+        "other"
+       ],
+       "type": "string"
+      },
+      "maxItems": 10,
+      "type": "array"
+     },
+     "source_families": {
+      "items": {
+       "enum": [
+        "document",
+        "code",
+        "graph"
+       ],
+       "type": "string"
+      },
+      "maxItems": 3,
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "include_project_ids": {
+    "description": "Additional read-only projects searched with the primary project.",
+    "items": {
+     "maxLength": 64,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "limit": {
+    "default": 10,
+    "description": "Maximum local RAG results.",
+    "maximum": 20,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "project_id": {
+    "description": "Primary project to search. Required unless all_projects=true.",
+    "maxLength": 64,
+    "minLength": 1,
+    "type": "string"
+   },
+   "queries": {
+    "description": "Independent questions returned as separate ranked groups inside one broker request.",
+    "items": {
+     "properties": {
+      "id": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "limit": {
+       "maximum": 20,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "query": {
+       "maxLength": 400,
+       "minLength": 1,
+       "type": "string"
+      },
+      "query_variants": {
+       "items": {
+        "maxLength": 400,
+        "minLength": 1,
+        "type": "string"
+       },
+       "maxItems": 19,
+       "type": "array"
+      }
+     },
+     "required": [
+      "id",
+      "query"
+     ],
+     "type": "object"
+    },
+    "maxItems": 20,
+    "minItems": 1,
+    "type": "array"
+   },
+   "query": {
+    "description": "One natural-language query over indexed local project knowledge. Use queries instead for independent grouped answers.",
+    "maxLength": 400,
+    "minLength": 1,
+    "type": "string"
+   },
+   "query_variants": {
+    "description": "Optional retrieval variants executed inside this one broker request. Exact identifiers and quoted phrases are added deterministically, candidates are fused with RRF, and the primary query is reranked once. Do not make repeated terminal or tool calls for query variants.",
+    "items": {
+     "maxLength": 400,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 19,
+    "type": "array"
+   },
+   "request_id": {
+    "description": "Caller-chosen ID for one local query. Supply it before a long request so project_memory query_status/query_cancel can inspect or cancel the same operation.",
+    "maxLength": 200,
+    "minLength": 1,
+    "type": "string"
+   },
+   "response_budget_bytes": {
+    "description": "Explicit result-array byte budget. Without an override, summaries adapt to unique result, question and source-family counts. Stored bodies and retrieval scope are not truncated by this budget; envelope metadata is separate.",
+    "maximum": 1000000,
+    "minimum": 1000,
+    "type": "integer"
+   },
+   "response_deadline_ms": {
+    "description": "Caller-selected 1-300 second response deadline. Returns available lane results or QUERY_TIMEOUT with request_id. Native reads remain tracked until they settle; stored evidence and writes are unaffected.",
+    "maximum": 300000,
+    "minimum": 1000,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "project_memory_search",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "active_source_snapshot": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "assertion": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "assertion_count": {
+    "type": "number"
+   },
+   "citation_observation_count": {
+    "type": "number"
+   },
+   "context": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "correction_count": {
+    "type": "number"
+   },
+   "current": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "decision_count": {
+    "type": "number"
+   },
+   "decisions": {
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "diff": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "doctor": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "document_count": {
+    "type": "number"
+   },
+   "elapsed_ms": {
+    "type": "number"
+   },
+   "entities": {
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "entity": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "entity_count": {
+    "type": "number"
+   },
+   "entity_operation_count": {
+    "type": "number"
+   },
+   "error": {
+    "additionalProperties": false,
+    "properties": {
+     "cancel_reason": {
+      "type": "string"
+     },
+     "code": {
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     },
+     "phase": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "retry_after_ms": {
+      "type": "number"
+     },
+     "retryable": {
+      "type": "boolean"
+     },
+     "user_action": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message",
+     "retryable"
+    ],
+    "type": "object"
+   },
+   "experiment_count": {
+    "type": "number"
+   },
+   "experiments": {
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "forget": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "groups": {
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "imported": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "index": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "job": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "job_counts": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "memory": {
+    "type": "string"
+   },
+   "memory_handle": {
+    "type": "string"
+   },
+   "meta": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "plan_count": {
+    "type": "number"
+   },
+   "plans": {
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "project": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "projects": {
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "query": {
+    "type": "string"
+   },
+   "query_status": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "receipt": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "receipts": {
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "record": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "records": {
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "results": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "authors": {
+       "type": "string"
+      },
+      "body_handle": {
+       "type": "string"
+      },
+      "canonical_url": {
+       "type": "string"
+      },
+      "content": {
+       "type": "string"
+      },
+      "created_at": {
+       "type": "string"
+      },
+      "creator": {
+       "type": "string"
+      },
+      "description": {
+       "type": "string"
+      },
+      "document_id": {
+       "type": "string"
+      },
+      "doi": {
+       "type": "string"
+      },
+      "excerpt": {
+       "type": "string"
+      },
+      "extract_error": {
+       "type": "string"
+      },
+      "extraction_quality": {
+       "enum": [
+        "full_text",
+        "abstract",
+        "meta_abstract",
+        "metadata_only"
+       ],
+       "type": "string"
+      },
+      "fresh_web": {
+       "type": "boolean"
+      },
+      "index_freshness": {
+       "enum": [
+        "current",
+        "stale"
+       ],
+       "type": "string"
+      },
+      "is_pdf": {
+       "type": "boolean"
+      },
+      "keywords": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "language": {
+       "type": "string"
+      },
+      "length": {
+       "type": "number"
+      },
+      "modified_at": {
+       "type": "string"
+      },
+      "page_count": {
+       "type": "number"
+      },
+      "producer": {
+       "type": "string"
+      },
+      "project_ids": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "publication": {
+       "type": "string"
+      },
+      "published_at": {
+       "type": "string"
+      },
+      "record_id": {
+       "type": "string"
+      },
+      "retrieval_families": {
+       "items": {
+        "enum": [
+         "exact",
+         "bm25",
+         "vector",
+         "graph"
+        ],
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "revision_id": {
+       "type": "string"
+      },
+      "score": {
+       "type": "number"
+      },
+      "source_family": {
+       "enum": [
+        "live",
+        "document",
+        "code",
+        "graph"
+       ],
+       "type": "string"
+      },
+      "source_length": {
+       "type": "number"
+      },
+      "source_span": {
+       "additionalProperties": false,
+       "properties": {
+        "end": {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        },
+        "start": {
+         "maximum": 9007199254740991,
+         "minimum": -9007199254740991,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "start",
+        "end"
+       ],
+       "type": "object"
+      },
+      "subject": {
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      },
+      "truncated": {
+       "type": "boolean"
+      },
+      "url": {
+       "type": "string"
+      },
+      "year": {
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "title",
+      "url",
+      "description"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "search_event_count": {
+    "type": "number"
+   },
+   "session": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "session_count": {
+    "type": "number"
+   },
+   "snapshot": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "source_entry_count": {
+    "type": "number"
+   },
+   "timeline": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "verification": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "visualization": {
+    "additionalProperties": {},
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Local Project Memory Search"
+}

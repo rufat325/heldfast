@@ -1,0 +1,433 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Get current stock holdings of an institutional investor (hedge fund, mutual fund, pension fund) from their latest SEC 13F filing. Returns top positions with share counts, values, and quarter-over-quarter changes. Every answer states its grain: ENTITY (a CIK that belongs to a manager family is answered for the whole family by default -- pass entity='filer' for that one filer's own 13F) and SECURITY (the default portfolio merges an issuer's share classes into one row, e.g. GOOG+GOOGL, and lists the per-class breakdown; pass `ticker` to get only that security). Shares and value are the 13F-reported totals over all legs; option legs are flagged. structuredContent carries exact shares/values and the grain fields.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "entity": {
+    "default": "family",
+    "description": "family (default): consolidate every 13F filer in the manager family; filer: only the requested CIK's own filing.",
+    "enum": [
+     "family",
+     "filer"
+    ],
+    "type": "string"
+   },
+   "institution": {
+    "description": "Institution CIK number (e.g. '1067983'), slug (e.g. 'berkshire-hathaway'), or name (e.g. 'Berkshire Hathaway') \u2014 names are resolved automatically.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "limit": {
+    "default": 50,
+    "description": "Results per page",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "page": {
+    "default": 1,
+    "description": "Page number",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "ticker": {
+    "description": "Only this security (e.g. 'GOOG'). Returns the security grain: GOOG is Class C only, not the Alphabet issuer total.",
+    "maxLength": 20,
+    "type": "string"
+   }
+  },
+  "required": [
+   "institution"
+  ],
+  "type": "object"
+ },
+ "name": "get_institution_holdings",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "entity_grain": {
+    "description": "filer = one 13F filer's own filing; family = consolidated across a manager family's filers",
+    "enum": [
+     "filer",
+     "family",
+     "unknown"
+    ],
+    "type": "string"
+   },
+   "family": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "canonical_cik": {
+        "$ref": "#/properties/family/anyOf/0/properties/slug"
+       },
+       "name": {
+        "$ref": "#/properties/family/anyOf/0/properties/slug"
+       },
+       "slug": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "slug",
+       "name",
+       "canonical_cik"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The manager family, when the answer is at family grain and ko.io named it"
+   },
+   "paging": {
+    "additionalProperties": false,
+    "description": "Paging state reconciled from ko.io meta.total_count and meta.softwall",
+    "properties": {
+     "continuation": {
+      "description": "SIGNIN_REQUIRED = page>1 needs a (free) ko.io API key",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "has_more": {
+      "description": "null = a full page came back and more MAY exist",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "next_page": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/rows/items/properties/reported_by_members/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Next page THIS caller can open; null when there is none (or sign-in is required)"
+     },
+     "page": {
+      "type": "integer"
+     },
+     "per_page": {
+      "type": "integer"
+     },
+     "plan_row_cap": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/rows/items/properties/reported_by_members/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Row cap the caller's plan applied to this page, if any"
+     },
+     "returned": {
+      "type": "integer"
+     },
+     "total_count": {
+      "anyOf": [
+       {
+        "$ref": "#/properties/rows/items/properties/reported_by_members/anyOf/0"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Total rows matching the request, when ko.io reported it"
+     },
+     "truncated_by_plan": {
+      "description": "True when the plan's row cap withheld rows from this page",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "page",
+     "per_page",
+     "returned",
+     "total_count",
+     "has_more",
+     "next_page",
+     "continuation",
+     "plan_row_cap",
+     "truncated_by_plan"
+    ],
+    "type": "object"
+   },
+   "plan_limit": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "continuation": {
+        "$ref": "#/properties/family/anyOf/0/properties/slug"
+       },
+       "date_basis": {
+        "$ref": "#/properties/family/anyOf/0/properties/slug"
+       },
+       "effective_period": {
+        "$ref": "#/properties/family/anyOf/0/properties/slug"
+       },
+       "policy_version": {
+        "$ref": "#/properties/family/anyOf/0/properties/slug"
+       },
+       "row_cap": {
+        "$ref": "#/properties/rows/items/properties/reported_by_members"
+       },
+       "truncated": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "window_end": {
+        "$ref": "#/properties/family/anyOf/0/properties/slug"
+       },
+       "window_start": {
+        "$ref": "#/properties/family/anyOf/0/properties/slug"
+       }
+      },
+      "required": [
+       "policy_version",
+       "window_start",
+       "window_end",
+       "effective_period",
+       "date_basis",
+       "row_cap",
+       "truncated",
+       "continuation"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "The Free/keyless plan limits ko.io applied to this answer (null for paid callers)"
+   },
+   "position_basis": {
+    "description": "What shares_held/holding_value count, when ko.io stated it (e.g. 13f_reported_all_legs)",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "quarter_date": {
+    "description": "The snapshot's quarter; null for a history (each row carries its own quarter_date)",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "quarters": {
+    "description": "Distinct quarter-ends present in rows, newest first",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "requested": {
+    "description": "The institution identifier the caller passed",
+    "type": "string"
+   },
+   "requested_cik": {
+    "description": "The CIK/slug the request was made for",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "resolved_cik": {
+    "description": "The CIK ko.io answered for (the family's canonical CIK at family grain)",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "rows": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "action": {
+       "$ref": "#/properties/family/anyOf/0/properties/slug"
+      },
+      "call_shares": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "cik": {
+       "$ref": "#/properties/family/anyOf/0/properties/slug"
+      },
+      "equity_shares": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "has_option_legs": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "holding_value": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "issuer": {
+       "$ref": "#/properties/family/anyOf/0/properties/slug"
+      },
+      "portfolio_weight_pct": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "put_shares": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "quarter_date": {
+       "$ref": "#/properties/family/anyOf/0/properties/slug"
+      },
+      "reported_by_members": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "security_grain": {
+       "enum": [
+        "security",
+        "issuer"
+       ],
+       "type": "string"
+      },
+      "share_change": {
+       "$ref": "#/properties/rows/items/properties/shares_held"
+      },
+      "share_classes": {
+       "description": "Per-class breakdown of an issuer-grain row; empty at security grain",
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "holding_value": {
+          "$ref": "#/properties/rows/items/properties/shares_held"
+         },
+         "shares_held": {
+          "$ref": "#/properties/rows/items/properties/shares_held"
+         },
+         "ticker": {
+          "$ref": "#/properties/family/anyOf/0/properties/slug"
+         }
+        },
+        "required": [
+         "ticker",
+         "shares_held",
+         "holding_value"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "shares_held": {
+       "anyOf": [
+        {
+         "pattern": "^-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Exact decimal string as served by ko.io (not rounded); null = unknown"
+      },
+      "ticker": {
+       "$ref": "#/properties/family/anyOf/0/properties/slug"
+      },
+      "tickers": {
+       "description": "Share-class tickers summed into this row (one entry at security grain)",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "cik",
+      "ticker",
+      "issuer",
+      "quarter_date",
+      "shares_held",
+      "holding_value",
+      "portfolio_weight_pct",
+      "action",
+      "share_change",
+      "security_grain",
+      "tickers",
+      "share_classes",
+      "equity_shares",
+      "call_shares",
+      "put_shares",
+      "has_option_legs",
+      "reported_by_members"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "security_grain": {
+    "description": "security = one row per security/share class; issuer = share classes of one issuer merged; mixed = portfolio with some merged rows",
+    "enum": [
+     "security",
+     "issuer",
+     "mixed"
+    ],
+    "type": "string"
+   },
+   "ticker_filter": {
+    "$ref": "#/properties/family/anyOf/0/properties/slug"
+   },
+   "view": {
+    "description": "snapshot = one quarter's holdings; history = one position across quarters (family + ticker), one row per quarter, newest first",
+    "enum": [
+     "snapshot",
+     "history"
+    ],
+    "type": "string"
+   }
+  },
+  "required": [
+   "requested",
+   "requested_cik",
+   "resolved_cik",
+   "entity_grain",
+   "family",
+   "security_grain",
+   "ticker_filter",
+   "position_basis",
+   "view",
+   "quarters",
+   "quarter_date",
+   "rows",
+   "paging",
+   "plan_limit"
+  ],
+  "type": "object"
+ }
+}

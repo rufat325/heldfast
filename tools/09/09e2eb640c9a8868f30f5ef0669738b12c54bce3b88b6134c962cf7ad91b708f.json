@@ -1,0 +1,407 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Buy Something for the User"
+ },
+ "description": "Find and buy products, tickets, bookings and subscriptions for the user at supported stores. Start with `search` { query } to find the item and merchant page using Vaaya OneSearch (5\u00a2 per search); the user can describe what they need without supplying a link. Before checkout, use `setup` to check payment and shipping readiness; resolve missing setup once. Persistent merchant accounts are managed at /store-connections. Use store_connection_id to select an account. Passwords and verification codes belong only on the merchant page, never in chat. PRODUCT DISCOVERY: if the user describes what to buy but provides no URL, use `search` { query: <product, variant, budget and preferred merchant if specified> } to locate it under the existing tool spending permissions; do not ask them to paste a link or say search for it first. Search is not purchase authorization. Respect search fees and spending limits; if search is unavailable, explain the actual error and then ask for a link. Verify the merchant, item and variant from the result; ask only when matches are ambiguous or details cannot be verified. Never invent a product URL, final total or delivery date from a search snippet. THE SEAMLESS PATH: once the user has told you what to buy and you have the exact item, merchant page URL and total, call `purchase` { item, merchant, url, total_cents, confirmed: true, confirmation: <the user's own words> } \u2014 it approves from their message (under the chat limit), starts buying in the user's cloud browser in the background and returns `message` (\"Hold on \u2014 buying it now.\"): RELAY IT, then poll `status` { approval_id } every ~10 seconds and relay its `message` when the status is completed (\"Done \u2014 \u2026\"), requires_action (read action_required.reason for the exact blocker) or failed. If `status` says the user's shipping address is missing, ask for it and call `address` { name, line1, line2?, city, state?, postal_code, country, phone? } then `checkout` { approval_id } to resume; if merchant authentication is pending, relay handoff_url and handoff_deadline. The durable worker checks authentication and resumes the same authorized purchase automatically. Do not ask the user to send done or submit codes in chat. If the handoff expires, relay the recovery page; it does not clear order or payment uncertainty. Other sub-commands: `search` { query } (protocol merchants plus a real web search; the web half bills 5\u00a2), `propose` { item, merchant, total_cents, url?, notes?, confirmed?, confirmation? } (creates an approval; without `confirmed` it returns an approval link the user opens \u2014 show its `message` VERBATIM), `checkout` { approval_id, params? } (buys an approved purchase; for a browser merchant it runs in the background like `purchase`). Use the user's existing authorization of the exact item and total; do not ask them to confirm twice. Ask only for missing purchase details. Nothing is ever bought without the user's yes: `checkout` refuses anything else. Use `reconcile` { approval_id } after an uncertain submission: it only inspects the existing checkout and never submits payment. For an unavailable checkout or inconclusive reconciliation, relay recovery_url and recovery_instructions from status. The user can resolve the attempt on its approval page only after checking both merchant orders and payment records. A chat statement alone does not clear the lock, and expiration does not clear it. If status or replay says purchase_resolved, never reuse checkout on that approval. When the user requests another attempt, call propose with retry_of set to that resolved ID, current item/price and no confirmed flag, then show the new approval link. Check setup browser_allowance first; a daily_browser_limit requires waiting until resets_at, not reconnecting or changing request text. For a handoff, return action_required.url and the deadline. The user fixes 2FA, CAPTCHA, payment, address or booking issues on that authenticated page and uses Return control to Vaaya; do not call checkout to bypass a pending handoff. Status polling never creates a replacement. Resume only the same approval_id; do not recreate a purchase to bypass an unresolved attempt. `charged_cents` is the Vaaya tool fee, NOT a merchant charge; read merchant_payment separately, and never infer a hold or capture from Link approval. Never open `browserbase` sessions yourself to buy something \u2014 only `buy` can.",
+ "inputSchema": {
+  "properties": {
+   "approval_id": {
+    "description": "The approval returned by purchase/propose (`status`, `checkout`).",
+    "type": "string"
+   },
+   "booking": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "baggage": {
+        "$ref": "#/anyOf/0/properties/segments/items/properties/flightNumber"
+       },
+       "changeCancellationTerms": {
+        "$ref": "#/anyOf/0/properties/segments/items/properties/flightNumber"
+       },
+       "kind": {
+        "const": "flight",
+        "type": "string"
+       },
+       "segments": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "cabin": {
+           "$ref": "#/anyOf/0/properties/segments/items/properties/flightNumber"
+          },
+          "departureDate": {
+           "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+           "type": "string"
+          },
+          "departureTime": {
+           "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+           "type": "string"
+          },
+          "destination": {
+           "pattern": "^[A-Z]{3}$",
+           "type": "string"
+          },
+          "fare": {
+           "$ref": "#/anyOf/0/properties/segments/items/properties/flightNumber"
+          },
+          "flightNumber": {
+           "maxLength": 500,
+           "minLength": 1,
+           "type": "string"
+          },
+          "origin": {
+           "pattern": "^[A-Z]{3}$",
+           "type": "string"
+          }
+         },
+         "required": [
+          "origin",
+          "destination",
+          "departureDate",
+          "departureTime",
+          "flightNumber",
+          "cabin",
+          "fare"
+         ],
+         "type": "object"
+        },
+        "maxItems": 8,
+        "minItems": 1,
+        "type": "array"
+       },
+       "travelers": {
+        "maximum": 9,
+        "minimum": 1,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "kind",
+       "travelers",
+       "segments",
+       "baggage",
+       "changeCancellationTerms"
+      ],
+      "type": "object"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "address": {
+        "$ref": "#/anyOf/0/properties/segments/items/properties/flightNumber"
+       },
+       "adults": {
+        "maximum": 30,
+        "minimum": 1,
+        "type": "integer"
+       },
+       "cancellationTerms": {
+        "$ref": "#/anyOf/0/properties/segments/items/properties/flightNumber"
+       },
+       "checkIn": {
+        "$ref": "#/anyOf/0/properties/segments/items/properties/departureDate"
+       },
+       "checkOut": {
+        "$ref": "#/anyOf/0/properties/segments/items/properties/departureDate"
+       },
+       "children": {
+        "maximum": 30,
+        "minimum": 0,
+        "type": "integer"
+       },
+       "kind": {
+        "const": "hotel",
+        "type": "string"
+       },
+       "mandatoryFeesCents": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "paymentTiming": {
+        "enum": [
+         "pay_now",
+         "pay_at_property",
+         "deposit"
+        ],
+        "type": "string"
+       },
+       "property": {
+        "$ref": "#/anyOf/0/properties/segments/items/properties/flightNumber"
+       },
+       "ratePlan": {
+        "$ref": "#/anyOf/0/properties/segments/items/properties/flightNumber"
+       },
+       "roomType": {
+        "$ref": "#/anyOf/0/properties/segments/items/properties/flightNumber"
+       },
+       "rooms": {
+        "maximum": 9,
+        "minimum": 1,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "kind",
+       "property",
+       "address",
+       "checkIn",
+       "checkOut",
+       "rooms",
+       "adults",
+       "children",
+       "roomType",
+       "ratePlan",
+       "cancellationTerms",
+       "paymentTiming",
+       "mandatoryFeesCents"
+      ],
+      "type": "object"
+     }
+    ],
+    "description": "Required for Expedia flights and Booking.com hotels: exact itinerary/stay, counts, fare/room, baggage/cancellation and payment terms. These are shown for approval and cannot be substituted. Traveler identity documents are entered directly on the merchant page, never in chat. Final booking review requires the authenticated handoff page."
+   },
+   "city": {
+    "description": "City (`address`).",
+    "type": "string"
+   },
+   "command": {
+    "description": "Use `search` to find an item with OneSearch, `purchase` to buy an authorized item, and `status` to track it.",
+    "enum": [
+     "setup",
+     "search",
+     "purchase",
+     "propose",
+     "status",
+     "checkout",
+     "reconcile",
+     "address",
+     "credentials"
+    ],
+    "type": "string"
+   },
+   "confirmation": {
+    "description": "The user's own words approving it, verbatim (`purchase`, `propose`).",
+    "type": "string"
+   },
+   "confirmed": {
+    "description": "true when the user has said yes to this exact item and total in the conversation (`purchase`, `propose`).",
+    "type": "boolean"
+   },
+   "country": {
+    "description": "Two-letter country code, e.g. US (`address`).",
+    "type": "string"
+   },
+   "currency": {
+    "description": "ISO currency, default 'usd'.",
+    "type": "string"
+   },
+   "email": {
+    "description": "Contact email for the order; defaults to the account email (`address`).",
+    "type": "string"
+   },
+   "item": {
+    "description": "What exactly is being bought, in the user's words \u2014 variant, size, quantity (`purchase`, `propose`).",
+    "type": "string"
+   },
+   "line1": {
+    "description": "Street address (`address`).",
+    "type": "string"
+   },
+   "line2": {
+    "description": "Apartment / unit (`address`).",
+    "type": "string"
+   },
+   "merchant": {
+    "description": "Merchant host or URL, e.g. bombas.com (`purchase`, `propose`, `credentials`).",
+    "type": "string"
+   },
+   "name": {
+    "description": "Full name for shipping (`address`).",
+    "type": "string"
+   },
+   "notes": {
+    "description": "One line for the driver/user: variant, size, colour, quantity, delivery window.",
+    "type": "string"
+   },
+   "params": {
+    "additionalProperties": true,
+    "description": "The merchant's own purchase body (product id, quantity, email, shipping) for a protocol merchant (`purchase`, `checkout`).",
+    "type": "object"
+   },
+   "password": {
+    "description": "Password at the merchant \u2014 stored encrypted, never returned (`credentials`).",
+    "type": "string"
+   },
+   "phone": {
+    "description": "Contact phone for delivery (`address`).",
+    "type": "string"
+   },
+   "postal_code": {
+    "description": "Postal / ZIP code (`address`).",
+    "type": "string"
+   },
+   "query": {
+    "description": "Describe the product, variant, budget and preferred store if any. `search` uses OneSearch to find matching items and merchant pages (5\u00a2).",
+    "type": "string"
+   },
+   "retry_of": {
+    "description": "For propose only: the previous approval ID resolved by the owner as no order/payment. Use only when the user requests a new attempt; omit confirmed and show the fresh approval link. Never vary item text or confirmation to bypass replay or locks.",
+    "format": "uuid",
+    "type": "string"
+   },
+   "state": {
+    "description": "State / region (`address`).",
+    "type": "string"
+   },
+   "store_connection_id": {
+    "description": "Merchant account connection ID from /store-connections. Required when multiple accounts are connected to the same store. Sign in and enter verification codes directly on that page, never in chat.",
+    "type": "string"
+   },
+   "total_cents": {
+    "description": "The full total the user will pay, in cents (`purchase`, `propose`).",
+    "type": "number"
+   },
+   "url": {
+    "description": "The exact product page the item came from \u2014 the driver starts there (`purchase`, `propose`).",
+    "type": "string"
+   },
+   "username": {
+    "description": "Email/username at the merchant (`credentials`).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "command"
+  ],
+  "type": "object"
+ },
+ "name": "buy",
+ "outputSchema": {
+  "additionalProperties": true,
+  "properties": {
+   "action_required": {
+    "description": "Null or an object with reason, message and optional action URL."
+   },
+   "approval_id": {
+    "description": "The purchase approval this call is about.",
+    "type": "string"
+   },
+   "approval_status": {
+    "description": "Stored approval state; needs_login is the legacy name for any pause.",
+    "type": "string"
+   },
+   "approval_url": {
+    "description": "Where the user approves \u2014 relay it.",
+    "type": "string"
+   },
+   "billing_note": {
+    "description": "Explains the separation of tool fees and merchant payments.",
+    "type": "string"
+   },
+   "card_required": {
+    "description": "True when a card must be added before this purchase.",
+    "type": "boolean"
+   },
+   "card_url": {
+    "description": "Where the user adds a card, when they have none yet.",
+    "type": "string"
+   },
+   "charged_cents": {
+    "description": "Amount billed for this call, in cents.",
+    "type": "number"
+   },
+   "command": {
+    "description": "Which sub-command ran: setup | search | purchase | propose | status | checkout | reconcile | address | credentials.",
+    "type": "string"
+   },
+   "currency": {
+    "description": "ISO currency of total_cents.",
+    "type": "string"
+   },
+   "error": {
+    "description": "Error code/message when ok=false.",
+    "type": "string"
+   },
+   "expires_at": {
+    "description": "When the approval stops being valid (24h from proposal).",
+    "type": "string"
+   },
+   "item": {
+    "description": "What is being bought.",
+    "type": "string"
+   },
+   "live_view_url": {
+    "description": "Live View link to the browser doing the checkout.",
+    "type": "string"
+   },
+   "login_url": {
+    "description": "Live View link for the user to sign into their own merchant account.",
+    "type": "string"
+   },
+   "merchant": {
+    "description": "Who it is being bought from.",
+    "type": "string"
+   },
+   "merchant_payment": {
+    "description": "Merchant payment status and charged_cents, null when unverified. Separate from the tool fee.",
+    "type": "object"
+   },
+   "merchants": {
+    "description": "Protocol merchants that sell this kind of thing.",
+    "type": "array"
+   },
+   "message": {
+    "description": "What to show the user \u2014 relay it VERBATIM.",
+    "type": "string"
+   },
+   "next": {
+    "description": "The next call to make.",
+    "type": "string"
+   },
+   "ok": {
+    "description": "True when the call succeeded.",
+    "type": "boolean"
+   },
+   "order_status": {
+    "description": "confirmed | not_confirmed | unknown | absent_user_reported.",
+    "type": "string"
+   },
+   "payment_source": {
+    "description": "merchant_saved_card | link_card, once checkout picks one.",
+    "type": "string"
+   },
+   "receipt": {
+    "description": "What was bought, once it completes.",
+    "type": "object"
+   },
+   "relay_verbatim": {
+    "description": "True when `message` must be shown to the user as written.",
+    "type": "boolean"
+   },
+   "status": {
+    "description": "proposed | approved | declined | checking_out | requires_action | completed | failed | expired.",
+    "type": "string"
+   },
+   "tool_fee_cents": {
+    "description": "Vaaya buy tool-call fee. Not a merchant charge.",
+    "type": "number"
+   },
+   "total_cents": {
+    "description": "The user's total, in cents \u2014 paid by their own card, not the balance.",
+    "type": "number"
+   },
+   "web": {
+    "description": "Web search evidence, when `search` ran one."
+   }
+  },
+  "type": "object"
+ },
+ "title": "Buy Something for the User"
+}

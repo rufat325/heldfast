@@ -1,0 +1,276 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Finds funders registered in the Crossref Funder Registry by name or funder DOI. Provide funder_doi for an exact single-funder lookup \u2014 the full DOI (\"10.13039/100000001\"), the bare registry ID (\"100000001\"), or either behind a doi: or https://doi.org/ prefix \u2014 or query for name-based search. Name-query results page with offset \u2014 the nextOffset enrichment carries the value for the following page, up to offset + rows = 100000. Set include_works to true to also return a page of the most recent works funded by the matched funder; that list pages two ways, in two orders. works_offset is the simple one: newest published first, capped ten times lower at works_offset + rows = 10000. works_cursor has no ceiling and reaches the whole funded-works list, newest registered first \u2014 ordered by the date each DOI was registered with Crossref, since Crossref does not walk a publication-date sort by cursor: pass works_cursor=\"*\" on the first call, then chain the nextWorksCursor token from each response. The two cannot be combined, and a cursor walk always starts at the most recently registered work \u2014 it cannot resume from an offset. This list also counts works funded by the funder's registry descendants, which a crossref_search_works filter on {\"funder\": \"10.13039/<id>\"} does not. Returns funder name, registry ID, country, and alternate names. The Funder Registry supersedes entries, and a deprecated one answers to the same names as its successor while carrying only a fraction of its works: such a record carries replacedBy with the superseding registry ID and the response carries a notice naming it. The replacement is never followed automatically \u2014 re-run with funder_doi set to that ID to get the current entry.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "funder_doi": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "Funder registry ID or funder DOI, e.g. \"100000001\"",
+      "pattern": "^(?:(?:https?:\\/\\/(?:dx\\.)?doi\\.org\\/|doi:)?10\\.13039\\/)?\\d+$",
+      "type": "string"
+     }
+    ],
+    "description": "Funder DOI for exact lookup \u2014 the full DOI \"10.13039/100000001\" (NSF) or the bare registry ID \"100000001\". Supersedes query when provided."
+   },
+   "include_works": {
+    "default": false,
+    "description": "When true, also return a page of works funded by the matched funder. Requires an unambiguous funder \u2014 pass funder_doi when a name query matches more than one.",
+    "type": "boolean"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Zero-based offset into the name-query funder list. Pass the nextOffset value from the previous response to continue. Ignored when funder_doi is set, which resolves exactly one record.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "query": {
+    "description": "Funder name search query, e.g. \"National Science Foundation\" or \"Wellcome Trust\"",
+    "type": "string"
+   },
+   "rows": {
+    "default": 10,
+    "description": "Maximum funders to return for name queries, or works when include_works is true (1\u2013100, default 10)",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "works_cursor": {
+    "description": "Cursor token for deep paging of the funded-works list when include_works is true. Pass \"*\" to start the walk at the most recently registered work, then pass the nextWorksCursor value from each response. A walk runs by the date each DOI was registered with Crossref, newest first, not by publication date \u2014 Crossref does not walk a publication-date sort by cursor. Has no offset ceiling and cannot be combined with works_offset.",
+    "type": "string"
+   },
+   "works_offset": {
+    "default": 0,
+    "description": "Zero-based offset into the funded-works list when include_works is true. Pass the nextWorksOffset value from the previous response to continue. Capped at works_offset + rows = 10000; use works_cursor to read the whole list. Cannot be combined with works_cursor.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   }
+  },
+  "type": "object"
+ },
+ "name": "crossref_search_funders",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "funders",
+     "funderCount",
+     "fundersTotal"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `rate_limited`: Crossref answered HTTP 429 and the limit did not clear inside the retry budget. `upstream_unavailable`: Crossref was unreachable, returned a 5xx status, or served an HTML error page instead of JSON. `malformed_response`: Crossref returned HTTP 200 with a body that is not valid JSON. `request_timeout`: Crossref did not respond within CROSSREF_TIMEOUT_MS, or answered HTTP 408/504. `invalid_cursor`: Crossref did not recognize the cursor token (HTTP 404 cursor-invalid). `invalid_parameter`: Crossref rejected a parameter value (a filter value of the wrong type or form), or answered HTTP 400 with a body that did not parse. `funder_not_found`: Funder DOI lookup returned 404 \u2014 funder is not in the Crossref Funder Registry. `ambiguous_funder`: include_works is true but the name query matched more than one funder, making the target ambiguous. `offset_too_large`: offset + rows exceeds the 100000-record ceiling Crossref allows on funder name search. `works_offset_too_large`: works_offset + rows exceeds the 10000-record ceiling Crossref allows on a funded-works list. `works_cursor_offset_conflict`: include_works is true and works_cursor was supplied alongside a works_offset above zero. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "rate_limited",
+         "upstream_unavailable",
+         "malformed_response",
+         "request_timeout",
+         "invalid_cursor",
+         "invalid_parameter",
+         "funder_not_found",
+         "ambiguous_funder",
+         "offset_too_large",
+         "works_offset_too_large",
+         "works_cursor_offset_conflict"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "fundedWorks": {
+    "description": "Page of works funded by the matched funder, newest first \u2014 by publication date on an offset page, by Crossref registration date on a works_cursor page. Only present when include_works is true.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Work summary",
+     "properties": {
+      "doi": {
+       "description": "Work DOI",
+       "type": "string"
+      },
+      "isReferencedByCount": {
+       "description": "Incoming citation count",
+       "type": "number"
+      },
+      "published": {
+       "additionalProperties": false,
+       "description": "Publication date \u2014 the first of published, published-print, and published-online that names one. A component Crossref records as unknown is omitted, and so is every component below it.",
+       "properties": {
+        "month": {
+         "description": "Month",
+         "type": "number"
+        },
+        "year": {
+         "description": "Year",
+         "type": "number"
+        }
+       },
+       "type": "object"
+      },
+      "title": {
+       "description": "Work title",
+       "type": "string"
+      },
+      "type": {
+       "description": "Work type",
+       "type": "string"
+      }
+     },
+     "required": [
+      "doi"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "fundedWorksTotal": {
+    "description": "Total count of funded works for the matched funder, when include_works is true",
+    "type": "number"
+   },
+   "funderCount": {
+    "description": "Number of funder records returned in this page",
+    "type": "number"
+   },
+   "funders": {
+    "description": "Matching funder records",
+    "items": {
+     "additionalProperties": false,
+     "description": "Funder record",
+     "properties": {
+      "altNames": {
+       "description": "Alternate names for this funder",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "country": {
+       "description": "Free-text place the registry records for this funder. Usually a country name, but supranational entries carry values like \"European Union\" \u2014 there is no machine-readable country code on the record.",
+       "type": "string"
+      },
+      "id": {
+       "description": "Funder registry ID",
+       "type": "string"
+      },
+      "name": {
+       "description": "Funder canonical name",
+       "type": "string"
+      },
+      "replacedBy": {
+       "description": "Registry IDs that supersede this funder. Present only on a deprecated entry \u2014 a deprecated funder carries a fraction of its successor's works, so re-run with funder_doi set to one of these IDs to reach the current entry. Pass a bare ID (\"501100004543\") or the full DOI.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "replaces": {
+       "description": "Registry IDs this funder supersedes. Present only when the funder has absorbed a deprecated entry; works registered against those IDs are not counted here.",
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "uri": {
+       "description": "Funder registry URI",
+       "type": "string"
+      },
+      "worksCount": {
+       "description": "Number of works associated with this funder in Crossref",
+       "type": "number"
+      }
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "fundersTotal": {
+    "description": "Total funder records matching the query in Crossref",
+    "type": "number"
+   },
+   "nextOffset": {
+    "description": "Value to pass as offset on the next call for the following page of funders. Absent when this page ends the matches or the next page would breach the 100000-record offset ceiling.",
+    "type": "number"
+   },
+   "nextWorksCursor": {
+    "description": "Value to pass as works_cursor on the next call for the following page of funded works. Present only on a page requested with works_cursor, and absent once the walk reaches the end of the works list.",
+    "type": "string"
+   },
+   "nextWorksOffset": {
+    "description": "Value to pass as works_offset on the next call for the following page of funded works. Absent when this page ends the works list, the next page would breach the 10000-record offset ceiling, or the page was requested with works_cursor.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance on a page that needs a caveat: a query nothing matched, an offset or works_offset past the end of a list that did match, a page that stops at one of the route offset ceilings with records still unretrieved, a returned funder that the Funder Registry has deprecated in favor of another entry, or a query or funder_doi supplied blank with nothing else to search by, so the page lists every funder unfiltered. Absent otherwise. A page needing more than one caveat carries them all in this one string.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Search Funders"
+}

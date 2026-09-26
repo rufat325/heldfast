@@ -1,0 +1,1141 @@
+{
+ "_meta": {
+  "apiVersion": "1.7.0",
+  "examples": [
+   {
+    "input": {
+     "headers": [
+      "Item",
+      "Qty",
+      "Total"
+     ],
+     "rows": [
+      [
+       "Widget",
+       "100",
+       "$1,000"
+      ]
+     ],
+     "title": "Sales"
+    },
+    "title": "Sales report"
+   },
+   {
+    "input": {
+     "caption": "Quarterly revenue",
+     "headers": [
+      "Month",
+      "Revenue"
+     ],
+     "repeatHeader": true,
+     "rows": [
+      [
+       "Oct",
+       "$1,000"
+      ],
+      [
+       "Nov",
+       "$1,500"
+      ],
+      [
+       "Dec",
+       "$2,100"
+      ]
+     ],
+     "title": "Q4",
+     "wrap": "auto",
+     "zebra": true
+    },
+    "title": "Smart table with caption + zebra + repeated header"
+   }
+  ]
+ },
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "description": "Tabular PDF report from `headers` + `rows` (every row the same length). Smart-table options: wrap, repeatHeader (header on every page), zebra, caption (tagged for PDF/A), minRowHeight, cellPadding, cellBorders, cellVAlign, autoFitColumns, clipCells. Inside a longer document use a 'table' block of generate_basic_pdf instead. PDF/A (pdfA + embedFonts:true), print, metadata, watermark and creationDate options as on every document tool.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "autoFitColumns": {
+    "description": "Auto-fit column widths to content. Output bytes then depend on text metrics (not byte-deterministic across content changes).",
+    "type": "boolean"
+   },
+   "caption": {
+    "description": "Caption rendered above the table (tagged as /Caption under PDF/A).",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "cellBorders": {
+    "additionalProperties": false,
+    "description": "Per-cell vector borders (pure strokes, PDF/A-safe). Choose individual sides or `all`.",
+    "properties": {
+     "all": {
+      "description": "Draw all four edges (overrides the individual side flags).",
+      "type": "boolean"
+     },
+     "bottom": {
+      "type": "boolean"
+     },
+     "color": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "description": "DeviceCMYK ink percentages [c, m, y, k], each 0\u2013100.",
+        "items": {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        "maxItems": 4,
+        "minItems": 4,
+        "type": "array"
+       }
+      ],
+      "description": "Stroke colour as a PDF operator string ('0.8 0.8 0.8') or hex. Default light grey."
+     },
+     "left": {
+      "type": "boolean"
+     },
+     "right": {
+      "type": "boolean"
+     },
+     "style": {
+      "description": "Stroke style (default 'solid').",
+      "enum": [
+       "solid",
+       "dashed",
+       "dotted"
+      ],
+      "type": "string"
+     },
+     "top": {
+      "type": "boolean"
+     },
+     "width": {
+      "description": "Stroke width in points (default 0.5).",
+      "maximum": 10,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "cellPadding": {
+    "description": "Horizontal cell padding in points (default 3).",
+    "maximum": 50,
+    "minimum": 0,
+    "type": "number"
+   },
+   "cellVAlign": {
+    "description": "Vertical alignment of cell content.",
+    "enum": [
+     "top",
+     "middle",
+     "bottom"
+    ],
+    "type": "string"
+   },
+   "clipCells": {
+    "description": "Clip cell contents to the column bounds (PDF clip operators). Recommended for PDF/A and visual safety.",
+    "type": "boolean"
+   },
+   "compress": {
+    "description": "FlateDecode the streams (smaller file, different bytes; PDF/A unaffected, XMP stays plain). Default false.",
+    "type": "boolean"
+   },
+   "creationDate": {
+    "description": "ISO-8601 instant for /CreationDate (+ XMP, the trailer /ID and the {date} placeholder), written in UTC. Pin it for byte-identical output across calls and hosts; omitted = wall clock, so every call differs.",
+    "format": "date-time",
+    "type": "string"
+   },
+   "debug": {
+    "description": "Draw margin / block / cell guide rectangles (unmarked content \u2014 not for PDF/UA output). Geometry unchanged. Default false.",
+    "type": "boolean"
+   },
+   "embedFonts": {
+    "default": false,
+    "description": "Embed Noto Sans Latin instead of the viewer base-14 Helvetica. REQUIRED for a valid PDF/A or PDF/X claim (every font embedded) and for strict=true; adds ~0.3 MiB.",
+    "type": "boolean"
+   },
+   "encrypt": {
+    "additionalProperties": false,
+    "description": "Encrypt at build time (AES-128 default / AES-256) and KEEP the AcroForm \u2014 unlike encrypt_pdf, which rebuilds the page tree. Exclusive with pdfA. Randomised output, never cached.",
+    "properties": {
+     "algorithm": {
+      "default": "aes128",
+      "description": "aes128 (V4/R4, widest compatibility) or aes256 (V5/R6).",
+      "enum": [
+       "aes128",
+       "aes256"
+      ],
+      "type": "string"
+     },
+     "ownerPassword": {
+      "description": "Owner password (full access).",
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+     },
+     "permissions": {
+      "additionalProperties": false,
+      "description": "Permission flags; each defaults to allowed.",
+      "properties": {
+       "copy": {
+        "type": "boolean"
+       },
+       "extractText": {
+        "type": "boolean"
+       },
+       "modify": {
+        "type": "boolean"
+       },
+       "print": {
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "userPassword": {
+      "description": "Open password; omitted/empty = opens without a prompt.",
+      "maxLength": 4096,
+      "type": "string"
+     }
+    },
+    "required": [
+     "ownerPassword"
+    ],
+    "type": "object"
+   },
+   "footerTemplate": {
+    "additionalProperties": false,
+    "description": "Running footer on every page. Replaces the default footer: footerText is then ignored and page numbers appear only via {page}/{pages}.",
+    "properties": {
+     "center": {
+      "description": "Placeholders: {page} {pages} {title} {date} (UTC date of creationDate when pinned, else of the build).",
+      "maxLength": 200,
+      "type": "string"
+     },
+     "color": {
+      "anyOf": [
+       {
+        "pattern": "^#[0-9a-fA-F]{6}$",
+        "type": "string"
+       },
+       {
+        "description": "DeviceCMYK operands 'C M Y K', each 0.0\u20131.0.",
+        "pattern": "^(?:0(?:\\.\\d+)?|1(?:\\.0+)?)(?: (?:0(?:\\.\\d+)?|1(?:\\.0+)?)){3}$",
+        "type": "string"
+       },
+       {
+        "description": "DeviceCMYK ink percentages [c, m, y, k], each 0\u2013100.",
+        "items": {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        "maxItems": 4,
+        "minItems": 4,
+        "type": "array"
+       }
+      ],
+      "description": "Hex colour (#RRGGBB)."
+     },
+     "fontSize": {
+      "description": "Default 7.",
+      "maximum": 14,
+      "minimum": 6,
+      "type": "number"
+     },
+     "left": {
+      "description": "Placeholders: {page} {pages} {title} {date} (UTC date of creationDate when pinned, else of the build).",
+      "maxLength": 200,
+      "type": "string"
+     },
+     "right": {
+      "description": "Placeholders: {page} {pages} {title} {date} (UTC date of creationDate when pinned, else of the build).",
+      "maxLength": 200,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "footerText": {
+    "description": "Optional text rendered at the bottom of every page.",
+    "maxLength": 200,
+    "type": "string"
+   },
+   "headerTemplate": {
+    "additionalProperties": false,
+    "description": "Running header on every page (left / center / right zones); reserves 15 pt.",
+    "properties": {
+     "center": {
+      "description": "Placeholders: {page} {pages} {title} {date} (UTC date of creationDate when pinned, else of the build).",
+      "maxLength": 200,
+      "type": "string"
+     },
+     "color": {
+      "anyOf": [
+       {
+        "pattern": "^#[0-9a-fA-F]{6}$",
+        "type": "string"
+       },
+       {
+        "description": "DeviceCMYK operands 'C M Y K', each 0.0\u20131.0.",
+        "pattern": "^(?:0(?:\\.\\d+)?|1(?:\\.0+)?)(?: (?:0(?:\\.\\d+)?|1(?:\\.0+)?)){3}$",
+        "type": "string"
+       },
+       {
+        "description": "DeviceCMYK ink percentages [c, m, y, k], each 0\u2013100.",
+        "items": {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        "maxItems": 4,
+        "minItems": 4,
+        "type": "array"
+       }
+      ],
+      "description": "Hex colour (#RRGGBB)."
+     },
+     "fontSize": {
+      "description": "Default 7.",
+      "maximum": 14,
+      "minimum": 6,
+      "type": "number"
+     },
+     "left": {
+      "description": "Placeholders: {page} {pages} {title} {date} (UTC date of creationDate when pinned, else of the build).",
+      "maxLength": 200,
+      "type": "string"
+     },
+     "right": {
+      "description": "Placeholders: {page} {pages} {title} {date} (UTC date of creationDate when pinned, else of the build).",
+      "maxLength": 200,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "headers": {
+    "description": "Column header labels. Must have the same length as each row in `rows`.",
+    "items": {
+     "maxLength": 200,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 50,
+    "minItems": 1,
+    "type": "array"
+   },
+   "includeDiagnostics": {
+    "default": false,
+    "description": "Return the diagnostics raised while building (PDFA_*, PDFX_*, TYPOGRAPHY_*) as `diagnostics[]` (possibly empty).",
+    "type": "boolean"
+   },
+   "infoItems": {
+    "description": "Optional key-value metadata rows rendered below the title (e.g. date, author).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "label": {
+       "maxLength": 100,
+       "minLength": 1,
+       "type": "string"
+      },
+      "value": {
+       "maxLength": 500,
+       "type": "string"
+      }
+     },
+     "required": [
+      "label",
+      "value"
+     ],
+     "type": "object"
+    },
+    "maxItems": 20,
+    "type": "array"
+   },
+   "margins": {
+    "additionalProperties": false,
+    "description": "Margins in points, all four required (0\u2013200). Default 45 / 36 / 35 / 36.",
+    "properties": {
+     "bottom": {
+      "maximum": 200,
+      "minimum": 0,
+      "type": "number"
+     },
+     "left": {
+      "maximum": 200,
+      "minimum": 0,
+      "type": "number"
+     },
+     "right": {
+      "maximum": 200,
+      "minimum": 0,
+      "type": "number"
+     },
+     "top": {
+      "maximum": 200,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "top",
+     "right",
+     "bottom",
+     "left"
+    ],
+    "type": "object"
+   },
+   "metadata": {
+    "additionalProperties": false,
+    "description": "/Info (+ XMP under PDF/A): author, subject, keywords, /Trapped.",
+    "properties": {
+     "author": {
+      "maxLength": 500,
+      "type": "string"
+     },
+     "keywords": {
+      "maxLength": 1000,
+      "type": "string"
+     },
+     "subject": {
+      "maxLength": 1000,
+      "type": "string"
+     },
+     "trapped": {
+      "description": "/Trapped print flag.",
+      "enum": [
+       "True",
+       "False",
+       "Unknown"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "minRowHeight": {
+    "description": "Minimum row height in points (default 12).",
+    "maximum": 200,
+    "minimum": 1,
+    "type": "number"
+   },
+   "outputIntent": {
+    "additionalProperties": false,
+    "description": "Custom OutputIntent (under pdfA or pdfx): an RGB, CMYK or Gray ICC profile + condition strings, replacing the built-in sRGB intent. The profile must be a real ICC file ('acsp' signature, consistent size \u2014 PRINT_ERROR otherwise); pdfx needs device class 'prtr'. Under a CMYK / Gray intent RGB content is mapped through a calibrated default space.",
+    "properties": {
+     "iccProfileBase64": {
+      "description": "ICC profile bytes, base64 (RGB, CMYK or Gray; \u2264 8 MiB).",
+      "maxLength": 11000000,
+      "minLength": 1,
+      "type": "string"
+     },
+     "info": {
+      "maxLength": 500,
+      "type": "string"
+     },
+     "outputCondition": {
+      "maxLength": 200,
+      "type": "string"
+     },
+     "outputConditionIdentifier": {
+      "description": "e.g. \"sRGB IEC61966-2.1\".",
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     },
+     "registryName": {
+      "description": "Default \"http://www.color.org\".",
+      "maxLength": 200,
+      "type": "string"
+     }
+    },
+    "required": [
+     "iccProfileBase64",
+     "outputConditionIdentifier"
+    ],
+    "type": "object"
+   },
+   "outputMode": {
+    "default": "base64",
+    "description": "Either 'base64' (returns the PDF inline) or 'file' (writes to a sandboxed path inside PDFNATIVE_MCP_OUTPUT_DIR).",
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "outputPath": {
+    "description": "Required when outputMode='file'. Relative path inside the sandbox; must end with .pdf.",
+    "type": "string"
+   },
+   "pageSize": {
+    "description": "Portrait page preset (points): A4 595.28\u00d7841.89 (default), Letter 612\u00d7792, Legal 612\u00d71008, A3 841.89\u00d71190.55, Tabloid 792\u00d71224. print.* boxes must fit it.",
+    "enum": [
+     "A4",
+     "Letter",
+     "Legal",
+     "A3",
+     "Tabloid"
+    ],
+    "type": "string"
+   },
+   "pdfA": {
+    "description": "PDF/A level: pdfa1b (simple text+images), pdfa2b/pdfa2u (richer; 2u = Unicode mapping), pdfa3b (attachments / Factur-X). Pair with embedFonts=true for a valid claim. Exclusive with encryption. See docs/guides/PDFA.md.",
+    "enum": [
+     "pdfa1b",
+     "pdfa2b",
+     "pdfa2u",
+     "pdfa3b"
+    ],
+    "type": "string"
+   },
+   "pdfx": {
+    "description": "PDF/X-4 print exchange (ISO 15930-7). REQUIRES outputIntent with the printer's ICC profile (device class 'prtr'; CMYK or Gray \u2014 none is bundled); needs embedFonts:true for a conformant file (PDFX_NO_FONT_ENTRIES otherwise, strict:true refuses). Exclusive with pdfA and encrypt; metadata.trapped must be 'True' or 'False'; TrimBox or ArtBox, not both. Links and form fields are reported (PDFX_ANNOTATIONS). Check with validate_pdf standard:'pdf-x-4'. See the print_ready prompt.",
+    "enum": [
+     "pdfx4"
+    ],
+    "type": "string"
+   },
+   "print": {
+    "additionalProperties": false,
+    "description": "Print production (ISO 32000-1 \u00a714.11): page boxes, `bleed` shorthand (TrimBox = MediaBox inset), crop/registration marks outside the TrimBox, /UserUnit for large formats (PDF 1.7; not under pdfa1b). See docs/guides/PRINT.md.",
+    "properties": {
+     "artBox": {
+      "description": "[x0, y0, x1, y1] in points, origin bottom-left, inside the MediaBox.",
+      "items": {
+       "type": "number"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+     },
+     "bleed": {
+      "description": "Bleed in points (8.5 = 3 mm); sets TrimBox = MediaBox inset. Exclusive with trimBox.",
+      "exclusiveMinimum": 0,
+      "maximum": 200,
+      "type": "number"
+     },
+     "bleedBox": {
+      "description": "[x0, y0, x1, y1] in points, origin bottom-left, inside the MediaBox.",
+      "items": {
+       "type": "number"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+     },
+     "cropBox": {
+      "description": "[x0, y0, x1, y1] in points, origin bottom-left, inside the MediaBox.",
+      "items": {
+       "type": "number"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+     },
+     "marks": {
+      "description": "Printer's marks (needs bleed or trimBox): true for defaults, or an object.",
+      "oneOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "additionalProperties": false,
+        "properties": {
+         "colourBars": {
+          "anyOf": [
+           {
+            "type": "boolean"
+           },
+           {
+            "additionalProperties": false,
+            "properties": {
+             "size": {
+              "description": "Patch size in points. Default 12.",
+              "maximum": 72,
+              "minimum": 4,
+              "type": "number"
+             },
+             "tints": {
+              "description": "Add the four 50 % tint patches. Default true.",
+              "type": "boolean"
+             }
+            },
+            "type": "object"
+           }
+          ],
+          "description": "Colour control strip in the bleed (C M Y K solids + their 50 % tints): true for defaults. Off by default; needs a bleed of about 5 mm (14.17 pt) and is skipped when the strip would not fit."
+         },
+         "crop": {
+          "description": "Corner crop (trim) marks. Default true.",
+          "type": "boolean"
+         },
+         "length": {
+          "description": "Mark length in points. Default 14.",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "number"
+         },
+         "offset": {
+          "description": "Gap between TrimBox and marks in points. Default 5.",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+         },
+         "registration": {
+          "description": "Edge-midpoint registration targets. Default true.",
+          "type": "boolean"
+         },
+         "weight": {
+          "description": "Stroke width in points. Default 0.25.",
+          "maximum": 5,
+          "minimum": 0.05,
+          "type": "number"
+         }
+        },
+        "type": "object"
+       }
+      ]
+     },
+     "trimBox": {
+      "description": "[x0, y0, x1, y1] in points, origin bottom-left, inside the MediaBox.",
+      "items": {
+       "type": "number"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+     },
+     "userUnit": {
+      "description": "/UserUnit (multiples of 1/72 in) for pages over 14400 pt. Rejected under pdfa1b.",
+      "maximum": 75000,
+      "minimum": 1,
+      "type": "number"
+     }
+    },
+    "type": "object"
+   },
+   "repeatHeader": {
+    "description": "Repeat the header row on every continuation page (default true).",
+    "type": "boolean"
+   },
+   "rows": {
+    "description": "Data rows. Each row is an array of cell strings with the same length as `headers`.",
+    "items": {
+     "items": {
+      "maxLength": 500,
+      "type": "string"
+     },
+     "maxItems": 50,
+     "minItems": 1,
+     "type": "array"
+    },
+    "maxItems": 5000,
+    "minItems": 1,
+    "type": "array"
+   },
+   "strict": {
+    "default": false,
+    "description": "Fail instead of producing a file the engine warns about: a PDFA_* diagnostic \u2192 PDF_A_COMPLIANCE_VIOLATION (e.g. PDFA_NO_FONT_ENTRIES without embedFonts), a PDFX_* one \u2192 PDF_X_COMPLIANCE_VIOLATION, any other \u2192 DIAGNOSTIC_ESCALATED. Pair with embedFonts=true.",
+    "type": "boolean"
+   },
+   "title": {
+    "description": "Report title rendered at the top of the document and used as PDF metadata title.",
+    "maxLength": 200,
+    "minLength": 1,
+    "type": "string"
+   },
+   "typography": {
+    "additionalProperties": false,
+    "description": "Fine typography, all opt-in (omitted = unchanged bytes). kerning, fontFeatures and the 'fr' narrow space need embedFonts:true. No hyphenation dictionary is installed: use soft hyphens (U+00AD). See the typography prompt.",
+    "properties": {
+     "bindShortWords": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "additionalProperties": false,
+        "properties": {
+         "maxLength": {
+          "maximum": 3,
+          "minimum": 1,
+          "type": "integer"
+         },
+         "words": {
+          "items": {
+           "maxLength": 16,
+           "minLength": 1,
+           "type": "string"
+          },
+          "maxItems": 100,
+          "type": "array"
+         }
+        },
+        "type": "object"
+       }
+      ],
+      "description": "Never end a line on a short word: up to maxLength letters (default 1), or exactly the listed words."
+     },
+     "fontFeatures": {
+      "description": "OpenType features, later wins. tnum / lnum are no-ops on Noto Sans (TYPOGRAPHY_FEATURE_INEFFECTIVE).",
+      "items": {
+       "enum": [
+        "tnum",
+        "pnum",
+        "lnum",
+        "onum",
+        "zero",
+        "ordn",
+        "sups",
+        "subs",
+        "smcp",
+        "c2sc",
+        "case"
+       ],
+       "type": "string"
+      },
+      "maxItems": 11,
+      "type": "array",
+      "uniqueItems": true
+     },
+     "hyphenationLanguage": {
+      "description": "BCP 47 tag; no effect here (no hyphenation provider installed).",
+      "maxLength": 35,
+      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+      "type": "string"
+     },
+     "keepHeadingsWithNext": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "additionalProperties": false,
+        "properties": {
+         "minLines": {
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       }
+      ],
+      "description": "Never strand a heading at a page foot. true = { minLines: 2 }."
+     },
+     "kerning": {
+      "description": "Pair kerning (GPOS).",
+      "type": "boolean"
+     },
+     "metrics": {
+      "description": "Base-14 text: 'exact' uses the AFM widths (different wraps). Default 'approximate'.",
+      "enum": [
+       "approximate",
+       "exact"
+      ],
+      "type": "string"
+     },
+     "opticalMargins": {
+      "description": "Hang punctuation into the margin of align:'justify' text.",
+      "type": "boolean"
+     },
+     "orphans": {
+      "description": "Min lines left at a page foot (default 2; needs splitParagraphs).",
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "punctuationSpacing": {
+      "anyOf": [
+       {
+        "enum": [
+         "fr",
+         "fr-CA"
+        ],
+        "type": "string"
+       },
+       {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "char": {
+           "maxLength": 2,
+           "minLength": 1,
+           "type": "string"
+          },
+          "side": {
+           "enum": [
+            "before",
+            "after"
+           ],
+           "type": "string"
+          },
+          "space": {
+           "description": "U+00A0 / U+202F (narrow needs embedFonts).",
+           "enum": [
+            "nbsp",
+            "narrow"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "char",
+          "side",
+          "space"
+         ],
+         "type": "object"
+        },
+        "maxItems": 32,
+        "type": "array"
+       }
+      ],
+      "description": "No-break spaces next to punctuation (existing spaces only). 'fr': narrow before ; ! ?, no-break before ':' and inside \u00ab \u00bb. 'fr-CA': ':' and \u00ab \u00bb only. Or explicit rules."
+     },
+     "splitParagraphs": {
+      "description": "Paragraphs may break across pages at a line boundary (default: atomic).",
+      "type": "boolean"
+     },
+     "unitBinding": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "additionalProperties": false,
+        "properties": {
+         "units": {
+          "items": {
+           "maxLength": 16,
+           "minLength": 1,
+           "type": "string"
+          },
+          "maxItems": 100,
+          "type": "array"
+         }
+        },
+        "type": "object"
+       }
+      ],
+      "description": "No-break space between a number and its unit ('150 \u20ac', '12 kg'); units replaces the built-in list."
+     },
+     "widows": {
+      "description": "Min lines carried over (default 2; needs splitParagraphs).",
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "viewerPreferences": {
+    "additionalProperties": false,
+    "description": "Reader presentation hints (catalog /PageLayout, /PageMode, /ViewerPreferences). PDF/A-safe; all optional.",
+    "properties": {
+     "centerWindow": {
+      "type": "boolean"
+     },
+     "direction": {
+      "enum": [
+       "l2r",
+       "r2l"
+      ],
+      "type": "string"
+     },
+     "displayDocTitle": {
+      "type": "boolean"
+     },
+     "duplex": {
+      "description": "Print-dialog paper handling default (/Duplex): single-sided or double-sided flipping on the short/long edge.",
+      "enum": [
+       "simplex",
+       "duplexFlipShortEdge",
+       "duplexFlipLongEdge"
+      ],
+      "type": "string"
+     },
+     "fitWindow": {
+      "type": "boolean"
+     },
+     "hideMenubar": {
+      "type": "boolean"
+     },
+     "hideToolbar": {
+      "type": "boolean"
+     },
+     "hideWindowUI": {
+      "type": "boolean"
+     },
+     "nonFullScreenPageMode": {
+      "enum": [
+       "useNone",
+       "useOutlines",
+       "useThumbs",
+       "useOC"
+      ],
+      "type": "string"
+     },
+     "numCopies": {
+      "description": "Default number of copies for the Print dialog (/NumCopies; viewers honour 2-5 per ISO 32000 Table 150).",
+      "maximum": 1000,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "pageLayout": {
+      "enum": [
+       "singlePage",
+       "oneColumn",
+       "twoColumnLeft",
+       "twoColumnRight",
+       "twoPageLeft",
+       "twoPageRight"
+      ],
+      "type": "string"
+     },
+     "pageMode": {
+      "enum": [
+       "useNone",
+       "useOutlines",
+       "useThumbs",
+       "fullScreen",
+       "useOC",
+       "useAttachments"
+      ],
+      "type": "string"
+     },
+     "pickTrayByPDFSize": {
+      "description": "Ask the printer to pick the input tray from the PDF page size (/PickTrayByPDFSize).",
+      "type": "boolean"
+     },
+     "printPageRange": {
+      "description": "Default page ranges for the Print dialog (/PrintPageRange) as inclusive 1-based [first, last] pairs, e.g. [[1, 4], [7, 7]].",
+      "items": {
+       "items": {
+        "minimum": 1,
+        "type": "integer"
+       },
+       "maxItems": 2,
+       "minItems": 2,
+       "type": "array"
+      },
+      "maxItems": 100,
+      "type": "array"
+     },
+     "printScaling": {
+      "enum": [
+       "none",
+       "appDefault"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "watermark": {
+    "additionalProperties": false,
+    "description": "Optional semi-transparent watermark rendered centred on every page: `text` (e.g. 'DRAFT'), `image` (JPEG/PNG), or both combined. At least one of text / image is required. opacity < 1.0 (text or image, including the defaults) is rejected under pdfA='pdfa1b' (ISO 19005-1 forbids transparency).",
+    "properties": {
+     "angle": {
+      "description": "Text rotation in degrees (counterclockwise). Default -45.",
+      "maximum": 360,
+      "minimum": -360,
+      "type": "number"
+     },
+     "color": {
+      "anyOf": [
+       {
+        "items": {
+         "maximum": 1,
+         "minimum": 0,
+         "type": "number"
+        },
+        "maxItems": 3,
+        "minItems": 3,
+        "type": "array"
+       },
+       {
+        "description": "DeviceCMYK operands 'C M Y K', each 0.0\u20131.0.",
+        "pattern": "^(?:0(?:\\.\\d+)?|1(?:\\.0+)?)(?: (?:0(?:\\.\\d+)?|1(?:\\.0+)?)){3}$",
+        "type": "string"
+       },
+       {
+        "description": "DeviceCMYK ink percentages [c, m, y, k], each 0\u2013100.",
+        "items": {
+         "maximum": 100,
+         "minimum": 0,
+         "type": "number"
+        },
+        "maxItems": 4,
+        "minItems": 4,
+        "type": "array"
+       }
+      ],
+      "description": "Text colour. RGB as a [r, g, b] triple in the 0.0\u20131.0 range; default light gray [0.75, 0.75, 0.75]."
+     },
+     "fontSize": {
+      "description": "Text font size in points. Default 60, auto-fit to the page.",
+      "maximum": 300,
+      "minimum": 6,
+      "type": "number"
+     },
+     "image": {
+      "additionalProperties": false,
+      "description": "Image watermark (JPEG or PNG) centred on every page, optionally combined with `text`. Bytes are validated against the JPEG/PNG magic numbers; mimeType must match.",
+      "properties": {
+       "height": {
+        "description": "Display height in points (default: from the image pixel size).",
+        "exclusiveMinimum": 0,
+        "maximum": 14400,
+        "type": "number"
+       },
+       "imageBase64": {
+        "description": "Base64-encoded JPEG or 8-bit opaque PNG bytes (max 8 MiB decoded; alpha-channel, palette and interlaced PNGs are rejected with a remedy). Plain base64, no data: URI prefix.",
+        "maxLength": 12000000,
+        "minLength": 4,
+        "type": "string"
+       },
+       "mimeType": {
+        "description": "'image/jpeg' or 'image/png' \u2014 must match the actual bytes.",
+        "enum": [
+         "image/jpeg",
+         "image/png"
+        ],
+        "type": "string"
+       },
+       "opacity": {
+        "description": "Image opacity 0.0\u20131.0. Default 0.10.",
+        "maximum": 1,
+        "minimum": 0,
+        "type": "number"
+       },
+       "width": {
+        "description": "Display width in points (default: from the image pixel size).",
+        "exclusiveMinimum": 0,
+        "maximum": 14400,
+        "type": "number"
+       }
+      },
+      "required": [
+       "imageBase64",
+       "mimeType"
+      ],
+      "type": "object"
+     },
+     "opacity": {
+      "description": "Text opacity 0.0\u20131.0. Default 0.15. (Image opacity is image.opacity.)",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "position": {
+      "default": "background",
+      "description": "'background' (behind page content, default) or 'foreground' (above it). Applies to text and image alike.",
+      "enum": [
+       "background",
+       "foreground"
+      ],
+      "type": "string"
+     },
+     "text": {
+      "description": "Watermark text. Optional when `image` is given.",
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "wrap": {
+    "description": "Cell wrap policy: 'auto' (default) wraps only overflowing cells; 'always' wraps every cell; 'never' truncates.",
+    "enum": [
+     "auto",
+     "always",
+     "never"
+    ],
+    "type": "string"
+   },
+   "zebra": {
+    "description": "Alternate-row light tint (static fill, PDF/A-1b safe).",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "title",
+   "headers",
+   "rows"
+  ],
+  "type": "object"
+ },
+ "name": "add_table",
+ "outputSchema": {
+  "additionalProperties": false,
+  "description": "Result of a PDF-producing tool. base64 mode: the PDF arrives as an embedded `resource` content block (not duplicated here); file mode: `filePath`.",
+  "properties": {
+   "diagnostics": {
+    "description": "Engine diagnostics (when includeDiagnostics=true).",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "severity": {
+       "enum": [
+        "warning"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "severity"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "filePath": {
+    "description": "Sandboxed absolute path (file mode).",
+    "type": "string"
+   },
+   "mode": {
+    "enum": [
+     "base64",
+     "file"
+    ],
+    "type": "string"
+   },
+   "sizeBytes": {
+    "minimum": 0,
+    "type": "integer"
+   },
+   "summary": {
+    "additionalProperties": true,
+    "description": "Tool-specific summary, when produced.",
+    "type": "object"
+   }
+  },
+  "required": [
+   "mode",
+   "sizeBytes"
+  ],
+  "type": "object"
+ },
+ "title": "Add table / report"
+}

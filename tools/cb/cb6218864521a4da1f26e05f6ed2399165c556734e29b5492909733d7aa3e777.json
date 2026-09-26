@@ -1,0 +1,240 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Traverse the one-hop CDM relationship graph of an EU act: what it amends or is amended by, what it repeals or is repealed by (explicit and implicit), its consolidated versions, national transposition measures, its legal basis, and works that cite it. Returns direct relations only, paginated per relation type and direction. Requires a CELEX number or CELLAR work URI.",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "celex_number": {
+    "anyOf": [
+     {
+      "const": "",
+      "type": "string"
+     },
+     {
+      "description": "CELEX number of the work (e.g. 32016R0679). Surrounding whitespace is trimmed and the value is uppercased before validation.",
+      "pattern": "^[0-9A-Z][0-9A-Z()/_-]{5,}$",
+      "type": "string"
+     }
+    ],
+    "description": "CELEX number of the work to traverse (e.g. 32016R0679). Provide exactly one of celex_number or work_uri."
+   },
+   "limit": {
+    "default": 100,
+    "description": "Maximum related works per relation type and direction (1\u2013100, default 100). Incoming edges are ordered newest-first, so the cap keeps the newest \u2014 page with offset for older ones.",
+    "maximum": 100,
+    "minimum": 1,
+    "type": "integer"
+   },
+   "offset": {
+    "default": 0,
+    "description": "Pagination offset applied per relation type and direction \u2014 related works to skip (default 0). Page forward by adding limit; incoming edges are newest-first, so higher offsets reach older works.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "relation_types": {
+    "description": "Subset of relation types to return; omit for all. Types: cites, amends, amended_by, repeals, repealed_by, implicitly_repeals, implicitly_repealed_by, legal_basis (treaty/article this act rests on), consolidated_version (consolidated texts of this act), national_transposition (member-state implementing measures).",
+    "items": {
+     "enum": [
+      "cites",
+      "amends",
+      "amended_by",
+      "repeals",
+      "repealed_by",
+      "implicitly_repeals",
+      "implicitly_repealed_by",
+      "legal_basis",
+      "consolidated_version",
+      "national_transposition"
+     ],
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "work_uri": {
+    "description": "CELLAR work resource URI to traverse (e.g. http://publications.europa.eu/resource/cellar/3e485e15-11bd-11e6-ba9a-01aa75ed71a1). Used directly as the addressed work; its CELEX identity is resolved for the national_transposition act match, which stands down when the work carries several CELEX numbers \u2014 address such a work by celex_number to name the act you mean. Provide exactly one of celex_number or work_uri.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "eurlex_get_relations",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "work_uri",
+     "relations",
+     "total",
+     "offset",
+     "has_more",
+     "requested_relation_types",
+     "empty_relation_types"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "cap": {
+    "description": "The per-direction cap. It bounds each relation type and each direction independently, so it is not an upper bound on shown: a page spanning several types and both directions can return more relations than this number.",
+    "type": "number"
+   },
+   "celex_number": {
+    "description": "CELEX number of the source work whose relations were traversed \u2014 the celex_number input, or the CELEX resolved from work_uri when the addressed work carries exactly one. Absent when the addressed work carries none, carries several, or its identity was not resolved because no requested relation type needs it.",
+    "type": "string"
+   },
+   "empty_relation_types": {
+    "description": "Requested relation types that returned zero relations in THIS page. Page-scoped: a type can appear here because all its edges sit beyond the current offset/limit window, not only because the act genuinely has none of that relation \u2014 so absent-from-here does not prove absent-in-CELLAR. An empty page \u2014 a first page with no edges, or an exhausted later page \u2014 returns all requested types here.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `invalid_identifier_args`: Neither celex_number nor work_uri was provided, or both were. `not_found`: CELEX number not found in CELLAR \u2014 resolve the identifier with eurlex_lookup_celex first. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "invalid_identifier_args",
+         "not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "has_more": {
+    "description": "True only when at least one requested relation type/direction returned an additional valid row beyond this page.",
+    "type": "boolean"
+   },
+   "next_offset": {
+    "description": "Offset for the next page. Present only when has_more is true.",
+    "type": "number"
+   },
+   "notice": {
+    "description": "Guidance for the next call: on an empty first page, how to widen the traversal; on a page with more rows, the offset to continue from.",
+    "type": "string"
+   },
+   "offset": {
+    "description": "Pagination offset applied to this response (per relation type and direction).",
+    "type": "number"
+   },
+   "relations": {
+    "description": "Direct CDM relations for the requested work.",
+    "items": {
+     "additionalProperties": false,
+     "description": "A single CDM relation between the source work and a related work.",
+     "properties": {
+      "direction": {
+       "description": "Direction: \"outgoing\" (this work \u2192 related) or \"incoming\" (related \u2192 this work).",
+       "type": "string"
+      },
+      "related_celex_number": {
+       "description": "CELEX number of the related work, if available.",
+       "type": "string"
+      },
+      "related_member_state": {
+       "description": "ISO 3166-1 alpha-3 code of the member state whose national measure this is (e.g. \"CZE\"), read from the three letters after the directive number in related_celex_number. Present on national_transposition rows only. The codes are the 27 member states plus \"GBR\" (the United Kingdom).",
+       "type": "string"
+      },
+      "related_work_uri": {
+       "description": "CELLAR URI of the related work.",
+       "type": "string"
+      },
+      "relation_type": {
+       "description": "Type of relation: cites, amends, amended_by, repeals, repealed_by, implicitly_repeals, implicitly_repealed_by, legal_basis, consolidated_version, national_transposition.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "relation_type",
+      "direction",
+      "related_work_uri"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "requested_relation_types": {
+    "description": "The relation types this request traversed \u2014 the explicit relation_types list, or all types when it was omitted. Diff against the types present in relations[], or read empty_relation_types, to confirm which requested types returned edges.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "shown": {
+    "description": "Number of relations returned in this page, summed across every relation type and direction \u2014 not the count for any single type or direction.",
+    "type": "number"
+   },
+   "total": {
+    "description": "Number of relations returned in this page (not a corpus-wide count).",
+    "type": "number"
+   },
+   "truncated": {
+    "description": "True when an additional valid row proves at least one relation type/direction has more related works \u2014 page with offset.",
+    "type": "boolean"
+   },
+   "work_uri": {
+    "description": "CELLAR URI of the source work (the work_uri input, or resolved from the CELEX).",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Get CELLAR Relationship Graph"
+}

@@ -1,0 +1,37 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Find the zone's nameservers from the root down, then ask one address of each nameserver name per family (IPv4 and IPv6) every name x type you list, with recursion off, over TCP, and widen to every other address: the zone apex SOA and the certificate-readiness questions first, then any question the sampled servers disagree on, then any that failed, as far as the per-sweep budget, the rate limit and the deadline allow. Readiness says not measured, naming the addresses, whenever one was held back. The result's holdback field says which addresses were sampled, which questions were widened, which addresses were never asked and which the widening pass paced out as slow or failing. Per name and type it says whether the servers agree: disagree (and which servers differ), not_authoritative (no aa bit), lame (answered REFUSED), no_answer (no response from this vantage, with the error per server), not_asked (never sent: held back by the sample, paced out as slow or failing, the deadline, or 3 misses in a row from that server; never counted as agreement), serial_mismatch (SOA), or unreachable_from_edge (a Cloudflare-hosted server the Cloudflare edge cannot dial, which is our reach and not their health). Those servers are asked from the pns2 sink instead, over TCP with recursion off, and each answer names its vantage in via (edge or sink:pns2); relay_failed says the sink was asked and did not answer; not_relayed says the relay did not send it (its cap, the sink budget, repeated misses, or the deadline). A nameserver with no address found is listed as not asked, never dropped; an owner no server answered usably is reported as not measured, never as empty. It also reports certificate readiness per name: the CAA set that governs issuance and where it was found (RFC 8659 section 3), and what is published at _acme-challenge (RFC 8555 section 8.4). Use this instead of many dig calls when checking a zone after a change. Limits: 16 names, 8 types; the plan samples at most 8 addresses and sends at most 256 sweep queries per sweep, sample and widening together (a zone with more addresses is sampled, never refused for its size); 512 sweep queries a minute per caller (IPv6 per /64), 256 a minute to any one nameserver address, 2048 a minute site-wide (the delegation walk, the zone-cut check of up to 8 queries and the DS read are extra and counted by the per-call limit). One question at a time per server; a server that misses 3 in a row is not asked the rest; the zone-cut check, the grid and the DS read stop 60 s after the sweep starts, and the delegation walk before them is not inside that limit.",
+ "inputSchema": {
+  "properties": {
+   "domain": {
+    "description": "The zone or name to sweep, e.g. example.com",
+    "type": "string"
+   },
+   "names": {
+    "description": "Relative labels to ask, \"@\" for the apex. Default: @, www, _dmarc, _acme-challenge",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "types": {
+    "description": "Record types. Default: SOA, NS, A, AAAA, MX, TXT, CAA",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "domain"
+  ],
+  "type": "object"
+ },
+ "name": "sweep_domain",
+ "title": "Sweep a domain across its authoritative servers"
+}

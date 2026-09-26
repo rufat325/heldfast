@@ -1,0 +1,158 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "PAID ($0.005 USDC via x402). Enrich ANY Base address in one call before you trust it: EOA vs contract (and whether it's an ERC-20, with its name/symbol/decimals), account nonce, ETH + USDC balance, and a KEYLESS GoPlus security verdict (phishing / sanctioned / mixer / money-laundering / blacklist and more) \u2014 the loop input for triaging a counterparty, payout target or approval spender. Without payment this returns the 402 challenge; the fiatdock-mcp npm package pays automatically. A bad address returns 400; if Base RPC or GoPlus is unavailable it returns 502 \u2014 neither is charged.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "address": {
+    "description": "A 40-hex EVM address (0x\u2026) on Base to enrich",
+    "type": "string"
+   },
+   "payment": {
+    "description": "Base64 of a single x402 v2 PaymentPayload (EIP-3009 transferWithAuthorization on Base USDC). OMIT it on the first call: the 402 you get back carries `howToPay.payloadTemplate` \u2014 the exact envelope to fill in \u2014 plus the price and the EIP-712 domain. Send it on the second call to complete the purchase; it is forwarded as the PAYMENT-SIGNATURE header, never as body data. Nothing is charged for the 402 itself, and a call that fails after payment settles nothing.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "address"
+  ],
+  "type": "object"
+ },
+ "name": "address_intel",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "address": {
+    "description": "The queried address",
+    "type": "string"
+   },
+   "asOf": {
+    "description": "ISO 8601 read time",
+    "type": "string"
+   },
+   "ethBalance": {
+    "description": "Native ETH balance as a decimal string",
+    "type": "string"
+   },
+   "isContract": {
+    "description": "true if the address has bytecode on Base",
+    "type": "boolean"
+   },
+   "isErc20": {
+    "description": "true if it is an ERC-20 token contract",
+    "type": "boolean"
+   },
+   "network": {
+    "description": "Chain read (always base)",
+    "type": "string"
+   },
+   "nonce": {
+    "description": "Outgoing transaction count (account nonce)",
+    "type": "number"
+   },
+   "security": {
+    "additionalProperties": false,
+    "description": "Keyless GoPlus address-security verdict",
+    "properties": {
+     "flags": {
+      "description": "GoPlus risk flags that fired (e.g. phishing_activities, sanctioned, mixer)",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "isMalicious": {
+      "description": "true if any GoPlus risk flag is set",
+      "type": "boolean"
+     },
+     "source": {
+      "description": "Security data source (GoPlus)",
+      "type": "string"
+     },
+     "verdict": {
+      "description": "clean | flagged",
+      "type": "string"
+     }
+    },
+    "required": [
+     "verdict",
+     "isMalicious",
+     "flags",
+     "source"
+    ],
+    "type": "object"
+   },
+   "summary": {
+    "description": "One-line human-readable verdict",
+    "type": "string"
+   },
+   "token": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "decimals": {
+        "type": "number"
+       },
+       "name": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "symbol": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "name",
+       "symbol",
+       "decimals"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "ERC-20 identity when isErc20, else null"
+   },
+   "type": {
+    "description": "eoa | contract | erc20_contract",
+    "type": "string"
+   },
+   "usdcBalance": {
+    "description": "USDC balance as a decimal string",
+    "type": "string"
+   }
+  },
+  "required": [
+   "network",
+   "address",
+   "type",
+   "isContract",
+   "isErc20",
+   "token",
+   "nonce",
+   "ethBalance",
+   "usdcBalance",
+   "security",
+   "summary",
+   "asOf"
+  ],
+  "type": "object"
+ },
+ "title": "Address intelligence on Base ($0.005)"
+}

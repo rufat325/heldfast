@@ -1,0 +1,351 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Create Post"
+ },
+ "description": "Accept a post for immediate asynchronous publishing or future scheduling. HTTP 201 and ok=true mean accepted, not delivered. For immediate posts, poll aidelly_get_post and only report publication when status is completed and provider_post_id is non-null. Use aidelly_list_pinterest_boards before Pinterest posts and pass content.platform_specific.board_id. LinkedIn document posts attach one PDF (\u2264100 MB, \u2264300 pages) as media[].type = \"document\"; documents are rejected on every other platform.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "account_id": {
+    "description": "The account / sub-account this post should target. Format depends on platform:\n  - **facebook** \u2014 Page ID (numeric string from `/accounts`).\n  - **instagram** \u2014 Instagram Business Account ID.\n  - **linkedin** \u2014 connection ID for personal posts; LinkedIn organization URN for company posts.\n  - **google_business** \u2014 GBP location resource name. Either fully-qualified\n    `accounts/{accountId}/locations/{locationId}` or the relative\n    `locations/{locationId}` form. Fetch with `GET /accounts` (rows where\n    `account_type: location`).\n  - **twitter / bluesky / threads / tiktok / youtube / pinterest / mastodon** \u2014 single-account\n    platforms; `account_id` is optional and ignored.\n\nWhen omitted, posts use the workspace-level default for that platform.\n",
+    "example": "social-account-id",
+    "type": "string"
+   },
+   "body": {
+    "additionalProperties": true,
+    "description": "Optional body override for endpoints with sparse parameter schemas.",
+    "type": "object"
+   },
+   "brand_id": {
+    "type": "string"
+   },
+   "content": {
+    "additionalProperties": false,
+    "properties": {
+     "draft_kind": {
+      "description": "Indicates whether the composer authored a single post or a\nthread. Optional \u2014 when omitted, threads are inferred from\n`thread.parts.length > 1`.\n",
+      "enum": [
+       "post",
+       "thread"
+      ],
+      "type": "string"
+     },
+     "facebook_destination": {
+      "description": "Facebook destination for posts. Use \"stories\" for a Page Story only or \"post_stories\" for feed + Story. Behind the FACEBOOK_STORIES_ENABLED feature flag.",
+      "enum": [
+       "post",
+       "stories",
+       "post_stories"
+      ],
+      "type": "string"
+     },
+     "first_comment": {
+      "additionalProperties": false,
+      "description": "Auto-posts a comment on the published post. Honored on platforms\nwhose `capabilities.firstComment` is true (Facebook, Instagram,\nLinkedIn, YouTube, X, Bluesky, Threads).\n",
+      "properties": {
+       "delay_minutes": {
+        "description": "Minutes to wait after the main publish before posting the\ncomment. Fully honored on scheduled posts (Inngest sleep);\nbest-effort on immediate publishes.\n",
+        "enum": [
+         0,
+         5,
+         30,
+         60,
+         360,
+         1440
+        ],
+        "type": "integer"
+       },
+       "overrides": {
+        "additionalProperties": {
+         "maxLength": 2200,
+         "minLength": 1,
+         "type": "string"
+        },
+        "description": "Per-platform override (`{ instagram: \"...\", facebook: \"...\" }`).\nFalls back to `text` when missing or empty.\n",
+        "type": "object"
+       },
+       "text": {
+        "description": "Global comment text. Default for every capable platform.",
+        "maxLength": 2200,
+        "minLength": 1,
+        "type": "string"
+       }
+      },
+      "required": [
+       "text"
+      ],
+      "type": "object"
+     },
+     "hashtags": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 30,
+      "type": "array"
+     },
+     "image_url": {
+      "description": "Single image URL alias. Prefer `content.media[].url` for new calls.",
+      "format": "uri",
+      "type": "string"
+     },
+     "instagram_destination": {
+      "description": "Instagram destination for posts. Use \"stories\" for Story-only or \"post_stories\" for feed + Story.",
+      "enum": [
+       "post",
+       "stories",
+       "post_stories"
+      ],
+      "type": "string"
+     },
+     "link": {
+      "format": "uri",
+      "type": "string"
+     },
+     "media": {
+      "description": "Media attachments. Supplying multiple items automatically creates a carousel/slideshow on platforms that support it (Instagram, Facebook, TikTok).\nUse `read_url` returned by `POST /media/upload-url` for each `media[].url`.\nTruncated or corrupt images are rejected at upload and publish preflight with a clear validation error.\nWhen `type` is omitted it is resolved from the media-library row (`application/pdf` \u2192 `document`), so an uploaded PDF is no longer stored as an image.\n- **Instagram**: 2\u201310 images \u2192 carousel; 1 video \u2192 reel (or `platform_specific.contentType: \"reel\"`)\n- **TikTok**: all images \u2192 photo carousel; 1 video \u2192 video post or draft\n- **Facebook**: 2+ images \u2192 carousel; 1 video \u2192 video post\n- **LinkedIn**: one `type: \"document\"` PDF (\u2264100 MB, \u2264300 pages) \u2192 swipeable document post. Documents are LinkedIn-only and cannot be mixed with images or videos; other platforms return `422 PUBLIC_API_DOCUMENT_UNSUPPORTED_PLATFORM`. The size and format checks run at create time; the page-count check runs at publish.\n",
+      "items": {
+       "anyOf": [
+        {
+         "required": [
+          "url"
+         ]
+        },
+        {
+         "required": [
+          "read_url"
+         ]
+        },
+        {
+         "required": [
+          "media_id"
+         ]
+        }
+       ],
+       "properties": {
+        "media_id": {
+         "description": "Media id returned by `POST /media/upload-url`. Accepted when `url`/`read_url` is not available.",
+         "type": "string"
+        },
+        "read_url": {
+         "description": "MCP-friendly alias for `url`.",
+         "format": "uri",
+         "type": "string"
+        },
+        "type": {
+         "description": "Attachment kind. Optional \u2014 resolved from the media-library row when omitted. `document` is LinkedIn-only.",
+         "enum": [
+          "image",
+          "video",
+          "gif",
+          "document"
+         ],
+         "type": "string"
+        },
+        "url": {
+         "description": "Publishable media URL. Use `read_url` returned by `POST /media/upload-url`.",
+         "format": "uri",
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "maxItems": 10,
+      "type": "array"
+     },
+     "media_urls": {
+      "description": "Agent-friendly alias for image URLs. Prefer `content.media[].url` for new calls.",
+      "items": {
+       "format": "uri",
+       "type": "string"
+      },
+      "maxItems": 10,
+      "type": "array"
+     },
+     "mentions": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 30,
+      "type": "array"
+     },
+     "platformSpecific": {
+      "additionalProperties": true,
+      "description": "Alias for `platform_specific` (agent compatibility).",
+      "type": "object"
+     },
+     "platform_specific": {
+      "additionalProperties": true,
+      "description": "Platform-specific options. Supported fields per platform:\n\n**Instagram**\n- `contentType` (`string`): `\"post\"` | `\"reel\"` | `\"story\"`. Defaults to `\"reel\"` for a single video, `\"carousel\"` for multiple images, `\"post\"` otherwise.\n- `instagramDestination` / `instagram_destination` (`string`): `\"post\"` | `\"stories\"` | `\"post_stories\"`. Use `stories` for Story-only or `post_stories` for feed + Story.\n- `reelOptions.shareToFeed` (`boolean`): Share reel to feed. Default `true`.\n- `reelOptions.trialReel.enabled` (`boolean`): Publish as a trial reel to non-followers first. When enabled, `shareToFeed` is forced to `false`.\n- `reelOptions.trialReel.graduationStrategy` (`string`): Required for trial reels. `\"MANUAL\"` graduates in Instagram; `\"SS_PERFORMANCE\"` graduates automatically based on performance.\n\n**TikTok**\n- `postMode` (`string`): `\"direct\"` (publish immediately) | `\"draft\"` (save to inbox for review). Default `\"direct\"`.\n- `postAsDraft` (`boolean`): Shorthand for `postMode: \"draft\"`.\n- `title` (`string`): Optional title shown in the TikTok inbox when posting as draft.\n- Aliases accepted for agents and normalized to camelCase: `post_mode`, `post_as_draft`, `publish_immediately`.\n- `photos` (`array`): For photo carousels \u2014 array of `{ url, order, caption? }` objects (max 35). When all media items are images, TikTok automatically creates a photo carousel.\n- `allowComments` (`boolean`), `allowDuet` (`boolean`), `allowStitch` (`boolean`): Interaction controls.\n\n**Facebook**\n- `fbPostType` (`string`): `\"photo\"` | `\"carousel\"`. Post type. `\"carousel\"` enables multi-card experience with child attachments. Defaults to `\"photo\"`.\n- `fbCarouselLink` (`string`): Destination link for all cards in a carousel. Required when `fbPostType=\"carousel\"`.\n- `fbCarouselCards` (`array`): Optional per-card copy for carousel posts. Array of objects with `name` and `description` strings (max 5 items), index-aligned with media attachments. Example: `[{ name: \"Card 1\", description: \"First card\" }, { name: \"Card 2\", description: \"Second card\" }]`.\n- `enableFirstComment` (`boolean`): Post an auto-comment after publishing.\n- `firstCommentText` (`string`): Text for the auto-comment.\n- `facebookDestination` / `facebook_destination` (`string`): `\"post\"` | `\"stories\"` | `\"post_stories\"`. Publishes a Page Story via `/photo_stories` or `/video_stories`. Story media must be 9:16; videos 3-60s (MP4/MOV); photos JPEG/PNG/BMP/GIF/TIFF under 10MB. Behind the `FACEBOOK_STORIES_ENABLED` feature flag.\n\n**Facebook Carousel Behavior (backward compatible)**\nSet `fbPostType=\"carousel\"` to opt in to carousel format. When `fbPostType` is absent or set to `\"photo\"`, the default behavior is used (single photo or video post). Absent or `\"photo\"` = backward compatible behavior.\n\n**Pinterest**\n- `board_id` / `boardId` (`string`): Board id returned by `GET /accounts/pinterest/boards`. When omitted, Aidelly resolves a board in this order: (1) value in the request payload, (2) board saved on the connected Pinterest account (`platform_specific`), (3) workspace posting default, (4) user-level posting default. Publishing fails preflight if no board can be resolved.\n\n**LinkedIn**\n- `contentType` (`string`): `\"post\"` | `\"image\"` | `\"video\"` \u2014 auto-detected from media if not specified.\n\n**Threads**\n- `replyControl` (`string`): `\"everyone\"` | `\"accounts_you_follow\"` | `\"mentioned_only\"`. Maps to the Threads API `reply_control` field. Defaults to the connection's saved Threads posting default, then `\"everyone\"`.\n- `topicTag` (`string`): A single topic tag (Threads accepts at most one per post). Maps to `topic_tag`.\n- `allowlistedCountryCodes` (`string[]`): ISO-3166 alpha-2 country codes that are allowed to see the post. Maps to `allowlisted_country_codes`. Empty array publishes globally.\n- `linkAttachmentUrl` (`string`): URL to attach as the canonical link preview. Maps to `link_attachment`.\n\n**Google Business** (`google_business`)\n- `locationName` (`string`, required): Full GBP location resource name, e.g. `accounts/{accountId}/locations/{locationId}`. Use the `id` from `/accounts` for a `google_business` row. Falls back to the connection's saved default location when omitted.\n- `topicType` (`string`): `\"STANDARD\"` | `\"EVENT\"` | `\"OFFER\"` | `\"ALERT\"`. Defaults to `\"STANDARD\"`.\n- `languageCode` (`string`): BCP-47 language tag (e.g. `\"en-US\"`). Defaults to `\"en-US\"`.\n- `callToActionType` (`string`): `\"BOOK\"` | `\"ORDER\"` | `\"SHOP\"` | `\"LEARN_MORE\"` | `\"SIGN_UP\"` | `\"CALL\"`. Adds a CTA button to STANDARD posts only.\n- `callToActionUrl` (`string`): Required for every CTA except `CALL`, which uses the phone number on the Business Profile.\n- `event` (`object`, required when `topicType` is `\"EVENT\"`): `{ title, schedule }` where `schedule` accepts ISO `start`/`end` strings or Google date/time objects (`startDate`, `startTime`, `endDate`, `endTime`).\n- `offer` (`object`, required when `topicType` is `\"OFFER\"`): `{ schedule, couponCode?, redeemOnlineUrl?, termsConditions? }`.\n- `alertType` (`string`, required when `topicType` is `\"ALERT\"`): Currently `\"COVID_19\"`.\n",
+      "example": {
+       "postMode": "draft"
+      },
+      "properties": {
+       "boardId": {
+        "description": "Camel-case alias for Pinterest board_id.",
+        "type": "string"
+       },
+       "board_id": {
+        "description": "Pinterest board id returned by aidelly_list_pinterest_boards.",
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "text": {
+      "example": "Launching our new feature today.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "thread": {
+      "additionalProperties": false,
+      "description": "Native thread composition. Honored on platforms whose\n`capabilities.thread` is true (X, Bluesky, Threads). Each part\npublishes as a reply chained off the previous one. `parts[0]`\nis the root post and shares text with `content.text`.\n",
+      "properties": {
+       "overrides": {
+        "additionalProperties": {
+         "items": {
+          "properties": {
+           "text": {
+            "type": "string"
+           }
+          },
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "description": "Per-platform override (`{ twitter: [...], bluesky: [...] }`).\nFalls back to `parts` when missing.\n",
+        "type": "object"
+       },
+       "parts": {
+        "items": {
+         "properties": {
+          "media": {
+           "items": {
+            "properties": {
+             "type": {
+              "enum": [
+               "image",
+               "video",
+               "gif",
+               "document"
+              ],
+              "type": "string"
+             },
+             "url": {
+              "format": "uri",
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "maxItems": 4,
+           "type": "array"
+          },
+          "text": {
+           "minLength": 1,
+           "type": "string"
+          }
+         },
+         "required": [
+          "text"
+         ],
+         "type": "object"
+        },
+        "maxItems": 25,
+        "minItems": 2,
+        "type": "array"
+       }
+      },
+      "required": [
+       "parts"
+      ],
+      "type": "object"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "facebook_destination": {
+    "description": "Facebook-only destination. Use post for feed only, stories for a Page Story only, or post_stories for both. Behind the FACEBOOK_STORIES_ENABLED feature flag - requests that set it while the flag is off are rejected with a validation error.",
+    "enum": [
+     "post",
+     "stories",
+     "post_stories"
+    ],
+    "type": "string"
+   },
+   "idempotency_key": {
+    "type": "string"
+   },
+   "instagram_destination": {
+    "description": "Instagram-only destination. Use post for feed only, stories for Stories only, or post_stories for both feed and Stories.",
+    "enum": [
+     "post",
+     "stories",
+     "post_stories"
+    ],
+    "type": "string"
+   },
+   "metadata": {
+    "additionalProperties": true,
+    "example": {
+     "campaign": "spring-launch",
+     "source": "agent"
+    },
+    "type": "object"
+   },
+   "platform": {
+    "description": "Supported platform identifier. `twitter` and `x` map to the same surface;\nresponses always normalize to `twitter`. `google_business` posts target\na single Google Business Profile location identified by\n`platform_specific.locationName`. `mastodon` accounts are per-instance \u2014\nthe connected account carries its own `instance_url`.\n",
+    "enum": [
+     "facebook",
+     "instagram",
+     "linkedin",
+     "twitter",
+     "bluesky",
+     "threads",
+     "pinterest",
+     "youtube",
+     "tiktok",
+     "google_business",
+     "mastodon"
+    ],
+    "example": "linkedin",
+    "type": "string"
+   },
+   "query": {
+    "additionalProperties": true,
+    "description": "Optional query overrides for endpoints with sparse parameter schemas.",
+    "type": "object"
+   },
+   "scheduled_at": {
+    "example": "2026-02-18T17:30:00Z",
+    "format": "date-time",
+    "type": "string"
+   },
+   "timezone": {
+    "example": "UTC",
+    "type": "string"
+   },
+   "workspace_id": {
+    "description": "Workspace to operate in. Do not ask the user for this UUID \u2014 call aidelly_list_workspaces and use the `id` of the matching workspace. Optional for read operations; required when creating content.",
+    "format": "uuid",
+    "type": "string"
+   }
+  },
+  "required": [
+   "idempotency_key",
+   "platform",
+   "content"
+  ],
+  "type": "object"
+ },
+ "name": "aidelly_create_post"
+}

@@ -1,0 +1,63 @@
+{
+ "annotations": {
+  "openWorldHint": true,
+  "readOnlyHint": true
+ },
+ "description": "Use when you need to PREPARE a compliant French e-invoice for a company (invoice header, VAT number, addressing) rather than decide whether paying it is safe \u2014 for the full verify-the-supplier-before-payment verdict, IBAN included, call prepare_french_invoice_file. The French e-invoicing mandate applies from 1 September 2026: receiving becomes obligatory for every VAT-liable company on that date, issuing is phased (large and mid-sized companies 1 September 2026, SMEs and micro-enterprises 1 September 2027; art. 91 of the 2024 Finance Act). Returns legal name & form, active/ceased status, computed intra-EU VAT number (+ VIES-check pointer), establishments (SIRET) with addresses, NAF code and indicative send/receive obligation dates from the INSEE size category. The response is Ed25519-signed and carries provenance[] \u2014 one entry per block served, with the official register, its licence and its as_of date \u2014 so the preparation is auditable offline. Preparation only \u2014 Sirenic is not an accredited platform (PDP), does not access the central directory and never issues, transmits or routes invoices, nor confirms PPF/PDP registration. Paid via x402 ($0.02 in USDC or EURC).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "api_key": {
+    "description": "Optional Sirenic API key (srn_live_\u2026) to pay with prepaid credits instead of x402 \u2014 no wallet needed. Get one at https://api.sirenic.eu/compte. Ignored when x_payment is provided (the signed payment wins). On insufficient balance the tool returns a credits error, not an x402 quote.",
+    "type": "string"
+   },
+   "siren": {
+    "description": "9-digit SIREN of the company to be invoiced (digits only, no spaces); use search_french_companies first if you only have a name",
+    "pattern": "^\\d{9}$",
+    "type": "string"
+   },
+   "x_payment": {
+    "description": "Optional signed x402 PAYMENT-SIGNATURE header value. Omit to receive the payment quote.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "siren"
+  ],
+  "type": "object"
+ },
+ "name": "prepare_french_einvoicing_recipient",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "hint": {
+    "description": "How to settle the quote, present when payment_required is true.",
+    "type": "string"
+   },
+   "payment_required": {
+    "description": "True when this response is an x402 payment quote instead of data: settle one of the quote's `accepts` options and call the tool again with `x_payment`.",
+    "type": "boolean"
+   },
+   "quote": {
+    "additionalProperties": {},
+    "description": "The signable x402 payment requirements when payment_required is true: {x402Version, accepts[]} where each entry carries scheme, network, amount, asset and payTo (USDC and EURC options at the same numeric amount). Sign one entry and call again with `x_payment`.",
+    "type": "object"
+   },
+   "resultat": {
+    "additionalProperties": {},
+    "description": "The endpoint's JSON response when payment_required is false. Paid responses carry `source`, `disclaimer` and an Ed25519 signature, and every paid JSON response carries a `provenance` array (all tools since 2026-09-06) \u2014 one entry per block served, with the official register, licence, version, `as_of` date and `precision_as_of` (what that date means), plus the common per-block envelope: `etat` in a closed list (servi, absence_mesuree, absence_non_conclusive, partiel, perime, indisponible, sans_objet), `motif` when unavailable, `age_jours` (only for publication or ingestion dates), `couverture` (complete / partielle / non_mesurable with its measure) and `confiance` in bands (faible / moyenne / forte, only where a measure grounds it, never averaged across blocks). Read the states before the numbers: an absence_non_conclusive, indisponible or partiel block is never \u00ab nothing to report \u00bb \u2014 only absence_mesuree asserts an absence. Register codes: GET /v1/provenance/registres ; states, closed lists and reading rules: GET /v1/lecture (both free). The PDF tools carry no JSON envelope (the PDF report prints it).",
+    "type": "object"
+   }
+  },
+  "required": [
+   "payment_required"
+  ],
+  "type": "object"
+ },
+ "title": "Prepare French e-invoicing recipient"
+}

@@ -1,0 +1,371 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Resolve Freight Reference"
+ },
+ "description": "Resolve an arbitrary freight identifier \u2014 one opaque string in, typed and cited candidates out. The agent front door: when you hold an identifier-ish token (\"176\", \"UN1845\", \"NLRTM\", \"FOB\", \"22G1\", \"MSKU1100810\", \"D/E\") and do not know which lookup tool fits, call this FIRST and follow the candidate's api_url / canonical_url (or the matching sibling tool) for depth.\n\nProvide q: ONE identifier (single token, max 32 chars). Thirteen grammars all run \u2014 UN numbers, AWB prefixes, airline IATA/ICAO, airport IATA/ICAO, UN/LOCODE, ISO 6346 container numbers (check digit computed), HS codes (6-10 digits; national lines resolve at their 6-digit international parent), Incoterms, ADR tunnel codes, ULD serials, ISO container size/type codes. Ambiguity is the product: colliding grammars return MULTIPLE ranked candidates (\"LHR\" is Heathrow AND an Egyptian carrier's ICAO), never a silent guess.\n\nBehavior: deterministic \u2014 normalize (trim, uppercase, collapse spaces/dashes, strip a UN prefix), match ALL grammars, rank by record-hit > verification status > static dataset prior (airlines/adr/unlocode first) > stable tiebreak; every candidate carries rank_basis so the ordering is inspectable. Zero candidates is a VALID result (count 0 + note), never an error. A failed container check digit returns a candidate with valid:false rather than dropping it. Rate-limited (anonymous use: 25 requests/day per IP): a 429 error body carries retry_after_seconds and a Retry-After header \u2014 back off and retry, or call get_subscribe_link for higher limits.\n\nReturns: query, normalized, count and candidates[] \u2014 each with entity_type, identifier_type, value_normalized, summary, record (the core fields the matching dataset holds), verification_status + verification_basis, rank_basis, canonical_url, api_url and a per-candidate dataset citation \u2014 under result, plus confidence, _source and citation (the FreightUtils v1 response envelope).\n\nLimitations: v1 is SINGLE-TOKEN resolution, not free-text extraction \u2014 pass one identifier, not a manifest line; SCAC/BIC codes are not yet covered; a match asserts the identifier is known/well-formed, not that a shipment exists.\n\nRelated: every lookup tool this resolves into \u2014 adr_lookup, airline_lookup, airport_lookup, unlocode_lookup, hs_code_lookup, incoterms_lookup, container_lookup, uld_lookup, validate.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "q": {
+    "description": "One freight identifier \u2014 e.g. \"176\", \"UN1845\", \"NLRTM\", \"FOB\", \"LHR\", \"22G1\", \"MSKU1100810\", \"090111\", \"AKE12345AB\", \"D/E\".",
+    "maxLength": 32,
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "q"
+  ],
+  "type": "object"
+ },
+ "name": "resolve_reference",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "_source": {
+    "additionalProperties": false,
+    "properties": {
+     "authority_current_edition": {
+      "type": "string"
+     },
+     "checked": {
+      "type": "string"
+     },
+     "checked_at": {
+      "type": "string"
+     },
+     "dataset_edition": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provenance_status": {
+      "enum": [
+       "verified",
+       "pending-verification",
+       "computed",
+       "live"
+      ],
+      "type": "string"
+     },
+     "source_url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "checked",
+     "provenance_status"
+    ],
+    "type": "object"
+   },
+   "blocking_errors": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "recovery": {
+       "additionalProperties": false,
+       "properties": {
+        "action": {
+         "type": "string"
+        },
+        "params": {
+         "additionalProperties": {},
+         "type": "object"
+        },
+        "tool": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "code",
+      "message",
+      "recovery"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "citation": {
+    "additionalProperties": false,
+    "properties": {
+     "qualifier": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "type": "object"
+   },
+   "confidence": {
+    "additionalProperties": false,
+    "properties": {
+     "basis": {
+      "enum": [
+       "deterministic",
+       "provenance",
+       "match_quality",
+       "freshness"
+      ],
+      "type": "string"
+     },
+     "level": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     },
+     "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "level",
+     "basis"
+    ],
+    "type": "object"
+   },
+   "envelope_version": {
+    "enum": [
+     "1",
+     "1.1"
+    ],
+    "type": "string"
+   },
+   "normalized_input": {
+    "additionalProperties": {},
+    "type": "object"
+   },
+   "ok": {
+    "type": "boolean"
+   },
+   "result": {
+    "anyOf": [
+     {
+      "additionalProperties": true,
+      "properties": {
+       "candidates": {
+        "anyOf": [
+         {
+          "items": {
+           "additionalProperties": true,
+           "properties": {
+            "api_url": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "canonical_url": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "citation": {
+             "anyOf": [
+              {
+               "additionalProperties": true,
+               "properties": {
+                "qualifier": {
+                 "type": [
+                  "string",
+                  "null"
+                 ]
+                },
+                "text": {
+                 "type": [
+                  "string",
+                  "null"
+                 ]
+                }
+               },
+               "type": "object"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "entity_type": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "identifier_type": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "rank_basis": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "record": {
+             "anyOf": [
+              {
+               "additionalProperties": {},
+               "type": "object"
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "summary": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "value_normalized": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "verification_basis": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "verification_status": {
+             "type": [
+              "string",
+              "null"
+             ]
+            }
+           },
+           "type": "object"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "count": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "normalized": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "note": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "query": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "type": "object"
+     },
+     {
+      "additionalProperties": {},
+      "type": "object"
+     }
+    ]
+   },
+   "validity": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "effective_from": {
+      "type": "string"
+     },
+     "effective_to": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "warnings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "details": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "message": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "envelope_version",
+   "ok",
+   "result",
+   "confidence",
+   "_source",
+   "citation"
+  ],
+  "type": "object"
+ }
+}

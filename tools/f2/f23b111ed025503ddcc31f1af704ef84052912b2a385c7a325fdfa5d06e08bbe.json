@@ -1,0 +1,180 @@
+{
+ "annotations": {
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "description": "List the tables staged on a Eurostat dataframe canvas, with their row counts and column names and types. Call this before eurostat_dataframe_query to learn the table and column names to write SQL against. The canvas_id comes from a eurostat_query_dataset or eurostat_download_dataset response that reported a staged table. Three tools stage tables, and they write different columns, so read the columns reported here rather than assuming. The two observation stagers keep every column flat: eurostat_query_dataset gives each dimension a code column named after the dimension (e.g. \"geo\") plus a label companion (e.g. \"geo_label\"); eurostat_download_dataset gives code columns only \u2014 the bulk endpoint carries no labels \u2014 plus a \"time\" column. Both write the same five measure columns \u2014 obs_value, obs_flag, obs_flag_label, conf_status, conf_status_label \u2014 carrying the same codes for the same observation, so their tables join on dimension codes and time and compare like with like. A table staged from a DS-* dataset (Comext detailed trade, PRODCOM) adds obs_value_text, holding a value Eurostat published as text, such as a PRODCOM quantity unit. eurostat_get_dimension_values, given a canvas_id, stages one dimension's value list as two columns, code and label, which labels a download's code column through a join (e.g. d.geo = g.code).",
+ "inputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+   "canvas_id": {
+    "description": "Canvas identifier returned as canvasId by eurostat_query_dataset, eurostat_download_dataset, or eurostat_get_dimension_values. Identifies the workspace holding the staged tables.",
+    "pattern": "^[A-Za-z0-9_-]{10}$",
+    "type": "string"
+   }
+  },
+  "required": [
+   "canvas_id"
+  ],
+  "type": "object"
+ },
+ "name": "eurostat_dataframe_describe",
+ "outputSchema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+   {
+    "not": {
+     "required": [
+      "error"
+     ]
+    },
+    "required": [
+     "canvasId",
+     "expiresAt",
+     "tables"
+    ]
+   },
+   {
+    "required": [
+     "error"
+    ]
+   }
+  ],
+  "properties": {
+   "canvasId": {
+    "description": "Canvas identifier the tables were read from.",
+    "type": "string"
+   },
+   "error": {
+    "additionalProperties": {},
+    "description": "Present when the call failed. Absent on success.",
+    "properties": {
+     "code": {
+      "description": "JSON-RPC error code for this failure.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+     },
+     "data": {
+      "additionalProperties": {},
+      "properties": {
+       "reason": {
+        "description": "Machine-readable failure mode. Declared by this tool: `canvas_disabled`: This deployment runs without a dataframe canvas, so there is nothing to describe. `canvas_not_found`: The canvas_id is unknown or its lifetime has elapsed. Other values are possible when a failure originates below the handler.",
+        "examples": [
+         "canvas_disabled",
+         "canvas_not_found"
+        ],
+        "type": "string"
+       },
+       "recovery": {
+        "additionalProperties": {},
+        "description": "Actionable next step for the caller.",
+        "properties": {
+         "hint": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "hint"
+        ],
+        "type": "object"
+       },
+       "retryable": {
+        "description": "Whether retrying may succeed.",
+        "type": "boolean"
+       }
+      },
+      "type": "object"
+     },
+     "message": {
+      "description": "Human-readable description of what went wrong.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "message"
+    ],
+    "type": "object"
+   },
+   "expiresAt": {
+    "description": "ISO 8601 timestamp when the canvas expires. Every call on it slides this forward.",
+    "type": "string"
+   },
+   "notice": {
+    "description": "Guidance when the canvas holds no tables. Omitted when it holds at least one.",
+    "type": "string"
+   },
+   "tables": {
+    "description": "Tables staged on this canvas. Empty when nothing has been staged yet, or when every staged table has expired.",
+    "items": {
+     "additionalProperties": false,
+     "description": "One table or view staged on the canvas.",
+     "properties": {
+      "columns": {
+       "description": "Columns in declaration order.",
+       "items": {
+        "additionalProperties": false,
+        "description": "One column of the table.",
+        "properties": {
+         "name": {
+          "description": "Column name.",
+          "type": "string"
+         },
+         "nullable": {
+          "description": "Whether the column admits NULL.",
+          "type": "boolean"
+         },
+         "type": {
+          "description": "SQL column type (e.g. \"VARCHAR\", \"DOUBLE\").",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "type",
+         "nullable"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "expiresAt": {
+       "description": "ISO 8601 expiry of this table specifically. Omitted when the table ages with the canvas rather than on its own clock.",
+       "type": "string"
+      },
+      "kind": {
+       "description": "Whether the entry is a base table or a view.",
+       "enum": [
+        "table",
+        "view"
+       ],
+       "type": "string"
+      },
+      "name": {
+       "description": "Table name to reference in SQL.",
+       "type": "string"
+      },
+      "rowCount": {
+       "description": "Rows the table holds.",
+       "type": "number"
+      }
+     },
+     "required": [
+      "name",
+      "kind",
+      "rowCount",
+      "columns"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   }
+  },
+  "type": "object"
+ },
+ "title": "Describe Eurostat Dataframes"
+}
