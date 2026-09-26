@@ -1,0 +1,108 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "cacheHint": {
+  "cacheKey": "input_hash",
+  "note": "cache by the JCS-canonical policy_parameters hash only; never by wall-clock or session",
+  "ttlMs": 86400000
+ },
+ "description": "Completes ONE step of a checklist/SOP run and returns its OCG v0.4 step receipt: execution_hash chains to prev_step_receipt_digest (pass the previous step's execution_hash, or omit for step 0). A blocking-gate step with evidence_requirement != \"none\" and no evidence supplied is refused (the caller enforces step order; this tool enforces the evidence requirement per step). Call once per step in order, then pass the full ordered list of returned receipts to checklist_verify_run to check the chain and mint the run receipt.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "completer_key": {
+    "description": "Identifier of who/what completed the step (e.g. an agent id). Never real PII.",
+    "type": "string"
+   },
+   "definition_digest": {
+    "description": "The definition_digest from checklist_validate_definition.",
+    "type": "string"
+   },
+   "evidence": {
+    "additionalProperties": {},
+    "description": "Evidence payload, e.g. { text_digest }, { file_sha256 }, or { attestation_digest }. Required unless evidence_requirement is \"none\".",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "prev_step_receipt_digest": {
+    "description": "execution_hash of the previous step's receipt. Omit for the first step in the run.",
+    "type": "string"
+   },
+   "step": {
+    "description": "The step object from the definition's steps[] array being completed.",
+    "properties": {
+     "approver_role": {
+      "description": "Role required to approve this step, if any.",
+      "type": "string"
+     },
+     "evidence_requirement": {
+      "description": "What evidence this step requires before it can be completed.",
+      "enum": [
+       "none",
+       "text",
+       "file-digest",
+       "attestation"
+      ],
+      "type": "string"
+     },
+     "gate": {
+      "description": "Whether this step blocks the next step until completed (blocking) or can be skipped (advisory).",
+      "enum": [
+       "blocking",
+       "advisory"
+      ],
+      "type": "string"
+     },
+     "instruction": {
+      "description": "The step's instruction text (for the receipt narrative; not hashed separately from the step object).",
+      "type": "string"
+     },
+     "step_id": {
+      "description": "The step's unique id within the definition, e.g. \"s1\".",
+      "type": "string"
+     },
+     "title": {
+      "description": "Human-readable step title.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "step_id",
+     "title",
+     "evidence_requirement",
+     "gate"
+    ],
+    "type": "object"
+   },
+   "step_index": {
+    "description": "Zero-based index of this step in the definition.",
+    "maximum": 9007199254740991,
+    "minimum": 0,
+    "type": "integer"
+   },
+   "timestamp": {
+    "description": "ISO 8601 completion timestamp (caller-supplied for determinism).",
+    "type": "string"
+   }
+  },
+  "required": [
+   "definition_digest",
+   "step",
+   "step_index",
+   "timestamp"
+  ],
+  "type": "object"
+ },
+ "lifecycle_status": "Active",
+ "name": "checklist_step_receipt",
+ "title": "Mint a hash-chained checklist step receipt"
+}

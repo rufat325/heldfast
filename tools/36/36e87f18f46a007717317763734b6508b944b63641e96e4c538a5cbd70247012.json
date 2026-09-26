@@ -1,0 +1,70 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "cacheHint": {
+  "cacheKey": "input_hash",
+  "note": "cache by the JCS-canonical policy_parameters hash only; never by wall-clock or session",
+  "ttlMs": 86400000
+ },
+ "description": "Executes every step of a named chain (list names with find_chain / build_workflow_links) and returns ONE composite artifact whose execution_hash anchors all step outputs. compute:\"server\"/\"auto\" (default) runs each kernel-backed step server-side, threading step N's execution_hash into step N+1's parent_hashes; compute:\"browser\" returns a zero-egress delegation bundle (composer URL + ordered deep-links) to run client-side instead \u2014 no data leaves the agent. Supply inputs as a map of step tool_id -> policy_parameters (field names per node manifest / build_chaingraph); a step whose kernel needs inputs you omit is reported per-step (status \"input_required\"), never failed silently. Steps that are browser-only (gpu:true or no registered kernel) are listed for browser delegation. Deterministic, zero PII, zero payload logging. Verify the result with verify_execution_hash. Runs with anything to explain carry decision_trail: per-step reason codes (gate rule id, escalation rule id, input_required cause), hash-excluded adjacent metadata recomputable from the hash-bound decisions[]. Each server-mode run also returns an OpenTelemetry GenAI span document as a resource link (one execute_tool span per executed step under an invoke_agent parent). Response includes a ledger_url fragment link for human verification at ledger.ainumbers.co. Server-mode responses also echo a stable `dedupe` object \u2014 `dedupe.input_hash` (JCS-SHA-256 over the effective run inputs: chain, per-step inputs after the caller/fixture fallback, and mandate_hash when a mandate governs) beside `dedupe.composite_execution_hash` \u2014 so a client can recognize and skip an exact re-run (idempotentHint) without recomputing anything. See docs/IDEMPOTENCY.md.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "chain": {
+    "description": "Chain name, e.g. \"agent-commerce-conformance\". List names with find_chain or build_workflow_links.",
+    "type": "string"
+   },
+   "compute": {
+    "description": "\"auto\"/\"server\" (default) runs kernel-backed steps server-side; \"browser\" returns a zero-egress delegation bundle to run client-side.",
+    "enum": [
+     "auto",
+     "server",
+     "browser"
+    ],
+    "type": "string"
+   },
+   "escalation_transport": {
+    "description": "How an OCG \u00a722.8 escalation is delivered. \"resolve_handle\" (DEFAULT) never blocks: the run COMPLETES with status \"escalated\" plus the open record, its record_hash and a resolve handle, and a human closes it out of band. \"input_required\" opts into the SEP-2322 multi-round-trip: the call answers with an InputRequiredResult asking for the \u00a722.8.4 closure, and the retry (echoing requestState) resolves the record inline.",
+    "enum": [
+     "resolve_handle",
+     "input_required"
+    ],
+    "type": "string"
+   },
+   "inputs": {
+    "additionalProperties": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "description": "Map of step tool_id -> policy_parameters overrides. Omitted steps run with {} (kernels needing required fields are reported, not failed silently).",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "mandate": {
+    "additionalProperties": {},
+    "description": "Optional \u00a722 Work Mandate artifact. When supplied: \u00a716 signature is verified and validity window is checked (unsigned/bad-sig/expired returns a structured error); mandate_hash is folded into every step and the composite receipt as a conditional-presence key, proving which policy governed this run. A no-mandate run is byte-identical to the pre-binding baseline (linear-hash-freeze invariant).",
+    "properties": {},
+    "type": "object"
+   }
+  },
+  "required": [
+   "chain"
+  ],
+  "type": "object"
+ },
+ "lifecycle_status": "Active",
+ "name": "run_chain",
+ "title": "Run a whole ChainGraph chain in one call"
+}

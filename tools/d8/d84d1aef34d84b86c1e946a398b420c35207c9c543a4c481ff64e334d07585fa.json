@@ -1,0 +1,160 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Lookup BIC/SWIFT"
+ },
+ "description": "Resolve a BIC / SWIFT code into the underlying bank: name, country, city, LEI, and registered head-office address (where available). USE WHEN: the user already has a BIC/SWIFT (8 or 11 chars, alphanumeric, e.g., \"UBSWCHZH80A\", \"DEUTDEFF\") and asks which bank it belongs to, where the bank is, or its LEI for compliance/regulatory matching. DO NOT USE for IBAN inputs \u2014 call validate_iban instead, it resolves the BIC for you. BACKED BY: BIC directory, 121,000+ entries (entries, not institutions): GLEIF and national registers, refreshed monthly, plus a public copy of the SWIFT directory frozen in January 2018 that still makes up about two thirds of the rows. 39,000+ of the rows carry an LEI from GLEIF. SOURCE: source names the dataset of this row and source_name spells it out; source_as_of is present only when that dataset is a copy frozen at that month (the public copy of the SWIFT directory, frozen in January 2018). listed_in_current_source says whether this BIC8 still appears in a list refreshed this cycle (GLEIF, a national register, the EPC scheme registers, the EBA STEP2 and NBP lists): true when one of them carries it, null when it was not found in what could be read in full. It never answers false today: the EBA STEP2 and NBP lists are only read through our deduplicated directory, which can drop a BIC they carry, so an absence is not proven. It does not prove the bank still exists under this name. COST: $0.003 per call (free with no key on this transport: 25 units a week per source address, one per call and one per IBAN in batch_validate_iban, reset on Monday 00:00 UTC. Or an ifk_ key with no e-mail at all: POST https://api.ibanforge.com/v1/keys/generate with no body for 25 REST calls/month, and POST /v1/keys/claim lifts that same key to 200 a month).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "bic": {
+    "description": "BIC/SWIFT code (8 or 11 chars)",
+    "type": "string"
+   }
+  },
+  "required": [
+   "bic"
+  ],
+  "type": "object"
+ },
+ "name": "lookup_bic",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "bic": {
+    "description": "Echo of the input, normalized to uppercase.",
+    "type": "string"
+   },
+   "bic11": {
+    "description": "11-char form including branch.",
+    "type": "string"
+   },
+   "bic8": {
+    "description": "8-char form (institution-level).",
+    "type": "string"
+   },
+   "branch_code": {
+    "type": "string"
+   },
+   "branch_info": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "city": {
+    "description": "Null, never an empty string, when the source leaves the town blank.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "country": {
+    "additionalProperties": false,
+    "description": "Same shape as REST GET /v1/bic/:code. name is the row's country name, then the ISO name, and falls back to the country code only when neither exists.",
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "name"
+    ],
+    "type": "object"
+   },
+   "country_code": {
+    "description": "DEPRECATED since 1.4.0, removed no earlier than 2027-01-01. Use country.code.",
+    "type": "string"
+   },
+   "country_name": {
+    "description": "DEPRECATED since 1.4.0, removed no earlier than 2027-01-01. Use country.name, which is never null: the row's country name, else the ISO name, else the code.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "error": {
+    "type": "string"
+   },
+   "found": {
+    "description": "True only when the row names an institution: a record is complete or not found.",
+    "type": "boolean"
+   },
+   "institution": {
+    "description": "Bank legal name.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "is_test_bic": {
+    "type": "boolean"
+   },
+   "lei": {
+    "description": "Legal Entity Identifier (ISO 17442) if available.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "lei_status": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "listed_in_current_source": {
+    "description": "Whether this BIC8 still appears in a list refreshed this cycle: GLEIF, the directory sources that carry no vintage, a national register, the EPC scheme registers. true when one of them carries it; null when it was not found in what could be read in full (never false by default). false is reserved for an index built from every list read in full, which is not the case today: the EBA STEP2 and NBP lists are only read through our deduplicated directory, so this field answers true or null. It does NOT prove the bank still exists under this name: a clearing list can keep the name of a bank that was absorbed.",
+    "type": [
+     "boolean",
+     "null"
+    ]
+   },
+   "note": {
+    "description": "Present only when found is false and the part of the directory served from a private file (EBA STEP2, NBP and OeNB records) is not loaded on this deployment: the absence was not looked up there.",
+    "type": "string"
+   },
+   "source": {
+    "description": "Code of the dataset this row comes from.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "source_as_of": {
+    "description": "Year-month the source DATA is from, present only for a frozen copy.",
+    "type": "string"
+   },
+   "source_name": {
+    "description": "source names the dataset of this row and source_name spells it out; source_as_of is present only when that dataset is a copy frozen at that month. listed_in_current_source says whether this BIC8 still appears in a list refreshed this cycle (GLEIF, a national register, the EPC scheme registers, the EBA STEP2 and NBP lists): true when one of them carries it, null when it was not found in what could be read in full. It never answers false today: the EBA STEP2 and NBP lists are only read through our deduplicated directory, which can drop a BIC they carry, so an absence is not proven. It does not prove the bank still exists under this name.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "valid": {
+    "description": "Set when the BIC failed format validation.",
+    "type": "boolean"
+   },
+   "valid_format": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "bic"
+  ],
+  "type": "object"
+ },
+ "title": "Lookup BIC/SWIFT"
+}

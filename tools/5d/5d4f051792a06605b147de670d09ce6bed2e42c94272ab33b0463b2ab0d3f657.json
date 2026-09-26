@@ -1,0 +1,221 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Update SAP Agent"
+ },
+ "description": "Local-signer-only: update the connected wallet SAP agent using SDK AgentModule.update. Hosted accountless SAP MCP rejects this direct write before x402 payment; hosted users should call sap_payments_update_agent from the local sap_payments bridge. SAP MCP context: Use this after sap_register_agent to refresh name, description, capabilities, pricing, supported protocols, x402 endpoint, or metadataUri. For NFT-backed identity changes, update the Metaplex asset first when needed, then point the SAP agent metadataUri at the current metadata document.\n\nSAP MCP execution guidance: Intent: local-signer write workflow. Pricing: paid value-action; preview cost and transaction effects before user confirmation. Routing: hosted accountless write is blocked; do not call this as a paid hosted write and no x402 payment should be charged. Use sap_payments_update_agent when user signing is required. Signer boundary: user-controlled local profile or external signer; OOBE hosted MCP remains non-custodial.",
+ "inputSchema": {
+  "description": "Update SAP Agent input schema. Intent: local-signer write workflow. Pricing: paid value-action; preview cost and transaction effects before user confirmation. Routing: hosted accountless write is blocked; do not call this as a paid hosted write and no x402 payment should be charged. Use sap_payments_update_agent when user signing is required. Signer boundary: user-controlled local profile or external signer; OOBE hosted MCP remains non-custodial. Use exact field names from this schema; do not guess aliases or include private key material.",
+  "properties": {
+   "agentId": {
+    "description": "Optional replacement stable agent id. Omit to keep current agentId.",
+    "type": "string"
+   },
+   "agentUri": {
+    "description": "Optional replacement public URI for agent metadata/profile. Use this to update pictures after uploading metadata to IPFS, Arweave, Kommodo, or HTTPS.",
+    "type": "string"
+   },
+   "capabilities": {
+    "description": "Optional full replacement capability list. Omit to keep current capabilities; do not send only the new item unless replacing the whole list is intended.",
+    "items": {
+     "description": "Capabilities array describing agent/tool capabilities. Use stable IDs, protocol labels, and human-readable descriptions; validate category values before writes.",
+     "oneOf": [
+      {
+       "description": "Capability id shorthand, for example jupiter:swap, pyth:price, metaplex:identity, sns:identity, or risk:management.",
+       "type": "string"
+      },
+      {
+       "additionalProperties": false,
+       "description": "Capabilities array describing agent/tool capabilities. Use stable IDs, protocol labels, and human-readable descriptions; validate category values before writes.",
+       "properties": {
+        "description": {
+         "description": "Optional human-readable capability description for agents and explorers.",
+         "type": "string"
+        },
+        "id": {
+         "description": "Required stable capability id. Use protocol:action naming, for example jupiter:swap, pyth:price, metaplex:identity, sns:identity, x402:payments, or risk:management.",
+         "type": "string"
+        },
+        "protocolId": {
+         "description": "Optional protocol namespace backing this capability, for example sap, mcp, jupiter, pyth, metaplex, sns, x402, or custom.",
+         "type": "string"
+        },
+        "version": {
+         "description": "Optional capability version string. Use semver when the capability maps to an API contract.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "type": "array"
+   },
+   "description": {
+    "description": "Optional replacement description. Omit to keep the current description.",
+    "type": "string"
+   },
+   "metadataUri": {
+    "description": "Alias for agentUri. Use a public metadata JSON URI; never use a desktop file path.",
+    "type": "string"
+   },
+   "name": {
+    "description": "Optional replacement display name. Omit to keep the current name.",
+    "type": "string"
+   },
+   "pricing": {
+    "description": "Optional full replacement pricing tier list. Omit to keep current pricing.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Pricing array of x402/pay.sh pricing tiers for the registered agent or tool. Amounts should be denominated explicitly in USDC smallest units when applicable.",
+     "properties": {
+      "batchIntervalSec": {
+       "description": "Optional settlement batch interval in seconds when settlementMode is batched.",
+       "type": "number"
+      },
+      "burstLimit": {
+       "description": "Optional short-window burst allowance for this tier.",
+       "type": "number"
+      },
+      "maxCallsPerSession": {
+       "description": "Maximum calls allowed per session for this tier. Defaults to 1000.",
+       "type": "number"
+      },
+      "maxPricePerCall": {
+       "description": "Optional ceiling price per call in the smallest unit of tokenType.",
+       "type": "string"
+      },
+      "minEscrowDeposit": {
+       "description": "Optional minimum escrow deposit in the smallest unit of tokenType.",
+       "type": "string"
+      },
+      "minPricePerCall": {
+       "description": "Optional floor price per call in the smallest unit of tokenType.",
+       "type": "string"
+      },
+      "pricePerCall": {
+       "description": "Price per call in the smallest unit of tokenType: lamports for sol, micro-USDC for usdc, or base units for spl.",
+       "type": "string"
+      },
+      "rateLimit": {
+       "description": "Maximum calls per second allowed by this tier. Defaults to 60.",
+       "type": "number"
+      },
+      "settlementMode": {
+       "description": "Settlement strategy. Use x402 for HTTP 402/pay.sh flows, escrow for prepaid SAP usage ledgers, instant for direct pay-per-call, and batched for periodic settlement.",
+       "enum": [
+        "instant",
+        "escrow",
+        "batched",
+        "x402"
+       ],
+       "type": "string"
+      },
+      "tierId": {
+       "description": "Stable tier id, for example default, read, premium, value-action, or enterprise.",
+       "type": "string"
+      },
+      "tokenDecimals": {
+       "description": "Decimals for the payment token. Defaults to 6 for usdc and 9 for sol when omitted.",
+       "type": "number"
+      },
+      "tokenMint": {
+       "description": "Optional SPL token mint public key. Required when tokenType is spl. For mainnet USDC use EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v.",
+       "type": "string"
+      },
+      "tokenType": {
+       "description": "Payment token type. Use usdc for x402/pay.sh agent commerce. Use spl only with tokenMint.",
+       "enum": [
+        "sol",
+        "usdc",
+        "spl"
+       ],
+       "type": "string"
+      },
+      "volumeCurve": {
+       "description": "Optional volume discounts. Each item lowers pricePerCall after a call threshold.",
+       "items": {
+        "additionalProperties": false,
+        "description": "Volume Curve parameter for Update SAP Agent.",
+        "properties": {
+         "afterCalls": {
+          "description": "Call count threshold where this price starts.",
+          "type": "number"
+         },
+         "pricePerCall": {
+          "description": "Discounted price per call in the smallest unit of tokenType.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "afterCalls",
+         "pricePerCall"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "pricePerCall"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "protocols": {
+    "description": "Optional full replacement protocol list. Omit to keep current protocols.",
+    "items": {
+     "description": "Protocols array of protocol identifiers such as sap, mcp, jupiter, pyth, metaplex, sns, or x402.",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "x402Endpoint": {
+    "description": "Optional replacement x402 discovery/payment endpoint. Omit to keep current endpoint.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "sap_update_agent",
+ "outputSchema": {
+  "properties": {
+   "content": {
+    "description": "MCP content blocks returned to the caller.",
+    "items": {
+     "properties": {
+      "text": {
+       "description": "Human-readable JSON or text returned by the tool.",
+       "type": "string"
+      },
+      "type": {
+       "description": "MCP content block type, usually text.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "isError": {
+    "description": "True when the tool result represents an application-level error.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "content"
+  ],
+  "type": "object"
+ },
+ "title": "Update SAP Agent"
+}

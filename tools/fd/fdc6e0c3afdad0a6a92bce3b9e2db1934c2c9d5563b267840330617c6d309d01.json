@@ -1,0 +1,80 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Poll Premium Stream Events"
+ },
+ "description": "Long-poll buffered premium stream events for an active session. Returns events that have been delivered to the server-side event buffer since the last poll. This is the MCP-compatible alternative to holding open an SSE connection \u2014 call this tool periodically to drain the event buffer. This tool is transport-agnostic: because it is a standard MCP tool call (request/response), it works over any MCP transport including stdio, streamable-http, and WebSocket-based MCP transports. There is no need for a separate WebSocket endpoint \u2014 this poll tool IS the WebSocket-compatible consumption path. Events are returned oldest-first. Use the sinceEventId cursor from the last poll to fetch only new events. If no events are available, the tool will wait up to waitMs (default 15s, max 30s) for events to arrive before returning an empty array \u2014 this gives near-real-time delivery without repeated polling. Set waitMs=0 for instant return.\n\nSAP MCP execution guidance: Intent: SAP MCP tool workflow. Pricing: free; call directly without x402. Routing: free hosted call; call directly and keep it small/exact when possible. Signer boundary: hosted reads/builders never receive keypair bytes; value-moving results must be finalized locally when signing is required.",
+ "inputSchema": {
+  "additionalProperties": false,
+  "description": "Poll Premium Stream Events input schema. Intent: SAP MCP tool workflow. Pricing: free; call directly without x402. Routing: free hosted call; call directly and keep it small/exact when possible. Signer boundary: hosted reads/builders never receive keypair bytes; value-moving results must be finalized locally when signing is required. Use exact field names from this schema; do not guess aliases or include private key material.",
+  "properties": {
+   "eventType": {
+    "description": "Optional event type filter. Only events matching this type are returned.",
+    "type": "string"
+   },
+   "maxEvents": {
+    "description": "Maximum number of events to return in a single poll. Default: 10, max: 100.",
+    "type": "number"
+   },
+   "sessionId": {
+    "description": "Active premium session id whose stream events should be polled.",
+    "type": "string"
+   },
+   "sinceEventId": {
+    "description": "Optional event id cursor. Only events delivered after this event id are returned. Use the last event id from the previous poll to paginate.",
+    "type": "string"
+   },
+   "waitMs": {
+    "description": "Long-poll wait timeout in milliseconds. If no events are available, the tool waits up to this duration for events to arrive before returning. Default: 15000 (15s). Max: 30000 (30s). Set to 0 for instant return.",
+    "maximum": 30000,
+    "minimum": 0,
+    "type": "number"
+   }
+  },
+  "required": [
+   "sessionId"
+  ],
+  "type": "object"
+ },
+ "name": "sap_premium_stream_poll",
+ "outputSchema": {
+  "additionalProperties": false,
+  "properties": {
+   "events": {
+    "description": "Buffered premium events matching the poll query, ordered oldest-first.",
+    "items": {
+     "additionalProperties": true,
+     "description": "Premium event record with eventId, eventType, observedAt, payload, and deliveredAt.",
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "hasMore": {
+    "description": "True if more events are available in the buffer beyond this batch. Call again to drain remaining events.",
+    "type": "boolean"
+   },
+   "hint": {
+    "description": "Optional hint message, e.g. when delivery loop was just auto-started and no events have arrived yet.",
+    "type": "string"
+   },
+   "sessionStatus": {
+    "description": "Current session status (active, closed, not_found).",
+    "type": "string"
+   },
+   "unitsRemaining": {
+    "description": "Remaining billable units in the session quota, if the session is active.",
+    "type": "number"
+   }
+  },
+  "required": [
+   "events",
+   "hasMore",
+   "sessionStatus"
+  ],
+  "type": "object"
+ },
+ "title": "Poll Premium Stream Events"
+}

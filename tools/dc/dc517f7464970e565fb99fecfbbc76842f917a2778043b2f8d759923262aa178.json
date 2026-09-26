@@ -1,0 +1,69 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "cacheHint": {
+  "cacheKey": "input_hash",
+  "note": "cache by the JCS-canonical policy_parameters hash only; never by wall-clock or session",
+  "ttlMs": 86400000
+ },
+ "description": "Makes ChainGraph tools agent-callable (ChainGraph Standard v0.1 \u00a73.1). Mode 1 \u2014 supply pre_computed_artifact (exported from the browser tool): validates \u00a74 schema fields, recomputes execution_hash via SHA-256 over canonical {policy_parameters, output_payload}, returns verified structuredContent. Mode 2 \u2014 supply tool_id + policy_parameters: returns an artifact template envelope and browser prefill URL so an agent can hand the user a pre-filled link; GPU sims always delegate to the browser per \u00a79.2. Mode 3 \u2014 supply tool_id only: returns node metadata and artifact schema scaffold. Mode 4 (Compute Binding, v0.4) \u2014 supply tool_id + policy_parameters + compute:\"server\" (or compute:\"auto\" for gpu:false nodes): runs the registered kernel server-side and returns a verified v0.4 artifact with execution_hash + output_payload in one round-trip. No browser required. gpu:true nodes always delegate to browser. Hashed input must be I-JSON (RFC 7493): integers beyond 2^53 must be passed as JSON strings, and NaN/Infinity are rejected \u2014 values outside I-JSON have no stable canonical form, so a structured -32602 error (error.data.reason \"ijson_violation\") is returned instead of an execution_hash. readOnlyHint: true. Zero PII, zero payload logging. Pair with verify_execution_hash (independent hash verification) and build_chaingraph (DAG wiring).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "compute": {
+    "description": "Compute mode (v0.4 Compute Binding). \"auto\" = server for gpu:false nodes (default); \"server\" = force server-side; \"browser\" = always return browser delegation URL. gpu:true nodes always use browser regardless of this flag.",
+    "enum": [
+     "auto",
+     "server",
+     "browser"
+    ],
+    "type": "string"
+   },
+   "parent_hashes": {
+    "description": "execution_hash values from upstream ChainGraph artifacts this call chains from. Placed into artifact.chain.parent_hashes (ChainGraph Standard v0.1 \u00a75 chain block).",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "parent_tool_ids": {
+    "description": "tool_ids corresponding to parent_hashes, in the same order.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "policy_parameters": {
+    "additionalProperties": {},
+    "description": "Input parameters for the tool (mirrors the tool's Policy Mandate input fields). Used for Mode 2 browser prefill and Mode 4 server-side compute.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "pre_computed_artifact": {
+    "additionalProperties": {},
+    "description": "A full ChainGraph artifact envelope previously exported from the browser tool via \"Export Policy Mandate\". When supplied, the worker validates \u00a74 required fields, recomputes execution_hash, and returns a verified structuredContent. This is the recommended path: run the tool in-browser, export JSON, call emit_chaingraph_artifact to verify and receive a structured receipt.",
+    "propertyNames": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "tool_id": {
+    "description": "ChainGraph node tool_id (e.g. \"art-01-ap2-mandate-chain-validator\"). Looked up in chaingraph.json nodes. Required unless pre_computed_artifact is supplied.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "lifecycle_status": "Active",
+ "name": "emit_chaingraph_artifact",
+ "title": "Emit a ChainGraph artifact envelope"
+}

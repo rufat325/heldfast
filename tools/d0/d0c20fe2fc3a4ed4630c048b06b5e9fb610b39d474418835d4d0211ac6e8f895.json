@@ -1,0 +1,248 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": true,
+  "readOnlyHint": false,
+  "title": "Plan SAP Agent Identity"
+ },
+ "description": "Free read-only planner for SAP agent registration, profile/image updates, Metaplex/MPL Core identity linking, SNS linking, x402 pricing metadata, and post-write verification. Use this before sap_payments_register_agent or sap_payments_update_agent so agents know the exact local-signer route, metadata contract, forbidden actions, and protocol fee verification checklist. It does not touch chain and never signs. SAP MCP context: Direct synapse-sap-sdk wrapper served by this MCP. Read tools return on-chain state; write tools require signer policy, configured RPC, and the active SAP profile.\n\nSAP MCP execution guidance: Intent: agent bootstrap, routing, skills, or repair guidance. Pricing: free; call directly without x402. Routing: free hosted call; call directly and keep it small/exact when possible. Signer boundary: hosted reads/builders never receive keypair bytes; value-moving results must be finalized locally when signing is required.",
+ "inputSchema": {
+  "description": "Plan SAP Agent Identity input schema. Intent: agent bootstrap, routing, skills, or repair guidance. Pricing: free; call directly without x402. Routing: free hosted call; call directly and keep it small/exact when possible. Signer boundary: hosted reads/builders never receive keypair bytes; value-moving results must be finalized locally when signing is required. Use exact field names from this schema; do not guess aliases or include private key material.",
+  "properties": {
+   "agentId": {
+    "description": "Optional stable lowercase agent id, for example solking. This is separate from the on-chain agent PDA.",
+    "type": "string"
+   },
+   "agentUri": {
+    "description": "Optional public HTTPS/IPFS/Arweave/Kommodo URI for the agent profile metadata or profile page. Never use local desktop file paths.",
+    "type": "string"
+   },
+   "capabilities": {
+    "description": "Required capability list. Prefer object form for production; strings are accepted as shorthand.",
+    "items": {
+     "description": "Capabilities array describing agent/tool capabilities. Use stable IDs, protocol labels, and human-readable descriptions; validate category values before writes.",
+     "oneOf": [
+      {
+       "description": "Capability id shorthand, for example jupiter:swap, pyth:price, metaplex:identity, sns:identity, or risk:management.",
+       "type": "string"
+      },
+      {
+       "additionalProperties": false,
+       "description": "Capabilities array describing agent/tool capabilities. Use stable IDs, protocol labels, and human-readable descriptions; validate category values before writes.",
+       "properties": {
+        "description": {
+         "description": "Optional human-readable capability description for agents and explorers.",
+         "type": "string"
+        },
+        "id": {
+         "description": "Required stable capability id. Use protocol:action naming, for example jupiter:swap, pyth:price, metaplex:identity, sns:identity, x402:payments, or risk:management.",
+         "type": "string"
+        },
+        "protocolId": {
+         "description": "Optional protocol namespace backing this capability, for example sap, mcp, jupiter, pyth, metaplex, sns, x402, or custom.",
+         "type": "string"
+        },
+        "version": {
+         "description": "Optional capability version string. Use semver when the capability maps to an API contract.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "type": "array"
+   },
+   "description": {
+    "description": "Required public description of what the agent does, which protocols it can use, and its safety/trust boundaries.",
+    "type": "string"
+   },
+   "imageUrl": {
+    "description": "Optional public image URL. This must be HTTPS, IPFS, Arweave, or another public URI; desktop file paths are not valid.",
+    "type": "string"
+   },
+   "intendedAction": {
+    "description": "Agent identity lifecycle step to plan. Use register for a new SAP agent, update for profile/image/capability changes, link-metaplex for NFT/MPL Core identity, link-sns for .sol identity, or full-identity for the recommended end-to-end flow.",
+    "enum": [
+     "register",
+     "update",
+     "link-metaplex",
+     "link-sns",
+     "full-identity"
+    ],
+    "type": "string"
+   },
+   "metadataUri": {
+    "description": "Alias for agentUri. Prefer a public JSON metadata document containing name, description, image, external_url, attributes, sap, metaplex, sns, and x402 fields.",
+    "type": "string"
+   },
+   "metaplexAsset": {
+    "description": "Optional Metaplex NFT or MPL Core asset/collection address to reference from public agent metadata.",
+    "type": "string"
+   },
+   "name": {
+    "description": "Required public display name for the SAP agent. Keep it stable enough for explorers and humans.",
+    "type": "string"
+   },
+   "ownerWallet": {
+    "description": "Optional expected SAP owner wallet. Use this for verification planning only; signing still comes from the active local SAP profile.",
+    "type": "string"
+   },
+   "pricing": {
+    "description": "Optional pricing tiers advertised by the agent. Use tokenType usdc + settlementMode x402 for pay.sh/x402 agent commerce.",
+    "items": {
+     "additionalProperties": false,
+     "description": "Pricing array of x402/pay.sh pricing tiers for the registered agent or tool. Amounts should be denominated explicitly in USDC smallest units when applicable.",
+     "properties": {
+      "batchIntervalSec": {
+       "description": "Optional settlement batch interval in seconds when settlementMode is batched.",
+       "type": "number"
+      },
+      "burstLimit": {
+       "description": "Optional short-window burst allowance for this tier.",
+       "type": "number"
+      },
+      "maxCallsPerSession": {
+       "description": "Maximum calls allowed per session for this tier. Defaults to 1000.",
+       "type": "number"
+      },
+      "maxPricePerCall": {
+       "description": "Optional ceiling price per call in the smallest unit of tokenType.",
+       "type": "string"
+      },
+      "minEscrowDeposit": {
+       "description": "Optional minimum escrow deposit in the smallest unit of tokenType.",
+       "type": "string"
+      },
+      "minPricePerCall": {
+       "description": "Optional floor price per call in the smallest unit of tokenType.",
+       "type": "string"
+      },
+      "pricePerCall": {
+       "description": "Price per call in the smallest unit of tokenType: lamports for sol, micro-USDC for usdc, or base units for spl.",
+       "type": "string"
+      },
+      "rateLimit": {
+       "description": "Maximum calls per second allowed by this tier. Defaults to 60.",
+       "type": "number"
+      },
+      "settlementMode": {
+       "description": "Settlement strategy. Use x402 for HTTP 402/pay.sh flows, escrow for prepaid SAP usage ledgers, instant for direct pay-per-call, and batched for periodic settlement.",
+       "enum": [
+        "instant",
+        "escrow",
+        "batched",
+        "x402"
+       ],
+       "type": "string"
+      },
+      "tierId": {
+       "description": "Stable tier id, for example default, read, premium, value-action, or enterprise.",
+       "type": "string"
+      },
+      "tokenDecimals": {
+       "description": "Decimals for the payment token. Defaults to 6 for usdc and 9 for sol when omitted.",
+       "type": "number"
+      },
+      "tokenMint": {
+       "description": "Optional SPL token mint public key. Required when tokenType is spl. For mainnet USDC use EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v.",
+       "type": "string"
+      },
+      "tokenType": {
+       "description": "Payment token type. Use usdc for x402/pay.sh agent commerce. Use spl only with tokenMint.",
+       "enum": [
+        "sol",
+        "usdc",
+        "spl"
+       ],
+       "type": "string"
+      },
+      "volumeCurve": {
+       "description": "Optional volume discounts. Each item lowers pricePerCall after a call threshold.",
+       "items": {
+        "additionalProperties": false,
+        "description": "Volume Curve parameter for Plan SAP Agent Identity.",
+        "properties": {
+         "afterCalls": {
+          "description": "Call count threshold where this price starts.",
+          "type": "number"
+         },
+         "pricePerCall": {
+          "description": "Discounted price per call in the smallest unit of tokenType.",
+          "type": "string"
+         }
+        },
+        "required": [
+         "afterCalls",
+         "pricePerCall"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "pricePerCall"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "protocols": {
+    "description": "Required protocol tags the agent supports, for example sap, mcp, jupiter, pyth, metaplex, sns, x402, payments.",
+    "items": {
+     "description": "Protocols array of protocol identifiers such as sap, mcp, jupiter, pyth, metaplex, sns, or x402.",
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "snsDomain": {
+    "description": "Optional .sol domain to link after ownership or registration is verified.",
+    "type": "string"
+   },
+   "x402Endpoint": {
+    "description": "Optional public x402 discovery/payment endpoint, usually https://host/.well-known/x402 for external agent services.",
+    "type": "string"
+   }
+  },
+  "type": "object"
+ },
+ "name": "sap_agent_identity_plan",
+ "outputSchema": {
+  "properties": {
+   "content": {
+    "description": "MCP content blocks returned to the caller.",
+    "items": {
+     "properties": {
+      "text": {
+       "description": "Human-readable JSON or text returned by the tool.",
+       "type": "string"
+      },
+      "type": {
+       "description": "MCP content block type, usually text.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "isError": {
+    "description": "True when the tool result represents an application-level error.",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "content"
+  ],
+  "type": "object"
+ },
+ "title": "Plan SAP Agent Identity"
+}

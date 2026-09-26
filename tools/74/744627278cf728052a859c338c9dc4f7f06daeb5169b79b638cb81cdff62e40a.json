@@ -1,0 +1,154 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": false,
+  "openWorldHint": false,
+  "readOnlyHint": false
+ },
+ "cacheHint": {
+  "cacheKey": "input_hash",
+  "note": "cache by the JCS-canonical policy_parameters hash only; never by wall-clock or session",
+  "ttlMs": 86400000
+ },
+ "description": "Composes a session receipt (build_session_receipt logic), an optional \u00a727.6 HA evidence bundle (ha_bundle_export logic, included only when ha_records is supplied and non-empty), and a disclosure manifest (build_disclosure_manifest logic) from one array of already-produced artifacts, all keyed to the same input hashes -- replacing what today takes 4-6 separate tool calls with hand-carried hashes. Calls the same in-process functions those standalone tools use; if any one section fails to build, the whole call fails isError:true with that section's own message -- no partial pack. Optionally carries a run_chain decision_trail (per-step reason codes: gate rule id, escalation rule id, input_required cause) as pack-level metadata so an auditor-facing pack answers \"why did each step happen\" without a second round-trip.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "artifacts": {
+    "description": "Already-produced artifacts this pack documents, in call order.",
+    "items": {
+     "properties": {
+      "execution_hash": {
+       "description": "sha256:... -- the OCG artifact hash this entry documents.",
+       "type": "string"
+      },
+      "output_payload": {
+       "additionalProperties": {},
+       "description": "Present when caller has the full artifact, not just its hash.",
+       "propertyNames": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "tool_id": {
+       "description": "The tool_id that produced this artifact, if known.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "execution_hash"
+     ],
+     "type": "object"
+    },
+    "minItems": 1,
+    "type": "array"
+   },
+   "decision_trail": {
+    "description": "Per-step decision reason trail from the run_chain result (pass its decision_trail \u2014 response field or composite_output.decision_trail). Carried verbatim into the pack as pack-level metadata, outside every section hash; omitted entirely when not supplied. See DECISIONTRAIL-1.",
+    "items": {
+     "properties": {
+      "decided_by": {
+       "description": "step_id of the decision that routed control past this step.",
+       "type": "string"
+      },
+      "gate_rule_id": {
+       "description": "<step_id>#r<index> or <step_id>#default \u2014 the gate rule that fired or bypassed this step. Recomputable from the hash-bound decisions[].",
+       "type": "string"
+      },
+      "input_required_cause": {
+       "description": "The kernel error that made this step input_required.",
+       "type": "string"
+      },
+      "next": {
+       "description": "Routing target of the gate decision (a step id, or the terminal \"end\"/\"escalate\").",
+       "type": "string"
+      },
+      "order": {
+       "description": "1-based step order, mirroring the producing run_chain result.",
+       "maximum": 9007199254740991,
+       "minimum": -9007199254740991,
+       "type": "integer"
+      },
+      "reason_code": {
+       "description": "Closed enum: ran | gate_routed | skipped_by_gate | skipped_by_escalation | input_required | unknown_node | gpu_browser_only | no_kernel_browser_only.",
+       "type": "string"
+      },
+      "status": {
+       "description": "Per-step status from the run_chain result.",
+       "type": "string"
+      },
+      "tool_id": {
+       "description": "The step's tool_id.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "order",
+      "tool_id",
+      "status",
+      "reason_code"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "framing": {
+    "description": "Optional framing context for the session receipt's PTG-01 regulator prompt.",
+    "type": "string"
+   },
+   "ha_records": {
+    "description": "\u00a727 human_accountability_records -- omit entirely for no HA section.",
+    "items": {
+     "additionalProperties": {},
+     "propertyNames": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "kernel_version": {
+    "description": "Version tag of the kernel that produced verification_result.",
+    "type": "string"
+   },
+   "policy_version": {
+    "description": "Version tag of the policy the kernel was evaluated against.",
+    "type": "string"
+   },
+   "room_label": {
+    "description": "Label for the disclosure-manifest room.",
+    "type": "string"
+   },
+   "sd_jwt": {
+    "description": "When true, also return an SD-JWT export of the HA bundle (mirrors ha_bundle_export, default false; no-op when ha_records is absent).",
+    "type": "boolean"
+   },
+   "session_id": {
+    "description": "Session identifier to embed in the receipt, if the caller tracks one.",
+    "type": "string"
+   },
+   "subject_hash": {
+    "description": "The sha256: subject hash the pack documents (defaults to artifacts[0].execution_hash if omitted).",
+    "type": "string"
+   },
+   "submission_receipt": {
+    "description": "Populate ONLY after a real transmission -- never fabricate (same rule as ha_bundle_export).",
+    "type": "string"
+   },
+   "verification_result": {
+    "description": "The \u00a716/\u00a718/\u00a720 verdict.",
+    "type": "string"
+   }
+  },
+  "required": [
+   "artifacts"
+  ],
+  "type": "object"
+ },
+ "lifecycle_status": "Active",
+ "name": "build_evidence_pack",
+ "title": "Assemble a complete evidence pack in one call"
+}

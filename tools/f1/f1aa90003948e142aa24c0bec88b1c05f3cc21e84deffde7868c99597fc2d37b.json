@@ -1,0 +1,123 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Validate Payment Reference"
+ },
+ "description": "Validate a structured payment reference and, when an IBAN is supplied, decide whether the two may legally travel together. USE WHEN: assembling a payment instruction from an invoice, a QR-bill or a remittance advice; whenever a Swiss IBAN and a reference appear together (the pairing rule is what most integrations get wrong); or when the user pastes an \"RF...\" string, a 27-digit number, a +++123/4567/89012+++ block, or asks whether a payment reference is correct. DO NOT USE to validate the IBAN itself \u2014 that is validate_iban. SCHEMES: RF Creditor Reference (ISO 11649, \"SCOR\" in Swiss Payment Standards, mod 97-10); Swiss QR reference (\"QRR\", 27 digits, modulo 10 recursive); Belgian OGM/VCS (12 digits, modulo 97, a remainder of 0 written 97); Finnish viitenumero (4-20 digits, weights 7-3-1 from the right). Norwegian KID and Swedish OCR are RECOGNISED but never judged: they answer valid: null with status unverifiable_without_creditor_config, because modulus type and length are configured per creditor account by the beneficiary bank and are not a property of the string. NEVER relay those to a user as \"invalid\" \u2014 say the check needs the creditor bank configuration. AMBIGUITY: only a leading \"RF\" and a 27-digit length pin a scheme down. A bare 12-digit string is both a Belgian OGM and a legal Finnish length, so the more specific reading is returned and the other appears in also_valid_as. Pass reference_type when you know the country. THE PAIRING RULE \u2014 the part no checksum library reproduces: pass an iban and you also get a pairing verdict. Per the Swiss Implementation Guidelines a QRR reference may ONLY be used with a QR-IBAN (institution identifier in the SIX range 30000-31999), and an ISO 11649 reference may NOT be used with one. Outside CH and LI, pairing is not_applicable \u2014 there is no QR-IBAN to pair against \u2014 and that does not affect the reference's own checksum verdict. IMPORTANT: valid and pairing are INDEPENDENT. A reference can be arithmetically valid and still illegal on that account. Read both, and relay source/as_of \u2014 they are what makes the verdict auditable. FREE: the checksums are published commodities. The paid surface is POST /v1/iban/validate, which returns this same pairing block with the full IBAN enrichment. COST: $0 per call, on every surface (free with no key on this transport: 25 units a week per source address, one per call and one per IBAN in batch_validate_iban, reset on Monday 00:00 UTC. Or an ifk_ key with no e-mail at all: POST https://api.ibanforge.com/v1/keys/generate with no body for 25 REST calls/month, and POST /v1/keys/claim lifts that same key to 200 a month).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "iban": {
+    "description": "Optional creditor IBAN \u2014 supply it to get the pairing verdict",
+    "type": "string"
+   },
+   "reference": {
+    "description": "The reference as printed; spaces, slashes and the +++\u2026+++ wrapper are stripped",
+    "type": "string"
+   },
+   "reference_type": {
+    "description": "Optional hint: rf | scor | qrr | ogm | vcs | viitenumero | kid | ocr",
+    "type": "string"
+   }
+  },
+  "required": [
+   "reference"
+  ],
+  "type": "object"
+ },
+ "name": "validate_payment_reference",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "also_valid_as": {
+    "additionalProperties": false,
+    "description": "The second reading of an ambiguous string, with its own verdict.",
+    "properties": {
+     "check_digit_expected": {
+      "type": "string"
+     },
+     "scheme": {
+      "type": "string"
+     },
+     "valid": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "scheme",
+     "valid"
+    ],
+    "type": "object"
+   },
+   "as_of": {
+    "description": "YYYY-MM of that document.",
+    "type": "string"
+   },
+   "check_digit_expected": {
+    "description": "A STRING, so a two-digit value beginning with zero survives (OGM remainder 3 is \"03\", remainder 0 is \"97\").",
+    "type": "string"
+   },
+   "note": {
+    "description": "What was checked, and what was not.",
+    "type": "string"
+   },
+   "pairing": {
+    "description": "Present only when an iban was supplied: ok | qrr_requires_qr_iban | scor_forbidden_with_qr_iban | not_applicable",
+    "type": "string"
+   },
+   "pairing_as_of": {
+    "type": "string"
+   },
+   "pairing_source": {
+    "description": "The document publishing the pairing rule \u2014 a DIFFERENT one from source.",
+    "type": "string"
+   },
+   "reference": {
+    "description": "Normalized: uppercase, separators removed.",
+    "type": "string"
+   },
+   "scheme": {
+    "description": "rf | qrr | ogm | viitenumero | kid | ocr, or null when nothing matched.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "source": {
+    "description": "The document publishing the rule. Null only when no scheme matched. Relay it.",
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "status": {
+    "description": "checked | unverifiable_without_creditor_config | unrecognised",
+    "type": "string"
+   },
+   "valid": {
+    "description": "null means the scheme was recognised and cannot be checked without the creditor bank configuration. Never report null as false.",
+    "type": [
+     "boolean",
+     "null"
+    ]
+   }
+  },
+  "required": [
+   "reference",
+   "scheme",
+   "valid",
+   "status",
+   "source",
+   "note"
+  ],
+  "type": "object"
+ },
+ "title": "Validate Payment Reference"
+}

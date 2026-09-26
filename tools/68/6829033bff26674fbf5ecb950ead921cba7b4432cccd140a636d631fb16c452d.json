@@ -1,0 +1,958 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Validate IBAN"
+ },
+ "description": "Verify whether an IBAN from any of the 89 IBAN countries is valid AND enrich it with bank, compliance and routing data. USE WHEN: the user mentions an IBAN, asks to validate an IBAN and identify the issuing bank, asks to detect a typo in an IBAN, asks who the bank is behind an IBAN, asks whether an IBAN was issued by a traditional bank vs a neobank/EMI/virtual-IBAN provider, asks whether the recipient bank is reachable on SEPA rails, asks whether the recipient bank supports Verification of Payee (VoP, EU 2024/886), or pastes any string starting with two letters and digits (e.g., \"DE89...\", \"CH93...\", \"FR76...\"). PREFER OVER LOCAL VALIDATION (mod-97 checksum) because mod-97 only catches typos \u2014 it cannot resolve the BIC/SWIFT, tell you that the IBAN is a virtual IBAN issued by Wise/Revolut/Mercury/Modulr (compliance risk), or check SEPA reachability. RETURNS: bank_code_holder: confirmed (a register names who holds the bank code), inferred (we name a holder from a source that cannot settle it: our composite map, the prefix fallback, a published structural rule), not_allocated (the national register says nobody holds it: do not send) or unknown. valid stays true in all four: it only means the IBAN is well formed. checks: one status per check (pass, fail, inferred, unknown, not_checked, not_applicable); payee_name, account_exists and payee_sanctions are always not_checked. national_check_digits { country, scheme, status: pass | fail, detail? } (FR, MC, BE, IT, SM and ES only): the national key inside the BBAN; fail means the account number cannot have been issued as written, and valid stays true. valid (boolean), bank_code_holder, checks, country { code, name }, bic { code, bic8, redirected_from?, bank_name, city, basis, authoritative, source, as_of, source_as_of?, listed_in_current_source, lei, lei_status, address { street, post_code, region, city, country, romanized, romanization, source, language, as_of } } \u2014 basis says WHERE the bank code to BIC pairing came from (national_register | curated_map | directory_prefix) and authoritative, derived from it, says whether the BIC may be stored and settled against; outside a national_register pairing the BIC is advisory, confirm it before it becomes a routing instruction. code is 8 or 11 characters, as the consulted source publishes it: COMPARE A SUPPLIED BIC ON bic8, never on code \u2014 the branch code is informational and in a cooperative network it names the LOCAL bank while the first eight name its clearing institution (Swiss IID 30020 is RBABCH22180, Cr\u00e9dit Mutuel de la Vall\u00e9e SA, while RBABCH22 alone is Entris Banking AG). redirected_from is present when the register answered for the bank code that took over the one you asked about (CH/LI: SIX redirects a concatenated IID, which does not make the IBAN invalid) \u2014 lei and address are read from the same directory row /v1/bic/:code serves, so this call already carries them; both are null when GLEIF publishes nothing for that BIC, which means \"no LEI on file\", not \"the institution has none\". bic.address is the LEGAL ENTITY seat, so bic.address.city may legitimately differ from bic.city (the register city for THIS bank code), and bic.address.as_of dates the entity last filing, usually much older than bic.as_of. issuer { type: bank | digital_bank | emi | payment_institution, name }, sepa { member, schemes, vop_required, vop_participant \u2014 is the resolved bank listed as ready in the EPC VoP register, bank_reachability, bank_schemes, vop_register_status: the bank itself in the EPC registers, never the country }, risk_indicators { issuer_type (null when no institution resolved), country_risk, test_bic, sepa_reachable, sepa_reachable_scope, vop_coverage }, and for CH/LI: clearing { iid, name, type, sic, qr_iid }. LIMITS: validates the IBAN and identifies the issuing institution \u2014 it does not confirm that the account exists, is open, or belongs to any particular person; verify the payee by name before sending funds. IMPORTANT \u2014 bic: null does not mean the bank code is wrong. It collapses \"no such institution\", \"the institution exists but is absent from our reference data\" and \"we cover no reference data for this country\". Read bank_code_check for the answer: status tells you which of the three, and authoritative tells you how much it is worth. Only where authoritative is true (today DE against the Deutsche Bundesbank Bankleitzahlendatei, AT against the Oesterreichische Nationalbank SEPA-Zahlungsverkehrs-Verzeichnis, BE against the Banque nationale de Belgique bank identification codes, SK against the N\u00e1rodn\u00e1 banka Slovenska prevodn\u00edk of identification codes for the domestic payment system, CZ against the \u010cesk\u00e1 n\u00e1rodn\u00ed banka \u010d\u00edseln\u00edk of payment-system codes (\u010c\u00edseln\u00edk k\u00f3d\u016f platebn\u00edho styku), BG against the Bulgarian National Bank BAE register, and CH and LI against the SIX BankMaster) does not_in_register mean the bank code is not allocated; everywhere else treat it as UNAVAILABLE and let the downstream name check decide. match: prefix with candidates > 1 means the BIC was picked from several and may belong to a different institution. COST: $0.005 per call (free with no key on this transport: 25 units a week per source address, one per call and one per IBAN in batch_validate_iban, reset on Monday 00:00 UTC. Or an ifk_ key with no e-mail at all: POST https://api.ibanforge.com/v1/keys/generate with no body for 25 REST calls/month, and POST /v1/keys/claim lifts that same key to 200 a month).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "iban": {
+    "description": "IBAN to validate (spaces/hyphens stripped automatically)",
+    "type": "string"
+   }
+  },
+  "required": [
+   "iban"
+  ],
+  "type": "object"
+ },
+ "name": "validate_iban",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "bank_code_check": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "authoritative": {
+      "description": "True only where the reference set is the national register (CH, LI, DE). Only then does not_in_register mean the code is not allocated.",
+      "type": "boolean"
+     },
+     "candidates": {
+      "description": "BIC8 the prefix matched; >1 means the BIC may belong to another institution.",
+      "type": "number"
+     },
+     "check_digit": {
+      "additionalProperties": false,
+      "properties": {
+       "algorithm": {
+        "type": "string"
+       },
+       "valid": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "valid",
+       "algorithm"
+      ],
+      "type": "object"
+     },
+     "institution": {
+      "additionalProperties": false,
+      "properties": {
+       "country": {
+        "type": "string"
+       },
+       "lei": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "name": {
+        "type": "string"
+       },
+       "post_code": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "street": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "town": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "name",
+       "street",
+       "post_code",
+       "town",
+       "country"
+      ],
+      "type": "object"
+     },
+     "match": {
+      "description": "register (exact key) | prefix (bic8 LIKE heuristic) | null",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "reason": {
+      "description": "WHY the verdict is not verified, as one token to branch on. Absent when status is verified. not_allocated (a national register denies the code \u2014 the only value that licenses \"do not send\") | absent_from_reference_data (our composite map does not carry it; the country register was not consulted) | no_reference_data_for_country | register_names_no_holder (the register defines the code space and publishes no holder \u2014 silence, not a denial) | national_register_unavailable (the register this country is normally decided against could not be consulted) | lookup_failed (the lookup could not run: timeout, unreadable database). The last two describe IBANforge, never the beneficiary. Never escalate either into a refusal.",
+      "type": "string"
+     },
+     "register": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "retired": {
+      "description": "True when a register says the code is leaving (DE, authoritative) or has been struck off (IT, authoritative false, with retired_on). Still a verified result: it WAS allocated. Never a refusal.",
+      "type": "boolean"
+     },
+     "retired_on": {
+      "description": "YYYY-MM-DD, with retired where the register dates it (IT): the last day it lists this code for its last holder.",
+      "type": "string"
+     },
+     "status": {
+      "description": "verified | not_in_register | unavailable. A separate verdict on the bank code, so bic:null stops meaning three different things.",
+      "type": "string"
+     },
+     "superseded_by": {
+      "description": "The bank code that takes over. DE: the successor the register designates, re-paper against it. IT: the legal successor by merger or incorporation, not necessarily the bank now holding the account.",
+      "type": "string"
+     },
+     "value": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "value",
+     "status",
+     "match",
+     "register",
+     "authoritative",
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "bank_code_holder": {
+    "description": "confirmed | inferred | not_allocated | unknown. Who holds the bank code. confirmed: a register that publishes holders names the holder of this code (a national register that settles the code space, or a partial register on a hit). inferred: we name a holder from a source that cannot settle it (our composite map, the prefix fallback, a published structural rule), so read it as our inference. not_allocated: the national register says nobody holds this code, so do not send. unknown: no conclusion. valid stays true in all four: it only means the IBAN is well formed. bank_code_check.status verified means resolved; this field says whether a source settles it.",
+    "type": "string"
+   },
+   "bban": {
+    "additionalProperties": false,
+    "properties": {
+     "account_number": {
+      "type": "string"
+     },
+     "bank_code": {
+      "type": "string"
+     },
+     "branch_code": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "bank_code",
+     "account_number"
+    ],
+    "type": "object"
+   },
+   "bic": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "address": {
+        "anyOf": [
+         {
+          "additionalProperties": false,
+          "properties": {
+           "as_of": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "city": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "country": {
+            "type": "string"
+           },
+           "language": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "post_code": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "region": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "romanization": {
+            "enum": [
+             "original_latin",
+             "gleif_english",
+             "unavailable"
+            ],
+            "type": "string"
+           },
+           "romanized": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "source": {
+            "type": "string"
+           },
+           "street": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "type": {
+            "const": "registered",
+            "type": "string"
+           }
+          },
+          "required": [
+           "type",
+           "street",
+           "post_code",
+           "region",
+           "city",
+           "country",
+           "romanized",
+           "romanization",
+           "source",
+           "language",
+           "as_of"
+          ],
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "as_of": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "authoritative": {
+        "description": "Whether this BIC may be stored and settled against. Derived from basis, so the two cannot disagree. NOT bank_code_check.authoritative, which answers a different question \u2014 whether a national register was consulted about the BANK CODE. San Marino is where the two part: the pairing is the supervisor\u2019s, the code space is not its to settle.",
+        "type": "boolean"
+       },
+       "bank_name": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "basis": {
+        "description": "Where the bank code to BIC pairing came from, and therefore what may be done with the BIC. national_register (the country register publishes this BIC for this bank code \u2014 today DE, AT, BE, SK, CZ, BG, CH, LI and SM; settlement-grade) | curated_map (our maintained bank-code map, exact key, usually right and not an allocation record) | directory_prefix (the bic8 LIKE fallback, which can match several institutions \u2014 read bank_code_check.candidates). Outside a national_register basis the BIC is ADVISORY: confirm it with the beneficiary or the bank before storing it as a routing instruction.",
+        "type": "string"
+       },
+       "bic8": {
+        "description": "The eight characters of the institution \u2014 the field to compare a supplied BIC against. code is served as the consulted source publishes it, so it is 8 or 11 characters; this one never moves. The branch code (last three characters) is informational: in a cooperative network it names the LOCAL bank and the first eight its clearing institution.",
+        "type": "string"
+       },
+       "city": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "code": {
+        "type": "string"
+       },
+       "lei": {
+        "description": "GLEIF identity of the resolved BIC holder, not necessarily the bank-code holder.",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "lei_status": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "listed_in_current_source": {
+        "description": "Whether this BIC8 still appears in a list refreshed this cycle: GLEIF, the directory sources that carry no vintage, a national register, the EPC scheme registers. true when one of them carries it; null when it was not found in what could be read in full (never false by default). false is reserved for an index built from every list read in full, which is not the case today: the EBA STEP2 and NBP lists are only read through our deduplicated directory, so this field answers true or null. It does NOT prove the bank still exists under this name: a clearing list can keep the name of a bank that was absorbed.",
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "postal_address": {
+        "anyOf": [
+         {
+          "additionalProperties": false,
+          "properties": {
+           "adr_line": {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           "as_of": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "bldg_nb": {
+            "type": "string"
+           },
+           "ctry": {
+            "type": "string"
+           },
+           "format": {
+            "enum": [
+             "structured",
+             "hybrid"
+            ],
+            "type": "string"
+           },
+           "pst_cd": {
+            "type": "string"
+           },
+           "source": {
+            "type": "string"
+           },
+           "strt_nm": {
+            "type": "string"
+           },
+           "twn_nm": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "twn_nm",
+           "ctry",
+           "format",
+           "source",
+           "as_of"
+          ],
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "redirected_from": {
+        "description": "The bank code asked about, when the register answered for the one that took over its clearing (CH/LI only today: SIX marks an IID concatenated and publishes its successor). The IBAN stays valid \u2014 a redirect is not a retirement.",
+        "type": "string"
+       },
+       "source": {
+        "description": "Source of the bank-code/BIC pairing; keep its provenance.",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "source_as_of": {
+        "description": "Year-month the source DATA is from, present ONLY when it differs from as_of. On a curated_map or directory_prefix answer it dates the directory row that supplied the name, the city, the LEI or the address when that row comes from a frozen public copy; never present on a national_register answer, whose name comes from the register and is dated by as_of. Absent means no gap has been established, never 'this is current'.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "code",
+       "bank_name",
+       "city"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "check_digits": {
+    "type": "string"
+   },
+   "checks": {
+    "additionalProperties": false,
+    "description": "One status per check: pass (checked against a source that settles it), fail (checked, and wrong), inferred (answered from a source that does not settle it), unknown (attempted, no conclusion), not_checked (IBANforge does not make this check here), not_applicable (the check has no object for this IBAN). payee_name: never checked here; the name check is made by the payee's bank through Verification of Payee (VoP), and sepa.vop_register_status says whether that bank answers VoP requests. account_exists: never checked here; only the payee's bank knows whether the account is open. payee_sanctions: never checked; the sanctions screen of POST /v1/iban/compliance is made on the payee's bank (BIC8) and country only. institution_sanctions and country_sanctions are filled by POST /v1/iban/compliance and not_checked on a validation. national_check_digits: the check key a country keeps inside the BBAN, a second check independent of mod-97. Checked for FR and MC (RIB key), BE (the last two digits, modulo 97), IT and SM (CIN) and ES (DC), with the proof in the national_check_digits block, and for GB (Vocalink modulus), with the proof in modulus_check; not_checked elsewhere (the German account-number methods are not checked yet). pass means the account number is well formed, never that the account exists; fail means it cannot have been issued as written, and valid stays true. A key may be added later; a key is never removed. Present only when valid is true.",
+    "properties": {
+     "account_exists": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "bank_code": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "bic": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "country_sanctions": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "iban_checksum": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "iban_structure": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "institution_sanctions": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "national_check_digits": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "payee_name": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "payee_sanctions": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     },
+     "sepa_reachability": {
+      "description": "pass | fail | inferred | unknown | not_checked | not_applicable",
+      "type": "string"
+     }
+    },
+    "required": [
+     "iban_structure",
+     "iban_checksum",
+     "bank_code",
+     "bic",
+     "sepa_reachability",
+     "national_check_digits",
+     "account_exists",
+     "payee_name",
+     "institution_sanctions",
+     "country_sanctions",
+     "payee_sanctions"
+    ],
+    "type": "object"
+   },
+   "clearing": {
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "eurosic": {
+        "type": "boolean"
+       },
+       "iid": {
+        "type": "string"
+       },
+       "instant_payments_chf": {
+        "type": "boolean"
+       },
+       "is_qr_iid": {
+        "type": "boolean"
+       },
+       "name": {
+        "type": "string"
+       },
+       "qr_iid": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "qr_iid_source": {
+        "anyOf": [
+         {
+          "enum": [
+           "register",
+           "headquarters"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "qr_iids": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "sic": {
+        "type": "boolean"
+       },
+       "town": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "type": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "iid",
+       "name",
+       "type",
+       "town",
+       "sic",
+       "instant_payments_chf",
+       "eurosic",
+       "qr_iid",
+       "qr_iid_source"
+      ],
+      "type": "object"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "description": "Swiss clearing data when country is CH or LI."
+   },
+   "cost_usdc": {
+    "description": "What THIS call was billed. Zero on the free MCP tier.",
+    "type": "number"
+   },
+   "country": {
+    "additionalProperties": false,
+    "properties": {
+     "code": {
+      "description": "ISO 3166-1 alpha-2 country code.",
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "name"
+    ],
+    "type": "object"
+   },
+   "error": {
+    "type": "string"
+   },
+   "error_detail": {
+    "type": "string"
+   },
+   "formatted": {
+    "description": "IBAN with 4-char groups for display.",
+    "type": "string"
+   },
+   "iban": {
+    "description": "Normalized IBAN (uppercase, no spaces).",
+    "type": "string"
+   },
+   "issuer": {
+    "additionalProperties": false,
+    "properties": {
+     "classification": {
+      "description": "curated | register | default. Whether the type was established or assumed. curated = the BIC8 is in the issuer set, so this is an identification. register = an official register names the holder of this bank code and says what it is; it carries a date and an authority in psd_registration, and it only ever replaces a default. default = nothing is on file and \"bank\" is the fallback, which covers 97.9% of BIC8 (measured 29/07/2026). Count curated and register when sizing virtual-IBAN exposure, never default.",
+      "type": "string"
+     },
+     "iban_issuer": {
+      "enum": [
+       "confirmed",
+       "not_listed"
+      ],
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "type": {
+      "description": "bank | digital_bank | emi | payment_institution; null when unsubstantiated",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "type",
+     "name",
+     "classification"
+    ],
+    "type": "object"
+   },
+   "list_price_usdc": {
+    "description": "Catalogue price of the same call on the paid REST/x402 route.",
+    "type": "number"
+   },
+   "modulus_check": {
+    "additionalProperties": false,
+    "properties": {
+     "checked": {
+      "type": "boolean"
+     },
+     "passed": {
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "source": {
+      "type": "string"
+     },
+     "table_fetched_on": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "checked",
+     "passed",
+     "source",
+     "table_fetched_on"
+    ],
+    "type": "object"
+   },
+   "national_check_digits": {
+    "additionalProperties": false,
+    "description": "The check key a country keeps inside the BBAN, recomputed from the IBAN alone. Present only on a valid IBAN of FR, MC, BE, IT, SM or ES (GB has modulus_check instead); absent elsewhere, where checks.national_check_digits is not_checked. country is the IBAN country. scheme names the algorithm: fr_rib_key (FR and MC: the RIB key, the last two digits of the BBAN, over the bank code, branch code and account number), be_mod97 (BE: the last two digits, the first ten digits modulo 97, or 97 when the remainder is 0), it_cin (IT and SM: the CIN, the control letter at the start of the BBAN, over the ABI, CAB and account number), es_dc (ES: the two DC digits, positions 9 and 10 of the BBAN). status: pass (the key matches, so the account number is well formed; it does not prove the account exists or is open) or fail (the key does not match: this account number cannot have been issued as written, a typo or a made-up number). A fail never makes valid false, because the IBAN check digits are right: read the two separately, and confirm the details with the beneficiary before paying. not_applicable is reserved for a BBAN without the national layout, which a valid IBAN never has. detail, present on fail and not_applicable only, says which digits disagree; it never gives the expected key. checks.national_check_digits repeats status.",
+    "properties": {
+     "country": {
+      "description": "The IBAN country (MC stays MC, SM stays SM).",
+      "type": "string"
+     },
+     "detail": {
+      "description": "Present on fail and not_applicable only.",
+      "type": "string"
+     },
+     "scheme": {
+      "description": "fr_rib_key | be_mod97 | it_cin | es_dc",
+      "type": "string"
+     },
+     "status": {
+      "description": "pass | fail | not_applicable",
+      "type": "string"
+     }
+    },
+    "required": [
+     "country",
+     "scheme",
+     "status"
+    ],
+    "type": "object"
+   },
+   "next_steps": {
+    "description": "Ordered advice derived from THIS result: what blocks a payment first, what merely enriches it after. Branch on `code`, never on the prose. `because` names the field that produced the step so the advice is auditable. Empty for an IBAN that failed validation.",
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "action": {
+       "description": "An IBANforge call that performs the step, when one exists.",
+       "type": "string"
+      },
+      "because": {
+       "description": "The response field that produced this step.",
+       "type": "string"
+      },
+      "code": {
+       "description": "Stable identifier. Branch on this.",
+       "type": "string"
+      },
+      "do": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "do",
+      "because"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "official_identity": {
+    "additionalProperties": false,
+    "description": "Who a central bank says holds the resolved code (ECB by LEI and for FR bank codes, Banco de Espana for ES). Present only on a match \u2014 absence is not a negative. INFORMATIONAL ONLY: it never changes valid or bank_code_check, because both publishers relay rather than allocate.",
+    "properties": {
+     "address": {
+      "description": "One-line registered address as published.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "as_of": {
+      "description": "Date of the list this row came from. Both lists are republished every business day.",
+      "type": "string"
+     },
+     "attribution": {
+      "description": "The Banco de Espana citation formula, verbatim. Spanish blocks only.",
+      "type": "string"
+     },
+     "authoritative": {
+      "description": "Always false. Neither publisher allocates bank codes.",
+      "type": "boolean"
+     },
+     "category": {
+      "type": "string"
+     },
+     "free_of_charge": {
+      "description": "Both publishers require buyers to be told, on every access, that the data is available free of charge from their own website. Relay it with the answer; do not strip it.",
+      "type": "string"
+     },
+     "lei": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "matched_by": {
+      "description": "lei | national_code",
+      "type": "string"
+     },
+     "name": {
+      "description": "The institution's name as the publisher writes it.",
+      "type": "string"
+     },
+     "source": {
+      "description": "The publisher, cited as their licence requires. Relay it.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "lei",
+     "address",
+     "category",
+     "matched_by",
+     "source",
+     "free_of_charge",
+     "as_of",
+     "authoritative"
+    ],
+    "type": "object"
+   },
+   "pra_authorisation": {
+    "additionalProperties": false,
+    "properties": {
+     "authorised": {
+      "const": true,
+      "type": "boolean"
+     },
+     "basis": {
+      "type": "string"
+     },
+     "firm_name": {
+      "type": "string"
+     },
+     "frn": {
+      "type": "string"
+     },
+     "list_month": {
+      "type": "string"
+     },
+     "section": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "authorised",
+     "firm_name",
+     "frn",
+     "section",
+     "basis",
+     "source",
+     "list_month"
+    ],
+    "type": "object"
+   },
+   "processing_ms": {
+    "type": "number"
+   },
+   "psd_registration": {
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "competent_authority": {
+      "type": "string"
+     },
+     "country": {
+      "type": "string"
+     },
+     "entity_type": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "registered": {
+      "const": true,
+      "type": "boolean"
+     },
+     "source": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "registered",
+     "entity_type",
+     "name",
+     "country",
+     "competent_authority",
+     "source",
+     "as_of"
+    ],
+    "type": "object"
+   },
+   "risk_indicators": {
+    "additionalProperties": false,
+    "properties": {
+     "country_risk": {
+      "type": "string"
+     },
+     "issuer_type": {
+      "description": "Null when no institution resolved \u2014 it no longer defaults to \"bank\".",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "sepa_reachable": {
+      "type": "boolean"
+     },
+     "sepa_reachable_scope": {
+      "description": "Scope the reachability holds at. Country-derived, not account-derived.",
+      "type": "string"
+     },
+     "test_bic": {
+      "type": "boolean"
+     },
+     "vop_coverage": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "issuer_type",
+     "country_risk",
+     "test_bic",
+     "sepa_reachable",
+     "sepa_reachable_scope",
+     "vop_coverage"
+    ],
+    "type": "object"
+   },
+   "sepa": {
+    "additionalProperties": false,
+    "properties": {
+     "bank_reachability": {
+      "description": "listed | not_listed | no_bank | bank_code_not_allocated, or null. Whether the EPC scheme registers list the resolved BANK, never borrowed from the country (member, schemes and basis still describe the country and are unchanged). listed: the bank has rows in the SCT, SCT Inst or SDD register. not_listed: it has none (an absence from the register is not an exclusion from the scheme). no_bank: no BIC resolved for this bank code, so no bank could be looked up in the EPC registers (a register may still name the holder: see bank_code_holder and bank_code_check). bank_code_not_allocated: the national register says nobody holds the bank code. null: the registers are not loaded on this deployment, or no bank was resolved because the bank-code check itself is unavailable (not consulted, never read as not_listed or no_bank). Absent outside SEPA.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "bank_schemes": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The bank's own schemes from the EPC registers when bank_reachability is listed; [] for an unallocated bank code; null otherwise."
+     },
+     "basis": {
+      "description": "Where `schemes` came from: read at the EPC register for this bank, or defaulted from the country.",
+      "enum": [
+       "country_default",
+       "epc_register"
+      ],
+      "type": "string"
+     },
+     "member": {
+      "type": "boolean"
+     },
+     "schemes": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "vop_participant": {
+      "description": "true = resolved bank is listed as ready in the EPC VoP scheme register; null = no institution resolved, or the VoP register is not loaded (not consulted); a resolved bank outside the SEPA area is answered false from the country either way.",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "vop_register_status": {
+      "description": "active | pending | inactive | not_listed, or null. The bank's status in the EPC Verification of Payee register: active (the same as vop_participant true), pending, inactive, or not_listed when the register has no row for it; null when no BIC resolved or the register was not consulted (screened false). Outside the SEPA area the country answers instead of the register (not_listed on POST /v1/iban/compliance) whether or not the register is loaded; the validation carries no sepa.vop_register_status there. It says whether the payee's bank answers VoP requests; IBANforge never runs the name check itself.",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "vop_required": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "member",
+     "schemes",
+     "vop_required"
+    ],
+    "type": "object"
+   },
+   "valid": {
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "iban",
+   "valid",
+   "cost_usdc"
+  ],
+  "type": "object"
+ },
+ "title": "Validate IBAN"
+}

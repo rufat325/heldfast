@@ -1,0 +1,533 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true,
+  "title": "Check Swiss QR-bill Payload"
+ },
+ "description": "Check a Swiss QR-bill payload, the text a QR-bill's code carries (starts with SPC), rule by rule, each finding citing the SIX document it comes from. USE WHEN: an agent, an ERP or an accounting tool holds a scanned or generated QR-bill and must know before paying or issuing it whether it is well-formed, whether the reference type matches the IBAN (QRR needs a QR-IBAN, IID 30000-31999), and above all whether the creditor and debtor addresses are STRUCTURED (type S) or still COMBINED (type K): the standard removed type K on 21.11.2025 and banks stop processing payments built on it from 14.11.2026. DO NOT USE to learn which bank holds the account or its payment-rail participation: that is the paid validate_iban. RETURNS: { valid, ready_for_2026_11_14, creditor_iban { value, valid, country, qr_iban, iid }, creditor { present, address, structured, sps_check, proposed_structured }, ultimate_debtor, amount, currency, reference { type, value, valid, note }, findings [{ code, severity, field, detail, source }], next_steps, source }. A combined address comes back with proposed_structured, the S-type fields derived from the combined lines, to relay as a fix. IMPORTANT: relay each finding's source string. COST: $0 per call, on every surface (free with no key on this transport: 25 units a week per source address, one per call and one per IBAN in batch_validate_iban, reset on Monday 00:00 UTC. Or an ifk_ key with no e-mail at all: POST https://api.ibanforge.com/v1/keys/generate with no body for 25 REST calls/month, and POST /v1/keys/claim lifts that same key to 200 a month).",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "payload": {
+    "description": "The Swiss QR Code text with real line breaks: SPC, 0200, 1, IBAN, creditor (7 lines), ultimate creditor (7 empty lines), amount, currency, ultimate debtor (7 lines), reference type, reference, message, EPD, optional billing information and alternative schemes.",
+    "maxLength": 4000,
+    "minLength": 1,
+    "type": "string"
+   }
+  },
+  "required": [
+   "payload"
+  ],
+  "type": "object"
+ },
+ "name": "check_swiss_qr_bill",
+ "outputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+   "alternative_schemes": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "amount": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "billing_information": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "coding": {
+    "type": "string"
+   },
+   "creditor": {
+    "additionalProperties": false,
+    "properties": {
+     "address": {
+      "additionalProperties": false,
+      "properties": {
+       "country": {
+        "type": "string"
+       },
+       "line1": {
+        "description": "StrtNm for type S, AdrLine1 for type K.",
+        "type": "string"
+       },
+       "line2": {
+        "description": "BldgNb for type S, AdrLine2 (postal code and town) for type K.",
+        "type": "string"
+       },
+       "name": {
+        "type": "string"
+       },
+       "postal_code": {
+        "type": "string"
+       },
+       "town": {
+        "type": "string"
+       },
+       "type": {
+        "description": "AdrTp as carried: S (structured), K (combined) or empty.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "type",
+       "name",
+       "line1",
+       "line2",
+       "postal_code",
+       "town",
+       "country"
+      ],
+      "type": "object"
+     },
+     "present": {
+      "type": "boolean"
+     },
+     "proposed_structured": {
+      "anyOf": [
+       {
+        "additionalProperties": false,
+        "properties": {
+         "bldg_nb": {
+          "type": "string"
+         },
+         "confidence": {
+          "description": "high | low",
+          "type": "string"
+         },
+         "ctry": {
+          "type": "string"
+         },
+         "note": {
+          "type": "string"
+         },
+         "pst_cd": {
+          "type": "string"
+         },
+         "strt_nm": {
+          "type": "string"
+         },
+         "twn_nm": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "confidence",
+         "note"
+        ],
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "For a combined (K) address: the type S fields derived from the combined lines."
+     },
+     "sps_check": {
+      "anyOf": [
+       {
+        "additionalProperties": false,
+        "properties": {
+         "conforms": {
+          "type": "boolean"
+         },
+         "findings": {
+          "items": {
+           "additionalProperties": false,
+           "properties": {
+            "detail": {
+             "type": "string"
+            },
+            "rule": {
+             "type": "string"
+            },
+            "source": {
+             "type": "string"
+            },
+            "verdict": {
+             "type": "string"
+            }
+           },
+           "required": [
+            "rule",
+            "verdict",
+            "detail",
+            "source"
+           ],
+           "type": "object"
+          },
+          "type": "array"
+         },
+         "note": {
+          "type": "string"
+         },
+         "scheme": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "scheme",
+         "conforms",
+         "findings",
+         "note"
+        ],
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The SPS structured-address verdicts for a type S address; null otherwise."
+     },
+     "structured": {
+      "description": "true = type S, false = type K (combined), null = absent or invalid type.",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "present",
+     "address",
+     "structured",
+     "sps_check",
+     "proposed_structured"
+    ],
+    "type": "object"
+   },
+   "creditor_iban": {
+    "additionalProperties": false,
+    "properties": {
+     "country": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "iid": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "qr_iban": {
+      "description": "IID in 30000-31999, which requires reference type QRR.",
+      "type": "boolean"
+     },
+     "valid": {
+      "type": "boolean"
+     },
+     "value": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "value",
+     "valid",
+     "country",
+     "qr_iban",
+     "iid"
+    ],
+    "type": "object"
+   },
+   "currency": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "findings": {
+    "items": {
+     "additionalProperties": false,
+     "properties": {
+      "code": {
+       "description": "Stable identifier, safe to branch on.",
+       "type": "string"
+      },
+      "detail": {
+       "type": "string"
+      },
+      "field": {
+       "type": "string"
+      },
+      "severity": {
+       "description": "error | warning",
+       "type": "string"
+      },
+      "source": {
+       "description": "The SIX document the rule comes from. Relay it.",
+       "type": "string"
+      }
+     },
+     "required": [
+      "code",
+      "severity",
+      "field",
+      "detail",
+      "source"
+     ],
+     "type": "object"
+    },
+    "type": "array"
+   },
+   "next_steps": {
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "qr_type": {
+    "type": "string"
+   },
+   "ready_for_2026_11_14": {
+    "description": "valid AND every present address is structured (type S): what banks require from 14.11.2026.",
+    "type": "boolean"
+   },
+   "reference": {
+    "additionalProperties": false,
+    "properties": {
+     "note": {
+      "type": "string"
+     },
+     "type": {
+      "description": "QRR | SCOR | NON as carried.",
+      "type": "string"
+     },
+     "valid": {
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "value": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "value",
+     "valid",
+     "note"
+    ],
+    "type": "object"
+   },
+   "source": {
+    "type": "string"
+   },
+   "trailer": {
+    "type": "string"
+   },
+   "ultimate_creditor_empty": {
+    "type": "boolean"
+   },
+   "ultimate_debtor": {
+    "additionalProperties": false,
+    "properties": {
+     "address": {
+      "additionalProperties": false,
+      "properties": {
+       "country": {
+        "type": "string"
+       },
+       "line1": {
+        "description": "StrtNm for type S, AdrLine1 for type K.",
+        "type": "string"
+       },
+       "line2": {
+        "description": "BldgNb for type S, AdrLine2 (postal code and town) for type K.",
+        "type": "string"
+       },
+       "name": {
+        "type": "string"
+       },
+       "postal_code": {
+        "type": "string"
+       },
+       "town": {
+        "type": "string"
+       },
+       "type": {
+        "description": "AdrTp as carried: S (structured), K (combined) or empty.",
+        "type": "string"
+       }
+      },
+      "required": [
+       "type",
+       "name",
+       "line1",
+       "line2",
+       "postal_code",
+       "town",
+       "country"
+      ],
+      "type": "object"
+     },
+     "present": {
+      "type": "boolean"
+     },
+     "proposed_structured": {
+      "anyOf": [
+       {
+        "additionalProperties": false,
+        "properties": {
+         "bldg_nb": {
+          "type": "string"
+         },
+         "confidence": {
+          "description": "high | low",
+          "type": "string"
+         },
+         "ctry": {
+          "type": "string"
+         },
+         "note": {
+          "type": "string"
+         },
+         "pst_cd": {
+          "type": "string"
+         },
+         "strt_nm": {
+          "type": "string"
+         },
+         "twn_nm": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "confidence",
+         "note"
+        ],
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "For a combined (K) address: the type S fields derived from the combined lines."
+     },
+     "sps_check": {
+      "anyOf": [
+       {
+        "additionalProperties": false,
+        "properties": {
+         "conforms": {
+          "type": "boolean"
+         },
+         "findings": {
+          "items": {
+           "additionalProperties": false,
+           "properties": {
+            "detail": {
+             "type": "string"
+            },
+            "rule": {
+             "type": "string"
+            },
+            "source": {
+             "type": "string"
+            },
+            "verdict": {
+             "type": "string"
+            }
+           },
+           "required": [
+            "rule",
+            "verdict",
+            "detail",
+            "source"
+           ],
+           "type": "object"
+          },
+          "type": "array"
+         },
+         "note": {
+          "type": "string"
+         },
+         "scheme": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "scheme",
+         "conforms",
+         "findings",
+         "note"
+        ],
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The SPS structured-address verdicts for a type S address; null otherwise."
+     },
+     "structured": {
+      "description": "true = type S, false = type K (combined), null = absent or invalid type.",
+      "type": [
+       "boolean",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "present",
+     "address",
+     "structured",
+     "sps_check",
+     "proposed_structured"
+    ],
+    "type": "object"
+   },
+   "unstructured_message": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "valid": {
+    "description": "True when no finding has severity error.",
+    "type": "boolean"
+   },
+   "version": {
+    "type": "string"
+   }
+  },
+  "required": [
+   "valid",
+   "ready_for_2026_11_14",
+   "qr_type",
+   "version",
+   "coding",
+   "creditor_iban",
+   "creditor",
+   "ultimate_creditor_empty",
+   "amount",
+   "currency",
+   "ultimate_debtor",
+   "reference",
+   "unstructured_message",
+   "trailer",
+   "billing_information",
+   "alternative_schemes",
+   "findings",
+   "next_steps",
+   "source"
+  ],
+  "type": "object"
+ },
+ "title": "Check Swiss QR-bill Payload"
+}

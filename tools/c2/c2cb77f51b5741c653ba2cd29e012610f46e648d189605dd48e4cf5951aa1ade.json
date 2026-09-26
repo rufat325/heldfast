@@ -1,0 +1,80 @@
+{
+ "annotations": {
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "openWorldHint": false,
+  "readOnlyHint": true
+ },
+ "cacheHint": {
+  "cacheKey": "input_hash",
+  "note": "cache by the JCS-canonical policy_parameters hash only; never by wall-clock or session",
+  "ttlMs": 86400000
+ },
+ "description": "Aggregates execution_hashes from N ChainGraph tool calls in one agent session into a single SHA-256 Merkle root (session_receipt_root). Returns a tamper-evident session receipt and a regulator-framed PTG-01 audit prompt. One receipt covers an entire agent session: supply all execution_hashes in call order. The Merkle root is deterministic \u2014 the same hashes in the same order always produce the same root. Compliant with EU AI Act Art. 12 (transparency) and DORA ICT audit-trail requirements.",
+ "execution": {
+  "taskSupport": "forbidden"
+ },
+ "inputSchema": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+   "execution_hashes": {
+    "description": "Ordered list of execution_hash values from ChainGraph tool calls in this session (each produced by emit_chaingraph_artifact or a kernel tool). Minimum 1.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "framing": {
+    "description": "Optional framing context for the PTG-01 regulator prompt (e.g. \"DORA incident review\" or \"EU AI Act Art.12 transparency log\").",
+    "type": "string"
+   },
+   "prior_receipt": {
+    "description": "An earlier receipt from this SAME session (its mmr_peaks/mmr_size/mmr_bagged_root). When supplied, execution_hashes MUST start with that earlier receipt's full leaf set \u2014 the response's consistency_proof then proves this receipt provably APPENDS to the prior one (CT-style append-only guarantee) without operating a log.",
+    "properties": {
+     "mmr_bagged_root": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "mmr_peaks": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "mmr_size": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "mmr_peaks",
+     "mmr_size"
+    ],
+    "type": "object"
+   },
+   "session_id": {
+    "description": "Optional agent session identifier for the audit narrative (e.g. a UUID or timestamp).",
+    "type": "string"
+   },
+   "tool_ids": {
+    "description": "tool_id values corresponding to execution_hashes, in the same order. Used for the audit narrative.",
+    "items": {
+     "type": "string"
+    },
+    "type": "array"
+   }
+  },
+  "required": [
+   "execution_hashes"
+  ],
+  "type": "object"
+ },
+ "lifecycle_status": "Active",
+ "name": "build_session_receipt",
+ "title": "Build a session audit receipt (Merkle root)"
+}
