@@ -19,6 +19,9 @@
 #                   verifies again, commits.
 #   sync            Weekly. Rebuilds the watchlist from the registry. Reads
 #                   JSON, launches nothing, writes only watchlist.json.
+#   alert           When any of the above fails or is cancelled: opens an
+#                   issue, or comments on the open one. feed-watchdog.yml
+#                   catches the runs that stall instead of failing.
 name: feed
 
 on:
@@ -224,3 +227,35 @@ jobs:
           fi
           git commit -q -m "feed: $(date -u +%Y-%m-%d)"
           git push origin HEAD:feed
+
+  # A failed or cancelled run opens an issue, or comments on the open one,
+  # so it reaches the maintainer's inbox instead of waiting to be noticed on
+  # the Actions tab. A run that stalls without failing is caught by
+  # feed-watchdog.yml, since a hung job never gets this far.
+  alert:
+    needs: [sync, measure-npm, measure-remote, publish]
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the feed-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          title="feed: a run failed"
+          failed=$(printf '%s' "$RESULTS" | jq -r 'to_entries[]
+            | select(.value.result != "success" and .value.result != "skipped")
+            | "- `\(.key)`: \(.value.result)"')
+          body=$(printf 'The drift feed run %s did not finish cleanly:\n\n%s\n\nA failed measuring shard costs its own slice of the day and the rest still publish; a failed `publish` means nothing from this run reached the feed.' "$RUN_URL" "$failed")
+          number=$(gh issue list --repo "$REPO" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$REPO" --body "$body" >/dev/null
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body" >/dev/null
+          fi
