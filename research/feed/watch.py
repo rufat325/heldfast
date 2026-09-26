@@ -18,7 +18,11 @@ Cadence. The 150 most-downloaded npm servers (the churn study's sample) and
 the four official ones are checked daily. Every other npm server is checked
 once a week, on a weekday fixed by a hash of its name -- no bookkeeping, so a
 day on which nothing moved writes nothing. Hosted endpoints are checked daily,
-because they can change without any release to announce it.
+because they can change without any release to announce it, and the ones
+that changed in the last three days are checked every four hours as well
+(`check-remote --busy`): a server that changes several times a day showed
+only its net change to a daily reading, and a version live for a few hours
+between two readings was never logged at all.
 
   watch.py seed         --data DIR [--results DIR]  history from the churn study
   watch.py sync         --data DIR                  rebuild the watchlist from the
@@ -637,13 +641,45 @@ def check_one(data: str, row: dict, budget: Budget | None = None) -> dict | None
     return event
 
 
+# A hosted server that changed within this many days is read every four
+# hours, not once a day. A publisher with more servers than BUSY_PER_PUBLISHER
+# changing at once is rewriting its own text on a timer -- two such publishers
+# account for most of the feed's hosted events -- and stays daily.
+BUSY_DAYS = 3
+BUSY_PER_PUBLISHER = 20
+
+
+def publisher(package: str) -> str:
+    """The registry namespace a hosted server is listed under."""
+    parts = package.split("/")
+    return parts[1] if len(parts) > 2 else package
+
+
+def busy(data: str, rows: list, today: date) -> list:
+    """The hosted servers that changed recently enough to read more often."""
+    recent = []
+    for row in rows:
+        version = str((load_state(data, row["package"]) or {}).get("version") or "")
+        try:
+            changed = date.fromisoformat(version[:10])
+        except ValueError:
+            continue
+        if (today - changed).days < BUSY_DAYS:
+            recent.append(row)
+    per = {}
+    for row in recent:
+        per[publisher(row["package"])] = per.get(publisher(row["package"]), 0) + 1
+    return [r for r in recent if per[publisher(r["package"])] <= BUSY_PER_PUBLISHER]
+
+
 def _selected(args: argparse.Namespace, kind: str) -> list:
     rows = [r for r in load_watchlist(args.data) if r.get("kind", "npm") == kind]
     if args.only:
         return [r for r in rows if r["package"] in set(args.only)]
     shard = parse_shard(args.shard)
     day = date.fromisoformat(args.day) if args.day else datetime.now(timezone.utc).date()
-    return [r for r in rows if in_shard(r, shard) and (kind == "remote" or due(r, day))]
+    rows = [r for r in rows if in_shard(r, shard) and (kind == "remote" or due(r, day))]
+    return busy(args.data, rows, day) if getattr(args, "busy", False) else rows
 
 
 def isolated(fn, data: str, row: dict, *extra: object) -> dict | None:
@@ -1207,6 +1243,9 @@ def main() -> int:
         c.add_argument("--label", default="local", help="name of this run's incoming file")
         c.add_argument("--budget", type=int, default=0,
                        help="launch at most this many servers (0: no limit)")
+        if name == "check-remote":
+            c.add_argument("--busy", action="store_true",
+                           help="only the hosted servers that changed recently")
     for name in ("sync", "fold", "render"):
         sub.add_parser(name).add_argument("--data", required=True)
     v = sub.add_parser("verify")

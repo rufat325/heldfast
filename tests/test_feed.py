@@ -620,3 +620,23 @@ class TestIsolation(unittest.TestCase):
             self.assertEqual(0, quiet(watch.check_remote, args))
         versions = [watch.load_state(self.data, r["package"]).get("version") for r in rows]
         self.assertEqual(4, sum(1 for v in versions if v))
+
+
+class TestBusy(unittest.TestCase):
+    """Hosted servers that changed recently are read every four hours."""
+
+    def test_recent_changers_are_busy_and_timer_publishers_are_not(self) -> None:
+        from datetime import date
+        with tempfile.TemporaryDirectory() as data:
+            rows = []
+            def server(name: str, changed: str) -> None:
+                rows.append({"package": name, "kind": "remote"})
+                watch.save_state(data, name, {"package": name, "version": changed + "T000000000000",
+                                              "tools": {}})
+            server("remote/com.example/fresh", "2026-09-25")
+            server("remote/com.example/stale", "2026-09-10")
+            for i in range(watch.BUSY_PER_PUBLISHER + 1):
+                server(f"remote/io.github.timer/listing-{i}", "2026-09-26")
+            rows.append({"package": "remote/com.example/never-read", "kind": "remote"})
+            picked = [r["package"] for r in watch.busy(data, rows, date(2026, 9, 26))]
+        self.assertEqual(["remote/com.example/fresh"], picked)

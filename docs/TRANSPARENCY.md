@@ -77,7 +77,10 @@ call site.
 
 Said plainly, because a security tool that overclaims is worse than none:
 
-- **The log is one reader, once a day.** A server that recognises the feed's
+- **The log is one reader, a few times a day.** Each hosted server is read
+  daily, and every four hours while it has changed in the last three days. A
+  quiet server that shows a version for only a few hours between two daily
+  readings is still never logged. A server that recognises the feed's
   requests and shows it the same poisoned tool it shows you is not caught
   here -- but it has then published the poison, where every other check can
   see it. Transparency does not stop an attack; it takes away the option of
