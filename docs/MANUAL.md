@@ -1098,6 +1098,13 @@ an attacker who controls the agent can call:
   reads the lockfile and the configuration and runs no rules, so there is no path from it
   to a process. A machine with no lockfile gets a note saying so rather than a clean-looking
   zero.
+- Nothing reaches the network unless you set `MCP_PIN_ALLOW_FEED`. That switch lists
+  `server_history`: give it an npm package, a hosted server's URL or its registry name, and
+  it returns what the public drift feed has on that server -- each version or reading with
+  its date and tool count, and each change with its date, grade and size -- so an agent can
+  ask *"has this server been stable?"* before it trusts one. It reads the feed from GitHub,
+  is annotated `openWorldHint: true` so your client knows, and never sends a local or
+  private address anywhere.
 - Input it can't parse raises an error instead of returning zero findings. "0 findings" for
   a config nothing could read is a clean bill of health nobody earned.
 
@@ -1553,7 +1560,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1419 tests, stdlib unittest, nothing to install.
+1426 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

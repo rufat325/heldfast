@@ -22,6 +22,11 @@ tool an attacker who controls the agent can call:
 - Path scanning is opt-in per deployment via MCP_PIN_ALLOW_PATH_SCAN,
   because an agent that can scan arbitrary paths can use findings as an
   oracle for what exists on the filesystem.
+- Reading the public log is opt-in via MCP_PIN_ALLOW_FEED. `server_history`
+  is the one tool that reaches outside this machine -- it reads the drift
+  feed on GitHub -- so it is not listed unless the deployment asks for it,
+  it is annotated as open-world, and it never sends a local or private
+  address anywhere.
 - Findings pass through the same redaction chokepoint as every other output,
   so a credential discovered during analysis is never returned to the model.
 
@@ -58,6 +63,7 @@ SUPPORTED_VERSIONS = [PROTOCOL_VERSION, LEGACY_PROTOCOL_VERSION]
 SERVER_INFO = {"name": "heldfast", "version": __version__}
 
 ALLOW_PATH_SCAN = os.environ.get("MCP_PIN_ALLOW_PATH_SCAN", "").lower() in ("1", "true", "yes")
+ALLOW_FEED = os.environ.get("MCP_PIN_ALLOW_FEED", "").lower() in ("1", "true", "yes")
 
 
 # What every tool here is, stated in the spec's own terms. A client uses these
@@ -75,10 +81,16 @@ READ_ONLY = {
 }
 
 
+# server_history reads the public log over the network: still read-only,
+# and a claim about the world outside this machine, which the client should
+# be told before it decides whether the call needs a person's approval.
+OPEN_WORLD = {"server_history"}
+
+
 def _tool_definitions() -> list[dict[str, Any]]:
     tools = _declared_tools()
     for tool in tools:
-        tool["annotations"] = dict(READ_ONLY)
+        tool["annotations"] = dict(READ_ONLY, openWorldHint=tool["name"] in OPEN_WORLD)
     return tools
 
 
@@ -139,6 +151,33 @@ def _declared_tools() -> list[dict[str, Any]]:
             },
         },
     ]
+    if ALLOW_FEED:
+        tools.append({
+            "name": "server_history",
+            "description": (
+                "Returns what the public drift feed has recorded about one Model Context "
+                "Protocol server: each version or reading it logged, with its date and "
+                "tool count, and each change between them, with its date, its grade and "
+                "how many tools were changed, added or removed. Accepts an npm package "
+                "name, a hosted server's URL, or its registry name. Reads the feed over "
+                "the network; local and private addresses are not looked up."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "server": {
+                        "type": "string",
+                        "description": "npm package name, hosted server URL, or registry name.",
+                    },
+                    "since": {
+                        "type": "string",
+                        "description": "Only versions and changes on or after this date, "
+                                       "YYYY-MM-DD.",
+                    },
+                },
+                "required": ["server"],
+            },
+        })
     if ALLOW_PATH_SCAN:
         tools.append({
             "name": "scan_path",
@@ -345,8 +384,49 @@ def tool_check_coverage(args: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def tool_server_history(args: dict[str, Any]) -> dict[str, Any]:
+    """What the public log holds on one server, for an agent deciding whether
+    to trust it: how long it has been watched, and how often and how it moved."""
+    if not ALLOW_FEED:
+        raise ValueError("reading the public log is not enabled on this server")
+    from . import transparency
+    from .feedlock import resolve
+    from .updates import feed_index
+
+    wanted = str(args.get("server") or "").strip()
+    since = str(args.get("since") or "")[:10]
+    if not wanted:
+        raise ValueError("server is required")
+    if "://" in wanted and not transparency.public(wanted):
+        return {"server": wanted, "note": "a local or private address; no public log can "
+                                          "hold it, and it was not looked up"}
+    feed = resolve()
+    index = feed_index(feed)
+    name = (wanted if wanted in index else
+            transparency.url_index(index).get(transparency.normalize(wanted))
+            if "://" in wanted else
+            f"remote/{wanted}" if f"remote/{wanted}" in index else None)
+    if name is None:
+        return {"server": wanted, "log": feed.source, "note": (
+            "not in the public log: it records the npm stdio servers and the hosted "
+            "servers listed in the MCP registry that answer without credentials")}
+    entry = index[name]
+    versions = [v for v in entry.get("versions") or []
+                if str(v.get("published") or "")[:10] >= since]
+    changes = [e for e in entry.get("events") or []
+               if str(e.get("published") or "")[:10] >= since]
+    return {
+        "server": name, "log": feed.source, "url": entry.get("url"),
+        "kind": "hosted" if name.startswith("remote/") else "npm",
+        "versions": versions, "changes": changes,
+        "summary": {"versions": len(versions), "changes": len(changes),
+                    "review": sum(1 for e in changes if e.get("grade") == "review")},
+    }
+
+
 HANDLERS = {
     "check_config": tool_check_config,
+    "server_history": tool_server_history,
     "list_rules": tool_list_rules,
     "explain_rule": tool_explain_rule,
     "scan_path": tool_scan_path,
@@ -408,7 +488,8 @@ def handle(message: dict[str, Any]) -> None:
         params = message.get("params") or {}
         name = params.get("name")
         handler = HANDLERS.get(str(name))
-        if handler is None or (name == "scan_path" and not ALLOW_PATH_SCAN):
+        if handler is None or (name == "scan_path" and not ALLOW_PATH_SCAN) or (
+                name == "server_history" and not ALLOW_FEED):
             _error(req_id, -32602, f"unknown tool: {name}")
             return
         try:

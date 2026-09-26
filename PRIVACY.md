@@ -22,6 +22,11 @@ places named. Each is a consequence of a command or flag you chose.
 **The MCP server** (`heldfast serve`) opens no connection and starts no
 process; every tool it exposes is read-only, and a test fails if one reaches
 the network. Path scanning is off unless `MCP_PIN_ALLOW_PATH_SCAN` is set.
+The one exception is opt-in: with `MCP_PIN_ALLOW_FEED` set, it also lists
+`server_history`, which reads the public drift feed from GitHub
+(`api.github.com`, `raw.githubusercontent.com`) and so tells GitHub that the
+feed was read. The server asked about is looked up in the downloaded index on
+your machine; a local or private address is never looked up.
 
 **The Claude Code plugin** runs on your machine. It reads `.mcp-pin.lock`, and
 with `MCP_PIN_DRIFT=graded` it runs the `heldfast` you installed. It sends

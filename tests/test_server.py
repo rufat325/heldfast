@@ -19,6 +19,7 @@ import tempfile
 import sys
 import unittest
 from contextlib import redirect_stdout
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -385,3 +386,75 @@ class TestEndToEnd(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestServerHistory(unittest.TestCase):
+    """The one tool that reads the network, and only when a deployment asks."""
+
+    SHA = "0123456789abcdef0123456789abcdef01234567"
+
+    def setUp(self) -> None:
+        from heldfast import feedlock
+        self.feedlock = feedlock
+        base = f"https://raw.githubusercontent.com/rufat325/heldfast/{self.SHA}"
+        self.asked: list[str] = []
+        self.pages = {feedlock.HEAD_URL: {"sha": self.SHA}, f"{base}/index.json": {"packages": {
+            "remote/com.example/kb": {"url": "https://kb.example.com/mcp", "versions": [
+                {"version": "2026-09-20T000000000000", "published": "2026-09-20", "tools": 4},
+                {"version": "2026-09-25T000000000000", "published": "2026-09-25", "tools": 5}],
+                "events": [{"from": "a", "to": "b", "published": "2026-09-25", "grade": "review",
+                            "changed": 1, "added": 1, "removed": 0}]},
+            "pkg": {"versions": [{"version": "1.0.0", "published": "2026-09-01", "tools": 2}],
+                    "events": []}}}}
+        self.original = srv.ALLOW_FEED
+        srv.ALLOW_FEED = True
+
+    def tearDown(self) -> None:
+        srv.ALLOW_FEED = self.original
+
+    def call(self, **args) -> dict:
+        def get(url: str):
+            self.asked.append(url)
+            return self.pages.get(url)
+        with mock.patch.object(self.feedlock, "get_json", get):
+            return srv.tool_server_history(args)
+
+    def test_not_listed_or_callable_unless_enabled(self) -> None:
+        srv.ALLOW_FEED = False
+        self.assertNotIn("server_history", {d["name"] for d in srv._tool_definitions()})
+        with self.assertRaises(ValueError):
+            srv.tool_server_history({"server": "pkg"})
+
+    def test_it_says_it_reaches_outside_the_machine(self) -> None:
+        tool = next(d for d in srv._tool_definitions() if d["name"] == "server_history")
+        self.assertEqual({"readOnlyHint": True, "destructiveHint": False,
+                          "idempotentHint": True, "openWorldHint": True}, tool["annotations"])
+
+    def test_a_hosted_server_by_url_and_by_registry_name(self) -> None:
+        for server in ("https://KB.example.com/mcp/", "com.example/kb"):
+            with self.subTest(server):
+                got = self.call(server=server)
+                self.assertEqual(("remote/com.example/kb", "hosted"), (got["server"], got["kind"]))
+                self.assertEqual({"versions": 2, "changes": 1, "review": 1}, got["summary"])
+
+    def test_since_narrows_the_answer(self) -> None:
+        got = self.call(server="com.example/kb", since="2026-09-21")
+        self.assertEqual(["2026-09-25T000000000000"], [v["version"] for v in got["versions"]])
+
+    def test_an_unknown_server_is_an_answer_not_an_error(self) -> None:
+        self.assertIn("not in the public log", self.call(server="nobody-knows")["note"])
+
+    def test_a_private_address_is_never_looked_up(self) -> None:
+        got = self.call(server="http://10.0.0.5:8080/mcp")
+        self.assertIn("not looked up", got["note"])
+        self.assertEqual([], self.asked)
+
+    def test_its_description_passes_heldfast_own_rules(self) -> None:
+        from heldfast.rules.poisoning import invisible_runs
+        tool = next(d for d in srv._tool_definitions() if d["name"] == "server_history")
+        self.assertEqual([], invisible_runs(tool["description"]))
+        from heldfast.rules import AuditContext, run_rules
+        spec = ToolSpec(server="heldfast", name=tool["name"], description=tool["description"],
+                        input_schema=tool["inputSchema"])
+        found = run_rules(AuditContext(tools=[spec]), enabled={"MCPA010", "MCPA011", "MCPA012"})
+        self.assertEqual([], [f.rule_id for f in found])
