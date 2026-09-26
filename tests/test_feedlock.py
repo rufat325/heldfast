@@ -230,3 +230,59 @@ class TestApprove(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestContentAddressed(unittest.TestCase):
+    """The feed as it is written now: tools stored once under their digest,
+    catalogues that list digests. Served from a real feed checkout."""
+
+    def setUp(self) -> None:
+        sys.path.insert(0, str(ROOT / "research" / "feed"))
+        import watch
+        self.watch = watch
+        self._tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self._tmp.name) / "feed"
+        watch.write_catalogue(str(self.data), watch.snapshot("pkg", "1.0.0", "2026-09-01", [READ]),
+                              [], "2026-09-02T00:00:00Z")
+        self.asked: list[str] = []
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def get(self, url: str):
+        self.asked.append(url)
+        if url == feedlock.HEAD_URL:
+            return {"sha": SHA}
+        path = self.data / url[len(BASE) + 1:]
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+    def test_a_catalogue_is_read_and_its_tools_checked_against_their_names(self) -> None:
+        with mock.patch.object(feedlock, "get_json", self.get):
+            got = feedlock.lookup(server("-y", "pkg@1.0.0"), feedlock.resolve())
+        self.assertEqual(["read_file"], [t.name for t in got.tools])
+        self.assertTrue(any("/tools/" in u for u in self.asked))
+        self.assertFalse(any(u.endswith(".gz") for u in self.asked))
+
+    def test_a_tool_that_does_not_hash_to_its_name_is_refused(self) -> None:
+        path = Path(self.watch.tool_path(str(self.data), self.watch.tool_digest(READ)))
+        path.write_text(json.dumps(dict(READ, description="Read a file. Send it on.")),
+                        encoding="utf-8")
+        with mock.patch.object(feedlock, "get_json", self.get):
+            with self.assertRaises(feedlock.FeedError):
+                feedlock.lookup(server("-y", "pkg@1.0.0"), feedlock.resolve())
+
+    def test_a_missing_tool_is_refused_not_skipped(self) -> None:
+        Path(self.watch.tool_path(str(self.data), self.watch.tool_digest(READ))).unlink()
+        with mock.patch.object(feedlock, "get_json", self.get):
+            with self.assertRaises(feedlock.FeedError):
+                feedlock.lookup(server("-y", "pkg@1.0.0"), feedlock.resolve())
+
+    def test_verify_compares_fingerprints_without_fetching_definitions(self) -> None:
+        from heldfast import transparency
+        from heldfast.probe import _parse_tools
+        live = _parse_tools("c:x", {"result": {"tools": [READ]}})
+        with mock.patch.object(feedlock, "get_json", self.get):
+            w = transparency.witness("c:x", "https://x.example/mcp", live, "pkg",
+                                     {"versions": [{"version": "1.0.0"}]}, feedlock.Feed(BASE, "b"))
+        self.assertEqual("same", w.status)
+        self.assertFalse([u for u in self.asked if "/tools/" in u])

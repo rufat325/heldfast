@@ -17,7 +17,6 @@ Reads the feed checkout. Runs nothing, contacts nothing.
 from __future__ import annotations
 
 import argparse
-import gzip
 import json
 import os
 import sys
@@ -27,14 +26,16 @@ from concurrent.futures import ProcessPoolExecutor
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(ROOT, "src"))
+sys.path.insert(0, os.path.join(ROOT, "research", "feed"))
 
 # The rules that read what a tool says, rather than how a server is launched.
 TEXT_RULES = {"MCPA010", "MCPA011", "MCPA012", "MCPA021", "MCPA022",
               "MCPA026", "MCPA033", "MCPA038"}
 
 
-def latest(feed: str) -> list[tuple[str, str]]:
-    """(package, path of its latest catalogue) for every measured server."""
+def latest(feed: str) -> list[tuple[str, str, str, str]]:
+    """(package, feed, catalogue directory, version) of every measured
+    server's latest catalogue, in either of the feed's layouts."""
     out = []
     state_dir = os.path.join(feed, "state")
     for name in sorted(os.listdir(state_dir)):
@@ -43,9 +44,9 @@ def latest(feed: str) -> list[tuple[str, str]]:
         version = state.get("version")
         if not version:
             continue
-        path = os.path.join(feed, "catalogues", name[:-len(".json")], version + ".json.gz")
-        if os.path.exists(path):
-            out.append((state["package"], path))
+        folder = os.path.join(feed, "catalogues", name[:-len(".json")])
+        if any(os.path.exists(os.path.join(folder, version + ext)) for ext in (".json", ".json.gz")):
+            out.append((state["package"], feed, name[:-len(".json")], version))
     return out
 
 
@@ -54,9 +55,9 @@ def scan_one(item: tuple[str, str]) -> dict:
     from heldfast.probe import _parse_tools
     from heldfast.rules import AuditContext, run_rules
 
-    package, path = item
-    with gzip.open(path, "rb") as fh:
-        body = json.loads(fh.read().decode("utf-8"))
+    import watch
+    package, feed, pkg_dir, version = item
+    body = watch._catalogue_at(feed, pkg_dir, version)
     remote = package.startswith("remote/")
     spec = ServerSpec(name=package, source="<feed>", client="feed",
                       transport="http" if remote else "stdio",

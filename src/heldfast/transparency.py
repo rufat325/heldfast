@@ -114,17 +114,30 @@ def url_index(index: dict[str, Any]) -> dict[str, str]:
     return out
 
 
-def _logged_tools(feed: Feed, name: str, version: str, identity: str) -> list[ToolSpec]:
-    from .probe import _parse_tools  # the parser --probe uses, so fingerprints agree
+def _logged_tools(feed: Feed, name: str, version: str, identity: str) -> list[tuple[str, str]]:
+    """(tool name, lockfile fingerprint) for one logged reading.
 
-    url = f"{feed.base}/catalogues/{name.replace('/', '__')}/{version}.json.gz"
-    body = feedlock.get_json(url)
+    The current layout lists each tool's fingerprint beside its digest, so
+    nothing more is fetched; the first layout carries the definitions, which
+    are fingerprinted here by the parser --probe uses.
+    """
+    from .probe import _parse_tools
+
+    base = f"{feed.base}/catalogues/{name.replace('/', '__')}/{version}"
+    body = feedlock.get_json(base + ".json")
+    if isinstance(body, dict) and isinstance(body.get("tools"), list):
+        if body.get("package") != name or str(body.get("version")) != version:
+            raise FeedError(f"{base}.json: not a catalogue for {name}@{version}")
+        return [(str(e.get("name")), str(e.get("fingerprint")))
+                for e in body["tools"] if isinstance(e, dict) and e.get("fingerprint")]
+    body = feedlock.get_json(base + ".json.gz")
     if body is None:
         return []
     if (not isinstance(body, dict) or body.get("package") != name
             or str(body.get("version")) != version or not isinstance(body.get("tools"), list)):
-        raise FeedError(f"{url}: not a catalogue for {name}@{version}")
-    return _parse_tools(identity, {"result": {"tools": body["tools"]}})
+        raise FeedError(f"{base}.json.gz: not a catalogue for {name}@{version}")
+    return [(t.name, t.fingerprint())
+            for t in _parse_tools(identity, {"result": {"tools": body["tools"]}})]
 
 
 def witness(identity: str, url: str, live: list[ToolSpec], log_name: str,
@@ -147,9 +160,9 @@ def witness(identity: str, url: str, live: list[ToolSpec], log_name: str,
         logged = _logged_tools(feed, log_name, version, identity)
         out.versions_read += 1
         if i == 0:
-            latest = {t.name for t in logged}
-        names |= {t.name for t in logged}
-        prints |= {t.fingerprint() for t in logged}
+            latest = {n for n, _ in logged}
+        names |= {n for n, _ in logged}
+        prints |= {fp for _, fp in logged}
         if wanted <= prints:
             break
     for t in sorted(live, key=lambda t: t.name):

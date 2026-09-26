@@ -42,9 +42,16 @@ rest read and write JSON and run nothing a server wrote.
 Layout under DIR:
   watchlist.json                 which servers, how often, and the rule
   state/<name>.json              the last version seen and its tool digests
+  tools/<ab>/<digest>.json       every tool definition ever measured, once,
+                                 as the server sent it, named by the SHA-256
+                                 of its canonical form (the tool digest)
+  catalogues/<name>/<version>.json
+                                 each catalogue measured: which tools, by
+                                 digest and by lockfile fingerprint. What
+                                 `heldfast approve --from-feed` pins
   catalogues/<name>/<version>.json.gz
-                                 every catalogue measured, whole, gzipped:
-                                 what `heldfast approve --from-feed` pins
+                                 the first layout: the whole catalogue,
+                                 gzipped. Still read; no longer written
   incoming/<label>.jsonl         events from one run, before `fold`
   events/YYYY-MM.jsonl           one line per release that changed something
   index.json                     per server: measured versions and events
@@ -87,7 +94,10 @@ ALLOWED = re.compile(
     r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|"
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
     r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta|all)\.json|"
-    r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json\.gz)$")
+    r"tools/[0-9a-f]{2}/[0-9a-f]{64}\.json|"
+    r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json(?:\.gz)?)$")
+TOOL_FILE = re.compile(r"^tools/([0-9a-f]{2})/([0-9a-f]{64})\.json$")
+DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MEASURED_PROTOCOL = "2025-06-18"
 MAX_FILE = 20 * 1024 * 1024
 # The whole lookup record in one file. GitHub refuses a file over 100 MB.
@@ -231,10 +241,14 @@ def diff(before: dict, after: dict, observed_at: str) -> dict | None:
 # -- storage ---------------------------------------------------------------
 
 def _write(path: str, data: bytes) -> None:
+    # A temporary name per writer: tools/ files are shared, so two threads
+    # measuring two servers that show one definition write the same path.
+    # The content is identical, so whichever replace lands last is right.
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path + ".tmp", "wb") as fh:
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+    with open(tmp, "wb") as fh:
         fh.write(data)
-    os.replace(path + ".tmp", path)
+    os.replace(tmp, path)
 
 
 def _json_bytes(obj: object) -> bytes:
@@ -250,36 +264,107 @@ def read_gz(path: str) -> object:
     return json.loads(raw.decode("utf-8"))
 
 
-def catalogue_path(data: str, package: str, version: str) -> str:
+def catalogue_path(data: str, package: str, version: str, legacy: bool = False) -> str:
     if not SAFE_VERSION.match(version):
         raise ValueError(f"version outside the safe set: {version!r}")
-    return os.path.join(data, "catalogues", safe(package), version + ".json.gz")
+    return os.path.join(data, "catalogues", safe(package),
+                        version + (".json.gz" if legacy else ".json"))
+
+
+def tool_path(data: str, digest: str) -> str:
+    if not DIGEST.match(digest):
+        raise ValueError(f"not a tool digest: {digest!r}")
+    return os.path.join(data, "tools", digest[:2], digest + ".json")
+
+
+def write_tool(data: str, raw: dict) -> str:
+    """Store one tool definition under its digest, once. Returns the digest.
+
+    Content-addressed: the file's name is the SHA-256 of its canonical form,
+    so a definition shown by a thousand listings, or unchanged across fifty
+    releases, is one file, and anyone -- the publishing job, a client -- can
+    check a file by hashing what is in it.
+    """
+    digest = tool_digest(raw)
+    path = tool_path(data, digest)
+    if not os.path.exists(path):
+        _write(path, _json_bytes(raw))
+    return digest
+
+
+def read_tool(data: str, digest: str) -> dict:
+    with open(tool_path(data, digest), encoding="utf-8") as fh:
+        return json.load(fh)
 
 
 def write_catalogue(data: str, snap: dict, args: list, measured_at: str,
                     extra: dict | None = None) -> None:
-    """The whole catalogue for one version, as `tools/list` returned it.
+    """One version's catalogue: which tools, stored once each under tools/.
 
-    This is what `heldfast approve --from-feed` pins, so it is the raw wire
-    objects, not the digests: the client fingerprints them itself, with the
-    same code `--probe` uses, rather than trusting a digest it was handed.
-    Gzipped with a fixed mtime, so the same catalogue is the same bytes.
+    What `heldfast approve --from-feed` pins is the tool definitions as the
+    server sent them, not a digest: the client fetches each one, checks it
+    hashes to its name, and fingerprints it with the code `--probe` uses. The
+    lockfile fingerprint is listed beside each digest so a reader comparing
+    fingerprints (`verify`, the lookup) need not fetch the definitions.
+    Plain JSON, so git stores a day's change as a delta, not a new blob.
     """
+    from heldfast.probe import _parse_tools
+
+    entries = []
+    for name, t in sorted(snap["tools"].items()):
+        digest = write_tool(data, t["raw"])
+        parsed = _parse_tools("feed", {"result": {"tools": [t["raw"]]}})
+        entries.append({"name": name, "digest": digest,
+                        "fingerprint": parsed[0].fingerprint() if parsed else ""})
     version = str(snap["version"])
     body = {"package": snap["package"], "version": version,
             "published": snap.get("published", ""), "measured_at": measured_at,
             "protocol": MEASURED_PROTOCOL, "args": list(args or []),
-            "tools": [t["raw"] for _, t in sorted(snap["tools"].items())], **(extra or {})}
-    _write(catalogue_path(data, snap["package"], version),
-           gzip.compress(_json_bytes(body), compresslevel=9, mtime=0))
+            "tools": entries, **(extra or {})}
+    _write(catalogue_path(data, snap["package"], version), _json_bytes(body))
+
+
+def _catalogue_at(data: str, pkg_dir: str, version: str, bodies: bool = True) -> dict | None:
+    """A catalogue in either layout; `tools` is the definitions when `bodies`,
+    and in the current layout `entries` is the digest list either way."""
+    folder = os.path.join(data, "catalogues", pkg_dir)
+    path = os.path.join(folder, version + ".json")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            body = json.load(fh)
+        body["entries"] = list(body.get("tools") or [])
+        if bodies:
+            body["tools"] = [read_tool(data, e["digest"]) for e in body["entries"]]
+        return body
+    legacy = os.path.join(folder, version + ".json.gz")
+    return read_gz(legacy) if os.path.exists(legacy) else None
+
+
+def read_catalogue(data: str, package: str, version: str, bodies: bool = True) -> dict | None:
+    catalogue_path(data, package, version)  # the name and version checks
+    return _catalogue_at(data, safe(package), version, bodies)
+
+
+def catalogue_versions(data: str) -> list[tuple[str, str]]:
+    """(package directory, version) of every catalogue held, in either layout."""
+    out = []
+    folder = os.path.join(data, "catalogues")
+    for pkg_dir in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        versions = set()
+        for name in os.listdir(os.path.join(folder, pkg_dir)):
+            if name.endswith(".json.gz"):
+                versions.add(name[:-len(".json.gz")])
+            elif name.endswith(".json"):
+                versions.add(name[:-len(".json")])
+        out.extend((pkg_dir, v) for v in sorted(versions))
+    return out
 
 
 def load_snapshot(data: str, package: str, version: str) -> dict | None:
     """The snapshot for a version the feed holds a catalogue of, or None."""
-    path = catalogue_path(data, package, version)
-    if not os.path.exists(path):
+    body = read_catalogue(data, package, version)
+    if body is None:
         return None
-    body = read_gz(path)
     return snapshot(package, version, str(body.get("published") or ""), body.get("tools") or [])
 
 
@@ -704,12 +789,9 @@ def index(data: str, events: list) -> dict:
     out. Sizes and counts only -- the catalogues and events carry the text.
     """
     out: dict = {}
-    folder = os.path.join(data, "catalogues")
-    for pkg_dir in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
-        for name in sorted(os.listdir(os.path.join(folder, pkg_dir))):
-            if not name.endswith(".json.gz"):
-                continue
-            body = read_gz(os.path.join(folder, pkg_dir, name))
+    for pkg_dir, version in catalogue_versions(data):
+        body = _catalogue_at(data, pkg_dir, version, bodies=False)
+        if body is not None:
             entry = out.setdefault(body["package"], {"versions": [], "events": []})
             # A hosted server's URL, so a client can find its record from the
             # address in its config (heldfast/transparency.py).
@@ -752,23 +834,25 @@ def lookup_buckets(data: str) -> dict[str, dict]:
     from heldfast.probe import _parse_tools
 
     seen: dict[str, dict] = {}
-    folder = os.path.join(data, "catalogues")
-    for pkg_dir in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
-        for name in sorted(os.listdir(os.path.join(folder, pkg_dir))):
-            if not name.endswith(".json.gz"):
-                continue
-            body = read_gz(os.path.join(folder, pkg_dir, name))
-            when = str(body.get("published") or body.get("measured_at") or "")[:10]
+    for pkg_dir, version in catalogue_versions(data):
+        body = _catalogue_at(data, pkg_dir, version, bodies=False)
+        if body is None:
+            continue
+        when = str(body.get("published") or body.get("measured_at") or "")[:10]
+        if "entries" in body:
+            # The current layout lists each tool's fingerprint beside its digest.
+            prints = {e["fingerprint"] for e in body["entries"] if e.get("fingerprint")}
+        else:
             try:
                 tools = _parse_tools("feed", {"result": {"tools": body.get("tools") or []}})
                 prints = {t.fingerprint() for t in tools}
             except ValueError:  # a schema the digest refuses; that server is skipped
                 continue
-            for fp in prints:
-                row = seen.setdefault(fp, {"first_seen": when, "servers": set()})
-                if when and (not row["first_seen"] or when < row["first_seen"]):
-                    row["first_seen"] = when
-                row["servers"].add(body["package"])
+        for fp in prints:
+            row = seen.setdefault(fp, {"first_seen": when, "servers": set()})
+            if when and (not row["first_seen"] or when < row["first_seen"]):
+                row["first_seen"] = when
+            row["servers"].add(body["package"])
     buckets: dict[str, dict] = {}
     for fp in sorted(seen):
         bucket = buckets.setdefault(fp[:LOOKUP_PREFIX], {})
@@ -891,11 +975,37 @@ def readme(events: list, generated: str, data: str) -> str:
 
 # -- verify ----------------------------------------------------------------
 
+def _check_tool(full: str, rel: str) -> str | None:
+    """A tool file must hash to its own name: content addressing is what lets
+    the publishing job take one from any shard without trusting the shard."""
+    m = TOOL_FILE.match(rel)
+    with open(full, encoding="utf-8") as fh:
+        body = json.load(fh)
+    if not m or not isinstance(body, dict) or m.group(2)[:2] != m.group(1):
+        return "not a tool definition"
+    return None if tool_digest(body) == m.group(2) else "does not hash to its name"
+
+
+def _check_catalogue(full: str) -> str | None:
+    with open(full, encoding="utf-8") as fh:
+        body = json.load(fh)
+    entries = body.get("tools") if isinstance(body, dict) else None
+    if not isinstance(entries, list) or not all(
+            isinstance(e, dict) and isinstance(e.get("digest"), str) and DIGEST.match(e["digest"])
+            for e in entries):
+        return "not a catalogue"
+    return None
+
+
 def _check_file(full: str, rel: str) -> str | None:
     try:
         if rel.endswith(".json.gz"):
             read_gz(full)
             return None
+        if rel.startswith("tools/"):
+            return _check_tool(full, rel)
+        if rel.startswith("catalogues/"):
+            return _check_catalogue(full)
         with open(full, encoding="utf-8") as fh:
             if rel.endswith(".jsonl"):
                 for line in fh:
@@ -940,10 +1050,28 @@ def verify(args: argparse.Namespace) -> int:
                 problems.append(f"{rel}: {why}")
     if total > MAX_TOTAL:
         problems.append(f"total {total} bytes")
+    if getattr(args, "complete", False):
+        problems.extend(_missing_tools(args.data))
     for p in problems[:50]:
         print(f"refused: {p}", file=sys.stderr)
     print(f"verify: {'refused' if problems else 'ok'} ({total} bytes)")
     return 1 if problems else 0
+
+
+def _missing_tools(data: str) -> list[str]:
+    """Every catalogue's tools must be in the feed: checked on the whole feed,
+    where they can be, not on one shard's upload, where most already were."""
+    out = []
+    for pkg_dir, version in catalogue_versions(data):
+        path = os.path.join(data, "catalogues", pkg_dir, version + ".json")
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            entries = json.load(fh).get("tools") or []
+        for e in entries:
+            if not os.path.exists(tool_path(data, e["digest"])):
+                out.append(f"catalogues/{pkg_dir}/{version}.json: tool {e['digest'][:12]} missing")
+    return out
 
 
 # -- admit -----------------------------------------------------------------
@@ -973,9 +1101,12 @@ def _foreign(root: str, owned: dict[str, str], label: str) -> list[str]:
                     why = "symbolic link"
                 elif len(parts) == 2 and parts[0] == "state" and rel.endswith(".json"):
                     why = _owns_state(full, owned.get(parts[1][:-len(".json")]))
-                elif len(parts) == 3 and parts[0] == "catalogues" and rel.endswith(".json.gz"):
+                elif len(parts) == 3 and parts[0] == "catalogues" and rel.endswith(".json"):
                     why = _owns_catalogue(full, owned.get(parts[1]),
-                                          parts[2][:-len(".json.gz")])
+                                          parts[2][:-len(".json")])
+                elif TOOL_FILE.match(rel):
+                    # Anyone's to add: it can only ever say what its name hashes to.
+                    why = _check_tool(full, rel)
                 elif rel == f"incoming/{label}.jsonl":
                     why = _owns_events(full, set(owned.values()))
                 else:
@@ -999,7 +1130,8 @@ def _owns_state(full: str, package: str | None) -> str | None:
 def _owns_catalogue(full: str, package: str | None, version: str) -> str | None:
     if package is None:
         return "a server this shard was not given"
-    body = read_gz(full)
+    with open(full, encoding="utf-8") as fh:
+        body = json.load(fh)
     if not isinstance(body, dict) or body.get("package") != package \
             or str(body.get("version")) != version:
         return f"does not say it is {package}@{version}"
@@ -1075,8 +1207,12 @@ def main() -> int:
         c.add_argument("--label", default="local", help="name of this run's incoming file")
         c.add_argument("--budget", type=int, default=0,
                        help="launch at most this many servers (0: no limit)")
-    for name in ("sync", "fold", "render", "verify"):
+    for name in ("sync", "fold", "render"):
         sub.add_parser(name).add_argument("--data", required=True)
+    v = sub.add_parser("verify")
+    v.add_argument("--data", required=True)
+    v.add_argument("--complete", action="store_true",
+                   help="the whole feed: also check every catalogue's tools are present")
     a = sub.add_parser("admit")
     a.add_argument("--data", required=True, help="the feed branch checkout (its watchlist)")
     a.add_argument("--deltas", required=True, help="one folder per shard's upload")

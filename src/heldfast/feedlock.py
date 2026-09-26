@@ -136,6 +136,46 @@ def pinned(spec: ServerSpec) -> tuple[str, str] | str:
     return name, version
 
 
+_DIGEST = re.compile(r"^[0-9a-f]{64}$")
+
+
+def catalogue(feed: Feed, name: str, version: str) -> tuple[dict | None, str]:
+    """(the catalogue with its tool definitions resolved, its URL), or (None, URL).
+
+    The current layout lists each tool by digest and stores the definition
+    once under tools/, named by that digest: every definition fetched is
+    hashed here and refused if it does not match its name, so a catalogue
+    cannot be served with definitions it did not list. The first layout, a
+    gzipped catalogue with the definitions inline, is read where it is all
+    the feed has.
+    """
+    from .digest import tool_digest
+
+    base = f"{feed.base}/catalogues/{name.replace('/', '__')}/{version}"
+    body = get_json(base + ".json")
+    if body is None:
+        return get_json(base + ".json.gz"), base + ".json.gz"
+    entries = body.get("tools") if isinstance(body, dict) else None
+    if not isinstance(entries, list):
+        raise FeedError(f"{base}.json: not a catalogue")
+    tools = []
+    for entry in entries:
+        digest = entry.get("digest") if isinstance(entry, dict) else None
+        if not isinstance(digest, str) or not _DIGEST.match(digest):
+            raise FeedError(f"{base}.json: an entry without a tool digest")
+        raw = get_json(f"{feed.base}/tools/{digest[:2]}/{digest}.json")
+        if not isinstance(raw, dict):
+            raise FeedError(f"{base}.json: tool {digest[:12]} is missing from the feed")
+        try:
+            actual = tool_digest(raw)
+        except ValueError as exc:
+            raise FeedError(f"tool {digest[:12]}: {exc}") from exc
+        if actual != digest:
+            raise FeedError(f"tool {digest[:12]} does not hash to its name; refused")
+        tools.append(raw)
+    return dict(body, tools=tools), base + ".json"
+
+
 def lookup(spec: ServerSpec, feed: Feed) -> FeedEntry | str:
     """The feed's catalogue for this server's exact pinned version, or why not."""
     from .probe import _parse_tools  # the parser --probe uses, so digests agree
@@ -144,8 +184,7 @@ def lookup(spec: ServerSpec, feed: Feed) -> FeedEntry | str:
     if isinstance(want, str):
         return want
     name, version = want
-    url = f"{feed.base}/catalogues/{name.replace('/', '__')}/{version}.json.gz"
-    body = get_json(url)
+    body, url = catalogue(feed, name, version)
     if body is None:
         return (f"the feed has not measured {name}@{version}; it watches the npm "
                 f"servers in the MCP registry and measures each new release, the "
