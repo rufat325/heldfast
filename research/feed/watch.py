@@ -252,7 +252,11 @@ def _write(path: str, data: bytes) -> None:
     tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
     with open(tmp, "wb") as fh:
         fh.write(data)
-    os.replace(tmp, path)
+    try:
+        os.replace(tmp, path)
+    except OSError:
+        os.remove(tmp)
+        raise
 
 
 def _json_bytes(obj: object) -> bytes:
@@ -292,7 +296,14 @@ def write_tool(data: str, raw: dict) -> str:
     digest = tool_digest(raw)
     path = tool_path(data, digest)
     if not os.path.exists(path):
-        _write(path, _json_bytes(raw))
+        try:
+            _write(path, _json_bytes(raw))
+        except OSError:
+            # Windows refuses to replace a file another thread is replacing
+            # at that moment. Both wrote the same bytes -- the name is their
+            # hash -- so the file being there is the write having happened.
+            if not os.path.exists(path):
+                raise
     return digest
 
 
