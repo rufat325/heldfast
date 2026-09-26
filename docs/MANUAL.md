@@ -1485,10 +1485,12 @@ client -- by fingerprint, not by name. The idea, the output and the limits are i
 
 `verify` also looks up every tool in your lockfile -- local servers included, without
 launching them -- in the public record of every definition the log has seen: public since a
-date and on how many servers, or never seen publicly. Only the first three characters of each
-fingerprint leave your machine, as the name of a bucket of a few dozen; the protocol is in
-[docs/LOOKUP.md](LOOKUP.md). A tool never seen publicly is normal for a server you wrote;
-`--strict` fails on it.
+date and on how many servers, or never seen publicly. By default it downloads the whole record
+and searches it here, so nothing about your tools is sent. `--lookup buckets` fetches only the
+buckets your tools fall in, which is lighter, but a server's set of buckets identifies it for
+85% of servers, so whoever serves them can tell which public servers you use; `--lookup off`
+skips it. The protocol is in [docs/LOOKUP.md](LOOKUP.md). A tool never seen publicly is normal
+for a server you wrote; `--strict` fails on it.
 
 `approve --probe` runs the same comparison for hosted servers at public addresses before it
 writes the lock, and refuses a differing definition until you name it with `--yes-tool`. If
@@ -1551,7 +1553,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1403 tests, stdlib unittest, nothing to install.
+1409 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

@@ -105,22 +105,40 @@ class TestBuckets(Published):
 
 
 class TestClient(Published):
-    def look(self, *raws: dict) -> dict:
+    def look(self, *raws: dict, mode: str = "all") -> dict:
         prints = [self.fingerprint(r) for r in raws]
         with mock.patch.object(feedlock, "get_json", self.get):
-            return lookup.seen(prints, feedlock.Feed(BASE, "log"))
+            return lookup.seen(prints, feedlock.Feed(BASE, "log"), mode)
 
     def test_a_logged_definition_is_found_and_a_private_one_is_not(self) -> None:
-        found = self.look(READ, PRIVATE)
-        self.assertEqual(2, found[self.fingerprint(READ)]["servers"])
-        self.assertIsNone(found[self.fingerprint(PRIVATE)])
+        for mode in ("all", "buckets"):
+            with self.subTest(mode):
+                found = self.look(READ, PRIVATE, mode=mode)
+                self.assertEqual(2, found[self.fingerprint(READ)]["servers"])
+                self.assertIsNone(found[self.fingerprint(PRIVATE)])
 
-    def test_only_bucket_names_are_ever_asked_for(self) -> None:
+    def test_by_default_the_whole_record_is_fetched_and_nothing_else(self) -> None:
+        """The set of buckets a server's tools fall in identifies the server
+        for most servers, so the default asks for no bucket at all."""
         self.look(READ, WRITE, PRIVATE)
+        self.assertEqual([f"{BASE}/lookup/all.json"], self.asked)
+
+    def test_buckets_ask_only_for_bucket_names(self) -> None:
+        self.look(READ, WRITE, PRIVATE, mode="buckets")
         full = {self.fingerprint(r) for r in (READ, WRITE, PRIVATE)}
         for url in self.asked:
             self.assertRegex(url, r"/lookup/[0-9a-f]{3}\.json$")
             self.assertFalse(any(fp in url for fp in full))
+
+    def test_the_whole_record_is_every_bucket(self) -> None:
+        with open(os.path.join(self.data, "lookup", "all.json"), encoding="utf-8") as fh:
+            record = json.load(fh)["tools"]
+        buckets = {}
+        for name in os.listdir(os.path.join(self.data, "lookup")):
+            if len(name) == len("abc.json"):
+                with open(os.path.join(self.data, "lookup", name), encoding="utf-8") as fh:
+                    buckets.update(json.load(fh)["tools"])
+        self.assertEqual(buckets, record)
 
 
 class TestVerify(Published):
@@ -152,6 +170,22 @@ class TestVerify(Published):
 
     def test_strict_fails_on_a_tool_never_seen_publicly(self) -> None:
         self.assertEqual(1, self.run_cli("verify", "--strict")[0])
+
+    def test_the_default_says_nothing_about_the_tools_was_sent(self) -> None:
+        code, out = self.run_cli("verify")
+        self.assertIn("the whole record was downloaded", out)
+        self.assertFalse([u for u in self.asked if u.endswith(".json")
+                          and "/lookup/" in u and not u.endswith("/all.json")])
+
+    def test_buckets_say_what_they_reveal(self) -> None:
+        code, out = self.run_cli("verify", "--lookup", "buckets")
+        self.assertIn("can identify which public servers", out)
+        self.assertIn("1 of 2 seen publicly", out)
+
+    def test_off_looks_nothing_up(self) -> None:
+        code, out = self.run_cli("verify", "--lookup", "off")
+        self.assertNotIn("public record", out)
+        self.assertFalse([u for u in self.asked if "/lookup/" in u])
 
     def test_json_carries_the_record(self) -> None:
         self.run_cli("verify", "--format", "json")

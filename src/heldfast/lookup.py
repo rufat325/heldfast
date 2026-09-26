@@ -11,13 +11,18 @@ since when, on how many servers?
   goes, only where you got it. Normal for a server you wrote or run
   privately; worth a look for one you installed from somewhere else.
 
-It never tells the log which tool you have. The fingerprint is the one the
-lockfile already records (docs/LOCK.md); the log publishes every fingerprint
-it has recorded in 4,096 buckets named by their first three hex characters,
-and this fetches the bucket and searches it here. Asking for a bucket says
-your tool is one of the few dozen in it, and nothing more -- the way Have I
-Been Pwned checks a password without seeing it. The protocol is small enough
-for any client to implement: docs/LOOKUP.md.
+The fingerprint is the one the lockfile already records (docs/LOCK.md).
+By default this downloads the whole record -- every fingerprint the log has
+seen, in one file -- and searches it here, so the log learns that someone
+looked, and nothing about what.
+
+Buckets (`--lookup buckets`) are the lighter way, and they leak. The record
+is also published in 4,096 buckets named by a fingerprint's first three hex
+characters; one bucket hides one tool among a few dozen, the way Have I Been
+Pwned hides a password. But a lookup asks for every tool a server has at
+once, and the set of buckets a server's tools fall in is unique to it for
+85% of the servers logged. Whoever serves the buckets can tell which public
+servers you use. The protocol, and both ways: docs/LOOKUP.md.
 
 Read from the lock, so nothing is launched and nothing is connected to but
 the log.
@@ -55,10 +60,25 @@ def bucket(feed: Feed, prefix: str) -> dict[str, dict]:
     return tools
 
 
-def seen(fingerprints: list[str], feed: Feed) -> dict[str, dict | None]:
+def everything(feed: Feed) -> dict[str, dict]:
+    """The whole record, which says nothing about what is being looked for."""
+    url = f"{feed.base}/lookup/all.json"
+    body = feedlock.get_json(url)
+    tools = body.get("tools") if isinstance(body, dict) else None
+    if not isinstance(tools, dict):
+        raise FeedError(f"{url}: not the lookup record")
+    return tools
+
+
+def seen(fingerprints: list[str], feed: Feed,
+         mode: str = "all") -> dict[str, dict | None]:
     """fingerprint -> what the log says about it, or None if it never saw it."""
     wanted = sorted({fp.lower() for fp in fingerprints if isinstance(fp, str) and len(fp) > PREFIX})
     out: dict[str, dict | None] = {}
+    if mode == "all" and wanted:
+        record = everything(feed)
+        return {fp: (dict(record[fp]) if isinstance(record.get(fp), dict) else None)
+                for fp in wanted}
     for prefix in sorted({fp[:PREFIX] for fp in wanted}):
         found = bucket(feed, prefix)
         for fp in (f for f in wanted if f.startswith(prefix)):
@@ -79,9 +99,9 @@ def approved(lock_servers: dict[str, Any]) -> list[tuple[str, str, str]]:
     return rows
 
 
-def check(lock_servers: dict[str, Any], feed: Feed) -> list[Record]:
+def check(lock_servers: dict[str, Any], feed: Feed, mode: str = "all") -> list[Record]:
     rows = approved(lock_servers)
-    found = seen([fp for _, _, fp in rows], feed)
+    found = seen([fp for _, _, fp in rows], feed, mode)
     records: dict[str, Record] = {}
     for server, name, fp in rows:
         rec = records.setdefault(server, Record(server))
@@ -93,11 +113,14 @@ def check(lock_servers: dict[str, Any], feed: Feed) -> list[Record]:
     return list(records.values())
 
 
-def render(records: list[Record]) -> list[str]:
+def render(records: list[Record], mode: str = "all") -> list[str]:
     if not records:
         return []
-    lines = ["", "Approved tools against the public record (only a 3-character bucket "
-                 "name is sent per tool):"]
+    how = ("the whole record was downloaded, so nothing about these tools was sent"
+           if mode == "all" else
+           "by bucket: the set of buckets asked for can identify which public servers "
+           "these are")
+    lines = ["", f"Approved tools against the public record ({how}):"]
     for r in records:
         head = f"  {r.server:<28}"
         total = len(r.seen) + len(r.unseen)

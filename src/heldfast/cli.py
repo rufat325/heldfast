@@ -620,8 +620,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
                           "record": [r.to_dict() for r in records]}, indent=2))
     else:
         from .lookup import render as render_record
-        sys.stdout.write(tr.render(found, feed.source)
-                         + "".join(line + "\n" for line in render_record(records)))
+        sys.stdout.write(tr.render(found, feed.source) + "".join(
+            line + "\n" for line in render_record(records, args.lookup)))
     worst = ("differs", "unlogged") if args.strict else ("differs",)
     failed = any(w.status in worst for w in found) or (
         args.strict and any(r.unseen for r in records))
@@ -633,11 +633,13 @@ def _verify_record(args: argparse.Namespace, feed: object) -> list:
     No lock, or one that cannot be read, is simply nothing to look up."""
     from .lookup import check as look_up
 
+    if args.lookup == "off":
+        return []
     try:
         lock = Lock.load(_resolve_lock_path(args))
     except (ValueError, OSError):
         return []
-    return look_up(lock.servers, feed) if lock.servers else []
+    return look_up(lock.servers, feed, args.lookup) if lock.servers else []
 
 
 def _witness_approval(data: Collected, args: argparse.Namespace) -> bool:

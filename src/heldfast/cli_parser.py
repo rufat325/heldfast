@@ -180,6 +180,12 @@ def _register_verify(sub: argparse._SubParsersAction) -> None:
                              "branch of rufat325/heldfast")
     verify.add_argument("--strict", action="store_true",
                         help="also exit 1 on tools the public log has never seen")
+    verify.add_argument("--lookup", choices=("all", "buckets", "off"), default="all",
+                        help="how approved tools are looked up in the public record: "
+                             "download all of it and search here (default; sends "
+                             "nothing about your tools), fetch only their buckets "
+                             "(lighter, but the set of buckets can identify which "
+                             "public servers you use), or not at all")
     verify.add_argument("-f", "--format", choices=("text", "json"), default="text")
 
 

@@ -86,10 +86,12 @@ SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+\-]*$")
 ALLOWED = re.compile(
     r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|"
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
-    r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta)\.json|"
+    r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta|all)\.json|"
     r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json\.gz)$")
 MEASURED_PROTOCOL = "2025-06-18"
 MAX_FILE = 20 * 1024 * 1024
+# The whole lookup record in one file. GitHub refuses a file over 100 MB.
+MAX_LOOKUP_ALL = 90 * 1024 * 1024
 # A gzip that inflates past this is refused, not read: the text inside came
 # from a server, and a server can send a catalogue built to be one.
 MAX_INFLATED = 50 * 1024 * 1024
@@ -728,8 +730,11 @@ def index(data: str, events: list) -> dict:
 
 
 # Hex characters of a tool fingerprint that name its lookup bucket. Three
-# gives 4,096 buckets: with a few hundred thousand tools logged, a client that
-# asks for one bucket is one of a hundred-odd tools as far as the log can tell.
+# gives 4,096 buckets of a few dozen tools each. That hides one tool. It does
+# not hide a server: the set of buckets a server's tools fall in is unique
+# to it for 85% of the servers logged, so a client that asks for a server's
+# buckets has named the server. lookup/all.json is the whole record in one
+# file, for the clients that should not (docs/LOOKUP.md).
 LOOKUP_PREFIX = 3
 
 
@@ -777,6 +782,13 @@ def write_lookup(data: str) -> int:
     for prefix, tools in buckets.items():
         _write(os.path.join(data, "lookup", prefix + ".json"),
                _json_bytes({"prefix": prefix, "tools": tools}))
+    # One line per definition, so a day that adds a few changes a few lines
+    # and git stores the day as a small delta, not a new copy.
+    _write(os.path.join(data, "lookup", "all.json"), (
+        '{"prefix_length": %d, "tools": {\n' % LOOKUP_PREFIX
+        + ",\n".join(f"{json.dumps(fp)}: {json.dumps(row, sort_keys=True)}"
+                      for tools in buckets.values() for fp, row in tools.items())
+        + "\n}}\n").encode("utf-8"))
     _write(os.path.join(data, "lookup", "meta.json"), _json_bytes({
         "prefix_length": LOOKUP_PREFIX,
         "fingerprint": "the tool fingerprint of docs/LOCK.md, lowercase hex",
@@ -921,7 +933,7 @@ def verify(args: argparse.Namespace) -> int:
                 continue
             size = os.path.getsize(full)
             total += size
-            if size > MAX_FILE:
+            if size > (MAX_LOOKUP_ALL if rel == "lookup/all.json" else MAX_FILE):
                 problems.append(f"{rel}: {size} bytes")
             why = _check_file(full, rel)
             if why:

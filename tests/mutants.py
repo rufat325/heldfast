@@ -2150,8 +2150,26 @@ from heldfast import feedlock, lookup
 asked = []
 feedlock.get_json = lambda url: asked.append(url) or None
 fp = "ab" * 32
-lookup.seen([fp], feedlock.Feed("https://log.example", "log"))
+lookup.seen([fp], feedlock.Feed("https://log.example", "log"), "buckets")
 FAIL_OPEN = any(fp in url for url in asked)
+""",
+    ),
+    Mutant(
+        id="lookup-buckets-by-default",
+        theorem="T-LOOKUP",
+        path="lookup.py",
+        original='''def seen(fingerprints: list[str], feed: Feed,
+         mode: str = "all") -> dict[str, dict | None]:''',
+        replacement='''def seen(fingerprints: list[str], feed: Feed,
+         mode: str = "buckets") -> dict[str, dict | None]:''',
+        harm=("Every lookup asks for the buckets of every tool a server has, and "
+              "that set names the server for 85% of those logged."),
+        probe="""
+from heldfast import feedlock, lookup
+asked = []
+feedlock.get_json = lambda url: asked.append(url) or {"prefix": url[-8:-5], "tools": {}}
+lookup.seen(["ab" * 32, "cd" * 32], feedlock.Feed("https://log.example", "log"))
+FAIL_OPEN = any(not url.endswith("/all.json") for url in asked)
 """,
     ),
 )

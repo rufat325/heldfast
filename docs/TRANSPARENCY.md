@@ -108,8 +108,9 @@ Said plainly, because a security tool that overclaims is worse than none:
   client can ask.
 
 The same log also answers the smaller question for any tool, hosted or not
--- has anyone else been shown this exact definition? -- without learning which
-tool you asked about: [LOOKUP.md](LOOKUP.md).
+-- has anyone else been shown this exact definition? By default the client
+downloads the whole record, so the log never learns which tools you asked
+about; what the lighter bucket lookup gives away is in [LOOKUP.md](LOOKUP.md).
 
 The data behind this is public: the `feed` branch of this repository, read
 at the commit `verify` prints.
