@@ -27,6 +27,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import __version__
 from .childenv import build as build_child_env
 from .childenv import explain as explain_withheld
 from .fetch import USER_AGENT
@@ -40,7 +41,7 @@ from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec
 # still do.
 PROTOCOL_VERSION = "2026-07-28"
 LEGACY_PROTOCOL_VERSION = "2024-11-05"
-CLIENT_INFO = {"name": "heldfast", "version": "0.1.0"}
+CLIENT_INFO = {"name": "heldfast", "version": __version__}
 
 
 def _obs_id(s: ServerSpec) -> str:

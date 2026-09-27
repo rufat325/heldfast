@@ -1,4 +1,4 @@
-"""One version number, stated in six places.
+"""One version number, stated in six places -- and never typed anywhere else.
 
 `release.yml` compares the tag against `pyproject.toml` and nothing else, so
 the Python wheel is the only one that could not ship wrong. The plugin's
@@ -61,6 +61,38 @@ class TestEveryStatedVersionAgrees(unittest.TestCase):
         self.assertIsNotNone(printed)
         assert printed is not None
         self.assertEqual(__version__, printed.group(1))
+
+
+
+class TestTheRunningVersionIsTheOneReported(unittest.TestCase):
+    """The probe's and the gateway's handshakes said 0.1.0 while 0.2.0 ran,
+    and the report renderers defaulted to it. A server's logs, and a bug
+    report built from them, then named the wrong code."""
+
+    def test_every_handshake_carries_the_package_version(self) -> None:
+        from heldfast import gateway, probe
+        self.assertEqual(__version__, probe.CLIENT_INFO["version"])
+        self.assertEqual(__version__, gateway.SERVER_INFO["version"])
+
+    def test_the_reports_default_to_it(self) -> None:
+        from heldfast.report.json_out import render_json
+        from heldfast.report.sarif import render_sarif
+        self.assertEqual(__version__, json.loads(render_json([]))["version"])
+        driver = json.loads(render_sarif([], base=ROOT))["runs"][0]["tool"]["driver"]
+        self.assertEqual(__version__, driver["version"])
+
+    def test_no_module_types_a_version_of_its_own(self) -> None:
+        """A version literal beside a name is how the handshakes went stale,
+        and a literal default is how the renderers did. The package's own
+        __init__ is the one place it is typed. (SARIF's "version": "2.1.0" is
+        the format's, on a line of its own, and is not this shape.)"""
+        typed = re.compile(r'"name"\s*:[^}]*"version"\s*:\s*"\d+\.\d+\.\d+"'
+                           r'|version:\s*str\s*=\s*"\d')
+        found = [f"{p.relative_to(ROOT)}:{n}"
+                 for p in sorted((ROOT / "src" / "heldfast").rglob("*.py"))
+                 for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+                 if typed.search(line)]
+        self.assertEqual([], found)
 
 
 if __name__ == "__main__":

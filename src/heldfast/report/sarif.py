@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path, PurePath
 
+from .. import __version__
 from ..findings import Finding, Severity, atlas_title
 from ..rules.base import all_rules
 
@@ -77,7 +78,7 @@ def _security_severity(severity: Severity) -> str:
 
 
 def render_sarif(findings: list[Finding], *, base: Path | None = None,
-                 version: str = "0.1.0") -> str:
+                 version: str = __version__) -> str:
     descriptors, index = _rule_descriptors()
     results = []
     for f in findings:

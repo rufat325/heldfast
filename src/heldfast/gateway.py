@@ -47,6 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .auditlog import AuditLog
 from .childenv import build as build_env
 from .childenv import explain
@@ -60,7 +61,7 @@ from .probe import SESSION_HEADER
 
 PROTOCOL_VERSION = "2026-07-28"
 LEGACY_PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": "heldfast-gateway", "version": "0.1.0"}
+SERVER_INFO = {"name": "heldfast-gateway", "version": __version__}
 
 # `server__tool`. Two underscores because single ones are common inside tool
 # names and would make the split ambiguous.
@@ -187,7 +188,7 @@ class Backend:
         reply = self.request("initialize", {
             "protocolVersion": LEGACY_PROTOCOL_VERSION,
             "capabilities": {},
-            "clientInfo": {"name": "heldfast-gateway", "version": "0.1.0"},
+            "clientInfo": {"name": "heldfast-gateway", "version": __version__},
         })
         if reply is None or "error" in reply:
             self.error = "did not answer initialize"
@@ -351,7 +352,7 @@ class HttpBackend(Backend):
         reply = self.request("initialize", {
             "protocolVersion": LEGACY_PROTOCOL_VERSION,
             "capabilities": {},
-            "clientInfo": {"name": "heldfast-gateway", "version": "0.1.0"},
+            "clientInfo": {"name": "heldfast-gateway", "version": __version__},
         })
         if reply is None or "error" in reply:
             self.error = "did not answer initialize"

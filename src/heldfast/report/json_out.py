@@ -7,6 +7,7 @@ import platform
 import time
 from typing import Iterable
 
+from .. import __version__
 from ..findings import Finding, Severity
 
 
@@ -20,7 +21,7 @@ def render_json(
     errors: Iterable[str] = (),
     lock_present: bool = False,
     probed: bool = False,
-    version: str = "0.1.0",
+    version: str = __version__,
     suppressed: list | None = None,
     probe: list | None = None,
 ) -> str:
