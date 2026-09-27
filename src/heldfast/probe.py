@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .childenv import build as build_child_env
+from .childenv import explain as explain_withheld
 from .fetch import USER_AGENT
 from .fetch import urlopen as fetch_url
 from .lifetime import bind_child, posix_preexec
@@ -163,7 +164,12 @@ def probe_stdio(s: ServerSpec, timeout: float = 20.0,
     # anyone has reviewed it, which is the whole reason it is opt-in. Handing
     # a config pasted from a README every secret in the environment, in order
     # to find out whether it is hostile, is the wrong order to do things in.
-    env, _ = build_child_env(s, share=share_env)
+    env, withheld = build_child_env(s, share=share_env)
+    # Said, not dropped: a probed server that cannot authenticate, or that
+    # resolves a different dependency tree than it would outside heldfast,
+    # is missing one of these.
+    for line in explain_withheld(withheld):
+        print(f"  {s.identity()}: {line}", file=sys.stderr)
     # Servers commonly buffer stdout when they think they are not on a tty.
     env.setdefault("PYTHONUNBUFFERED", "1")
 
