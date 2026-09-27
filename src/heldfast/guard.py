@@ -1396,12 +1396,12 @@ def _child_env(share: set[str] | None, isolate: bool) -> tuple[dict[str, str], l
 
 
 def _announce_env(guard: Guard, withheld: list[str], isolate: bool) -> None:
-    from .childenv import notable
+    from .childenv import explain
 
     if isolate:
-        secrets = notable(withheld)
-        guard.log(f"child environment: isolated, {len(withheld)} variable(s) withheld"
-                  + (f" including {', '.join(secrets[:5])}" if secrets else ""))
+        guard.log(f"child environment: isolated, {len(withheld)} variable(s) withheld")
+        for line in explain(withheld):
+            guard.log(f"  {line}")
         return
     guard.log("child environment: inherited. The wrapped server receives every "
               "variable this process has, including credentials meant for other "

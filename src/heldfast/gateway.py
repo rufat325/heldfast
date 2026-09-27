@@ -49,7 +49,7 @@ from typing import Any
 
 from .auditlog import AuditLog
 from .childenv import build as build_env
-from .childenv import notable
+from .childenv import explain
 from .findings import Severity
 from .guard import Guard
 from .identity import Identity, UnknownIdentity
@@ -498,16 +498,13 @@ class Gateway:
                 self.stats.backends_started += 1
                 self.log(f"started {backend.spec.identity()} "
                          f"({len(backend.tools)} tool(s) offered)")
-                # Naming the credential-shaped variables it did not get. A
-                # server that stops authenticating after this lands is looking
-                # for one of these, and one stderr line is the difference
-                # between a one-line fix and an afternoon.
-                hidden = notable(backend.withheld)
-                if hidden:
-                    self.log(f"  {name}: not given {', '.join(hidden[:6])}"
-                             f"{' and %d more' % (len(hidden) - 6) if len(hidden) > 6 else ''}"
-                             f" -- declare it in the server's env, or pass "
-                             f"--share-env NAME")
+                # Naming the credentials and the package-manager settings it
+                # did not get. A server that stops authenticating, or installs
+                # a different tree than it does outside heldfast, is missing
+                # one of these, and one stderr line is the difference between
+                # a one-line fix and an afternoon.
+                for line in explain(backend.withheld):
+                    self.log(f"  {name}: {line}")
                 if self.trail:
                     self.trail.record("backend_started", subject=backend.spec.identity(),
                                       detail=f"withheld={len(backend.withheld)}")

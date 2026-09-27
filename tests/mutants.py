@@ -673,6 +673,35 @@ FAIL_OPEN = "PYTHONPATH" in env
 """,
     ),
     Mutant(
+        id="childenv-drop-install-settings",
+        theorem="T-INSTALL-SETTINGS",
+        path="childenv.py",
+        original="BASE = {name.upper() for name in (_RUNTIME | _TOOLCHAIN | _PACKAGE_MANAGER | _NETWORK)}",
+        replacement="BASE = {name.upper() for name in (_RUNTIME | _TOOLCHAIN | _NETWORK)}",
+        harm="The user's npm cutoff and curated registry silently vanish, so npx "
+             "resolves a newer, unscreened tree from the public registry.",
+        probe="""
+from heldfast.childenv import build
+env, _ = build(None, {"PATH": "/bin", "npm_config_before": "2026-09-20",
+                      "NPM_CONFIG_REGISTRY": "https://corp.example/npm"})
+FAIL_OPEN = "npm_config_before" not in env or "NPM_CONFIG_REGISTRY" not in env
+""",
+    ),
+    Mutant(
+        id="childenv-index-login-passes",
+        theorem="T-INSTALL-SETTINGS",
+        path="childenv.py",
+        original="""           and not (k.upper() in _INSTALL_SETTINGS and k.upper() not in shared
+                    and carries_login(v))}""",
+        replacement="}",
+        harm="A private index's user name and token reach the server it installs.",
+        probe="""
+from heldfast.childenv import build
+env, _ = build(None, {"PATH": "/bin", "PIP_INDEX_URL": "https://me:tok@corp.example/simple"})
+FAIL_OPEN = "PIP_INDEX_URL" in env
+""",
+    ),
+    Mutant(
         id="gateway-mux-by-name",
         theorem="T-MUX",
         path="gateway.py",

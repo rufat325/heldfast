@@ -19,6 +19,9 @@ and credentials.
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -26,7 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from heldfast.childenv import BASE, build, notable  # noqa: E402
+from heldfast.childenv import BASE, build, carries_login, explain, notable  # noqa: E402
 from heldfast.model import ServerSpec  # noqa: E402
 
 PARENT = {
@@ -153,28 +156,121 @@ class TestWhatGetsSaidOutLoud(unittest.TestCase):
 
     def test_credential_shaped_names_are_reported(self) -> None:
         _, withheld = build(spec(), PARENT)
-        named = set(notable(withheld))
+        named = set(notable(withheld).credentials)
         self.assertEqual(
             {"GITHUB_TOKEN", "OPENAI_API_KEY", "DB_PASSWORD",
              "AWS_SECRET_ACCESS_KEY"}, named)
 
     def test_an_ordinary_name_is_not_reported(self) -> None:
         _, withheld = build(spec(), PARENT)
-        self.assertNotIn("MY_LAPTOP_NICKNAME", notable(withheld))
+        self.assertNotIn("MY_LAPTOP_NICKNAME", notable(withheld).credentials)
+        self.assertNotIn("MY_LAPTOP_NICKNAME", notable(withheld).install_settings)
 
     def test_the_matching_is_on_whole_words(self) -> None:
         """MONKEY contains KEY. A report that names it teaches people to skim
         past the list, which is where the real one is."""
         _, withheld = build(spec(), {"MONKEY": "x", "TURKEY": "y",
                                      "API_KEY": "z", "PASSWORD": "w"})
-        self.assertEqual({"API_KEY", "PASSWORD"}, set(notable(withheld)))
+        self.assertEqual({"API_KEY", "PASSWORD"}, set(notable(withheld).credentials))
+
+
+INSTALL = {
+    "npm_config_before": "2026-09-20", "NPM_CONFIG_MIN_RELEASE_AGE": "3",
+    "UV_EXCLUDE_NEWER": "2026-09-20", "npm_config_ignore_scripts": "true",
+    "NPM_CONFIG_REGISTRY": "https://artifactory.example/npm",
+    "PIP_INDEX_URL": "https://artifactory.example/pypi/simple",
+    "PIP_UPLOADED_PRIOR_TO": "2026-09-20T00:00:00Z",
+    "UV_DEFAULT_INDEX": "https://artifactory.example/pypi/simple",
+    "NPM_CONFIG_USERCONFIG": "/etc/corp/npmrc",
+}
+
+
+class TestTheUsersOwnInstallSettings(unittest.TestCase):
+    """A server launched as `npx -y pkg@1.2.3` is installed by the process
+    started here. Withholding the user's cutoffs, script block and registry
+    resolved a newer, unscreened tree -- or the public registry instead of a
+    company's curated one -- than the same server outside heldfast."""
+
+    def test_cutoffs_registries_and_config_files_reach_the_server(self) -> None:
+        env, withheld = build(spec(), {**PARENT, **INSTALL})
+        for name, value in INSTALL.items():
+            with self.subTest(name):
+                self.assertEqual(value, env.get(name))
+                self.assertNotIn(name, withheld)
+
+    def test_credentials_for_a_package_manager_stay_withheld(self) -> None:
+        creds = {"NPM_CONFIG__AUTH": "a", "NPM_CONFIG__AUTHTOKEN": "b", "NPM_TOKEN": "c",
+                 "NODE_AUTH_TOKEN": "d", "UV_INDEX_EXAMPLE_PASSWORD": "e",
+                 "npm_config__auth": "f"}
+        env, withheld = build(spec(), {**PARENT, **creds})
+        for name in creds:
+            with self.subTest(name):
+                self.assertNotIn(name, env)
+                self.assertIn(name, withheld)
+
+    def test_there_is_no_prefix_in_the_allowlist(self) -> None:
+        """NPM_CONFIG_* would pass NPM_CONFIG__AUTH. Only named settings pass."""
+        env, _ = build(spec(), {**PARENT, "NPM_CONFIG_SOMETHING_NEW": "x",
+                                "UV_INDEX_CORP_USERNAME": "me"})
+        self.assertNotIn("NPM_CONFIG_SOMETHING_NEW", env)
+        self.assertNotIn("UV_INDEX_CORP_USERNAME", env)
+
+    def test_an_index_url_with_a_login_is_withheld_and_named(self) -> None:
+        """The server runs inside the process that installs it, so a login
+        handed to `uvx` is handed to the server."""
+        logins = {"PIP_INDEX_URL": "https://me:tok@corp.example/simple",
+                  "NPM_CONFIG_REGISTRY": "https://tok@corp.example/npm/",
+                  "PIP_EXTRA_INDEX_URL": "https://pypi.org/simple https://me:t@corp.example/s",
+                  "UV_INDEX": "corp=https://me:t@corp.example/simple",
+                  "UV_EXTRA_INDEX_URL": "https://a.example/s  https://me@b.example/s"}
+        env, withheld = build(spec(), {**PARENT, **logins})
+        for name in logins:
+            with self.subTest(name):
+                self.assertNotIn(name, env)
+                self.assertIn(name, notable(withheld).install_settings)
+        self.assertTrue(any("--share-env" in line and "credential" in line
+                            for line in explain(withheld)))
+
+    def test_share_env_passes_one_on_with_its_login(self) -> None:
+        url = "https://me:tok@corp.example/simple"
+        env, _ = build(spec(), {**PARENT, "PIP_INDEX_URL": url}, share={"PIP_INDEX_URL"})
+        self.assertEqual(url, env["PIP_INDEX_URL"])
+
+    def test_what_a_login_looks_like(self) -> None:
+        for value in ("https://u:p@h/simple", "https://u@h/", "a=https://u:p@h/",
+                      "https://ok.example/ https://u:p@h/"):
+            with self.subTest(value):
+                self.assertTrue(carries_login(value))
+        for value in ("https://h.example/simple", "corp=https://h/s", "", "2026-09-20",
+                      "/etc/corp/npmrc", "https://a/ https://b/"):
+            with self.subTest(value):
+                self.assertFalse(carries_login(value))
+
+    def test_withheld_settings_are_named_in_their_own_group(self) -> None:
+        _, withheld = build(spec(), {**PARENT, "YARN_NPM_REGISTRY_SERVER": "https://x",
+                                     "NPM_CONFIG__AUTH": "y"})
+        found = notable(withheld)
+        self.assertEqual(["YARN_NPM_REGISTRY_SERVER"], found.install_settings)
+        self.assertIn("NPM_CONFIG__AUTH", found.credentials)
+        self.assertEqual(2, len(explain(withheld)))
+
+    def test_nothing_is_said_when_nothing_notable_is_withheld(self) -> None:
+        self.assertEqual([], explain(["MY_LAPTOP_NICKNAME"]))
+
+    @unittest.skipUnless(shutil.which("npm"), "npm is not on PATH")
+    def test_npm_sees_the_cutoff(self) -> None:
+        env, _ = build(spec(), {**os.environ, "npm_config_before": "2026-09-20"})
+        out = subprocess.run([shutil.which("npm"), "config", "get", "before"], env=env,
+                             capture_output=True, text=True, timeout=60).stdout.strip()
+        self.assertNotEqual("null", out)
+        self.assertIn("2026", out)
 
 
 class TestTheBaseSetItself(unittest.TestCase):
     def test_it_holds_no_credential_shaped_name(self) -> None:
         """The allowlist is the one place a mistake is silent: a credential
         name in here would be handed to every backend forever."""
-        self.assertEqual([], notable(sorted(BASE)),
+        self.assertEqual([], notable(sorted(BASE)).credentials,
                          "a credential-shaped name is in the always-pass set")
 
     def test_it_is_stored_uppercased(self) -> None:

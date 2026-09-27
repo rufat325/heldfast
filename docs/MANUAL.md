@@ -356,8 +356,29 @@ base set is the platform floor nothing greps for because nothing has to: a Windo
 without `SystemRoot` cannot open a socket, and that failure looks nothing like a missing
 variable.
 
-**If a server stops authenticating after this**, the gateway names the credential-shaped
-variables it withheld, on stderr, per server. Declare it in that server's `env`, pass
+**Your own install settings pass through.** A server launched as `npx -y pkg@1.2.3` or
+`uvx pkg==1.2.3` is installed by the process heldfast starts. So the settings that decide
+what gets installed, and where from, are part of the base set. That covers the release
+cutoffs (`npm_config_before`, `npm_config_min_release_age`, `PIP_UPLOADED_PRIOR_TO`,
+`UV_EXCLUDE_NEWER`) and `npm_config_ignore_scripts`. It covers the registry and index URLs
+(`NPM_CONFIG_REGISTRY`, `PIP_INDEX_URL`, `PIP_EXTRA_INDEX_URL`, `UV_DEFAULT_INDEX`, `UV_INDEX`
+and the older `UV_INDEX_URL` / `UV_EXTRA_INDEX_URL`), `UV_INDEX_STRATEGY`, and the config-file
+and CA pointers (`NPM_CONFIG_USERCONFIG`, `NPM_CONFIG_GLOBALCONFIG`, `NPM_CONFIG_CAFILE`,
+`PIP_CONFIG_FILE`, `PIP_CERT`, `UV_CONFIG_FILE`). Before this, isolation withheld them
+silently. A server behind heldfast then resolved a newer, unscreened dependency tree than the
+same server outside it, and a company's curated registry was bypassed for the public one.
+Each is named one by one, never by prefix: `NPM_CONFIG_*` would also pass
+`NPM_CONFIG__AUTH`. Credentials stay withheld: `NPM_CONFIG__AUTH`, `NPM_TOKEN`,
+`NODE_AUTH_TOKEN`, `UV_INDEX_<NAME>_PASSWORD`. So does an index URL with a user name or
+password in it (`https://user:token@host/simple`). The server runs inside the process that
+installs it, so a login handed to `uvx` is handed to the server as well. `--share-env NAME`
+passes such a URL on, credential and all, if that is what you want.
+
+**If a server stops authenticating, or installs differently, after this**, the gateway
+names on stderr, per server, what it withheld, in two groups. The first group is
+credential-shaped variables. The second is package-manager settings (anything starting
+with `NPM_CONFIG_`, `PIP_`, `PIPX_`, `UV_`, `YARN_`, `PNPM_`, `BUN_` or `DENO_`). `probe`
+and `wrap --isolate-env` say the same. Declare the variable in that server's `env`, pass
 `--share-env NAME` to give it to all of them, or `--no-isolate-env` to restore the old
 behaviour entirely.
 
@@ -1560,7 +1581,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1456 tests, stdlib unittest, nothing to install.
+1465 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

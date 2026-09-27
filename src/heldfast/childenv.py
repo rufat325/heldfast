@@ -13,6 +13,13 @@ the machine is not one.
 So: a backend gets the infrastructure it needs to run, plus exactly what its
 own config entry declares, and nothing else.
 
+The infrastructure includes the user's own package-manager settings -- the
+registry, the index, the release-age cutoff, whether install scripts run --
+because a server is installed by the process started here, and withholding
+them silently left a server behind heldfast less protected than the same
+server outside it. What is withheld is said out loud in two groups:
+credential-shaped names, and package-manager settings (see `explain`).
+
 THE ALLOWLIST IS THE WHOLE DESIGN
 ---------------------------------
 Withhold too much and every server breaks. The base set below is therefore
@@ -41,7 +48,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any
+from typing import Any, NamedTuple
 
 # How a process finds its runtime, its home and its configuration.
 _RUNTIME = {
@@ -70,10 +77,34 @@ _TOOLCHAIN = {
     "PYTHONUNBUFFERED", "PYTHONIOENCODING",
     "PYTHONUTF8", "PYTHONDONTWRITEBYTECODE", "VIRTUAL_ENV", "CONDA_PREFIX",
     "CONDA_DEFAULT_ENV", "PIPX_HOME", "PIPX_BIN_DIR", "UV_CACHE_DIR",
-    "UV_PYTHON", "UV_INDEX",
+    "UV_PYTHON",
     "NODE_PATH", "NODE_ENV", "NVM_DIR", "NVM_BIN",
     "npm_config_prefix", "npm_config_cache", "NPM_CONFIG_PREFIX",
     "BUN_INSTALL", "DENO_DIR", "JAVA_HOME", "GOPATH", "GOROOT", "DOTNET_ROOT",
+}
+
+# The user's own install-time defences: which registry or index a package
+# manager resolves from, how old a release must be before it is installed,
+# whether install scripts run, and which config file says the rest. A server
+# launched as `npx -y pkg@1.2.3` or `uvx pkg==1.2.3` is installed by the very
+# process heldfast starts, so withholding these silently resolved a newer,
+# unscreened dependency tree -- or pointed a company's npm at the public
+# registry, past its own curated mirror -- than the same server run without
+# heldfast. That left a server behind heldfast less protected than outside it.
+#
+# Named one by one, and confirmed against the npm 11, pip 26 and uv docs.
+# Never a prefix such as NPM_CONFIG_*: that would pass NPM_CONFIG__AUTH.
+# Settings in ~/.npmrc or pip.conf already survive, because HOME and APPDATA do.
+_PACKAGE_MANAGER = {
+    # npm reads any `npm_config_<name>` in either case.
+    "NPM_CONFIG_BEFORE", "NPM_CONFIG_MIN_RELEASE_AGE", "NPM_CONFIG_IGNORE_SCRIPTS",
+    "NPM_CONFIG_REGISTRY", "NPM_CONFIG_USERCONFIG", "NPM_CONFIG_GLOBALCONFIG",
+    "NPM_CONFIG_CAFILE",
+    # pip reads PIP_<OPTION>; --uploaded-prior-to is its publish-date cutoff.
+    "PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "PIP_CONFIG_FILE", "PIP_CERT",
+    "PIP_UPLOADED_PRIOR_TO",
+    "UV_EXCLUDE_NEWER", "UV_DEFAULT_INDEX", "UV_INDEX", "UV_INDEX_URL",
+    "UV_EXTRA_INDEX_URL", "UV_CONFIG_FILE", "UV_INDEX_STRATEGY",
 }
 
 # Reaching the network at all, from behind whatever the operator's network is.
@@ -84,7 +115,32 @@ _NETWORK = {
     "CURL_CA_BUNDLE", "NODE_EXTRA_CA_CERTS",
 }
 
-BASE = {name.upper() for name in (_RUNTIME | _TOOLCHAIN | _NETWORK)}
+BASE = {name.upper() for name in (_RUNTIME | _TOOLCHAIN | _PACKAGE_MANAGER | _NETWORK)}
+_INSTALL_SETTINGS = {name.upper() for name in _PACKAGE_MANAGER}
+
+
+def carries_login(value: str) -> bool:
+    """Whether a registry or index setting has a user name or password in it.
+
+    `https://user:token@host/simple` is the common way to reach a private
+    index. The wrapped server runs inside the process that installs it, so an
+    index credential handed to `uvx` or `npx` is handed to the server too.
+    Several URLs are separated by whitespace (the EXTRA variants, UV_INDEX),
+    and UV_INDEX may name one as `name=https://...`.
+    """
+    from urllib.parse import urlsplit
+
+    for part in str(value or "").split():
+        if "=" in part.split("://", 1)[0]:
+            part = part.split("=", 1)[1]
+        try:
+            url = urlsplit(part)
+            if url.username or url.password:
+                return True
+        except ValueError:
+            # A value urllib cannot parse is not one this can clear.
+            return True
+    return False
 
 # This tool's own variables, which are never a child's business.
 #
@@ -145,17 +201,19 @@ def build(spec: Any | None, parent: dict | None = None,
         env.setdefault("PYTHONUNBUFFERED", "1")
         return env, sorted(k for k in parent if _mine(k) and k not in declared)
 
-    allowed = BASE | {s.upper() for s in (share or set())}
+    shared = {s.upper() for s in (share or set())}
+    allowed = BASE | shared
     env = {k: v for k, v in parent.items()
-           if k.upper() in allowed and not _mine(k)}
+           if k.upper() in allowed and not _mine(k)
+           # An index URL with a login in it goes only when named.
+           and not (k.upper() in _INSTALL_SETTINGS and k.upper() not in shared
+                    and carries_login(v))}
     # Declared last, so a server can override anything in the base set for
     # itself -- that is what declaring it means.
     env.update({k: _resolve(v, parent) for k, v in declared.items()})
     env.setdefault("PYTHONUNBUFFERED", "1")
 
-    withheld = sorted(k for k in parent
-                      if (k.upper() not in allowed or _mine(k))
-                      and k not in declared)
+    withheld = sorted(k for k in parent if k not in env and k not in declared)
     return env, withheld
 
 
@@ -167,11 +225,47 @@ _SECRETISH = re.compile(
     re.IGNORECASE)
 
 
-def notable(withheld: list) -> list:
+# A package manager's own namespace. Only used for reporting, like the above.
+_INSTALLISH = re.compile(r"^(?:NPM_CONFIG_|PIP_|PIPX_|UV_|YARN_|PNPM_|BUN_|DENO_)",
+                         re.IGNORECASE)
+
+
+class Notable(NamedTuple):
+    """The withheld names an operator would want named, in two groups."""
+    credentials: list
+    install_settings: list
+
+
+def notable(withheld: list) -> Notable:
     """The withheld names an operator would want named.
 
     Listing all ~60 variables of a normal shell would bury the one that
-    matters. A server that stops authenticating after this lands is almost
-    always looking for one of these, so these are the ones printed.
+    matters. A server that stops authenticating is almost always looking for
+    a credential-shaped name; a server that installs a different dependency
+    tree than it does outside heldfast is missing one of the user's own
+    package-manager settings. Those two groups are what gets printed. A name
+    that is both (NPM_CONFIG__AUTH) is a credential.
     """
-    return [name for name in withheld if _SECRETISH.search(name)]
+    credentials = [n for n in withheld if _SECRETISH.search(n)]
+    install = [n for n in withheld if _INSTALLISH.search(n) and n not in credentials]
+    return Notable(credentials, install)
+
+
+def _names(names: list, most: int = 6) -> str:
+    return ", ".join(names[:most]) + (f" and {len(names) - most} more" if len(names) > most else "")
+
+
+def explain(withheld: list) -> list:
+    """What `gateway`, `guard` and `probe` say about a child's environment:
+    one line per group that is not empty."""
+    found = notable(withheld)
+    lines = []
+    if found.credentials:
+        lines.append(f"not given {_names(found.credentials)} -- declare it in the server's "
+                     f"env, or pass --share-env NAME")
+    if found.install_settings:
+        lines.append(f"not given package-manager settings {_names(found.install_settings)} "
+                     f"-- pass --share-env NAME. A registry or index URL with a user name or "
+                     f"password in it is withheld because the server runs inside the process "
+                     f"that installs it; --share-env passes it on with its credential")
+    return lines

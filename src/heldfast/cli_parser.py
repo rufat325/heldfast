@@ -48,7 +48,9 @@ def _add_scan_arguments(p: argparse.ArgumentParser) -> None:
                    help="with --probe, also pass this environment variable to the "
                         "servers being launched (repeatable). By default a probed "
                         "server gets what its config declares plus the infrastructure "
-                        "it needs, and none of your other credentials")
+                        "it needs -- including your npm, pip and uv cutoffs, registries "
+                        "and index URLs -- and none of your other credentials. An index "
+                        "URL with a login in it is withheld unless named here")
     p.add_argument("--require-integrity", action="store_true",
                    help="treat a registry artifact that could not be verified "
                         "as a failure rather than a note (MCPA037 becomes high). "
@@ -350,12 +352,16 @@ def _register_gateway(sub: argparse._SubParsersAction) -> None:
     gateway_p.add_argument("--share-env", metavar="NAME", action="append", default=[],
                            help="also pass this environment variable through to every "
                                 "backend (repeatable). By default a backend gets the "
-                                "infrastructure it needs plus what its own config "
-                                "declares, so one server's token does not reach the rest")
+                                "infrastructure it needs, your npm, pip and uv install "
+                                "settings, and what its own config declares, so one "
+                                "server's token does not reach the rest. An index URL "
+                                "with a login in it is withheld unless named here, since "
+                                "the server runs inside the process that installs it")
     gateway_p.add_argument("--no-isolate-env", action="store_true",
                            help="give every backend the gateway's whole environment, "
-                                "as clients do. Restores the behaviour from before "
-                                "isolation existed")
+                                "as clients do, credentials included. Restores the "
+                                "behaviour from before isolation existed; your install "
+                                "settings already pass without it")
     gateway_p.add_argument("--quiet", action="store_true")
     gateway_p.add_argument("-v", "--verbose", action="store_true")
 
@@ -485,7 +491,8 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
                               "withhold it, or only log")
     guard_p.add_argument("--isolate-env", action="store_true",
                          help="give the wrapped server only the environment it needs "
-                              "to run, instead of everything this process has. Off by "
+                              "to run -- your npm, pip and uv install settings included "
+                              "-- instead of everything this process has. Off by "
                               "default because wrap takes a command rather than a "
                               "config entry, so there is no declared 'env' block to "
                               "read a server's own token from -- turning it on may "
@@ -493,7 +500,8 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
                               "either way")
     guard_p.add_argument("--share-env", metavar="NAME", action="append", default=[],
                          help="with --isolate-env, also pass this variable through "
-                              "(repeatable)")
+                              "(repeatable). Needed for an npm, pip or uv index URL with "
+                              "a login in it; the other install settings pass anyway")
 
 
 def _register_check(sub: argparse._SubParsersAction) -> None:
