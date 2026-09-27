@@ -526,7 +526,7 @@ def _register_check(sub: argparse._SubParsersAction) -> None:
 def _register_grade_drift(sub: argparse._SubParsersAction) -> None:
     sub.add_parser(
         "grade-drift",
-        help="grade one changed tool definition, JSON in and out (for hooks)",
+        help="grade one changed tool definition, JSON in and out, the way `wrap --drift graded` does",
         description=(
             "Reads {\"recorded\": <lock entry for the tool>, \"definition\": "
             "<live tool>} on stdin and prints {\"introduced\": [...]}: the "

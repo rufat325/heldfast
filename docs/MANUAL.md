@@ -75,7 +75,7 @@ heldfast scan --probe                 # also read live tool descriptions
 heldfast scan --safe                  # never execute, never connect
 heldfast scan --no-source             # skip reading server source
 heldfast doctor                       # same job as scan
-heldfast ci                           # fail the PR on MCPA014/015; never launches
+heldfast ci                           # fail the PR when config, scripts or skills left the lock; never launches
 heldfast check                        # verify .mcp-pin.lock, launch nothing
 heldfast approve --probe              # write .mcp-pin.lock
 heldfast approve --from-feed          # ...from the drift feed's measurement, launching nothing
