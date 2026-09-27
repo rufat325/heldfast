@@ -71,6 +71,8 @@ Layout under DIR:
                                  three hex characters of its fingerprint: when
                                  first seen, on how many servers (docs/LOOKUP.md)
   feed.json, feed.xml            the latest events, as JSON and as Atom
+  stats.json                     every event counted per operator and by kind
+                                 of change (operators.py)
   README.md                      the same, for a person
   checkpoints/YYYY-MM-DD.json    one published commit, described by a digest of
                                  every other file in it (docs/TRANSPARENCY.md)
@@ -109,7 +111,7 @@ FIELDS = ("description", "title", "inputSchema", "outputSchema", "annotations", 
 SAFE_NAME = re.compile(r"^[A-Za-z0-9@._\-]+$")
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+\-]*$")
 ALLOWED = re.compile(
-    r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|"
+    r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|stats\.json|"
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
     r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta|all)\.json|lookup/all\.json\.gz|"
     r"tools/[0-9a-f]{2}/[0-9a-f]{64}\.json|"
@@ -960,7 +962,10 @@ def render(args: argparse.Namespace) -> int:
     _write(os.path.join(args.data, "feed.json"), _json_bytes(
         {"updated_at": generated, "events": events[:FEED_EVENTS]}))
     _write(os.path.join(args.data, "feed.xml"), atom(events[:FEED_EVENTS], generated).encode("utf-8"))
-    _write(os.path.join(args.data, "README.md"), readme(events, generated, args.data).encode("utf-8"))
+    counted = churn_stats(args.data, events)
+    _write(os.path.join(args.data, "stats.json"), _json_bytes(counted))
+    _write(os.path.join(args.data, "README.md"),
+           readme(events, generated, args.data, counted).encode("utf-8"))
     logged = write_lookup(args.data)
     print(f"rendered {min(len(events), FEED_EVENTS)} of {len(events)} events; "
           f"{logged} tool definitions in lookup/")
@@ -1007,7 +1012,69 @@ def atom(events: list, generated: str) -> str:
     return "\n".join(out) + "\n"
 
 
-def readme(events: list, generated: str, data: str) -> str:
+def churn_stats(data: str, events: list) -> dict:
+    """Every event by operator and by kind of change (operators.py).
+
+    Classifying an event reads both catalogues, so what stats.json already
+    says about an event is kept: an event and the catalogues it names never
+    change once written, so neither does its answer, and a day's render
+    reads only the day's new events.
+    """
+    import operators
+    previous: dict = {}
+    path = os.path.join(data, "stats.json")
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                previous = json.load(fh)
+        except (OSError, ValueError):
+            previous = {}
+    known_kinds = previous.get("classified") or {}
+    known_ops = previous.get("operator_of") or {}
+    kinds: dict[str, str] = {}
+    ops: dict[str, str] = {}
+    for e in events:
+        key = operators.event_key(e)
+        if key in known_kinds and key in known_ops:
+            kinds[key], ops[key] = known_kinds[key], known_ops[key]
+            continue
+        try:
+            before = read_catalogue(data, e["package"], e["from"])
+            after = read_catalogue(data, e["package"], e["to"])
+        except (OSError, ValueError, KeyError):
+            before = after = None
+        if before is None or after is None:
+            kinds[key] = "unclassified"
+            ops[key] = operators.operator(e["package"], None)
+            continue
+        named = lambda body: {str(t.get("name")): t for t in body.get("tools") or []
+                              if isinstance(t, dict)}
+        kinds[key] = operators.classify_event(named(before), named(after))
+        url = after.get("url") if e["package"].startswith(REMOTE_PREFIX) else None
+        ops[key] = operators.operator(e["package"], url if isinstance(url, str) else None)
+    return operators.tally(events, kinds, ops)
+
+
+OPERATORS_SHOWN = 12
+
+
+def _operator_rows(counted: dict) -> list[str]:
+    rows = counted["operators"]
+    lines = ["| operator | changes | substantive | numbers only | reordered only |",
+             "|---|---|---|---|---|"]
+    for r in rows[:OPERATORS_SHOWN]:
+        lines.append(f"| `{r['operator']}` | {r['changes']} | {r.get('substantive', 0)} | "
+                     f"{r.get('numbers-only', 0)} | {r.get('reorder-only', 0)} |")
+    rest = rows[OPERATORS_SHOWN:]
+    if rest:
+        lines.append(f"| {len(rest)} other operators | {sum(r['changes'] for r in rest)} | "
+                     f"{sum(r.get('substantive', 0) for r in rest)} | "
+                     f"{sum(r.get('numbers-only', 0) for r in rest)} | "
+                     f"{sum(r.get('reorder-only', 0) for r in rest)} |")
+    return lines
+
+
+def readme(events: list, generated: str, data: str, counted: dict | None = None) -> str:
     """Counts, names and versions only. The words a server wrote stay in the
     JSON and the Atom feed, where they are data; rendering them as Markdown on
     a page people read would hand a server a formatting channel."""
@@ -1029,7 +1096,8 @@ def readme(events: list, generated: str, data: str) -> str:
         f"releases ({len(live) - len(readings)} observed live, {len(events) - len(live)} "
         f"from the [churn study](https://github.com/rufat325/heldfast/blob/main/docs/CHURN.md)) "
         f"and {len(readings)} readings of hosted servers that found their tools changed; "
-        f"{len(review)} where `heldfast wrap --drift graded` would refuse something.", "",
+        f"{len(review)} where `heldfast wrap --drift graded` would refuse something."
+        + (" [Per operator, and by kind of change](#per-operator)." if counted else ""), "",
         "Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, "
         "with the words that moved: [events/](events).", "",
         "Each day's commit is anchored in Bitcoin with OpenTimestamps: "
@@ -1047,6 +1115,17 @@ def readme(events: list, generated: str, data: str) -> str:
     for e in events[:README_EVENTS]:
         lines.append(f"| {e['published'][:10]} | `{e['package']}` | "
                      f"{e['from']} -> {e['to']} | {summary(e)} | {e['grade']} |")
+    if counted:
+        k = counted["kinds"]
+        lines += ["", "## Per operator", "",
+                  f"A few operators account for most of the changes, and many changes move "
+                  f"only a number or an order: {k.get('substantive', 0)} substantive, "
+                  f"{k.get('numbers-only', 0)} that changed only numbers (a catalogue "
+                  f"counter ticking, a date), {k.get('reorder-only', 0)} that only "
+                  f"reordered a list. A number can still matter -- a price is one -- so this "
+                  f"sorts the count, it excuses nothing. Grouped by "
+                  f"{counted['grouping']}. Every event: [stats.json](stats.json).", ""]
+        lines += _operator_rows(counted)
     return "\n".join(lines) + "\n"
 
 
