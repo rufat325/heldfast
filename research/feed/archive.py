@@ -188,6 +188,7 @@ def tree_files(root: str):
 
 CARD = """---
 pretty_name: heldfast drift feed
+license: cc-by-4.0
 tags:
 - mcp
 - model-context-protocol
@@ -256,8 +257,16 @@ prove the data is accurate.
 
 ## Licence
 
-Not chosen yet. Until it is, no licence is granted here for this project's
-own data, and the tool text recorded in it remains its authors'.
+This project's own data -- the measurements, dates, grades, counts,
+digests, checkpoints and the archives' structure -- is licensed under
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+Credit it as "heldfast drift feed (rufat325/heldfast-feed)".
+
+The tool names, descriptions and schemas recorded in it are the MCP
+servers' own text, written by their authors, and are not licensed by this
+project. They are included as a record of what each server published, and
+remain their authors'. To ask for something to be removed, open an issue at
+[rufat325/heldfast-feed](https://github.com/rufat325/heldfast-feed/issues).
 """
 
 

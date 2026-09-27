@@ -1103,6 +1103,10 @@ def readme(events: list, generated: str, data: str, counted: dict | None = None)
         f"and {len(readings)} readings of hosted servers that found their tools changed; "
         f"{len(review)} where `heldfast wrap --drift graded` would refuse something."
         + (" [Per operator, and by kind of change](#per-operator)." if counted else ""), "",
+        "Licence: this project's own data (measurements, dates, grades, counts, digests, "
+        "checkpoints) is [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The tool "
+        "definitions recorded here are the servers' own text and remain their authors'; to "
+        "ask for something to be removed, open an issue.", "",
         "Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, "
         "with the words that moved: [events/](events).", "",
         "Each day's commit is anchored in Bitcoin with OpenTimestamps: "

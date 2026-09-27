@@ -154,9 +154,11 @@ class TestArchives(unittest.TestCase):
 
 
 class TestTheCard(unittest.TestCase):
-    def test_it_grants_no_licence_until_one_is_chosen(self) -> None:
-        self.assertNotIn("\nlicense:", archive.CARD)
-        self.assertIn("Not chosen yet", archive.CARD)
+    def test_it_licenses_only_this_projects_own_data(self) -> None:
+        front_matter = archive.CARD.split("---")[1]
+        self.assertIn("\nlicense: cc-by-4.0\n", front_matter)
+        self.assertIn("creativecommons.org/licenses/by/4.0", archive.CARD)
+        self.assertIn("are not licensed by this\nproject", archive.CARD)
         self.assertIn("belong to their authors", archive.CARD)
 
 
