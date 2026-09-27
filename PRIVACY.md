@@ -31,8 +31,11 @@ feed was read. The server asked about is looked up in the downloaded index on
 your machine; a local or private address is never looked up.
 
 **The Claude Code plugin** runs on your machine. It reads `.mcp-pin.lock`
-and the environment variable `HELDFAST_ALLOW_UNPINNED`, runs nothing else, and
-sends nothing anywhere.
+and the environment variable `HELDFAST_ALLOW_UNPINNED`, and by default runs
+nothing else and sends nothing anywhere. With `HELDFAST_SESSION_CHECK=1`, it
+runs the `heldfast` you installed once per session to read the tool lists of
+the hosted servers your lockfile records, at the URLs recorded there, with no
+credentials: those servers learn that a client connected.
 
 **Secrets.** Findings pass through a redaction step before any report or tool
 result is written, so a credential seen during analysis is not repeated back.

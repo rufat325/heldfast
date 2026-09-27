@@ -158,10 +158,13 @@ We do not claim these. Do not imply them in output.
   cache written after that check, or a package manager that refetches instead
   of reading its cache, is outside what reading the disk can see
 - Stopping a client that talks to the server *beside* the gateway (MCPA032 reports it)
-- Checking a tool's definition in the Claude Code hook. Claude Code gives a PreToolUse
-  hook the tool's name and the model's arguments, never the definition, so the hook
-  refuses servers and tools the lock does not name and nothing more. A definition
-  that changed under an approved name is refused by `wrap` and `gateway`. Another
+- Checking a tool's definition in the Claude Code hook at the moment of the call.
+  Claude Code gives a PreToolUse hook the tool's name and the model's arguments,
+  never the definition, so the hook refuses servers and tools the lock does not
+  name. With `HELDFAST_SESSION_CHECK=1` it also refuses a hosted server's tool
+  whose definition had changed when the session started; a change after that, a
+  hosted server behind a login, and every stdio server are refused only by `wrap`
+  and `gateway`. Another
   plugin's MCP servers are approved like any other; one packed as an MCP bundle
   (`.mcpb`, `.dxt`), or from a plugin synced from claude.ai, is not read, and a
   tool from a plugin server the lock does not name is refused unless named in

@@ -16,6 +16,7 @@
  */
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 
@@ -210,6 +211,32 @@ function resolveMcpTool(toolName, lock) {
   return { server: [...best.bares][0], tool: String(toolName).slice(("mcp__" + best.written + "__").length) };
 }
 
+/**
+ * Where a session's hosted-server check is kept: the plugin's data directory
+ * when Claude Code gives one, else the temporary directory. One file per
+ * session id, so one session's reading never governs another's.
+ */
+function sessionStatePath(sessionId) {
+  if (!sessionId || typeof sessionId !== "string") return null;
+  const dir = process.env.CLAUDE_PLUGIN_DATA || path.join(os.tmpdir(), "heldfast-plugin");
+  return path.join(dir, "session-" + sessionId.replace(/[^A-Za-z0-9_-]/g, "-") + ".json");
+}
+
+function writeSessionState(sessionId, state) {
+  const file = sessionStatePath(sessionId);
+  if (!file) return;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(state));
+  } catch (_err) { /* no state: the session is checked by name only */ }
+}
+
+function readSessionState(sessionId) {
+  const file = sessionStatePath(sessionId);
+  if (!file || !fs.existsSync(file)) return null;
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
 function readStdin() {
   return new Promise((resolve) => {
     let buf = "";
@@ -230,5 +257,8 @@ module.exports = {
   parseMcpTool,
   resolveMcpTool,
   toolServerName,
+  sessionStatePath,
+  writeSessionState,
+  readSessionState,
   readStdin,
 };

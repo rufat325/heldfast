@@ -46,7 +46,7 @@ Commit `.mcp-pin.lock`. From then on, one file is checked in three places:
 |---|---|---|
 | **CI** -- `heldfast ci` or the [GitHub Action](#ci) | the configuration against the lock: servers, launch commands, versions, integrity. The Action also reads each hosted server's tools (reading one runs nothing). A stdio server's tools only with `probe: true`, on a disposable runner | the PR fails, and the report shows the words that moved |
 | **your MCP client** -- `wrap`, or `gateway` for several servers | every tool definition the server sends, at call time. The only place a changed tool is refused as it is used | the tool is replaced with a refusal, and calls to it are blocked |
-| **Claude Code** -- the [plugin](#install) | the server and tool names a call uses. Claude Code does not show hooks the definitions, so a tool changed under an approved name needs `wrap` or `gateway` | a call to a server or tool the lock does not name is denied |
+| **Claude Code** -- the [plugin](#install) | the server and tool names a call uses. Claude Code does not show hooks the definitions; with `HELDFAST_SESSION_CHECK=1` it reads hosted servers' tools once at session start. Otherwise a tool changed under an approved name needs `wrap` or `gateway` | a call to a server or tool the lock does not name is denied, and, with the session check, a hosted tool that changed |
 
 With no lock, `wrap` will not start the server. That is not trust on first use.
 
@@ -330,7 +330,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1578 tests, stdlib unittest, nothing to install.
+1586 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

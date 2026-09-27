@@ -92,6 +92,7 @@ heldfast report trail.jsonl           # what the agent did: sessions, calls, ref
 heldfast guard --dry-run -- npx pkg   # what would the policy block?
 heldfast wrap --drift graded -- npx pkg  # forward a change that introduced nothing
 heldfast grade-drift < change.json    # the same grading, JSON in and out
+heldfast hosted-drift                 # which approved hosted tools read differently now (for the hook)
 heldfast policy --probe               # propose argument limits to review
 heldfast gateway                      # one endpoint in front of every approved server
 heldfast gateway --as finance         # ...restricted to one declared identity
@@ -1255,7 +1256,10 @@ Things that do not change under grading:
   change for it to grade. It checks names against the lock. An earlier version read a
   definition from the arguments, which the model writes and which proves nothing about
   the server; that is gone, and `MCP_PIN_DRIFT=graded` no longer does anything in the hook.
-  For definitions, put `wrap` or `gateway` in the path.
+  For definitions, put `wrap` or `gateway` in the path. The one exception is opt-in:
+  `HELDFAST_SESSION_CHECK=1` has the hook read each hosted server once when the session
+  starts (`heldfast hosted-drift`, which runs no server code) and refuse, for that
+  session, an approved tool whose definition had changed by then.
 
 **This is a heuristic, which is why it is not the default.** Grading answers "did the change
 match any pattern we know", not "is the change safe". A rewrite phrased to miss every
@@ -1613,7 +1617,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1578 tests, stdlib unittest, nothing to install.
+1586 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

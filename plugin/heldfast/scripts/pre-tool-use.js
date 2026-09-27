@@ -51,7 +51,7 @@
  */
 
 const { loadLock, findServerEntry, parseMcpTool, resolveMcpTool, readStdin,
-        LOCK_VERSION, DIGEST_CHANGED_IN } = require("./lib.js");
+        readSessionState, LOCK_VERSION, DIGEST_CHANGED_IN } = require("./lib.js");
 
 const PLUGIN_PREFIX = "mcp__plugin_";
 
@@ -157,6 +157,25 @@ async function decide(event) {
   const tools = entry.tools && typeof entry.tools === "object" ? entry.tools : {};
   if (!Object.prototype.hasOwnProperty.call(tools, parsed.tool)) {
     return deny("tool '" + parsed.tool + "' was not present at approval");
+  }
+
+  // HELDFAST_SESSION_CHECK=1: the hosted servers were read at session start.
+  // A state file that cannot be read is a refusal, like a lock that cannot.
+  let state = null;
+  try {
+    state = readSessionState(event.session_id);
+  } catch (err) {
+    return deny("this session's hosted-server check could not be read (" +
+      String(err && err.message || err) + "); refusing rather than allowing");
+  }
+  if (state && state.lock === lockPath && state.drifted) {
+    const key = Object.keys(data.servers).find((k) => data.servers[k] === entry);
+    const changed = key && Array.isArray(state.drifted[key]) ? state.drifted[key] : [];
+    if (changed.includes(parsed.tool)) {
+      return deny("tool '" + parsed.tool + "' reads differently from its approval: the " +
+        "server's own tool list, read at session start, has another definition for it. " +
+        "Review it with `heldfast approve --probe`");
+    }
   }
   return allow();
 }

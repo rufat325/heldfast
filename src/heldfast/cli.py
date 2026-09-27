@@ -933,6 +933,18 @@ def cmd_guard(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_hosted_drift(args: argparse.Namespace) -> int:
+    """hostedcheck.py for the Claude Code hook: JSON out, never the lock written."""
+    from .hostedcheck import check
+    try:
+        lock = Lock.load(Path(args.lock))
+    except ValueError as exc:
+        print(f"heldfast hosted-drift: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    print(json.dumps({"servers": check(lock.servers, timeout=args.timeout)}, sort_keys=True))
+    return EXIT_OK
+
+
 def cmd_grade_drift(_args: argparse.Namespace) -> int:
     """`guard --drift graded`'s test, for a caller that is not Python.
 
@@ -1242,6 +1254,7 @@ _COMMANDS = {
     "wrap": cmd_guard,
     "check": cmd_check,
     "grade-drift": cmd_grade_drift,
+    "hosted-drift": cmd_hosted_drift,
     "ci": cmd_ci,
     "serve": lambda _args: _serve(),
     "scan": cmd_scan,

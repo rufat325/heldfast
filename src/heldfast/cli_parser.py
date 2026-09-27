@@ -538,10 +538,29 @@ def _register_grade_drift(sub: argparse._SubParsersAction) -> None:
     )
 
 
+def _register_hosted_drift(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser(
+        "hosted-drift",
+        help="read each hosted server the lock records and list its approved tools "
+             "whose definition changed (runs no server code)",
+        description=(
+            "For the Claude Code hook, which sees tool names and never definitions. "
+            "Reads every hosted (HTTP) server in the lockfile at its recorded URL, "
+            "without headers, compares each tool's fingerprint with the lock and prints "
+            "{\"servers\": {<lock key>: {\"state\": \"read\" | \"unverified\", "
+            "\"drifted\": [...]}}}. A server that wants a login is unverified, not "
+            "drifted. Stdio servers are not read. Never writes the lock."
+        ),
+    )
+    p.add_argument("--lock", metavar="PATH", default=".mcp-pin.lock")
+    p.add_argument("--timeout", type=float, default=5.0,
+                   help="seconds per server (default 5)")
+
+
 def _register_ci(sub: argparse._SubParsersAction) -> None:
     ci = sub.add_parser(
         "ci",
-        help="scan that fails the PR on MCPA014/015 (never launches)",
+        help="scan that fails the PR when the configuration left the lock (never launches)",
         description=(
             "The build-gate name. Equivalent to `scan --fail-on high` with "
             "`--probe` refused, so a runner cannot be talked into launching "
@@ -606,6 +625,7 @@ def build_parser() -> argparse.ArgumentParser:
     _register_guard(sub)
     _register_check(sub)
     _register_grade_drift(sub)
+    _register_hosted_drift(sub)
     _register_ci(sub)
     _register_serve(sub)
     # The command names come from the parser rather than a second list.
