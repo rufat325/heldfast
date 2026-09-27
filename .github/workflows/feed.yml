@@ -395,6 +395,15 @@ jobs:
         with:
           name: feed-checkpoint
           path: checkpoint
+      # A second run on the same day finds today's checkpoint recorded, and a
+      # recorded checkpoint is never signed again; record-anchor would refuse it.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: rufat325/heldfast-feed
+          ref: main
+          path: feed-data
+          persist-credentials: false
+          sparse-checkout: checkpoints
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v3.1.3
@@ -404,6 +413,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out/checkpoints
+          if [ -e "feed-data/checkpoints/$DAY.json" ]; then
+            echo "a checkpoint for $DAY is already recorded; not signing a second"
+            exit 0
+          fi
           cp "checkpoint/$DAY.json" out/checkpoints/
           cosign sign-blob --yes --bundle "out/checkpoints/$DAY.json.sigstore.json" \
             "out/checkpoints/$DAY.json"
