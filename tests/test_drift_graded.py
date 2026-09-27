@@ -206,6 +206,33 @@ class TestPrices(unittest.TestCase):
     def test_a_number_that_is_not_money_is_not_a_price(self) -> None:
         self.assertEqual([], prices(APPROVED, APPROVED + " Returns up to 100 rows, 5 USDT fees."))
 
+    def test_a_size_is_not_a_price(self) -> None:
+        """"$80M", "US $100K": the clearest false alarms in the feed."""
+        for said in ("Bands: low (under $80M), mid ($80M to $500M).",
+                     "Thresholds: US $100K, SG $1M.", "A $2bn fund.", "Revenue of $3 million."):
+            with self.subTest(said):
+                self.assertEqual([], prices(APPROVED, APPROVED + " " + said))
+
+    def test_a_price_however_it_is_phrased_is_held(self) -> None:
+        """Requiring price words nearby was measured on the feed and missed real
+        prices phrased without them. Any amount counts, sizes aside."""
+        for said, amount in (("Costs $0.05 per call.", "0.05"), ("$0.05/request", "0.05"),
+                             ("Price: $0.50", "0.5"), ("$29/month", "29"),
+                             ("Pay 2 USDC via x402.", "2"), ("$0.002 per 1,000 tokens", "0.002"),
+                             ("$50.10 as a Deadline Notice", "50.1"),
+                             ("A 1.00 USD specialist operation.", "1"),
+                             ("Buy the Pro kit for $29.", "29")):
+            with self.subTest(said):
+                self.assertEqual([amount], prices(APPROVED, APPROVED + " " + said))
+
+    def test_prices_in_a_services_own_units(self) -> None:
+        """The feed also prices in credits and sats; 8 credits is not $8."""
+        self.assertEqual(["8 credits"], prices(APPROVED, APPROVED + " Debits 8 credits."))
+        self.assertEqual(["200 sats"], prices(APPROVED, APPROVED + " 200 sats per edit."))
+        before = APPROVED + " Costs 5 credits."
+        self.assertEqual(["8 credits"], prices(before, APPROVED + " Costs 8 credits."))
+        self.assertEqual([], prices(before, APPROVED + " Costs 5 credit."))
+
     def test_the_guard_holds_a_repriced_tool_under_graded(self) -> None:
         g = graded({"solve": PRICED})
         out = g.filter_tools([wire("solve", PRICED.replace("$0.012", "$0.05"))])

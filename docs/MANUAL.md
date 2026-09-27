@@ -1223,19 +1223,22 @@ and the change introduced credential-path '~/.ssh/', signal:concealment 'never r
 What counts: an instruction to conceal, override, exfiltrate or act before anything else;
 a hidden or bidirectional-control character; a credential path; a word spelled with
 look-alike letters; the critical words `approve` already refuses to `--yes` past; and a
-price -- a `$` amount or an amount in USD or USDC -- that the approved text did not state.
-A price is not aimed at the agent, but for one that pays per call it is part of what was
-approved: a rise, a cut or a new amount is refused, and the same amount written
-differently (`$0.05`, `$0.050`) is not a change. The description is not the bill, which is
-set when the call is paid; it is what the tool said it would charge. The approved side is
-the recorded preview, so an amount past its first 4,096 characters, or inside a schema,
-counts as new on any change to that tool. Measured over the feed's 11,734 events on 27
-September 2026: graded against the full previous text, 422 tool changes on 50 servers would
-be held for a price, and 58 events graded quiet would have been review; graded against the
-preview a lock records, 535 changes on 68 servers, the extra 58 tools on 21 servers being
-amounts the preview never held. Both forms also match money that is not a per-call price --
-a shop's product prices, a threshold in a filter -- which reads as a change only when the
-amount itself moved. What is
+price -- a `$` amount, an amount in USD or USDC, or one in credits or sats -- that the
+approved text did not state. A price is not aimed at the agent, but for one that pays per
+call it is part of what was approved: a rise, a cut or a new amount is refused, and the same
+amount written differently (`$0.05`, `$0.050`) is not a change. A size (`$80M`, `$100K`) is
+not a price. The description is not the bill, which is set when the call is paid; it is what
+the tool said it would charge. The approved side is the recorded preview, so an amount past
+its first 4,096 characters, or inside a schema, counts as new on any change to that tool.
+
+Measured over the feed's 12,015 events on 27 September 2026: graded against the full
+previous text, 522 tool changes on 65 servers would be held for a price; graded against the
+preview a lock records, 660 on 84 servers, the difference being amounts the preview never
+held. A stricter rule, counting an amount only with price words beside it ("per call",
+"costs"), was measured too and rejected: it missed real prices phrased without them, such as
+"$50.10 as a Deadline Notice" and "1.00 USD specialist operation". So any stated amount
+counts, including a shop's product prices, which read as a change only when the amount itself
+moved; "quiet" means no price this recognises changed, not that none did. What is
 read: the description, the title, and every description and title inside the input and
 output schemas - a parameter description is model-facing too, and it is where a careful
 rewrite would put the instruction.
@@ -1617,7 +1620,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1615 tests, stdlib unittest, nothing to install.
+1618 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

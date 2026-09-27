@@ -16,8 +16,10 @@ A price is not aimed at the agent, but for an agent that pays per call it is
 part of what was approved: the feed saw one server raise three tools' prices
 three to five times in a change graded quiet. Any amount the approved text
 did not state is introduced -- a rise, a cut, a new one -- and an amount
-written differently (`$0.05`, `$0.050`) is the same amount. The description
-is a signal, not the bill: what is charged is set at call time.
+written differently (`$0.05`, `$0.050`) is the same amount. Dollars (`$`,
+USD, USDC) and the service units the feed shows (credits, sats) count; a
+size (`$80M`, `$100K`) does not. The description is a signal, not the bill:
+what is charged is set at call time.
 
 The approved side is what the lockfile recorded: the description preview
 (the first PREVIEW_CHARS characters) and its full length. Nothing else was
@@ -59,6 +61,20 @@ _SPACE = re.compile(r"\s+")
 _AMOUNT = r"(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)"
 PRICES = (re.compile(r"\$\s?" + _AMOUNT),
           re.compile(_AMOUNT + r"\s?USDC?\b", re.IGNORECASE))
+# Prices the feed also states in a service's own units: "debits 8 credits",
+# "200 sats per edit". Kept apart from dollars: 8 credits is not $8.
+UNIT_PRICES = (("credits", re.compile(_AMOUNT + r"\s?credits?\b", re.IGNORECASE)),
+               ("sats", re.compile(_AMOUNT + r"\s?(?:sats?|satoshis?)\b", re.IGNORECASE)))
+# "$80M", "US $100K", "$2bn": a size, not what a call costs. Every other
+# amount counts. Requiring price words nearby instead ("per call", "costs")
+# was measured on the feed and missed real prices phrased without them --
+# "$50.10 as a Deadline Notice", "1.00 USD specialist operation" -- and a
+# price change that passes as quiet is worse than one review too many.
+_SIZE = re.compile(r"\s?(?:[kmb]|bn|mn|million|billion|thousand)\b", re.IGNORECASE)
+
+
+def _priced(text: str, match: "re.Match[str]") -> bool:
+    return _SIZE.match(text, match.end()) is None
 
 
 def _amount(text: str) -> str:
@@ -99,7 +115,11 @@ def signals(text: str) -> set[Signal]:
         out.add(Signal("confusable", word))
     for pattern in PRICES:
         for m in pattern.finditer(text):
-            out.add(Signal("price", _amount(m.group(1))))
+            if _priced(text, m):
+                out.add(Signal("price", _amount(m.group(1))))
+    for unit, pattern in UNIT_PRICES:
+        for m in pattern.finditer(text):
+            out.add(Signal("price", f"{_amount(m.group(1))} {unit}"))
     lowered = text.lower()
     for needle in CRITICAL_NEEDLES:
         if needle in lowered:
