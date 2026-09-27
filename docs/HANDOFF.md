@@ -16,6 +16,14 @@ Read this file and `docs/GUARANTEES.md` instead.
   absent, so renaming the file is not a silent loss of enforcement.
 - Last public commit on `main` before this freeze work:
   `d54123c Stop a name in a config from rewriting the report about it`
+- The feed's data lives in `rufat325/heldfast-feed`; its collector is
+  `.github/workflows/feed.yml` here. GitHub disables a public repository's
+  scheduled workflows after 60 days without activity, and since the data moved
+  out, this repository is active only when someone commits to it. So it needs
+  a commit at least every 60 days, or the collector stops. The watchdog in the
+  feed repository (from `research/feed/feed-repo-watchdog.yml`) keeps running
+  either way and opens an issue there when nothing has been published for 26
+  hours; the fix is to enable `feed.yml` again on the Actions tab.
 - `pkgcache.py` is on the launch path and is in the `mypy --strict` job for
   that reason. It opens no socket; if it ever needs to, that is a design
   change, not an implementation detail.

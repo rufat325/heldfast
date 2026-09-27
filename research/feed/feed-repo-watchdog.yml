@@ -1,0 +1,58 @@
+# Notices the drift feed stopping without failing, from the repository that
+# changes every day. Copied into rufat325/heldfast-feed as
+# .github/workflows/watchdog.yml; the logic is research/feed/watchdog.py in
+# rufat325/heldfast, read from there at run time.
+#
+# It lives here, not in heldfast, because GitHub disables a public
+# repository's scheduled workflows after 60 days without activity. This
+# repository gets a commit every day while the feed runs, so its schedule
+# stays on -- and if the collector in heldfast stops, even because its own
+# schedule was disabled, this keeps running and opens an issue here, with this
+# repository's own token and no other credential. Watch this repository to
+# get the notification.
+name: watchdog
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: rufat325/heldfast
+          ref: main
+          path: tool
+          persist-credentials: false
+      - name: Check that the feed is moving
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          last=$(gh api "repos/$REPO/commits/main" --jq .commit.committer.date)
+          gh run list --repo rufat325/heldfast --workflow feed.yml --status in_progress \
+            --json createdAt,url > runs.json
+          if problems=$(python3 tool/research/feed/watchdog.py check --last-change "$last" --runs runs.json); then
+            echo "$problems"
+            exit 0
+          fi
+          title="feed: stalled"
+          body=$(printf 'The drift feed has stopped moving:\n\n%s\n\nThe collector is `feed.yml` in rufat325/heldfast. A run that hangs holds its concurrency group, so later runs wait behind it: cancel it on the Actions tab. If GitHub disabled the schedule after 60 days without activity, enable feed.yml again there.' "$problems")
+          number=$(gh issue list --repo "$REPO" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$REPO" --body "$body" >/dev/null
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body" >/dev/null
+          fi
+          echo "$problems"

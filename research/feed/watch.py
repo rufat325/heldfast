@@ -115,6 +115,8 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9@._\-]+$")
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+\-]*$")
 ALLOWED = re.compile(
     r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|stats\.json|"
+    # The feed repository's own watchdog (research/feed/feed-repo-watchdog.yml).
+    r"\.github/workflows/watchdog\.yml|"
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
     r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta|all)\.json|lookup/all\.json\.gz|"
     r"tools/[0-9a-f]{2}/[0-9a-f]{64}\.json|"

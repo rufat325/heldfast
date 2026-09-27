@@ -32,7 +32,7 @@ OLD = (
 )
 SCANNED = ("README.md", "PRIVACY.md", "SECURITY.md", "CONTRIBUTING.md", "action.yml",
            "updates/action.yml")
-SCANNED_TREES = (("docs", "*.md"), ("src", "*.py"), ("research", "*.py"),
+SCANNED_TREES = (("docs", "*.md"), ("src", "*.py"), ("research", "*.py"), ("research", "*.yml"),
                  (".github/workflows", "*.yml"), ("plugin", "*.*"), ("js", "*.js"))
 
 
@@ -65,7 +65,7 @@ class TestTheFeedIsWhereItLives(unittest.TestCase):
         scanned = {p.relative_to(ROOT).as_posix() for p in files()}
         for must in ("README.md", "docs/LOOKUP.md", "src/heldfast/feedlock.py",
                      "research/feed/watch.py", ".github/workflows/feed.yml",
-                     ".github/workflows/feed-watchdog.yml", "updates/action.yml"):
+                     "research/feed/feed-repo-watchdog.yml", "updates/action.yml"):
             self.assertIn(must, scanned)
 
 
