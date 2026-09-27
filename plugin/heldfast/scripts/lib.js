@@ -192,7 +192,10 @@ function resolveMcpTool(toolName, lock) {
     if (!entry || typeof entry !== "object") continue;
     const bare = typeof entry.name === "string" && entry.name ? entry.name
       : key.slice(key.indexOf(":") + 1);
-    const written = toolServerName(bare);
+    // A plugin's server is recorded as `<plugin>:<server>` and registered by
+    // Claude Code as `plugin:<plugin>:<server>`.
+    const fromPlugin = entry.client === "claude-code-plugin" || key.startsWith("claude-code-plugin:");
+    const written = toolServerName(fromPlugin ? "plugin:" + bare : bare);
     if (!byWritten.has(written)) byWritten.set(written, new Set());
     byWritten.get(written).add(bare);
   }

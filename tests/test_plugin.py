@@ -236,7 +236,7 @@ class TestAnotherPluginsServers(_Tmp):
         for named in ("plugin_other-plugin", "plugin_other-plugin_d", "plugin_other-plugin_db2",
                       "PLUGIN_other-plugin_db", "other-plugin_db", "*"):
             with self.subTest(named):
-                self.assertIn("cannot pin", self.decide(
+                self.assertIn("does not name that server", self.decide(
                     self.TOOL, {"HELDFAST_ALLOW_UNPINNED": named}))
 
     def test_the_override_is_for_plugin_servers_only(self) -> None:

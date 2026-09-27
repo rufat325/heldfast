@@ -42,9 +42,10 @@
  * ANOTHER PLUGIN'S SERVERS
  * ------------------------
  * Claude Code names a tool from a plugin-bundled MCP server
- * `mcp__plugin_<plugin>_<server>__<tool>`. heldfast cannot pin those yet, so
- * they are refused with that said, rather than as "not in the lockfile",
- * which suggested a re-approval that cannot help. HELDFAST_ALLOW_UNPINNED
+ * `mcp__plugin_<plugin>_<server>__<tool>`. `heldfast approve` finds installed
+ * plugins' servers and records them as `claude-code-plugin:<plugin>:<server>`,
+ * and those are matched like any other. One the lock does not name is refused
+ * with what it is and how to approve it. HELDFAST_ALLOW_UNPINNED
  * (comma-separated, matched exactly, e.g. `plugin_other-plugin_db`) lets named
  * ones through, unpinned, and says so on every call.
  */
@@ -89,8 +90,9 @@ function unmatched(toolName) {
       return allow();
     }
     return deny("'" + toolName + "' is a tool from another Claude Code plugin's MCP " +
-      "server, which heldfast cannot pin yet, so it is refused. To call it unpinned, set " +
-      "HELDFAST_ALLOW_UNPINNED to that server's name as it appears after mcp__ " +
+      "server, and the lockfile does not name that server. `heldfast approve --probe` " +
+      "records installed plugins' servers; or, to call it unpinned, set " +
+      "HELDFAST_ALLOW_UNPINNED to its name as it appears after mcp__ " +
       "(plugin_<plugin>_<server>).");
   }
   const named = parseMcpTool(toolName);

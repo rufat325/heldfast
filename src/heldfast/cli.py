@@ -145,6 +145,13 @@ def _collect_configs(out: "Collected", roots: list[Path], args: argparse.Namespa
         exclude=_excludes(args),
     )
     out.config_count = len(config_files)
+    if not args.no_user_configs:
+        # Claude Code plugins bundle MCP servers of their own; they are user
+        # level, like the client configs above (claudeplugins.py).
+        from .claudeplugins import plugin_servers
+        bundled, notes = plugin_servers()
+        out.servers.extend(bundled)
+        out.errors.extend(notes)
     from .clients import BY_ID
     for path, client in config_files:
         servers, errors = parse_config(path, client)

@@ -161,9 +161,11 @@ We do not claim these. Do not imply them in output.
 - Checking a tool's definition in the Claude Code hook. Claude Code gives a PreToolUse
   hook the tool's name and the model's arguments, never the definition, so the hook
   refuses servers and tools the lock does not name and nothing more. A definition
-  that changed under an approved name is refused by `wrap` and `gateway`. Tools from
-  another plugin's MCP server are refused as unpinnable, unless named in
-  `HELDFAST_ALLOW_UNPINNED`, which calls them unpinned
+  that changed under an approved name is refused by `wrap` and `gateway`. Another
+  plugin's MCP servers are approved like any other; one packed as an MCP bundle
+  (`.mcpb`, `.dxt`), or from a plugin synced from claude.ai, is not read, and a
+  tool from a plugin server the lock does not name is refused unless named in
+  `HELDFAST_ALLOW_UNPINNED`, which calls it unpinned
 - Proving a regex matches "all prompt injection"
 - Checking the *current* definition of a tool on a `tools/call` that arrives
   before any `tools/list`. The name is checked against the lock, and a tool

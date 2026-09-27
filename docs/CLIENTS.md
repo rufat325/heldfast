@@ -5,7 +5,7 @@ Frozen 2026-09-21. This is not a discoverer race. Seventeen entries; Goose and C
 | id | name | last verified | notes |
 |---|---|---|---|
 | claude-desktop | Claude Desktop | 2026-09-21 | `claude_desktop_config.json` |
-| claude-code | Claude Code | 2026-09-21 | `.mcp.json`, `~/.claude.json`; also the plugin in `plugin/heldfast` |
+| claude-code | Claude Code | 2026-09-21 | `.mcp.json`, `~/.claude.json`, and the MCP servers of installed plugins (`claude-code-plugin:<plugin>:<server>`); also the plugin in `plugin/heldfast` |
 | cursor | Cursor | 2026-09-21 | `.cursor/mcp.json` |
 | vscode | VS Code | 2026-09-21 | servers under `servers` |
 | windsurf | Windsurf | 2026-09-21 | |

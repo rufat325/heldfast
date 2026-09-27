@@ -16,7 +16,7 @@ This is not TOFU. An unpinned project refuses MCP calls until `heldfast approve 
 
 **Names, not definitions.** Claude Code gives a PreToolUse hook the tool's name and the arguments the model wrote. It never gives the hook the tool's definition. So this hook checks names: it cannot see a tool whose description or schema changed under an approved name. `heldfast wrap` and `heldfast gateway` sit between the client and the server and see the definitions; put one of them in the path for that. An earlier version hashed a definition when one appeared in the arguments. The model writes those, so it proved nothing; it is gone, and `MCP_PIN_DRIFT=graded` no longer does anything here.
 
-**Other plugins' MCP servers.** Claude Code names a tool from a plugin-bundled server `mcp__plugin_<plugin>_<server>__<tool>`. heldfast cannot pin those yet, so they are refused, with a message saying so. To call one anyway, unpinned, list its server exactly as it appears after `mcp__` in `HELDFAST_ALLOW_UNPINNED`, comma-separated:
+**Other plugins' MCP servers.** Claude Code names a tool from a plugin-bundled server `mcp__plugin_<plugin>_<server>__<tool>`. `heldfast approve --probe` finds the servers your installed, enabled plugins declare (their `.mcp.json` and the `mcpServers` in their manifest) and records them as `claude-code-plugin:<plugin>:<server>`; from then on they are checked like any other. MCP bundles (`.mcpb`, `.dxt`) and plugins synced from claude.ai are not read, and approval says so. A plugin server the lock does not name is refused with a message saying how to approve it. To call one anyway, unpinned, list its server exactly as it appears after `mcp__` in `HELDFAST_ALLOW_UNPINNED`, comma-separated:
 
 ```
 HELDFAST_ALLOW_UNPINNED=plugin_other-plugin_db
