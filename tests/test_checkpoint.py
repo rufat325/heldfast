@@ -99,8 +99,14 @@ class TestFromGit(unittest.TestCase):
     """The checkpoint reads the commit, not whatever the checkout holds."""
 
     def setUp(self) -> None:
-        self.tmp = tempfile.mkdtemp(prefix="heldfast-checkpoint-")
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        # TemporaryDirectory, not mkdtemp + rmtree: git writes its objects
+        # read-only, which rmtree cannot remove on Windows, and with
+        # ignore_errors that left a folder behind on every run. The files the
+        # tests write beside the repository (".." below) are inside it too.
+        base = tempfile.TemporaryDirectory(prefix="heldfast-checkpoint-")
+        self.addCleanup(base.cleanup)
+        self.tmp = os.path.join(base.name, "feed")
+        os.makedirs(self.tmp)
         git = ["git", "-C", self.tmp, "-c", "user.name=t", "-c", "user.email=t@example.invalid",
                "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false"]
         subprocess.run(["git", "init", "-q", self.tmp], check=True)
