@@ -1,6 +1,6 @@
 """heldfast -- a zero-dependency security scanner for MCP servers and agent skills."""
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 from .findings import Finding, Location, Severity
 
