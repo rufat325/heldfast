@@ -98,6 +98,20 @@ Said plainly, because a security tool that overclaims is worse than none:
   several independent logs and monitors watch each other. That is the next
   step, and it is the part worth doing with the registry rather than alone.
 
+## Why it runs continuously, and who reads it
+
+The feed is built by `.github/workflows/feed.yml` in this repository, and it
+is the data several heldfast commands run on. `approve --from-feed` pins a
+server from a catalogue the feed measured, instead of running the server
+here. `updates` grades each newer release by the feed's measurement before
+proposing it. `verify`, and `approve --probe` for a hosted server, compare
+what a server shows you with what the feed read. `verify` also looks each
+approved tool up in `lookup/`. The opt-in `server_history` tool of `heldfast
+serve` answers from its index. A hosted server has no release to go back to:
+a version it shows for a few hours exists in the record only if it was read
+during those hours. That is why the measuring is daily, and every four hours
+for servers that changed recently, rather than done once when someone asks.
+
 ## Checkpoints
 
 Every date in the log is written by whoever holds the push credential: a
