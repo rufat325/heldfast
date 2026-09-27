@@ -165,6 +165,59 @@ class TestGradedRefuses(unittest.TestCase):
                            wire("read", APPROVED, deep), "unreadable")
 
 
+PRICED = "Solve a captcha. Costs $0.012 per call, paid over x402."
+
+
+def prices(recorded: str, live: str) -> list[str]:
+    found = driftgrade.introduced({"description_preview": recorded}, live)
+    return [s.match for s in found if s.kind == "price"]
+
+
+class TestPrices(unittest.TestCase):
+    """A price changed since approval is a material change to what was
+    approved for an agent that pays per call. In the feed, 28 such changes
+    were graded quiet, among them rises of three to five times."""
+
+    def test_a_rise_is_introduced(self) -> None:
+        self.assertEqual(["0.05"], prices(PRICED, PRICED.replace("$0.012", "$0.05")))
+
+    def test_a_cut_is_introduced_too(self) -> None:
+        # The question is whether the tool still says what was approved.
+        self.assertEqual(["0.001"], prices(PRICED, PRICED.replace("$0.012", "$0.001")))
+
+    def test_a_formatting_change_is_not(self) -> None:
+        for spelled in ("$0.0120", "$0.012000", "$ 0.012", "0.012 USDC", "0.012 usd"):
+            with self.subTest(spelled):
+                self.assertEqual([], prices(PRICED, PRICED.replace("$0.012", spelled)))
+        self.assertEqual([], prices("Costs $1,250.00.", "Costs $1250."))
+
+    def test_an_unchanged_amount_inside_the_preview_is_not(self) -> None:
+        self.assertEqual([], prices(PRICED, PRICED + " Results are cached for an hour."))
+
+    def test_a_new_amount_where_there_was_none_is(self) -> None:
+        self.assertEqual(["0.5"], prices(APPROVED, APPROVED + " Now $0.50 per invoice."))
+        self.assertEqual(["2"], prices(APPROVED, APPROVED + " 2 USDC per call."))
+
+    def test_an_amount_past_the_preview_counts_as_introduced(self) -> None:
+        """What the lock did not record cannot vouch for an amount."""
+        long = "x" * PREVIEW_CHARS + " Costs $0.012 per call."
+        self.assertEqual(["0.012"], prices(long[:PREVIEW_CHARS], long))
+
+    def test_a_number_that_is_not_money_is_not_a_price(self) -> None:
+        self.assertEqual([], prices(APPROVED, APPROVED + " Returns up to 100 rows, 5 USDT fees."))
+
+    def test_the_guard_holds_a_repriced_tool_under_graded(self) -> None:
+        g = graded({"solve": PRICED})
+        out = g.filter_tools([wire("solve", PRICED.replace("$0.012", "$0.05"))])
+        self.assertIn("BLOCKED BY heldfast", out[0]["description"])
+        self.assertIn("price", call(g, "solve")["result"]["content"][0]["text"])
+
+    def test_a_reworded_tool_at_the_same_price_is_forwarded(self) -> None:
+        g = graded({"solve": PRICED})
+        g.filter_tools([wire("solve", PRICED.replace("Solve a captcha.", "Solve one captcha."))])
+        self.assertIsNone(call(g, "solve"))
+
+
 class TestApprovalAgreesWithTheGuard(unittest.TestCase):
     """A change graded mode refuses is one `approve --yes` cannot write."""
 

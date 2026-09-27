@@ -9,8 +9,15 @@ often gets muted, and a muted control still looks like coverage.
 This answers the narrower question an upgrade actually raises: compared with
 the text that was approved, does the live definition *introduce* a signal --
 an instruction to conceal, override or exfiltrate, a hidden character, a
-credential path, a look-alike letter. Text the approved version already said
-is not introduced; it was reviewed.
+credential path, a look-alike letter, a price. Text the approved version
+already said is not introduced; it was reviewed.
+
+A price is not aimed at the agent, but for an agent that pays per call it is
+part of what was approved: the feed saw one server raise three tools' prices
+three to five times in a change graded quiet. Any amount the approved text
+did not state is introduced -- a rise, a cut, a new one -- and an amount
+written differently (`$0.05`, `$0.050`) is the same amount. The description
+is a signal, not the bill: what is charged is set at call time.
 
 The approved side is what the lockfile recorded: the description preview
 (the first PREVIEW_CHARS characters) and its full length. Nothing else was
@@ -32,6 +39,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Mapping
 
 from .confusables import mixed_script_words
@@ -45,6 +53,22 @@ CRITICAL_NEEDLES = (
 )
 
 _SPACE = re.compile(r"\s+")
+
+# The two forms prices take in the feed: "$0.012 per call", "0.05 USDC".
+# Another form is added with an example from the feed, not in anticipation.
+_AMOUNT = r"(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)"
+PRICES = (re.compile(r"\$\s?" + _AMOUNT),
+          re.compile(_AMOUNT + r"\s?USDC?\b", re.IGNORECASE))
+
+
+def _amount(text: str) -> str:
+    """One spelling per amount: "0.050000" and "0.05" are the same price."""
+    try:
+        value = Decimal(text.replace(",", ""))
+    except InvalidOperation:
+        return text
+    plain = format(value.normalize(), "f")
+    return plain if value else "0"
 
 
 @dataclass(frozen=True, order=True)
@@ -73,6 +97,9 @@ def signals(text: str) -> set[Signal]:
         out.add(Signal("credential-path", _norm(m.group(0))))
     for word in mixed_script_words(text):
         out.add(Signal("confusable", word))
+    for pattern in PRICES:
+        for m in pattern.finditer(text):
+            out.add(Signal("price", _amount(m.group(1))))
     lowered = text.lower()
     for needle in CRITICAL_NEEDLES:
         if needle in lowered:

@@ -1037,7 +1037,9 @@ def readme(events: list, generated: str, data: str) -> str:
         "[TRANSPARENCY.md](https://github.com/rufat325/heldfast/blob/main/docs/TRANSPARENCY.md#checkpoints).", "",
         "`quiet`: a graded pin forwards every changed tool (new tools still need "
         "approval). `review`: a change introduced an agent-directed instruction, hidden "
-        "character, credential path or look-alike letter. Review means read it, not "
+        "character, credential path or look-alike letter, or, from 2026-09-27, a price "
+        "the previous version did not state. Events before that date were graded "
+        "without prices and are kept as they were graded. Review means read it, not "
         "that it is hostile.", "",
         "| published | server | release | tools | grade |",
         "|---|---|---|---|---|",
