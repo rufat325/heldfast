@@ -26,11 +26,22 @@ servers you use. The protocol, and both ways: docs/LOOKUP.md.
 
 Read from the lock, so nothing is launched and nothing is connected to but
 the log.
+
+The whole record is fetched gzipped where the feed publishes it that way, and
+kept in the user's cache directory under the feed commit it was read at. What
+a commit holds never changes, so a cached copy for the same commit is the same
+record, and a second `verify` against an unchanged feed downloads nothing.
 """
 
 from __future__ import annotations
 
+import gzip
+import json
+import os
+import sys
+import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from . import feedlock
@@ -60,13 +71,90 @@ def bucket(feed: Feed, prefix: str) -> dict[str, dict]:
     return tools
 
 
+# Cached records kept. The newest two: the one in use, and the one before it
+# for a feed that has just moved on.
+KEEP = 2
+
+
+def cache_dir() -> Path:
+    """Where this user's machine keeps caches. Tests replace this."""
+    home = Path.home()
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = home / "Library" / "Caches"
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME") or home / ".cache")
+    return base / "heldfast"
+
+
+def _cached(commit: str) -> dict[str, dict] | None:
+    path = cache_dir() / f"lookup-{commit}.json.gz"
+    try:
+        with gzip.open(path, "rb") as fh:
+            raw = fh.read(feedlock.MAX_LOOKUP + 1)
+        body = json.loads(raw.decode("utf-8")) if len(raw) <= feedlock.MAX_LOOKUP else None
+    except FileNotFoundError:
+        return None
+    except (OSError, EOFError, ValueError):
+        body = None
+    tools = body.get("tools") if isinstance(body, dict) else None
+    if isinstance(tools, dict):
+        return tools
+    # Parsed before trusted: a copy that does not read as the record is removed
+    # and fetched again, never used.
+    try:
+        path.unlink()
+    except OSError:
+        pass
+    return None
+
+
+def _keep(commit: str, tools: dict[str, dict]) -> None:
+    """Write-then-rename, so a reader never sees half a file; keep the newest two.
+    A cache that cannot be written costs the next run a download, nothing else."""
+    folder = cache_dir()
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix="lookup-", suffix=".tmp", dir=folder)
+        try:
+            with os.fdopen(fd, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as fh:
+                fh.write(json.dumps({"tools": tools}, sort_keys=True).encode("utf-8"))
+            os.replace(tmp, folder / f"lookup-{commit}.json.gz")
+        except BaseException:
+            os.unlink(tmp)
+            raise
+        # The one just written, and the newest of the rest.
+        others = sorted((p for p in folder.glob("lookup-*.json.gz")
+                         if p.name != f"lookup-{commit}.json.gz"),
+                        key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in others[KEEP - 1:]:
+            old.unlink()
+    except OSError:
+        pass
+
+
 def everything(feed: Feed) -> dict[str, dict]:
-    """The whole record, which says nothing about what is being looked for."""
-    url = f"{feed.base}/lookup/all.json"
+    """The whole record, which says nothing about what is being looked for.
+
+    Gzipped first (lookup/all.json.gz), the plain file where the feed does
+    not have that yet; both bounded by the same limit the feed writes to.
+    Cached by feed commit when the commit is known -- a --feed base someone
+    chose has none, and is read fresh."""
+    if feed.commit:
+        cached = _cached(feed.commit)
+        if cached is not None:
+            return cached
+    url = f"{feed.base}/lookup/all.json.gz"
     body = feedlock.get_json(url)
+    if body is None:
+        url = f"{feed.base}/lookup/all.json"
+        body = feedlock.get_json(url)
     tools = body.get("tools") if isinstance(body, dict) else None
     if not isinstance(tools, dict):
         raise FeedError(f"{url}: not the lookup record")
+    if feed.commit:
+        _keep(feed.commit, tools)
     return tools
 
 

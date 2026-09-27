@@ -267,8 +267,10 @@ class TestPublishing(unittest.TestCase):
             entry = json.load(fh)["tools"][0]
         self.assertEqual(("read", digest), (entry["name"], entry["digest"]))
         self.assertEqual(64, len(entry["fingerprint"]))
-        for _, _, files in os.walk(self.data):
-            self.assertFalse([f for f in files if f.endswith(".gz")])
+        # Only the whole lookup record is published gzipped, beside its plain copy.
+        for folder in ("catalogues", "tools"):
+            for _, _, files in os.walk(os.path.join(self.data, folder)):
+                self.assertFalse([f for f in files if f.endswith(".gz")])
 
     def test_a_tool_file_that_does_not_hash_to_its_name_is_refused(self) -> None:
         watch.write_catalogue(self.data, snap("1.0.2", tool("read", APPROVED)), [], "t")

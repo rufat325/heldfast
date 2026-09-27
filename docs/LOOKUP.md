@@ -30,8 +30,12 @@ whether you are looking at the same thing as everyone else.
 **The whole record** (`lookup/all.json`, the default for `verify`). One file,
 every fingerprint the log has seen. The client searches it locally. Whoever
 serves it learns that someone downloaded the record, and nothing about which
-tools or servers they have. It is about 13.5 MB today and grows as new
-definitions are logged.
+tools or servers they have. It is about 19 MB today and grows as new
+definitions are logged. The same bytes are published gzipped as
+`lookup/all.json.gz`, about a third of the size, which is what `verify` asks
+for first. It keeps what it downloaded in your cache directory under the feed
+commit it read, since a commit's content never changes: `verify` against an
+unchanged feed downloads nothing.
 
 **Buckets** (`lookup/<abc>.json`, `verify --lookup buckets`). The same record
 split 4,096 ways by the first three hex characters of the fingerprint, a few
@@ -54,8 +58,10 @@ either way: its bucket name matches nothing anyone else has.
    write `.mcp-pin.lock` have it on disk.
 2. **Fetch the record**, from
    `https://raw.githubusercontent.com/rufat325/heldfast/<commit>/lookup/all.json`,
-   where `<commit>` is the `feed` branch resolved to a commit (or `feed` itself,
-   if you do not need to record which state of the log you read). It is
+   (or `lookup/all.json.gz`, gzipped), where `<commit>` is the `feed` branch
+   resolved to a commit -- `git ls-remote https://github.com/rufat325/heldfast
+   refs/heads/feed` does that without the rate-limited REST API -- or `feed`
+   itself, if you do not need to record which state of the log you read. It is
    `{"prefix_length": 3, "tools": {"<fingerprint>": {"first_seen": "YYYY-MM-DD", "servers": N}}}`.
    *Or*, knowing what it reveals, fetch only `lookup/<first three hex characters>.json`,
    which is `{"prefix": "abc", "tools": {...}}` with the same entries.

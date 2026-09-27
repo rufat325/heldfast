@@ -11,6 +11,7 @@ only under --strict. Nothing here touches the network.
 
 from __future__ import annotations
 
+import gzip
 import io
 import json
 import os
@@ -35,6 +36,14 @@ from heldfast.probe import _parse_tools  # noqa: E402
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
 BASE = f"https://raw.githubusercontent.com/rufat325/heldfast/{SHA}"
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fake_feed  # noqa: E402
+
+
+def setUpModule() -> None:
+    fake_feed.install()
 
 
 def tool(name: str, description: str) -> dict:
@@ -76,6 +85,9 @@ class Published(unittest.TestCase):
         path = os.path.join(self.data, *url[len(BASE) + 1:].split("/"))
         if not os.path.exists(path):
             return None
+        if path.endswith(".gz"):
+            with gzip.open(path, "rb") as fh:
+                return json.loads(fh.read().decode("utf-8"))
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
 
@@ -121,7 +133,16 @@ class TestClient(Published):
         """The set of buckets a server's tools fall in identifies the server
         for most servers, so the default asks for no bucket at all."""
         self.look(READ, WRITE, PRIVATE)
-        self.assertEqual([f"{BASE}/lookup/all.json"], self.asked)
+        self.assertEqual([f"{BASE}/lookup/all.json.gz"], self.asked)
+
+    def test_a_feed_without_the_gzipped_record_is_read_from_the_plain_one(self) -> None:
+        os.remove(os.path.join(self.data, "lookup", "all.json.gz"))
+        self.look(READ, WRITE, PRIVATE)
+        self.assertEqual([f"{BASE}/lookup/all.json.gz", f"{BASE}/lookup/all.json"], self.asked)
+
+    def test_the_gzipped_record_is_the_plain_one(self) -> None:
+        with open(os.path.join(self.data, "lookup", "all.json"), "rb") as plain,                 gzip.open(os.path.join(self.data, "lookup", "all.json.gz"), "rb") as packed:
+            self.assertEqual(plain.read(), packed.read())
 
     def test_buckets_ask_only_for_bucket_names(self) -> None:
         self.look(READ, WRITE, PRIVATE, mode="buckets")

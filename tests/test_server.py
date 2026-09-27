@@ -40,6 +40,14 @@ MALICIOUS_CONFIG = json.dumps({
 })
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fake_feed  # noqa: E402
+
+
+def setUpModule() -> None:
+    fake_feed.install()
+
+
 def call(message: dict) -> dict | None:
     """Drive one JSON-RPC message through the handler and capture the reply."""
     buf = io.StringIO()
