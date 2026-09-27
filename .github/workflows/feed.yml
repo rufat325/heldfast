@@ -19,6 +19,14 @@
 #                   file against the names, sizes and formats the feed produces
 #                   (with the code from main), folds the events, renders,
 #                   verifies again, commits.
+#   anchor          After the daily publish. Stamps the checkpoint publish wrote
+#                   (one digest of every file in the commit it pushed) with
+#                   OpenTimestamps, and upgrades earlier proofs still pending.
+#                   Runs a third-party client, installed by hash, so it cannot
+#                   write: it uploads the stamps.
+#   record-anchor   Takes the anchor job's upload only under checkpoints/, only
+#                   the checkpoint publish described and proofs that name it,
+#                   checked with the code from main; then commits it.
 #   sync            Weekly. Rebuilds the watchlist from the registry. Reads
 #                   JSON, launches nothing, writes only watchlist.json.
 #   alert           When any of the above fails or is cancelled: opens an
@@ -186,6 +194,11 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    outputs:
+      day: ${{ steps.checkpoint.outputs.day }}
+      feed_commit: ${{ steps.checkpoint.outputs.feed_commit }}
+      manifest_sha256: ${{ steps.checkpoint.outputs.manifest_sha256 }}
+      checkpoint_sha256: ${{ steps.checkpoint.outputs.checkpoint_sha256 }}
     steps:
       # The verifier comes from main, not from anything a measuring job wrote.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -233,12 +246,149 @@ jobs:
           git commit -q -m "feed: $(date -u +%Y-%m-%d)"
           git push origin HEAD:feed
 
+      # Once a day, even when nothing moved: the anchor proves the whole record
+      # existed by today, and a day that is not anchored cannot be later.
+      - name: Describe the published commit for the anchor
+        id: checkpoint
+        if: github.event.schedule != '43 */4 * * *'
+        run: |
+          set -euo pipefail
+          day=$(date -u +%Y-%m-%d)
+          mkdir -p checkpoint
+          python3 tool/research/feed/watch.py checkpoint --data feed-data \
+            --commit "$(git -C feed-data rev-parse HEAD)" --day "$day" \
+            --generator-commit "$(git -C tool rev-parse HEAD)" \
+            --out "checkpoint/$day.json" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.checkpoint.outcome == 'success'
+        with:
+          name: feed-checkpoint
+          path: checkpoint
+          retention-days: 3
+
+  # Stamps the checkpoint with OpenTimestamps: a calendar aggregates it into a
+  # Bitcoin transaction, which proves the checkpoint -- and so every file it
+  # digests -- existed no later than that block. The client is third-party
+  # code, so this job can read and nothing more; record-anchor decides what of
+  # its upload reaches the feed.
+  anchor:
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.publish.outputs.feed_commit != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          path: tool
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: feed
+          path: feed-data
+          persist-credentials: false
+          sparse-checkout: checkpoints
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: feed-checkpoint
+          path: checkpoint
+      - name: Install the OpenTimestamps client, by hash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ots"
+          "$RUNNER_TEMP/ots/bin/pip" install --quiet --require-hashes --only-binary :all: \
+            -r tool/research/feed/anchor-requirements.txt
+      - name: Stamp today's checkpoint, upgrade the proofs still pending
+        env:
+          DAY: ${{ needs.publish.outputs.day }}
+        run: |
+          set -euo pipefail
+          ots="$RUNNER_TEMP/ots/bin/ots"
+          mkdir -p out/checkpoints work
+          if [ -e "feed-data/checkpoints/$DAY.json" ]; then
+            echo "a checkpoint for $DAY is already recorded; not stamping a second"
+          else
+            cp "checkpoint/$DAY.json" out/checkpoints/
+            "$ots" stamp "out/checkpoints/$DAY.json"
+          fi
+          # A fresh proof is pending until a calendar's transaction confirms,
+          # hours later. `ots upgrade` exits 1 while it still is, and keeps the
+          # old proof as .bak when it gets something new, so compare instead.
+          for proof in feed-data/checkpoints/*.ots; do
+            [ -e "$proof" ] || continue
+            # Exits 1 when the proof already carries a Bitcoin attestation.
+            python3 -c 'import sys; sys.exit(bytes.fromhex("0588960d73d71901") in open(sys.argv[1], "rb").read())' "$proof" || continue
+            work="work/$(basename "$proof")"
+            cp "$proof" "$work"
+            "$ots" upgrade "$work" || true
+            if ! cmp -s "$proof" "$work"; then cp "$work" out/checkpoints/; fi
+          done
+          ls -l out/checkpoints
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: feed-anchor
+          path: out
+          retention-days: 3
+          if-no-files-found: ignore
+
+  # The only job that writes what the anchor job produced, and it runs none of
+  # that job's code: watch.py admit-anchor, from main, takes a file only under
+  # checkpoints/, today's checkpoint only if it is byte for byte the one
+  # publish described, and a proof only if it names that file's digest.
+  record-anchor:
+    needs: [publish, anchor]
+    if: ${{ !cancelled() && needs.anchor.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          path: tool
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: feed
+          path: feed-data
+          sparse-checkout: checkpoints
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: feed-anchor
+          path: incoming
+          merge-multiple: true
+      - name: Take the checkpoint and proofs only if they are what publish described
+        env:
+          DAY: ${{ needs.publish.outputs.day }}
+          FEED_COMMIT: ${{ needs.publish.outputs.feed_commit }}
+          MANIFEST: ${{ needs.publish.outputs.manifest_sha256 }}
+          CHECKPOINT: ${{ needs.publish.outputs.checkpoint_sha256 }}
+        run: |
+          python3 tool/research/feed/watch.py admit-anchor --data feed-data --incoming incoming \
+            --day "$DAY" --feed-commit "$FEED_COMMIT" \
+            --manifest-sha256 "$MANIFEST" --checkpoint-sha256 "$CHECKPOINT"
+      - name: Commit to the feed branch
+        env:
+          DAY: ${{ needs.publish.outputs.day }}
+        run: |
+          set -euo pipefail
+          cd feed-data
+          git config user.name "heldfast feed"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add checkpoints
+          if git diff --cached --quiet; then
+            echo "nothing to anchor"
+            exit 0
+          fi
+          git commit -q -m "feed: checkpoint $DAY"
+          git push origin HEAD:feed
+
   # A failed or cancelled run opens an issue, or comments on the open one,
   # so it reaches the maintainer's inbox instead of waiting to be noticed on
   # the Actions tab. A run that stalls without failing is caught by
   # feed-watchdog.yml, since a hung job never gets this far.
   alert:
-    needs: [sync, measure-npm, measure-remote, publish]
+    needs: [sync, measure-npm, measure-remote, publish, anchor, record-anchor]
     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
