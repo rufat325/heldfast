@@ -148,10 +148,63 @@ function findServerEntry(lock, serverName) {
   return null;
 }
 
+/**
+ * How Claude Code writes a server's name inside a tool name: every character
+ * outside [A-Za-z0-9_-] becomes "_", and a "claude.ai " server's runs of "_"
+ * collapse and its edges are trimmed. Read from Claude Code 2.1.7's own
+ * normaliser. A plugin's server is registered as `plugin:<plugin>:<server>`,
+ * which this turns into `plugin_<plugin>_<server>`.
+ */
+function toolServerName(name) {
+  let out = String(name).replace(/[^a-zA-Z0-9_-]/g, "_");
+  if (String(name).startsWith("claude.ai ")) out = out.replace(/_+/g, "_").replace(/^_|_$/g, "");
+  return out;
+}
+
+/**
+ * The server and tool in `mcp__<server>__<tool>`, split the way Claude Code
+ * splits it: at the first "__" after the prefix. Only good for naming things
+ * in a message -- a server or a tool whose name holds "__" is split wrongly --
+ * so a decision goes through resolveMcpTool instead.
+ */
 function parseMcpTool(name) {
-  const m = /^mcp__(.+)__(.+)$/.exec(name || "");
-  if (!m) return null;
-  return { server: m[1], tool: m[2] };
+  const parts = String(name || "").split("__");
+  if (parts[0] !== "mcp" || parts.length < 3 || !parts[1]) return null;
+  return { server: parts[1], tool: parts.slice(2).join("__") };
+}
+
+/**
+ * Split a tool name against the servers the lock names, not a pattern.
+ *
+ * A greedy /^mcp__(.+)__(.+)$/ read `mcp__files__read__raw` as server
+ * `files__read`, tool `raw`: the wrong server, the wrong tool. Here every
+ * lock server is written the way Claude Code writes it; the longest one the
+ * tool name starts with (as `mcp__<server>__`) is the server and the rest is
+ * the tool. Returns {server, tool} with the lock's own spelling of the
+ * server, {ambiguous: [...]} when two different servers fit equally well, or
+ * null when none does.
+ */
+function resolveMcpTool(toolName, lock) {
+  const servers = lock && lock.servers && typeof lock.servers === "object" ? lock.servers : {};
+  const byWritten = new Map();
+  for (const key of Object.keys(servers)) {
+    const entry = servers[key];
+    if (!entry || typeof entry !== "object") continue;
+    const bare = typeof entry.name === "string" && entry.name ? entry.name
+      : key.slice(key.indexOf(":") + 1);
+    const written = toolServerName(bare);
+    if (!byWritten.has(written)) byWritten.set(written, new Set());
+    byWritten.get(written).add(bare);
+  }
+  let best = null;
+  for (const [written, bares] of byWritten) {
+    const prefix = "mcp__" + written + "__";
+    if (!String(toolName).startsWith(prefix) || String(toolName).length === prefix.length) continue;
+    if (!best || written.length > best.written.length) best = { written, bares };
+  }
+  if (!best) return null;
+  if (best.bares.size > 1) return { ambiguous: [...best.bares].sort() };
+  return { server: [...best.bares][0], tool: String(toolName).slice(("mcp__" + best.written + "__").length) };
 }
 
 function readStdin() {
@@ -172,5 +225,7 @@ module.exports = {
   loadLock,
   findServerEntry,
   parseMcpTool,
+  resolveMcpTool,
+  toolServerName,
   readStdin,
 };

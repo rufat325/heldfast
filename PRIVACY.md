@@ -30,9 +30,9 @@ The one exception is opt-in: with `MCP_PIN_ALLOW_FEED` set, it also lists
 feed was read. The server asked about is looked up in the downloaded index on
 your machine; a local or private address is never looked up.
 
-**The Claude Code plugin** runs on your machine. It reads `.mcp-pin.lock`, and
-with `MCP_PIN_DRIFT=graded` it runs the `heldfast` you installed. It sends
-nothing anywhere.
+**The Claude Code plugin** runs on your machine. It reads `.mcp-pin.lock`
+and the environment variable `HELDFAST_ALLOW_UNPINNED`, runs nothing else, and
+sends nothing anywhere.
 
 **Secrets.** Findings pass through a redaction step before any report or tool
 result is written, so a credential seen during analysis is not repeated back.
