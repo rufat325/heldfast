@@ -31,7 +31,7 @@ function main(argv) {
     else if (args[i] === "--tool") toolArg = args[++i];
     else if (args[i] === "--golden") goldenArg = args[++i];
     else if (args[i] === "--version") {
-      process.stdout.write("heldfast-check 0.2.0\n");
+      process.stdout.write("heldfast-check 0.2.1\n");
       return 0;
     } else die("unknown argument " + args[i], 2);
   }
