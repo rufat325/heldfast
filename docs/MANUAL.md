@@ -204,6 +204,25 @@ newline there forges a whole row.
 
 The action installs itself from the checked-out copy, uploads SARIF to code
 scanning and writes a job summary. Inputs are in [action.yml](../action.yml).
+
+**What it reads.** With the defaults it runs `scan --probe --no-stdio-probe`:
+every hosted (HTTP) server's tool definitions are read and compared with the
+lock, so a hosted tool rewritten since approval fails the job (MCPA015).
+Reading a hosted server's tool list runs none of its code. Stdio servers are
+read only with `probe: true`, which launches them. The job summary says
+which were checked and which were not, and why:
+
+```
+Tool definitions checked: 3 hosted servers. Not checked: 1 hosted server
+(could not read: HTTP 401 Unauthorized), 2 stdio servers (probe is off for
+stdio servers, which it would launch).
+```
+
+A hosted server that cannot be read (a login, a network error, a timeout) is
+reported as not verified and does not fail the job, because credentialed
+servers are common and a check that is red on every one of them gets
+removed. `require-probe: true` (or `scan --require-probe`) makes it fail.
+`heldfast ci` is unchanged: it never launches or connects to anything.
 Private reports: [SECURITY.md](../SECURITY.md).
 
 ### One endpoint in front of everything (`gateway`)
@@ -1581,7 +1600,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1499 tests, stdlib unittest, nothing to install.
+1508 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

@@ -24,9 +24,24 @@ inputs:
     default: "heldfast.sarif"
   probe:
     description: >-
-      Connect to servers and read live tool descriptions. This LAUNCHES local
-      STDIO servers, so leave it off unless the runner is disposable and you
-      trust the servers enough to execute them.
+      Connect to every server and read its live tool definitions. This LAUNCHES
+      local STDIO servers, so leave it off unless the runner is disposable and
+      you trust the servers enough to execute them.
+    required: false
+    default: "false"
+  probe-hosted:
+    description: >-
+      Read each hosted (HTTP) server's tool definitions and compare them with
+      the lock, so a tool rewritten since approval fails the job. Reading a
+      hosted server's tool list runs none of its code. A server that cannot be
+      read (it wants a login, the network failed, it timed out) is reported as
+      not verified and does not fail the job unless `require-probe` is true.
+    required: false
+    default: "true"
+  require-probe:
+    description: >-
+      Fail the job when a server that was asked for its tool definitions did
+      not answer, instead of reporting it as not verified.
     required: false
     default: "false"
   scan-user-configs:
@@ -49,6 +64,9 @@ outputs:
   highest-severity:
     description: "Highest severity observed, or 'none'"
     value: ${{ steps.scan.outputs.highest-severity }}
+  unverified:
+    description: "Servers asked for their tool definitions that did not answer"
+    value: ${{ steps.scan.outputs.unverified }}
   report:
     description: "Path to the written report file"
     value: ${{ steps.scan.outputs.report }}
@@ -80,6 +98,7 @@ runs:
         IN_FORMAT: ${{ inputs.format }}
         IN_OUTPUT: ${{ inputs.output }}
         IN_PROBE: ${{ inputs.probe }}
+        IN_PROBE_HOSTED: ${{ inputs.probe-hosted }}
         IN_USER_CONFIGS: ${{ inputs.scan-user-configs }}
       run: |
         set -euo pipefail
@@ -90,6 +109,9 @@ runs:
         common=(scan "$IN_PATH")
         if [ "$IN_PROBE" = "true" ]; then
           common+=(--probe)
+        elif [ "$IN_PROBE_HOSTED" = "true" ]; then
+          # Hosted servers only: reading one runs nothing; a stdio one would run.
+          common+=(--probe --no-stdio-probe)
         fi
         if [ "$IN_USER_CONFIGS" != "true" ]; then
           common+=(--no-user-configs)
@@ -107,9 +129,12 @@ runs:
         total=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['summary']['total'])" "$summary")
         highest=$(python -c "import json,sys;d=json.load(open(sys.argv[1]))['summary'];print(d['highest'] if d['total'] else 'none')" "$summary")
 
+        unverified=$(python -c "import json,sys;print(sum(1 for p in json.load(open(sys.argv[1])).get('probe', []) if p['state'] == 'could not read'))" "$summary")
+
         {
           echo "findings=$total"
           echo "highest-severity=$highest"
+          echo "unverified=$unverified"
           echo "report=$IN_OUTPUT"
         } >> "$GITHUB_OUTPUT"
 
@@ -121,6 +146,8 @@ runs:
           echo "### heldfast"
           echo ""
           echo "\`$total\` finding(s), highest severity: \`$highest\`"
+          echo ""
+          python -m heldfast.report.probe_summary "$summary"
         } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Upload SARIF
@@ -129,6 +156,17 @@ runs:
       with:
         sarif_file: ${{ inputs.output }}
         category: heldfast
+
+    - name: Require every probed server to answer
+      if: ${{ inputs.require-probe == 'true' }}
+      shell: bash
+      env:
+        UNVERIFIED: ${{ steps.scan.outputs.unverified }}
+      run: |
+        if [ "${UNVERIFIED:-0}" != "0" ]; then
+          echo "heldfast: $UNVERIFIED server(s) could not be read, and require-probe is on"
+          exit 1
+        fi
 
     - name: Enforce threshold
       if: ${{ inputs.fail-on != 'never' }}

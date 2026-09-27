@@ -58,6 +58,9 @@ class _Handler(BaseHTTPRequestHandler):
     # What a legacy server does with server/discover before any session:
     # 0 answers a JSON-RPC error; an HTTP status answers that status instead.
     discover_status = 0
+    # A server behind a login: every request without an Authorization header
+    # is answered 401, the way a hosted server that wants a token answers.
+    require_auth = False
     requests: list[dict[str, Any]] = []
     seen_sessions: list[str] = []
     calls: list[dict[str, Any]] = []
@@ -90,6 +93,11 @@ class _Handler(BaseHTTPRequestHandler):
             return
         method = message.get("method")
         request_id = message.get("id")
+        if self.require_auth and not self.headers.get("Authorization"):
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Bearer realm="mcp"')
+            self.end_headers()
+            return
         type(self).seen_sessions.append(self.headers.get("Mcp-Session-Id") or "")
         type(self).requests.append({"method": method, "params": message.get("params"),
                                     "version": self.headers.get("MCP-Protocol-Version")})
@@ -164,17 +172,19 @@ class _Handler(BaseHTTPRequestHandler):
 
 @contextlib.contextmanager
 def serve(mode: str = "benign", *, sse: bool = False, require_session: bool = True,
-          era: str = "legacy", discover_status: int = 0):
+          era: str = "legacy", discover_status: int = 0, require_auth: bool = False,
+          port: int = 0):
     """Run the stub on loopback and yield its URL."""
     _Handler.mode = mode
     _Handler.sse = sse
     _Handler.require_session = require_session
     _Handler.era = era
     _Handler.discover_status = discover_status
+    _Handler.require_auth = require_auth
     _Handler.requests = []
     _Handler.seen_sessions = []
     _Handler.calls = []
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
@@ -194,6 +204,11 @@ def set_mode(mode: str) -> None:
     _Handler.mode = mode
 
 
+def set_require_auth(required: bool) -> None:
+    """Put the running server behind a login, or take it out from behind one."""
+    _Handler.require_auth = required
+
+
 def sessions_seen() -> list[str]:
     return list(_Handler.seen_sessions)
 
@@ -204,3 +219,20 @@ def calls_made() -> list[dict[str, Any]]:
 
 def requests_made() -> list[dict[str, Any]]:
     return list(_Handler.requests)
+
+
+if __name__ == "__main__":
+    # For the CI job that runs action.yml against a hosted server: serve on a
+    # fixed loopback port until killed.
+    import argparse
+    import time
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mode", default="benign", choices=("benign", "poisoned"))
+    ap.add_argument("--require-auth", action="store_true")
+    ap.add_argument("--port", type=int, required=True)
+    a = ap.parse_args()
+    with serve(a.mode, require_auth=a.require_auth, port=a.port) as served:
+        print(served, flush=True)
+        while True:
+            time.sleep(3600)

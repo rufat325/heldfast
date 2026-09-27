@@ -78,6 +78,11 @@ def _register_scan(sub: argparse._SubParsersAction) -> None:
     scan.add_argument("--disable", action="append", metavar="RULE", default=[],
                       help="skip these rule ids (repeatable)")
     scan.add_argument("--no-color", action="store_true")
+    scan.add_argument("--require-probe", action="store_true",
+                      help="with --probe, exit 1 when a server that was asked for its "
+                           "tools did not answer (a login, a network error, a timeout). "
+                           "Without it such a server is reported as could-not-verify "
+                           "and does not fail the run")
     scan.add_argument("--ignore-file", metavar="PATH", default=None,
                       help=f"suppression file (default: ./{supp.DEFAULT_IGNORE_NAME} if present)")
     scan.add_argument("--no-ignore", action="store_true",
