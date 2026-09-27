@@ -36,6 +36,14 @@ READ = {"name": "read_file", "description": "Read a file from disk.",
         "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}}
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fake_feed  # noqa: E402
+
+
+def setUpModule() -> None:
+    fake_feed.install()
+
+
 def server(*args: str, command: str = "npx") -> ServerSpec:
     return ServerSpec(name="files", source="/p/.mcp.json", client="test",
                       transport="stdio", command=command, args=list(args))

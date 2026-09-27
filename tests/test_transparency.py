@@ -33,6 +33,14 @@ URL = "https://mcp.example.com/mcp"
 NAME = "remote/com.example/mcp"
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fake_feed  # noqa: E402
+
+
+def setUpModule() -> None:
+    fake_feed.install()
+
+
 def tool(name: str, description: str) -> dict:
     return {"name": name, "description": description, "inputSchema": {"type": "object"}}
 

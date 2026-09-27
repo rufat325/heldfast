@@ -99,6 +99,7 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "research", "churn"))
 
 from heldfast.digest import tool_digest  # noqa: E402
+from heldfast.feedlock import MAX_LOOKUP  # noqa: E402
 from heldfast.driftgrade import introduced, live_text  # noqa: E402
 from heldfast.review import word_diff  # noqa: E402
 
@@ -110,7 +111,7 @@ SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+\-]*$")
 ALLOWED = re.compile(
     r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|"
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
-    r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta|all)\.json|"
+    r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta|all)\.json|lookup/all\.json\.gz|"
     r"tools/[0-9a-f]{2}/[0-9a-f]{64}\.json|"
     r"checkpoints/\d{4}-\d{2}-\d{2}\.json(?:\.ots)?|"
     r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json(?:\.gz)?)$")
@@ -118,8 +119,10 @@ TOOL_FILE = re.compile(r"^tools/([0-9a-f]{2})/([0-9a-f]{64})\.json$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MEASURED_PROTOCOL = "2025-06-18"
 MAX_FILE = 20 * 1024 * 1024
-# The whole lookup record in one file. GitHub refuses a file over 100 MB.
-MAX_LOOKUP_ALL = 90 * 1024 * 1024
+# The whole lookup record in one file. GitHub refuses a file over 100 MB. The
+# same bound is the reader's (heldfast.feedlock), so a record this writes is
+# never one a client refuses for its size -- plain or inflated from the .gz.
+MAX_LOOKUP_ALL = MAX_LOOKUP
 # A gzip that inflates past this is refused, not read: the text inside came
 # from a server, and a server can send a catalogue built to be one.
 MAX_INFLATED = 50 * 1024 * 1024
@@ -277,12 +280,12 @@ def _json_bytes(obj: object) -> bytes:
     return (json.dumps(obj, indent=1, sort_keys=True) + "\n").encode("utf-8")
 
 
-def read_gz(path: str) -> object:
-    """A gzipped JSON file, refused if it inflates past MAX_INFLATED."""
+def read_gz(path: str, limit: int = MAX_INFLATED) -> object:
+    """A gzipped JSON file, refused if it inflates past `limit`."""
     with gzip.open(path, "rb") as fh:
-        raw = fh.read(MAX_INFLATED + 1)
-    if len(raw) > MAX_INFLATED:
-        raise ValueError(f"{path}: inflates past {MAX_INFLATED} bytes")
+        raw = fh.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError(f"{path}: inflates past {limit} bytes")
     return json.loads(raw.decode("utf-8"))
 
 
@@ -929,11 +932,15 @@ def write_lookup(data: str) -> int:
                _json_bytes({"prefix": prefix, "tools": tools}))
     # One line per definition, so a day that adds a few changes a few lines
     # and git stores the day as a small delta, not a new copy.
-    _write(os.path.join(data, "lookup", "all.json"), (
-        '{"prefix_length": %d, "tools": {\n' % LOOKUP_PREFIX
-        + ",\n".join(f"{json.dumps(fp)}: {json.dumps(row, sort_keys=True)}"
-                      for tools in buckets.values() for fp, row in tools.items())
-        + "\n}}\n").encode("utf-8"))
+    whole = ('{"prefix_length": %d, "tools": {\n' % LOOKUP_PREFIX
+             + ",\n".join(f"{json.dumps(fp)}: {json.dumps(row, sort_keys=True)}"
+                           for tools in buckets.values() for fp, row in tools.items())
+             + "\n}}\n").encode("utf-8")
+    _write(os.path.join(data, "lookup", "all.json"), whole)
+    # The same bytes gzipped, about a third of the size, which is what clients
+    # ask for first. mtime 0 and no file name, so the same record gives the
+    # same bytes. The plain file stays for clients from before this.
+    _write(os.path.join(data, "lookup", "all.json.gz"), gzip.compress(whole, 9, mtime=0))
     _write(os.path.join(data, "lookup", "meta.json"), _json_bytes({
         "prefix_length": LOOKUP_PREFIX,
         "fingerprint": "the tool fingerprint of docs/LOCK.md, lowercase hex",
@@ -1069,7 +1076,7 @@ def _check_file(full: str, rel: str) -> str | None:
             return None if len(proof) <= MAX_PROOF and proof.startswith(OTS_MAGIC) \
                 else "not an OpenTimestamps proof"
         if rel.endswith(".json.gz"):
-            read_gz(full)
+            read_gz(full, MAX_LOOKUP_ALL if rel == "lookup/all.json.gz" else MAX_INFLATED)
             return None
         if rel.startswith("tools/"):
             return _check_tool(full, rel)
@@ -1112,7 +1119,7 @@ def verify(args: argparse.Namespace) -> int:
                 continue
             size = os.path.getsize(full)
             total += size
-            if size > (MAX_LOOKUP_ALL if rel == "lookup/all.json" else MAX_FILE):
+            if size > (MAX_LOOKUP_ALL if rel.startswith("lookup/all.json") else MAX_FILE):
                 problems.append(f"{rel}: {size} bytes")
             why = _check_file(full, rel)
             if why:
