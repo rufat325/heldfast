@@ -9,6 +9,7 @@ upload reaches the feed. Nothing here contacts a calendar.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -45,6 +46,14 @@ def proof(target: bytes, complete: bool = False) -> bytes:
     """Shaped like a DetachedTimestampFile: header, version, sha256 op, digest."""
     tail = bytes.fromhex("0588960d73d71901") if complete else bytes.fromhex("83dfe30d2ef90c8e")
     return watch.OTS_SHA256 + hashlib.sha256(target).digest() + b"\xf0\x10" + b"n" * 16 + tail
+
+
+def bundle(target: bytes, media: str = "application/vnd.dev.sigstore.bundle.v0.3+json") -> bytes:
+    """Shaped like what cosign 3.1.3 sign-blob --bundle writes."""
+    return json.dumps({"mediaType": media, "verificationMaterial": {}, "messageSignature": {
+        "messageDigest": {"algorithm": "SHA2_256",
+                          "digest": base64.b64encode(hashlib.sha256(target).digest()).decode()},
+        "signature": "c2ln"}}).encode()
 
 
 class TestManifest(unittest.TestCase):
@@ -267,6 +276,48 @@ class TestAdmitAnchor(unittest.TestCase):
             self.assertEqual(1, watch.admit_anchor(args))
 
 
+class TestTheSigstoreWitness(TestAdmitAnchor):
+    """The second witness: a Sigstore bundle, admitted only if it names the
+    checkpoint beside it, only for today's, and never over one recorded."""
+
+    def sign(self, body: bytes, day: str = DAY) -> None:
+        self.put(self.incoming, f"checkpoints/{day}.json.sigstore.json", body)
+
+    def test_a_bundle_of_todays_checkpoint_is_taken_with_it(self) -> None:
+        self.today()
+        self.sign(bundle(self.checkpoint))
+        self.assertEqual([], self.problems())
+        self.assertEqual(0, self.admit())
+        self.assertTrue(os.path.exists(
+            os.path.join(self.data, "checkpoints", DAY + ".json.sigstore.json")))
+
+    def test_a_bundle_of_some_other_file_is_refused(self) -> None:
+        self.today()
+        self.sign(bundle(b"another file"))
+        self.assertIn(f"checkpoints/{DAY}.json.sigstore.json: a signature of some other file",
+                      self.problems())
+
+    def test_something_that_is_not_a_bundle_is_refused(self) -> None:
+        self.today()
+        for junk in (b"{", b"[]", bundle(self.checkpoint, media="application/json")):
+            with self.subTest(junk[:20]):
+                self.sign(junk)
+                self.assertTrue(any("not a Sigstore bundle" in p for p in self.problems()))
+
+    def test_an_earlier_day_or_a_second_signature_is_refused(self) -> None:
+        self.sign(bundle(self.yesterday), "2026-09-26")
+        self.assertTrue(any("signed or recorded before" in p for p in self.problems()))
+        self.setUp()
+        self.put(self.data, f"checkpoints/{DAY}.json", self.checkpoint)
+        self.put(self.data, f"checkpoints/{DAY}.json.sigstore.json", bundle(self.checkpoint))
+        self.sign(bundle(self.checkpoint))
+        self.assertTrue(any("signed or recorded before" in p for p in self.problems()))
+
+    def test_a_bundle_for_no_checkpoint_is_refused(self) -> None:
+        self.sign(bundle(self.checkpoint))
+        self.assertTrue(any("does not hold" in p for p in self.problems()))
+
+
 class TestTheFeedAcceptsItsCheckpoints(unittest.TestCase):
     def setUp(self) -> None:
         self.data = tempfile.mkdtemp(prefix="heldfast-verify-")
@@ -284,6 +335,15 @@ class TestTheFeedAcceptsItsCheckpoints(unittest.TestCase):
 
     def test_a_checkpoint_and_its_proof_verify(self) -> None:
         self.assertEqual(0, self.verify())
+
+    def test_a_signature_bundle_verifies_and_junk_in_its_name_does_not(self) -> None:
+        path = os.path.join(self.data, "checkpoints", "2026-09-27.json.sigstore.json")
+        with open(path, "wb") as fh:
+            fh.write(bundle(b'{"date": "2026-09-27"}\n'))
+        self.assertEqual(0, self.verify())
+        with open(path, "wb") as fh:
+            fh.write(b'{"not": "a bundle"}')
+        self.assertEqual(1, self.verify())
 
     def test_a_proof_that_is_not_one_does_not(self) -> None:
         with open(os.path.join(self.data, "checkpoints", "2026-09-27.json.ots"), "wb") as fh:

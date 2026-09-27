@@ -165,6 +165,27 @@ node, `ots --no-bitcoin verify` prints the block height and the Merkle root
 the proof commits to. You can compare those with any block explorer, but
 then you are trusting the explorer.
 
+**A second witness.** While the feed is collected in GitHub Actions, each
+checkpoint is also signed with [Sigstore](https://www.sigstore.dev), keyless:
+`checkpoints/YYYY-MM-DD.json.sigstore.json` is the bundle, and the signature
+sits in the public Rekor log with the identity of the workflow that made it.
+Verify it with cosign 3:
+
+```bash
+cosign verify-blob --bundle checkpoints/$day.json.sigstore.json \
+  --certificate-identity https://github.com/rufat325/heldfast/.github/workflows/feed.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checkpoints/$day.json
+```
+
+That adds what the Bitcoin anchor cannot say: the checkpoint came from this
+repository's feed workflow, on `main`, and Rekor recorded when. It rests on
+trusting GitHub's identity tokens and Sigstore's log, where the anchor rests
+on Bitcoin alone; that is why it is the second witness and not the first.
+Only the signing job holds the permission to sign as the workflow, and it
+runs cosign and nothing else. A missing signature costs nothing else: the
+anchor does not depend on it.
+
 **What it proves.** The checkpoint, and every file in the commit it
 describes, existed no later than the time of the Bitcoin block. An event the
 log claims to have observed on a day is in that day's checkpoint or it is

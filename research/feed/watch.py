@@ -79,6 +79,9 @@ Layout under DIR:
   checkpoints/YYYY-MM-DD.json.ots
                                  its OpenTimestamps proof: the checkpoint existed
                                  no later than a Bitcoin block
+  checkpoints/YYYY-MM-DD.json.sigstore.json
+                                 its Sigstore bundle: signed by this repository's
+                                 feed workflow, recorded in the Rekor log
 """
 from __future__ import annotations
 
@@ -115,7 +118,7 @@ ALLOWED = re.compile(
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
     r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta|all)\.json|lookup/all\.json\.gz|"
     r"tools/[0-9a-f]{2}/[0-9a-f]{64}\.json|"
-    r"checkpoints/\d{4}-\d{2}-\d{2}\.json(?:\.ots)?|"
+    r"checkpoints/\d{4}-\d{2}-\d{2}\.json(?:\.ots|\.sigstore\.json)?|"
     r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json(?:\.gz)?)$")
 TOOL_FILE = re.compile(r"^tools/([0-9a-f]{2})/([0-9a-f]{64})\.json$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -1160,6 +1163,12 @@ def _check_file(full: str, rel: str) -> str | None:
                 proof = fh.read(MAX_PROOF + 1)
             return None if len(proof) <= MAX_PROOF and proof.startswith(OTS_MAGIC) \
                 else "not an OpenTimestamps proof"
+        if rel.endswith(".sigstore.json"):
+            with open(full, "rb") as fh:
+                bundle = fh.read(MAX_PROOF + 1)
+            body = json.loads(bundle.decode("utf-8")) if len(bundle) <= MAX_PROOF else None
+            return None if isinstance(body, dict) and str(body.get("mediaType") or "") \
+                .startswith(SIGSTORE_MEDIA) else "not a Sigstore bundle"
         if rel.endswith(".json.gz"):
             read_gz(full, MAX_LOOKUP_ALL if rel == "lookup/all.json.gz" else MAX_INFLATED)
             return None
@@ -1362,7 +1371,7 @@ def admit(args: argparse.Namespace) -> int:
 # A day not anchored can never be anchored later: a stamp made today proves only
 # today.
 CHECKPOINTS = "checkpoints/"
-CHECKPOINT_FILE = re.compile(r"^checkpoints/(\d{4}-\d{2}-\d{2})\.json(\.ots)?$")
+CHECKPOINT_FILE = re.compile(r"^checkpoints/(\d{4}-\d{2}-\d{2})\.json(\.ots|\.sigstore\.json)?$")
 EVENTS_FILE = re.compile(r"^events/\d{4}-\d{2}\.jsonl$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 MANIFEST_FORMAT = ("one line per file in feed_commit outside checkpoints/: the SHA-256 of "
@@ -1378,6 +1387,12 @@ OTS_MAGIC = b"\x00OpenTimestamps\x00\x00Proof\x00\xbf\x89\xe2\xe8\x84\xe8\x92\x9
 OTS_SHA256 = OTS_MAGIC + b"\x01" + b"\x08"
 # notary.py: BitcoinBlockHeaderAttestation.TAG. Present once a proof is complete.
 OTS_BITCOIN = bytes.fromhex("0588960d73d71901")
+# The second witness: a Sigstore bundle from keyless signing in the `witness`
+# job, which puts the checkpoint's digest in the public Rekor log beside the
+# workflow's identity. Checked here only for what the standard library can
+# check -- that it is a bundle, and names this checkpoint's SHA-256 -- as
+# cosign 3.1.3 writes it: messageSignature.messageDigest, SHA2_256, base64.
+SIGSTORE_MEDIA = "application/vnd.dev.sigstore.bundle"
 
 
 def git_files(data: str, commit: str):
@@ -1476,6 +1491,23 @@ def checkpoint(args: argparse.Namespace) -> int:
     return 0
 
 
+def _bundle_problem(bundle: bytes, target: bytes | None) -> str | None:
+    import base64
+    if target is None:
+        return "a signature for a checkpoint the feed does not hold"
+    try:
+        body = json.loads(bundle.decode("utf-8"))
+    except ValueError:
+        return "not a Sigstore bundle"
+    if not isinstance(body, dict) or not str(body.get("mediaType") or "").startswith(SIGSTORE_MEDIA):
+        return "not a Sigstore bundle"
+    digest = (body.get("messageSignature") or {}).get("messageDigest") or {}
+    if digest.get("algorithm") != "SHA2_256" or \
+            digest.get("digest") != base64.b64encode(hashlib.sha256(target).digest()).decode():
+        return "a signature of some other file"
+    return None
+
+
 def _proof_problem(proof: bytes, target: bytes | None) -> str | None:
     if target is None:
         return "a proof for a checkpoint the feed does not hold"
@@ -1523,11 +1555,19 @@ def anchor_problems(data: str, incoming: str, day: str, feed_commit: str,
             problems.extend(f"{rel}: {why}" for why in _checkpoint_problems(
                 body, m.group(1), held, day, feed_commit, manifest_sha256, checkpoint_sha256))
             continue
-        target_rel = rel[:-len(".ots")]
+        target_rel = rel[:-len(m.group(2))]
         target = found.get(target_rel)
         if target is None and os.path.exists(os.path.join(data, target_rel)):
             with open(os.path.join(data, target_rel), "rb") as fh:
                 target = fh.read()
+        if m.group(2) == ".sigstore.json":
+            # A signature is made once, with its checkpoint, and never replaced.
+            why = _bundle_problem(body, target)
+            if why is None and (m.group(1) != day or os.path.exists(held)):
+                why = "a signature for a checkpoint signed or recorded before"
+            if why:
+                problems.append(f"{rel}: {why}")
+            continue
         why = _proof_problem(body, target)
         if why is None and m.group(1) != day and not os.path.exists(held):
             why = "a new proof for an earlier day; only an upgrade may replace one"

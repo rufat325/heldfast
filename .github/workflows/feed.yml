@@ -44,6 +44,10 @@
 #                   OpenTimestamps, and upgrades earlier proofs still pending.
 #                   Runs a third-party client, installed by hash, so it cannot
 #                   write: it uploads the stamps.
+#   witness         Signs the same checkpoint with Sigstore, keyless: the
+#                   signature and the workflow's identity go into the public
+#                   Rekor log. The only job given id-token, and it runs cosign
+#                   and nothing else -- not the OpenTimestamps client.
 #   record-anchor   Takes the anchor job's upload only under checkpoints/, only
 #                   the checkpoint publish described and proofs that name it,
 #                   checked with the code from main; then commits it.
@@ -371,12 +375,52 @@ jobs:
           retention-days: 3
           if-no-files-found: ignore
 
+  # A second witness beside the Bitcoin anchor, while the collector runs in
+  # Actions: keyless Sigstore signing records the checkpoint's digest in the
+  # public Rekor log with this workflow's identity. id-token lets whatever runs
+  # in a job sign as this workflow, so it is given to this job alone, which
+  # runs cosign and nothing else. Optional: a failure here costs the signature,
+  # never the anchor.
+  witness:
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.publish.outputs.feed_commit != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: feed-checkpoint
+          path: checkpoint
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - name: Sign today's checkpoint
+        env:
+          DAY: ${{ needs.publish.outputs.day }}
+        run: |
+          set -euo pipefail
+          mkdir -p out/checkpoints
+          cp "checkpoint/$DAY.json" out/checkpoints/
+          cosign sign-blob --yes --bundle "out/checkpoints/$DAY.json.sigstore.json" \
+            "out/checkpoints/$DAY.json"
+          rm "out/checkpoints/$DAY.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: feed-witness
+          path: out
+          retention-days: 3
+          if-no-files-found: ignore
+
   # The only job that writes what the anchor job produced, and it runs none of
   # that job's code: watch.py admit-anchor, from main, takes a file only under
   # checkpoints/, today's checkpoint only if it is byte for byte the one
   # publish described, and a proof only if it names that file's digest.
   record-anchor:
-    needs: [publish, anchor]
+    needs: [publish, anchor, witness]
     if: ${{ !cancelled() && needs.anchor.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -396,7 +440,7 @@ jobs:
           sparse-checkout: checkpoints
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: feed-anchor
+          pattern: feed-{anchor,witness}
           path: incoming
           merge-multiple: true
       - name: Take the checkpoint and proofs only if they are what publish described
