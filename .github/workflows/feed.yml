@@ -51,6 +51,16 @@
 #   record-anchor   Takes the anchor job's upload only under checkpoints/, only
 #                   the checkpoint publish described and proofs that name it,
 #                   checked with the code from main; then commits it.
+#   archive         Packs the day's checkpointed commit for keeping outside
+#                   GitHub (research/feed/archive.py): what changed since
+#                   the mirror's last copy, and on a month's first checkpoint
+#                   the whole tree. No credentials.
+#   mirror          Uploads those archives and the checkpoints to the Hugging
+#                   Face dataset rufat325/heldfast-feed. Holds HF_TOKEN and
+#                   nothing that can write to GitHub.
+#   release-archive On a month's first checkpoint, attaches the snapshot to a
+#                   release of rufat325/heldfast-feed and downloads it back to
+#                   compare. Holds FEED_TOKEN and not HF_TOKEN.
 #   sync            Weekly. Rebuilds the watchlist from the registry. Reads
 #                   JSON, launches nothing, writes only watchlist.json.
 #   alert           When any of the above fails or is cancelled: opens an
@@ -482,12 +492,175 @@ jobs:
           git commit -q -m "feed: checkpoint $DAY"
           git push origin HEAD:main
 
+  # Keeping the record somewhere other than GitHub. Archives are made only for
+  # a day's checkpointed commit, so every archive ends where a checkpoint can
+  # vouch for it, and a second run on the same day does not overwrite one. The
+  # mirror's MIRRORED_FROM, read anonymously, says where the last copy ended,
+  # so a missed day is covered by the next archive instead of leaving a gap.
+  archive:
+    needs: [publish, record-anchor]
+    if: ${{ !cancelled() && needs.record-anchor.result == 'success' && needs.publish.outputs.feed_commit != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      packed: ${{ steps.pack.outputs.packed }}
+      snapshot: ${{ steps.pack.outputs.snapshot }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          path: tool
+          persist-credentials: false
+      - name: Pack what the mirror does not have yet
+        id: pack
+        env:
+          DAY: ${{ needs.publish.outputs.day }}
+          COMMIT: ${{ needs.publish.outputs.feed_commit }}
+          FEED: https://github.com/rufat325/heldfast-feed.git
+          RAW: https://raw.githubusercontent.com/rufat325/heldfast-feed/main
+          MIRROR: https://huggingface.co/datasets/rufat325/heldfast-feed/resolve/main
+        run: |
+          set -euo pipefail
+          checkpointed=$(curl -sfL "$RAW/checkpoints/$DAY.json" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["feed_commit"])' || true)
+          if [ "$checkpointed" != "$COMMIT" ]; then
+            echo "today's checkpoint is not this commit; nothing to archive"
+            echo "packed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git init -q feed-data
+          git -C feed-data fetch -q --depth=1 "$FEED" "$COMMIT"
+          last=$(curl -sfL "$MIRROR/MIRRORED_FROM" || true)
+          last_commit=$(printf '%s' "$last" | cut -d' ' -f1)
+          last_day=$(printf '%s' "$last" | cut -d' ' -f2 | tr -d '\n')
+          mkdir -p out
+          if [ -z "$last_commit" ] || [ "${last_day:0:7}" != "${DAY:0:7}" ]; then
+            python3 tool/research/feed/archive.py snapshot --data feed-data --commit "$COMMIT" \
+              --day "$DAY" --out "out/snapshot-${DAY:0:7}.tar.gz"
+            echo "snapshot=snapshot-${DAY:0:7}.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$last_commit" ] && [ "$last_commit" != "$COMMIT" ]; then
+            git -C feed-data fetch -q --depth=1 "$FEED" "$last_commit"
+            python3 tool/research/feed/archive.py daily --data feed-data --from "$last_commit" \
+              --to "$COMMIT" --day "$DAY" --out "out/daily/$DAY.tar.gz"
+          fi
+          printf '%s %s\n' "$COMMIT" "$DAY" > out/MIRRORED_FROM
+          python3 tool/research/feed/archive.py card --out out/README.md
+          ls -lR out
+          echo "packed=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.pack.outputs.packed == 'true'
+        with:
+          name: feed-archive
+          path: out
+          retention-days: 3
+
+  # The Hugging Face copy. This job holds HF_TOKEN and no credential that can
+  # write to GitHub; it runs huggingface_hub, installed by hash, and reads the
+  # checkpoints anonymously.
+  mirror:
+    needs: [publish, archive]
+    if: ${{ !cancelled() && needs.archive.outputs.packed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          path: tool
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: rufat325/heldfast-feed
+          ref: main
+          path: feed-data
+          persist-credentials: false
+          sparse-checkout: checkpoints
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: feed-archive
+          path: staged
+      - name: Install huggingface_hub, by hash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/hf"
+          "$RUNNER_TEMP/hf/bin/pip" install --quiet --require-hashes --only-binary :all: \
+            -r tool/research/feed/mirror-requirements.txt
+      - name: Upload to the dataset, then read it back
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          DAY: ${{ needs.publish.outputs.day }}
+        run: |
+          set -euo pipefail
+          cp -r feed-data/checkpoints staged/checkpoints
+          "$RUNNER_TEMP/hf/bin/python" - <<'EOF'
+          import hashlib, os, pathlib
+          from huggingface_hub import HfApi, hf_hub_download
+          repo, staged = "rufat325/heldfast-feed", pathlib.Path("staged")
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          api.upload_folder(repo_id=repo, repo_type="dataset", folder_path=str(staged),
+                            commit_message=f"mirror {os.environ['DAY']}")
+          for sums in sorted(staged.rglob("*.tar.gz.sha256")):
+              want, name = sums.read_text().split()
+              rel = sums.relative_to(staged).parent / name
+              got = hf_hub_download(repo, rel.as_posix(), repo_type="dataset",
+                                    token=os.environ["HF_TOKEN"], force_download=True)
+              digest = hashlib.sha256(pathlib.Path(got).read_bytes()).hexdigest()
+              if digest != want:
+                  raise SystemExit(f"{rel}: the mirror holds {digest}, uploaded {want}")
+              print(f"{rel}: verified {digest}")
+          EOF
+
+  # The monthly snapshot as a release asset of the feed repository. Holds
+  # FEED_TOKEN (contents on that repository only) and not HF_TOKEN. An asset
+  # must be under 2 GB, so a larger snapshot goes up in parts; every asset is
+  # downloaded back and compared before the job says it worked.
+  release-archive:
+    needs: [archive]
+    if: ${{ !cancelled() && needs.archive.outputs.snapshot != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: feed-archive
+          path: staged
+      - name: Publish the snapshot and check what was published
+        env:
+          GH_TOKEN: ${{ secrets.FEED_TOKEN }}
+          SNAPSHOT: ${{ needs.archive.outputs.snapshot }}
+        run: |
+          set -euo pipefail
+          cd staged
+          tag="archive-${SNAPSHOT#snapshot-}"; tag="${tag%.tar.gz}"
+          if gh release view "$tag" --repo rufat325/heldfast-feed >/dev/null 2>&1; then
+            echo "$tag is already published"; exit 0
+          fi
+          assets=("$SNAPSHOT.sha256")
+          if [ "$(stat -c %s "$SNAPSHOT")" -gt 2000000000 ]; then
+            split -b 1900m -d -a 2 "$SNAPSHOT" "$SNAPSHOT.part"
+            sha256sum "$SNAPSHOT".part* > "$SNAPSHOT.parts.sha256"
+            assets+=("$SNAPSHOT".part* "$SNAPSHOT.parts.sha256")
+          else
+            assets+=("$SNAPSHOT")
+          fi
+          gh release create "$tag" --repo rufat325/heldfast-feed --target main \
+            --title "$tag" --notes "The whole feed at this month's first checkpoint. Deterministic: rebuild it with research/feed/archive.py in rufat325/heldfast and compare the SHA-256." \
+            "${assets[@]}"
+          mkdir ../check
+          gh release download "$tag" --repo rufat325/heldfast-feed --dir ../check
+          for f in "${assets[@]}"; do cmp "$f" "../check/$f"; done
+          echo "published and verified: ${assets[*]}"
+
   # A failed or cancelled run opens an issue, or comments on the open one,
   # so it reaches the maintainer's inbox instead of waiting to be noticed on
   # the Actions tab. A run that stalls without failing is caught by
   # feed-watchdog.yml, since a hung job never gets this far.
   alert:
-    needs: [sync, measure-npm, measure-remote, publish, anchor, record-anchor]
+    needs: [sync, measure-npm, measure-remote, publish, anchor, record-anchor, archive, mirror, release-archive]
     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10

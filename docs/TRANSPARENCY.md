@@ -198,6 +198,34 @@ everyone what it showed the log. That the log has not left something out.
 Only an upper bound on each date is anchored, never when a reading was
 really taken.
 
+## Copies outside GitHub
+
+The whole record lived in one repository on one host. It is now also kept in
+two other places, built by `.github/workflows/feed.yml` after each day's
+checkpoint:
+
+- **The Hugging Face dataset
+  [rufat325/heldfast-feed](https://huggingface.co/datasets/rufat325/heldfast-feed)**:
+  every checkpoint with its proofs, one archive a day of what changed
+  (`daily/YYYY-MM-DD.tar.gz`), a snapshot of the whole tree at each month's
+  first checkpoint (`snapshot-YYYY-MM.tar.gz`), and `MIRRORED_FROM`, the feed
+  commit the copy is current to.
+- **Releases of the feed repository**: each monthly snapshot, as a release
+  tagged `archive-YYYY-MM`, split into parts past GitHub's 2 GB asset limit.
+
+Every archive is deterministic -- members sorted, one fixed timestamp, no
+owners, gzip without a name or a time -- so the same commit always packs to
+the same bytes, and `research/feed/archive.py` rebuilds any of them from the
+feed repository for comparison. A snapshot and the daily archives after it
+rebuild the tree at a later checkpoint, and the manifest digest of what they
+rebuild is the one that checkpoint states: the copies are checked by the same
+anchor as the original. `archive.py verify --checkpoint FILE ARCHIVE...` does
+that in memory. Use it rather than unpacking on Windows or macOS: the feed
+holds paths that differ only in letter case, which those disks fold into one. Each upload is read back and its SHA-256 compared
+before the job reports success. The job that uploads to Hugging Face holds
+only that token, and the one that publishes releases only the feed
+repository's, so neither copy can be written by what writes the other.
+
 ## Where this goes
 
 - **Independent readers.** The same reading, taken from different networks by
