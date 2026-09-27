@@ -165,6 +165,59 @@ jobs:
           python -c "import json;d=json.load(open('vuln.sarif'));assert d['version']=='2.1.0';print(len(d['runs'][0]['results']),'SARIF results')"
           echo "gate fired correctly with $FINDINGS finding(s)"
 
+      # probe-hosted is on by default: a hosted server rewritten since
+      # approval fails the job, and one behind a login is reported as not
+      # verified without failing it. The stub is tests/fixtures/http_server.py.
+      - name: Approve a hosted server
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet .
+          mkdir -p hosted
+          echo '{"mcpServers": {"invoices": {"type": "http", "url": "http://127.0.0.1:8765/mcp"}}}' > hosted/.mcp.json
+          python tests/fixtures/http_server.py --port 8765 --mode benign & echo $! > stub.pid
+          sleep 2
+          heldfast approve hosted --probe --no-user-configs --no-skills
+          kill "$(cat stub.pid)"
+          python tests/fixtures/http_server.py --port 8765 --mode poisoned & echo $! > stub.pid
+          sleep 2
+
+      - name: Run against the hosted server, rewritten
+        id: rewritten
+        continue-on-error: true
+        uses: ./
+        with:
+          path: hosted
+          format: json
+          output: rewritten.json
+          upload-sarif: "false"
+
+      - name: Put the hosted server behind a login
+        run: |
+          kill "$(cat stub.pid)"
+          python tests/fixtures/http_server.py --port 8765 --require-auth & echo $! > stub.pid
+          sleep 2
+
+      - name: Run against the hosted server, behind a login
+        id: login
+        uses: ./
+        with:
+          path: hosted
+          format: json
+          output: login.json
+          upload-sarif: "false"
+
+      - name: The rewrite failed the job; the login was reported, not failed
+        env:
+          REWRITTEN: ${{ steps.rewritten.outcome }}
+          UNVERIFIED: ${{ steps.login.outputs.unverified }}
+        run: |
+          kill "$(cat stub.pid)" || true
+          test "$REWRITTEN" = "failure" || { echo "a rewritten hosted tool did not fail the job"; exit 1; }
+          python -c "import json;d=json.load(open('rewritten.json'));assert any(f['rule_id']=='MCPA015' for f in d['findings'])"
+          test "$UNVERIFIED" = "1" || { echo "expected 1 unverified server, got $UNVERIFIED"; exit 1; }
+          python -m heldfast.report.probe_summary login.json | tee /dev/stderr | grep -q "could not read"
+          echo "hosted reads: a rewrite fails, a login is reported"
+
   # The updates action, run for real against the live feed: a project pinned
   # to an older release is approved from the feed, then the action reports
   # and applies. No pull request or issue is opened from CI.

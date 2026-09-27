@@ -192,7 +192,11 @@ def _ingest_probe(out: "Collected", results: list) -> None:
         out.eras[res.server] = res.protocol_era
         out.probe_status[res.server] = (
             f"no response: {res.error}" if res.error else "answered")
-        if res.error:
+        if res.error == "stdio probing disabled":
+            # Not asked, which is not the same news as asked and not answered.
+            out.errors.append(f"not probed: {res.server} -- stdio servers are not "
+                              f"launched under --no-stdio-probe")
+        elif res.error:
             out.errors.append(f"probe {res.server}: {res.error}")
 
 
@@ -241,6 +245,49 @@ def _collect_probe(out: "Collected", args: argparse.Namespace) -> None:
         verbose=args.verbose,
         share_env=set(getattr(args, "share_env", None) or []),
     ))
+
+
+def probe_coverage(args: argparse.Namespace, data: Collected) -> list[dict]:
+    """Per configured server: whether this run read its tool definitions.
+
+    `read`, `not read` (probing was off for it, or it was deliberately not
+    launched) or `could not read` (it was asked and did not answer: a login,
+    a network error, a timeout). A scan that says "no findings" has only
+    checked the first kind, and a report has to be able to say so.
+    """
+    skipped = dict(data.probe_skipped)
+    probing = getattr(args, "probe", False) and not getattr(args, "safe", False)
+    out = []
+    for s in data.servers:
+        if s.disabled:
+            continue
+        ident = s.identity()
+        status = data.probe_status.get(ident)
+        if not probing:
+            state, why = "not read", "probe is off"
+        elif ident in skipped:
+            state, why = "not read", str(skipped[ident])
+        elif status == "answered":
+            state, why = "read", ""
+        elif status is None or status.endswith("stdio probing disabled"):
+            state, why = "not read", "probe is off for stdio servers, which it would launch"
+        else:
+            state, why = "could not read", status[len("no response: "):] \
+                if status.startswith("no response: ") else status
+        out.append({"server": ident, "transport": "hosted" if s.is_remote else "stdio",
+                    "state": state, "detail": why})
+    return out
+
+
+def _unread(args: argparse.Namespace, data: Collected) -> int | None:
+    """--require-probe: a server asked for its tools that did not answer fails."""
+    if not getattr(args, "require_probe", False):
+        return None
+    failed = [c for c in probe_coverage(args, data) if c["state"] == "could not read"]
+    for c in failed:
+        print(f"heldfast: --require-probe: could not read {c['server']}: {c['detail']}",
+              file=sys.stderr)
+    return EXIT_FINDINGS if failed else None
 
 
 def collect(args: argparse.Namespace) -> Collected:
@@ -340,7 +387,7 @@ def _render_scan(args: argparse.Namespace, data: Collected, lock: Lock,
             scanned_configs=data.config_count, scanned_servers=len(data.servers),
             scanned_tools=len(data.tools), scanned_skills=len(data.skills),
             errors=data.errors, lock_present=not lock.is_empty, probed=data.probed,
-            version=__version__, suppressed=suppressed,
+            version=__version__, suppressed=suppressed, probe=probe_coverage(args, data),
         )
     if args.format == "sarif":
         return render_sarif(findings, base=Path.cwd(), version=__version__)
@@ -403,6 +450,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
     emit_fail = _emit_report(args, report, findings)
     if emit_fail is not None:
         return emit_fail
+    unread = _unread(args, data)
+    if unread is not None:
+        return unread
     if args.fail_on == "never":
         return EXIT_OK
     return EXIT_FINDINGS if any(f.severity >= Severity.parse(args.fail_on) for f in findings) else EXIT_OK

@@ -66,6 +66,7 @@ def render_terminal(
     paint = _Paint(use_color() if color is None else color)
     out: list[str] = []
     add = out.append
+    errors = list(errors)
 
     add("")
     add(paint.bold("  heldfast"))
@@ -79,8 +80,14 @@ def render_terminal(
         # Not everything on this channel is a parse failure. "not probed:"
         # lines are a deliberate refusal to launch something, which is a
         # different kind of news and was reading as a malfunction.
-        label = "not probed" if err.startswith("not probed:") else "parse error"
-        text = err[len("not probed:"):].strip() if label == "not probed" else err
+        # A server asked for its tools that did not answer is not a parse
+        # error either: its definitions were simply not checked.
+        if err.startswith("not probed:"):
+            label, text = "not probed", err[len("not probed:"):].strip()
+        elif err.startswith("probe "):
+            label, text = "could not verify", err[len("probe "):]
+        else:
+            label, text = "parse error", err
         add(f"  {paint(label, _COLORS[Severity.MEDIUM])} {text}")
     if errors:
         add("")
@@ -119,7 +126,14 @@ def render_terminal(
         for s in sorted(Severity, reverse=True) if counts[s]
     )
     add(paint.dim("  " + "-" * 64))
-    add(f"  {summary}" if summary else paint.dim("  clean"))
+    unverified = sum(1 for e in errors if e.startswith("probe "))
+    if summary:
+        add(f"  {summary}")
+    elif unverified:
+        add(paint.dim(f"  no findings in what was read; {unverified} server(s) could not "
+                      f"be read, so their tools were not checked"))
+    else:
+        add(paint.dim("  clean"))
 
     # Suppressed findings are reported as a count, never silently dropped:
     # a reader has to be able to see that something was excluded.

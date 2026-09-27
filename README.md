@@ -288,6 +288,13 @@ scan --safe → isolate (you provide this) → approve --probe → commit the lo
     fail-on: high
 ```
 
+By default the action also reads each hosted (HTTP) server's tool definitions
+and compares them with the lock (`probe-hosted: true`). Reading one runs none
+of its code. Stdio servers are read only with `probe: true`, which launches
+them, so only on a disposable runner. A hosted server that cannot be read,
+for example one that wants a login, is listed in the job summary as not
+verified and does not fail the job unless `require-probe: true`.
+
 A runner that must not pass on "could not see" wants
 `heldfast scan --require-integrity`, which makes an unverifiable artifact
 high rather than a note. An air-gapped runner will fail on it, which is the
@@ -323,7 +330,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1499 tests, stdlib unittest, nothing to install.
+1508 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

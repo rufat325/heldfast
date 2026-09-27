@@ -22,6 +22,7 @@ def render_json(
     probed: bool = False,
     version: str = "0.1.0",
     suppressed: list | None = None,
+    probe: list | None = None,
 ) -> str:
     counts = {s.label: sum(1 for f in findings if f.severity == s) for s in Severity}
     doc = {
@@ -44,6 +45,10 @@ def render_json(
             "highest": max((f.severity for f in findings), default=Severity.INFO).label,
         },
         "errors": list(errors),
+        # Per server: whether its tool definitions were read ("read"), not
+        # asked for ("not read") or asked for and not answered ("could not
+        # read"). "No findings" covers only the first.
+        "probe": list(probe or []),
         "suppressed": [
             {**f.to_dict(), "suppressed_by": {"rule": r.rule_id, "server": r.server,
                                               "line": r.source_line, "reason": r.reason}}
