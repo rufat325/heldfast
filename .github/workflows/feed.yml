@@ -109,8 +109,21 @@ jobs:
     timeout-minutes: 300
     permissions:
       contents: read
+    # The Free plan runs 20 jobs at once per account and queues the rest, and
+    # this run used to start exactly 20 (16 of these, 4 measure-remote), so
+    # every other workflow in the account, CI on pull requests included,
+    # waited for it. Ten at a time peaks at 14 and leaves 6.
+    #
+    # Measured over the 11 full runs of 23-27 September 2026: an npm shard
+    # took 1-12 minutes, a measure-remote shard 11-28, publish 1-5, and the
+    # whole run 12-33. Two waves of npm shards add about 12 minutes, well
+    # inside the six hours the day allows. measure-remote stays at full
+    # width: the busy pass shares this workflow's concurrency group, where
+    # GitHub keeps one pending run and a newer one cancels it, so a slow busy
+    # pass still running at 06:23 could cost the day's npm measuring.
     strategy:
       fail-fast: false
+      max-parallel: 10
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
