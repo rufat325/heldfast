@@ -1017,14 +1017,18 @@ def readme(events: list, generated: str, data: str) -> str:
     hosted = [r for r in rows if r.get("kind") == "remote"]
     live = [e for e in events if not e.get("seeded")]
     review = [e for e in events if e["grade"] == "review"]
+    # A hosted server has no releases: its events are readings in which what
+    # it said had changed. Counted apart, so neither is called the other.
+    readings = [e for e in events if e["package"].startswith(REMOTE_PREFIX)]
     lines = [
         "# MCP server tool changes", "",
         f"Last change observed {generated}. Built by `research/feed/watch.py` on the "
         f"`main` branch. Watching {len(npm)} npm servers from the official MCP registry "
         f"({len(daily)} daily, the rest weekly) and {len(hosted)} hosted endpoints (daily).", "",
-        f"{len(events)} releases that changed a tool definition "
-        f"({len(live)} observed live, {len(events) - len(live)} from the "
-        f"[churn study](https://github.com/rufat325/heldfast/blob/main/docs/CHURN.md)); "
+        f"{len(events)} changes to a tool definition: {len(events) - len(readings)} npm "
+        f"releases ({len(live) - len(readings)} observed live, {len(events) - len(live)} "
+        f"from the [churn study](https://github.com/rufat325/heldfast/blob/main/docs/CHURN.md)) "
+        f"and {len(readings)} readings of hosted servers that found their tools changed; "
         f"{len(review)} where `heldfast wrap --drift graded` would refuse something.", "",
         "Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, "
         "with the words that moved: [events/](events).", "",

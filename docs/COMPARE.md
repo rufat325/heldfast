@@ -6,8 +6,8 @@ Four jobs. They are not the same product.
 |---|---|---|---|---|
 | What it answers | Does this config look wrong *now*? | Is this the tool I approved? | May this call go through? | May this process start? |
 | Artifact | report / SARIF | `.mcp-pin.lock` | the same lock | the same lock |
-| Command | `heldfast doctor` / `heldfast ci` | `heldfast approve --probe` | `heldfast wrap -- …` / Claude Code hook | `heldfast wrap` / `gateway` at start |
-| Fails the PR | MCPA014, MCPA015, and `--fail-on high` | the file is the pin | n/a (runtime) | n/a (runtime) |
+| Command | `heldfast doctor` / `heldfast ci` | `heldfast approve --probe` | `heldfast wrap -- …` / Claude Code hook (names only: hooks are not shown definitions) | `heldfast wrap` / `gateway` at start |
+| Fails the PR | MCPA014, `--fail-on high`, and MCPA015 for servers whose tools were read: hosted ones by the Action's default, stdio ones only with `--probe` | the file is the pin | n/a (runtime) | n/a (runtime) |
 | Launches a server | only with `--probe` | `--probe` records live tools | yes, the child | yes, after the pin gate |
 | Who else occupies it | Snyk, Cisco (text looks evil) | this tool | this tool, gateways (auth/DLP) | this tool |
 

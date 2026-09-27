@@ -42,11 +42,11 @@ weekly pull request.
 
 Commit `.mcp-pin.lock`. From then on, one file is checked in three places:
 
-| where | when a tool changed or appeared since approval |
-|---|---|
-| **CI** -- `heldfast ci` or the [GitHub Action](#ci) | the PR fails, and the report shows the words that moved |
-| **your MCP client** -- `wrap`, or `gateway` for several servers | the tool is replaced with a refusal, and calls to it are blocked |
-| **Claude Code** -- the [plugin](#install) | a call to a tool the lock does not name is denied; a changed definition is denied when the hook is shown it |
+| where | what it checks | what happens |
+|---|---|---|
+| **CI** -- `heldfast ci` or the [GitHub Action](#ci) | the configuration against the lock: servers, launch commands, versions, integrity. The Action also reads each hosted server's tools (reading one runs nothing). A stdio server's tools only with `probe: true`, on a disposable runner | the PR fails, and the report shows the words that moved |
+| **your MCP client** -- `wrap`, or `gateway` for several servers | every tool definition the server sends, at call time. The only place a changed tool is refused as it is used | the tool is replaced with a refusal, and calls to it are blocked |
+| **Claude Code** -- the [plugin](#install) | the server and tool names a call uses. Claude Code does not show hooks the definitions, so a tool changed under an approved name needs `wrap` or `gateway` | a call to a server or tool the lock does not name is denied |
 
 With no lock, `wrap` will not start the server. That is not trust on first use.
 
@@ -118,7 +118,7 @@ heldfast wrap -- npx -y pkg@1.0.0     # refuse the rest (alias of guard)
 heldfast -- npx -y pkg@1.0.0          # same wrap
 heldfast approve --probe              # pin; --yes-tool NAME for critical drift
 heldfast doctor                       # later: see what changed (alias of scan)
-heldfast ci                           # fail the PR on MCPA014/015; never launches
+heldfast ci                           # fail the PR when config, scripts or skills left the lock; never launches
 heldfast check                        # the lockfile, nothing else
 heldfast scan ./my-project            # scan one project
 heldfast scan --safe                  # never execute, never connect
