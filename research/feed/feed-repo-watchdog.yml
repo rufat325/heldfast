@@ -56,3 +56,26 @@ jobs:
             gh issue create --repo "$REPO" --title "$title" --body "$body" >/dev/null
           fi
           echo "$problems"
+      # The early warning for GitHub's 60-day rule. rufat325/heldfast, where
+      # feed.yml's schedule lives, is active only when someone commits to it.
+      # This opens its own issue ten days before the deadline, so a person
+      # makes a real commit; it does not commit or re-enable anything itself.
+      - name: Warn before the collector's schedule goes idle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          last=$(gh api repos/rufat325/heldfast/commits/main --jq .commit.committer.date)
+          if warning=$(python3 tool/research/feed/watchdog.py idle --last-change "$last"); then
+            echo "$warning"
+            exit 0
+          fi
+          title="heldfast: a commit is needed to keep the collector running"
+          number=$(gh issue list --repo "$REPO" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$REPO" --body "$warning" >/dev/null
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$warning" >/dev/null
+          fi
+          echo "$warning"

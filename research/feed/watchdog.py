@@ -13,6 +13,15 @@ schedule was disabled after 60 quiet days -- this keeps running and says so.
 
   watchdog.py check --last-change ISO [--runs FILE] [--now ISO]
                     [--stale-hours 26] [--hung-hours 6]
+  watchdog.py idle  --last-change ISO [--now ISO] [--warn-days 50]
+
+`idle` is the early warning for GitHub's 60-day rule: a public repository's
+scheduled workflows are disabled after 60 days without activity, and since
+the data moved out, rufat325/heldfast -- where the collector's schedule
+lives -- is active only when someone commits to it. Given that repository's
+last commit, it says how many days are left, so a person makes a real
+commit in time. Nothing here commits, re-enables or otherwise works around
+the rule on its own.
 
 Prints one line per problem and exits 1 when there is any, 0 when the feed
 is moving. `--runs` is the JSON `gh run list --json createdAt,url` prints
@@ -28,6 +37,8 @@ from datetime import datetime, timezone
 
 STALE_HOURS = 26
 HUNG_HOURS = 6
+IDLE_LIMIT_DAYS = 60
+IDLE_WARN_DAYS = 50
 
 
 def _when(text: str) -> datetime:
@@ -48,6 +59,23 @@ def problems(last_change: str, runs: list, now: datetime,
     return out
 
 
+def idle(last_change: str, now: datetime, warn_days: float = IDLE_WARN_DAYS,
+         limit_days: float = IDLE_LIMIT_DAYS) -> str | None:
+    """A warning when the tool repository nears the 60-day rule, or None."""
+    from datetime import timedelta
+    last = _when(last_change)
+    days = (now - last).total_seconds() / 86400
+    if days < warn_days:
+        return None
+    deadline = (last + timedelta(days=limit_days)).strftime("%Y-%m-%d")
+    left = limit_days - days
+    when = f"in {left:.0f} day(s), on {deadline}" if left > 0 else f"since {deadline}"
+    return (f"rufat325/heldfast has had no commit for {days:.0f} days. GitHub disables a public "
+            f"repository's scheduled workflows after {limit_days:.0f} days without activity, "
+            f"which stops the feed's collector {when}. Any real commit or merged pull request "
+            f"there resets it; if it has already stopped, enable feed.yml again on its Actions tab.")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
@@ -57,7 +85,16 @@ def main() -> int:
     c.add_argument("--now", default="", help="ISO time to judge at (default: now)")
     c.add_argument("--stale-hours", type=float, default=STALE_HOURS)
     c.add_argument("--hung-hours", type=float, default=HUNG_HOURS)
+    i = sub.add_parser("idle")
+    i.add_argument("--last-change", required=True, help="ISO time of rufat325/heldfast's newest commit")
+    i.add_argument("--now", default="")
+    i.add_argument("--warn-days", type=float, default=IDLE_WARN_DAYS)
     args = ap.parse_args()
+    if args.command == "idle":
+        now = _when(args.now) if args.now else datetime.now(timezone.utc)
+        warning = idle(args.last_change, now, args.warn_days)
+        print(warning or "rufat325/heldfast is active")
+        return 1 if warning else 0
     runs = []
     if args.runs:
         with open(args.runs, encoding="utf-8") as fh:

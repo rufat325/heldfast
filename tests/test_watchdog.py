@@ -66,6 +66,40 @@ class TestTheWatchdog(unittest.TestCase):
         self.assertEqual(2, len(found))
 
 
+class TestTheSixtyDayRule(unittest.TestCase):
+    """GitHub disables a public repository's schedules after 60 days without
+    activity. The watchdog warns ten days ahead, and does nothing else."""
+
+    def days_ago(self, days: float) -> str:
+        return ago(days * 24)
+
+    def test_quiet_before_fifty_days(self) -> None:
+        self.assertIsNone(watchdog.idle(self.days_ago(49), NOW))
+
+    def test_warns_with_the_days_left_and_the_date(self) -> None:
+        said = watchdog.idle(self.days_ago(52), NOW)
+        self.assertIn("no commit for 52 days", said)
+        self.assertIn("in 8 day(s), on 2026-10-06", said)
+
+    def test_after_the_deadline_it_says_so_and_how_to_recover(self) -> None:
+        said = watchdog.idle(self.days_ago(63), NOW)
+        self.assertIn("since 2026-09-25", said)
+        self.assertIn("enable feed.yml again", said)
+
+    def test_the_command_exits_by_whether_there_is_a_warning(self) -> None:
+        run = lambda days: subprocess.run(
+            [sys.executable, str(ROOT / "research" / "feed" / "watchdog.py"), "idle",
+             "--last-change", self.days_ago(days), "--now", NOW.isoformat()],
+            capture_output=True, text=True).returncode
+        self.assertEqual((0, 1), (run(10), run(55)))
+
+    def test_it_works_around_nothing(self) -> None:
+        """The popular keepalive action was disabled by GitHub; this only warns."""
+        workflow = (ROOT / "research" / "feed" / "feed-repo-watchdog.yml").read_text(encoding="utf-8")
+        for forbidden in ("/enable", "workflow enable", "git commit", "git push", "--allow-empty"):
+            self.assertNotIn(forbidden, workflow)
+
+
 class TestTheFeedHoldsItsWatchdog(unittest.TestCase):
     """The workflow file sits in the feed repository, so the publishing job's
     check must accept exactly it, and no measuring shard may upload it."""

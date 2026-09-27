@@ -23,7 +23,13 @@ Read this file and `docs/GUARANTEES.md` instead.
   a commit at least every 60 days, or the collector stops. The watchdog in the
   feed repository (from `research/feed/feed-repo-watchdog.yml`) keeps running
   either way and opens an issue there when nothing has been published for 26
-  hours; the fix is to enable `feed.yml` again on the Actions tab.
+  hours; the fix is to enable `feed.yml` again on the Actions tab. It also
+  warns ten days ahead: when this repository has had no commit for 50 days,
+  it opens "heldfast: a commit is needed to keep the collector running" in
+  the feed repository, with the deadline. Nothing commits or re-enables the
+  workflow automatically, on purpose: the best-known keepalive action for
+  this was itself disabled by GitHub, and a crawler already sits close to the
+  Actions terms.
 - `pkgcache.py` is on the launch path and is in the `mypy --strict` job for
   that reason. It opens no socket; if it ever needs to, that is a design
   change, not an implementation detail.
