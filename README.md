@@ -109,7 +109,7 @@ Claude Code, without rewriting `mcpServers` argv:
 /plugin install heldfast@heldfast
 ```
 
-The hook reads the same `.mcp-pin.lock`. PreToolUse denies `mcp__server__tool` on a miss or a drifted digest. It does not rewrite hashes. `MCP_PIN_DRIFT=graded` gives it the same graded mode as `wrap` ([plugin/heldfast/README.md](plugin/heldfast/README.md)).
+The hook reads the same `.mcp-pin.lock`. PreToolUse denies a call to a server or tool the lock does not name. It does not rewrite hashes, and it cannot see tool definitions: Claude Code does not give them to hooks, so a tool whose definition changed under the same name needs `wrap` or `gateway` ([plugin/heldfast/README.md](plugin/heldfast/README.md)).
 
 ## Usage
 
@@ -323,7 +323,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1491 tests, stdlib unittest, nothing to install.
+1499 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

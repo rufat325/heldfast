@@ -5,9 +5,20 @@
  * PreToolUse: deny mcp__server__tool when the lock is missing, the server
  * is unpinned, or the tool was not present at approval.
  *
- * Does not rewrite hashes. Does not start the server. A live definition
- * (tool_definition / tool_input._definition) is hashed when present; a
- * mismatch is deny, same as wrap.
+ * Does not rewrite hashes. Does not start the server.
+ *
+ * NAMES, NOT DEFINITIONS
+ * ----------------------
+ * A PreToolUse event carries the tool's name, the arguments the model wrote
+ * and an id -- never the tool's definition. This hook used to hash a
+ * definition when one arrived as `tool_definition`, `toolDefinition` or
+ * `tool_input._definition`. The first two never arrive from Claude Code, and
+ * no other client this was written for sends them. The third is part of the
+ * arguments, which the model writes: it proved nothing about what the server
+ * sent, and at most let the model trigger a denial. All three are gone, and
+ * with them the graded-drift path they fed. So in Claude Code this checks
+ * names. A tool whose definition changed under the same name is caught by
+ * `wrap` or `gateway`, which see the server's own tools/list.
  *
  * THIS AND `wrap` MUST ANSWER THE SAME QUESTION THE SAME WAY
  * ----------------------------------------------------------
@@ -28,79 +39,20 @@
  * `tests/test_plugin.py` walks a table of lock states and asserts the two
  * agree on every one of them.
  *
- * GRADED DRIFT (MCP_PIN_DRIFT=graded)
- * -----------------------------------
- * `wrap --drift graded` forwards a changed tool when the change introduced no
- * signal. This hook does the same only by asking `heldfast grade-drift`, the
- * same Python the wrap runs, rather than keeping a JavaScript copy of the
- * patterns: two copies of a regex table are two answers waiting to happen.
- * Anything but a clean answer from it -- not installed, timed out, exited
- * non-zero, printed something that is not the expected JSON -- is a deny.
- * Without grading this call was refused, so refusing it is not a new failure.
+ * ANOTHER PLUGIN'S SERVERS
+ * ------------------------
+ * Claude Code names a tool from a plugin-bundled MCP server
+ * `mcp__plugin_<plugin>_<server>__<tool>`. heldfast cannot pin those yet, so
+ * they are refused with that said, rather than as "not in the lockfile",
+ * which suggested a re-approval that cannot help. HELDFAST_ALLOW_UNPINNED
+ * (comma-separated, matched exactly, e.g. `plugin_other-plugin_db`) lets named
+ * ones through, unpinned, and says so on every call.
  */
 
-const { spawnSync } = require("child_process");
-const { loadLock, findServerEntry, parseMcpTool, toolDigest, readStdin,
+const { loadLock, findServerEntry, parseMcpTool, resolveMcpTool, readStdin,
         LOCK_VERSION, DIGEST_CHANGED_IN } = require("./lib.js");
 
-const GRADE_TIMEOUT_MS = 15000;
-
-/** {introduced: [...]} from heldfast, or {error: "..."}. Never throws. */
-function gradeDrift(recorded, definition) {
-  // MCP_PIN_PYTHON runs the module from a given interpreter (a venv, a test);
-  // otherwise the `heldfast` on PATH, which is what `pipx install` puts there.
-  const python = process.env.MCP_PIN_PYTHON;
-  const cmd = python || "heldfast";
-  const args = python ? ["-m", "heldfast", "grade-drift"] : ["grade-drift"];
-  let proc;
-  try {
-    proc = spawnSync(cmd, args, {
-      input: JSON.stringify({ recorded, definition }),
-      encoding: "utf8", timeout: GRADE_TIMEOUT_MS, windowsHide: true,
-    });
-  } catch (err) {
-    return { error: String(err && err.message || err) };
-  }
-  if (proc.error) return { error: String(proc.error.message || proc.error) };
-  if (proc.status !== 0) {
-    return { error: "grade-drift exited " + proc.status + ": " +
-      String(proc.stderr || "").trim().slice(0, 200) };
-  }
-  let out;
-  try {
-    out = JSON.parse(proc.stdout);
-  } catch (_err) {
-    return { error: "grade-drift printed something that is not JSON" };
-  }
-  if (!out || !Array.isArray(out.introduced)) {
-    return { error: "grade-drift answered without an `introduced` list" };
-  }
-  return { introduced: out.introduced };
-}
-
-function describe(found) {
-  const head = found.slice(0, 3).map((s) => String(s.kind) + " '" + String(s.match) + "'");
-  return head.join(", ") + (found.length > 3 ? " and " + (found.length - 3) + " more" : "");
-}
-
-function driftVerdict(tool, recorded, definition) {
-  if (process.env.MCP_PIN_DRIFT !== "graded") {
-    return deny("tool '" + tool + "' fingerprint changed since approval");
-  }
-  const graded = gradeDrift(recorded, definition);
-  if (graded.error) {
-    return deny("tool '" + tool + "' fingerprint changed since approval, and grading " +
-      "the change failed (" + graded.error + "); refusing rather than allowing");
-  }
-  if (graded.introduced.length) {
-    return deny("tool '" + tool + "' fingerprint changed since approval and the change " +
-      "introduced " + describe(graded.introduced));
-  }
-  process.stderr.write("heldfast: tool '" + tool + "' changed since approval; the change " +
-    "introduced no signal (MCP_PIN_DRIFT=graded). Forwarded, not approved -- " +
-    "`heldfast approve --probe` pins it.\n");
-  return allow();
-}
+const PLUGIN_PREFIX = "mcp__plugin_";
 
 function deny(reason) {
   process.stdout.write(JSON.stringify({
@@ -120,9 +72,35 @@ function allow() {
   process.exitCode = 0;
 }
 
+/** The override name this plugin tool matches exactly, or "". */
+function allowedUnpinned(toolName) {
+  const named = String(process.env.HELDFAST_ALLOW_UNPINNED || "")
+    .split(",").map((s) => s.trim()).filter((s) => s.startsWith("plugin_"));
+  return named.find((server) => toolName.startsWith("mcp__" + server + "__") &&
+    toolName.length > ("mcp__" + server + "__").length) || "";
+}
+
+function unmatched(toolName) {
+  if (toolName.startsWith(PLUGIN_PREFIX)) {
+    const server = allowedUnpinned(toolName);
+    if (server) {
+      process.stderr.write("heldfast: " + toolName + " is called UNPINNED: '" + server +
+        "' is another plugin's MCP server, let through by HELDFAST_ALLOW_UNPINNED.\n");
+      return allow();
+    }
+    return deny("'" + toolName + "' is a tool from another Claude Code plugin's MCP " +
+      "server, which heldfast cannot pin yet, so it is refused. To call it unpinned, set " +
+      "HELDFAST_ALLOW_UNPINNED to that server's name as it appears after mcp__ " +
+      "(plugin_<plugin>_<server>).");
+  }
+  const named = parseMcpTool(toolName);
+  return deny("server '" + (named ? named.server : toolName) + "' is not in the lockfile");
+}
+
 async function decide(event) {
-  const parsed = parseMcpTool(event.tool_name || event.toolName || "");
-  if (!parsed) return allow();
+  const toolName = String(event.tool_name || event.toolName || "");
+  const named = parseMcpTool(toolName);
+  if (!named) return allow();
 
   const cwd = event.cwd || process.cwd();
   let lockPath;
@@ -133,10 +111,10 @@ async function decide(event) {
     // Unreadable or malformed. The call is refused rather than waved through:
     // "we could not tell" and "it was approved" must not be the same answer.
     return deny("lockfile could not be read (" + String(err && err.message || err) +
-      "); refusing " + parsed.server + "/" + parsed.tool);
+      "); refusing " + named.server + "/" + named.tool);
   }
   if (!lockPath) {
-    return deny("no .mcp-pin.lock; refusing " + parsed.server + "/" + parsed.tool);
+    return deny("no .mcp-pin.lock; refusing " + named.server + "/" + named.tool);
   }
 
   const version = Number((data && data.version) || 0);
@@ -148,6 +126,14 @@ async function decide(event) {
     return deny("lockfile version " + version + " predates the RFC 8785 digest, so its " +
       "fingerprints are not comparable; run `heldfast approve` to re-record it");
   }
+
+  const parsed = resolveMcpTool(toolName, data);
+  if (parsed && parsed.ambiguous) {
+    return deny("'" + toolName + "' fits " + parsed.ambiguous.length + " servers in the " +
+      "lockfile (" + parsed.ambiguous.join(", ") + ") that Claude Code writes the same " +
+      "way, so this hook cannot tell which one is being called; give them distinct names");
+  }
+  if (!parsed) return unmatched(toolName);
 
   const found = findServerEntry(data, parsed.server);
   if (found && found.ambiguous) {
@@ -169,16 +155,6 @@ async function decide(event) {
   const tools = entry.tools && typeof entry.tools === "object" ? entry.tools : {};
   if (!Object.prototype.hasOwnProperty.call(tools, parsed.tool)) {
     return deny("tool '" + parsed.tool + "' was not present at approval");
-  }
-
-  const live = event.tool_definition || event.toolDefinition ||
-    (event.tool_input && event.tool_input._definition) || null;
-  if (live && tools[parsed.tool] && tools[parsed.tool].fingerprint) {
-    const pinned = String(tools[parsed.tool].fingerprint);
-    const definition = Object.assign({ name: parsed.tool }, live);
-    if (toolDigest(definition) !== pinned) {
-      return driftVerdict(parsed.tool, tools[parsed.tool], definition);
-    }
   }
   return allow();
 }

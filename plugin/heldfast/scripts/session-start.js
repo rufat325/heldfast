@@ -47,8 +47,9 @@ function summary(lock) {
   );
   if (process.env.MCP_PIN_DRIFT === "graded") {
     process.stdout.write(
-      "heldfast: MCP_PIN_DRIFT=graded -- a changed tool is allowed when the change " +
-        "introduced no signal, graded by `heldfast grade-drift`. A heuristic, not a pin.\n"
+      "heldfast: MCP_PIN_DRIFT=graded has no effect here. Claude Code gives this hook a " +
+        "tool's name, not its definition, so it checks names; `heldfast wrap --drift graded` " +
+        "sees the definitions.\n"
     );
   }
 })();
