@@ -92,19 +92,85 @@ Said plainly, because a security tool that overclaims is worse than none:
   text constantly; their definitions can read as differing between readings.
   `verify` says when the log has seen a server change often.
 - **One publisher.** Today the log is this project's git history: a record
-  cannot change without its commit changing, and `verify` prints the commit
-  it read -- but it is published by one party. Certificate Transparency works because
+  cannot change without its commit changing, `verify` prints the commit it
+  read, and each day's commit is anchored in Bitcoin ([checkpoints](#checkpoints))
+  -- but it is published by one party. Certificate Transparency works because
   several independent logs and monitors watch each other. That is the next
   step, and it is the part worth doing with the registry rather than alone.
+
+## Checkpoints
+
+Every date in the log is written by whoever holds the push credential: a
+commit date, an `observed_at`. So "the log saw this first" would be only as
+good as a claim this project makes about itself. Checkpoints put a bound on
+those dates that nobody holding this repository's credentials can move.
+
+**What is anchored.** After each daily publish, the feed branch gets
+`checkpoints/YYYY-MM-DD.json`. It names one published commit (`feed_commit`)
+and gives `manifest_sha256`: the SHA-256 of a manifest listing the SHA-256 of
+every file in that commit, outside `checkpoints/` itself. The file also says
+how many files and events that commit holds, and which heldfast version and
+`main` commit wrote it. Beside it, `checkpoints/YYYY-MM-DD.json.ots` is an
+[OpenTimestamps](https://opentimestamps.org) proof of the checkpoint file. A
+calendar server folds the file's digest into a Bitcoin transaction, so the
+proof ties the checkpoint, and every byte it digests, to a Bitcoin block. A
+fresh proof is pending until that transaction confirms, a few hours later.
+The next day's run upgrades it and commits the complete proof. Git's own
+object IDs are SHA-1, which is why the manifest hashes file contents itself
+instead of relying on the commit ID.
+
+**From which date.** From the first daily run after checkpoints were added.
+Nothing before that is anchored, and it never can be: a stamp made today
+proves only that the data existed today.
+
+**How to verify one.** Rebuild the manifest from the commit, compare the
+digest, then verify the proof. On Linux:
+
+```bash
+git clone --branch feed --single-branch https://github.com/rufat325/heldfast feed
+cd feed
+day=2026-09-28   # the checkpoint to check
+commit=$(python3 -c "import json; print(json.load(open('checkpoints/$day.json'))['feed_commit'])")
+mkdir ../at && git -c core.autocrlf=false archive "$commit" | tar -x -C ../at
+(cd ../at && find . -type f ! -path './checkpoints/*' -printf '%P\0' \
+  | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum)
+# compare with "manifest_sha256" in checkpoints/$day.json
+pip install opentimestamps-client
+ots verify checkpoints/$day.json.ots
+```
+
+The manifest's lines are exactly what `sha256sum` prints: the digest, two
+spaces, the path, one line per file, sorted by path as bytes. `python3
+research/feed/watch.py checkpoint --data feed --commit $commit --day $day
+--generator-commit <its main_commit> --out /tmp/cp.json` from a clone of
+`main` rebuilds the whole checkpoint file byte for byte.
+
+`ots verify` checks the proof against the Bitcoin block headers, which it
+reads from a local Bitcoin Core node (a pruned one is enough). Without a
+node, `ots --no-bitcoin verify` prints the block height and the Merkle root
+the proof commits to. You can compare those with any block explorer, but
+then you are trusting the explorer.
+
+**What it proves.** The checkpoint, and every file in the commit it
+describes, existed no later than the time of the Bitcoin block. An event the
+log claims to have observed on a day is in that day's checkpoint or it is
+not, and one inserted into the history later is missing from every
+checkpoint before it.
+
+**What it does not prove.** That the data is accurate: a lying server, or a
+lying collector, is anchored just as faithfully. That a server showed
+everyone what it showed the log. That the log has not left something out.
+Only an upper bound on each date is anchored, never when a reading was
+really taken.
 
 ## Where this goes
 
 - **Independent readers.** The same reading, taken from different networks by
   different operators, published side by side. A server that shows one reader
   something different from the rest is found by the log itself.
-- **Tamper evidence.** Signed checkpoints of the log, so a client can hold
-  proof of what the log said on a given day, and show that no reading was
-  later rewritten.
+- **Tamper evidence.** Daily checkpoints are anchored today (above), which
+  bounds when each reading can have been written. Next: signed checkpoints a
+  client can hold, so it can show what the log told it on a given day.
 - **A registry field.** The MCP registry already verifies who publishes a
   server. Recording the digest of what a hosted server says, at each reading,
   next to that entry would make "is this what everyone sees?" a question any

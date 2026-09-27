@@ -38,6 +38,14 @@ between two readings was never logged at all.
   watch.py admit        --data DIR --deltas DIR --into DIR
                                                     take each shard's upload only
                                                     for the servers it was given
+  watch.py checkpoint   --data DIR --commit SHA [--day D] [--out FILE]
+                                                    describe one published feed
+                                                    commit, to be anchored
+  watch.py admit-anchor --data DIR --incoming DIR --day D --feed-commit SHA
+                        --manifest-sha256 X --checkpoint-sha256 Y
+                                                    take the anchor job's
+                                                    checkpoint and proofs only
+                                                    if they are what was asked
 
 `check` downloads and runs published npm packages, exactly as measure.py
 does, and for the same reason it belongs in research/feed/Dockerfile. The
@@ -64,6 +72,11 @@ Layout under DIR:
                                  first seen, on how many servers (docs/LOOKUP.md)
   feed.json, feed.xml            the latest events, as JSON and as Atom
   README.md                      the same, for a person
+  checkpoints/YYYY-MM-DD.json    one published commit, described by a digest of
+                                 every other file in it (docs/TRANSPARENCY.md)
+  checkpoints/YYYY-MM-DD.json.ots
+                                 its OpenTimestamps proof: the checkpoint existed
+                                 no later than a Bitcoin block
 """
 from __future__ import annotations
 
@@ -99,6 +112,7 @@ ALLOWED = re.compile(
     r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
     r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta|all)\.json|"
     r"tools/[0-9a-f]{2}/[0-9a-f]{64}\.json|"
+    r"checkpoints/\d{4}-\d{2}-\d{2}\.json(?:\.ots)?|"
     r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json(?:\.gz)?)$")
 TOOL_FILE = re.compile(r"^tools/([0-9a-f]{2})/([0-9a-f]{64})\.json$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -1007,6 +1021,9 @@ def readme(events: list, generated: str, data: str) -> str:
         f"{len(review)} where `heldfast wrap --drift graded` would refuse something.", "",
         "Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, "
         "with the words that moved: [events/](events).", "",
+        "Each day's commit is anchored in Bitcoin with OpenTimestamps: "
+        "[checkpoints/](checkpoints), and how to check one in "
+        "[TRANSPARENCY.md](https://github.com/rufat325/heldfast/blob/main/docs/TRANSPARENCY.md#checkpoints).", "",
         "`quiet`: a graded pin forwards every changed tool (new tools still need "
         "approval). `review`: a change introduced an agent-directed instruction, hidden "
         "character, credential path or look-alike letter. Review means read it, not "
@@ -1046,6 +1063,11 @@ def _check_catalogue(full: str) -> str | None:
 
 def _check_file(full: str, rel: str) -> str | None:
     try:
+        if rel.endswith(".ots"):
+            with open(full, "rb") as fh:
+                proof = fh.read(MAX_PROOF + 1)
+            return None if len(proof) <= MAX_PROOF and proof.startswith(OTS_MAGIC) \
+                else "not an OpenTimestamps proof"
         if rel.endswith(".json.gz"):
             read_gz(full)
             return None
@@ -1238,6 +1260,239 @@ def admit(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- checkpoint ------------------------------------------------------------
+
+# Every date in the feed is written by whoever holds the push credential: a
+# commit date, an `observed_at`. A checkpoint is one published commit reduced
+# to a digest, and the anchor job stamps that file with OpenTimestamps, which
+# commits it to a Bitcoin block. That proves the data existed no later than the
+# block -- something nobody holding this repository's credentials can backdate.
+# A day not anchored can never be anchored later: a stamp made today proves only
+# today.
+CHECKPOINTS = "checkpoints/"
+CHECKPOINT_FILE = re.compile(r"^checkpoints/(\d{4}-\d{2}-\d{2})\.json(\.ots)?$")
+EVENTS_FILE = re.compile(r"^events/\d{4}-\d{2}\.jsonl$")
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
+MANIFEST_FORMAT = ("one line per file in feed_commit outside checkpoints/: the SHA-256 of "
+                   "its bytes in lowercase hex, two spaces, its path, a line feed; sorted "
+                   "by path as UTF-8 bytes")
+# A proof is a few hundred bytes pending and a few kilobytes once complete.
+MAX_PROOF = 64 * 1024
+# From opentimestamps 0.4.5, opentimestamps/core/timestamp.py and op.py:
+# DetachedTimestampFile writes HEADER_MAGIC, its MAJOR_VERSION (1) as a
+# varuint, the file hash op's tag (OpSHA256: 0x08) and the file's digest, in
+# that order. So a proof names the exact file it is about in its first bytes.
+OTS_MAGIC = b"\x00OpenTimestamps\x00\x00Proof\x00\xbf\x89\xe2\xe8\x84\xe8\x92\x94"
+OTS_SHA256 = OTS_MAGIC + b"\x01" + b"\x08"
+# notary.py: BitcoinBlockHeaderAttestation.TAG. Present once a proof is complete.
+OTS_BITCOIN = bytes.fromhex("0588960d73d71901")
+
+
+def git_files(data: str, commit: str):
+    """(path, bytes) for every file in one commit, from git's objects rather
+    than the working tree, so a checkout's line endings or untracked files
+    cannot change the answer. Anyone with a clone can run the same thing."""
+    import subprocess
+    listing = subprocess.run(["git", "-C", data, "ls-tree", "-r", "-z", "--full-tree", commit],
+                             capture_output=True, check=True).stdout
+    entries = []
+    for record in listing.split(b"\0"):
+        if not record:
+            continue
+        meta, path = record.split(b"\t", 1)
+        _mode, kind, oid = meta.split(b" ")
+        if kind != b"blob":
+            raise ValueError(f"{path.decode('utf-8', 'replace')}: a {kind.decode()} in the feed")
+        entries.append((path.decode("utf-8"), oid))
+    with subprocess.Popen(["git", "-C", data, "cat-file", "--batch"],
+                          stdin=subprocess.PIPE, stdout=subprocess.PIPE) as proc:
+        for path, oid in entries:
+            proc.stdin.write(oid + b"\n")
+            proc.stdin.flush()
+            header = proc.stdout.readline().split()
+            if len(header) != 3 or header[1] != b"blob":
+                raise ValueError(f"{path}: git could not read {oid.decode()}")
+            size = int(header[2])
+            body = proc.stdout.read(size)
+            proc.stdout.read(1)  # the line feed after each object
+            yield path, body
+        proc.stdin.close()
+
+
+def _entries(files) -> tuple[list[tuple[bytes, str]], int]:
+    """(path, sha256) for every file outside checkpoints/, and the events count."""
+    kept, events = [], 0
+    for path, body in files:
+        if path.startswith(CHECKPOINTS):
+            continue
+        kept.append((path.encode("utf-8"), hashlib.sha256(body).hexdigest()))
+        if EVENTS_FILE.match(path):
+            events += sum(1 for line in body.splitlines() if line.strip())
+    return sorted(kept), events
+
+
+def _manifest_bytes(kept: list[tuple[bytes, str]]) -> bytes:
+    return b"".join(digest.encode("ascii") + b"  " + path + b"\n" for path, digest in kept)
+
+
+def manifest(files) -> bytes:
+    """The manifest a checkpoint digests (MANIFEST_FORMAT). Not stored: anyone
+    can rebuild it from the commit, which is what makes it checkable."""
+    return _manifest_bytes(_entries(files)[0])
+
+
+def describe(day: str, commit: str, files, generator: dict) -> dict:
+    kept, events = _entries(files)
+    return {"date": day, "feed_commit": commit, "files": len(kept),
+            "manifest_sha256": hashlib.sha256(_manifest_bytes(kept)).hexdigest(),
+            "manifest_format": MANIFEST_FORMAT, "events": events, "generator": generator}
+
+
+def _resolve_commit(data: str, ref: str) -> str:
+    import subprocess
+    sha = subprocess.run(["git", "-C", data, "rev-parse", "--verify", "--quiet", ref + "^{commit}"],
+                         capture_output=True, text=True).stdout.strip()
+    if not COMMIT.match(sha):
+        raise ValueError(f"not a commit in {data}: {ref!r}")
+    return sha
+
+
+def checkpoint(args: argparse.Namespace) -> int:
+    """Describe one published feed commit, for the anchor job to stamp.
+
+    Prints `key=value` lines for $GITHUB_OUTPUT: the day, the commit, the
+    manifest digest and the digest of the checkpoint file itself, which is
+    the one the proof must commit to."""
+    from heldfast import __version__
+    day = date.fromisoformat(args.day).isoformat() if args.day else now()[:10]
+    commit = _resolve_commit(args.data, args.commit)
+    main_commit = args.generator_commit
+    if not main_commit:
+        try:
+            main_commit = _resolve_commit(ROOT, "HEAD")
+        except (ValueError, OSError):
+            main_commit = ""
+    body = _json_bytes(describe(day, commit, git_files(args.data, commit),
+                                {"heldfast": __version__, "main_commit": main_commit}))
+    out = args.out or os.path.join(args.data, "checkpoints", day + ".json")
+    _write(out, body)
+    described = json.loads(body)
+    print(f"day={day}\nfeed_commit={commit}\nmanifest_sha256={described['manifest_sha256']}\n"
+          f"checkpoint_sha256={hashlib.sha256(body).hexdigest()}")
+    print(f"checkpoint: {described['files']} files, {described['events']} events at {commit}",
+          file=sys.stderr)
+    return 0
+
+
+def _proof_problem(proof: bytes, target: bytes | None) -> str | None:
+    if target is None:
+        return "a proof for a checkpoint the feed does not hold"
+    if len(proof) > MAX_PROOF:
+        return f"{len(proof)} bytes, more than a proof needs"
+    if not proof.startswith(OTS_MAGIC):
+        return "not an OpenTimestamps proof"
+    if not proof.startswith(OTS_SHA256 + hashlib.sha256(target).digest()):
+        return "a proof of some other file"
+    return None
+
+
+def anchor_problems(data: str, incoming: str, day: str, feed_commit: str,
+                    manifest_sha256: str, checkpoint_sha256: str) -> list[str]:
+    """Everything wrong with the anchor job's upload; empty means take it.
+
+    The anchor job runs a third-party client, so what it hands back is checked
+    here, with the code from main, before the job that can write sees it: only
+    files under checkpoints/; today's checkpoint only if it is byte for byte
+    the one `publish` described, and never over one already recorded; a proof
+    only if it is small, starts with the OpenTimestamps header, and names the
+    SHA-256 of the checkpoint beside it. A proof for an earlier day may only
+    replace one the feed already holds, and only with one that reached a
+    Bitcoin block -- that is what upgrading is.
+    """
+    problems, found = [], {}
+    for base, _dirs, files in os.walk(incoming):
+        for name in files:
+            full = os.path.join(base, name)
+            rel = os.path.relpath(full, incoming).replace(os.sep, "/")
+            m = CHECKPOINT_FILE.match(rel)
+            if os.path.islink(full):
+                problems.append(f"{rel}: symbolic link")
+            elif not m:
+                problems.append(f"{rel}: not a checkpoint or a proof")
+            elif os.path.getsize(full) > MAX_PROOF:
+                problems.append(f"{rel}: {os.path.getsize(full)} bytes")
+            else:
+                with open(full, "rb") as fh:
+                    found[rel] = fh.read()
+    for rel, body in sorted(found.items()):
+        m = CHECKPOINT_FILE.match(rel)
+        held = os.path.join(data, rel)
+        if not m.group(2):
+            problems.extend(f"{rel}: {why}" for why in _checkpoint_problems(
+                body, m.group(1), held, day, feed_commit, manifest_sha256, checkpoint_sha256))
+            continue
+        target_rel = rel[:-len(".ots")]
+        target = found.get(target_rel)
+        if target is None and os.path.exists(os.path.join(data, target_rel)):
+            with open(os.path.join(data, target_rel), "rb") as fh:
+                target = fh.read()
+        why = _proof_problem(body, target)
+        if why is None and m.group(1) != day and not os.path.exists(held):
+            why = "a new proof for an earlier day; only an upgrade may replace one"
+        if why is None and os.path.exists(held) and OTS_BITCOIN not in body:
+            why = "replaces a proof with one that has not reached a Bitcoin block"
+        if why:
+            problems.append(f"{rel}: {why}")
+    return problems
+
+
+def _checkpoint_problems(body: bytes, named: str, held: str, day: str, feed_commit: str,
+                         manifest_sha256: str, checkpoint_sha256: str) -> list[str]:
+    if named != day:
+        return [f"a checkpoint for {named}, not {day}"]
+    if os.path.exists(held):
+        return ["a checkpoint the feed already records; one is never replaced"]
+    out = []
+    if hashlib.sha256(body).hexdigest() != checkpoint_sha256:
+        out.append("not the checkpoint publish described")
+    try:
+        described = json.loads(body.decode("utf-8"))
+    except ValueError:
+        return out + ["not JSON"]
+    if not isinstance(described, dict) or described.get("manifest_sha256") != manifest_sha256:
+        out.append("its manifest digest is not the published commit's")
+    if not isinstance(described, dict) or described.get("feed_commit") != feed_commit:
+        out.append("describes another commit")
+    return out
+
+
+def admit_anchor(args: argparse.Namespace) -> int:
+    day = date.fromisoformat(args.day).isoformat()
+    for name, value, shape in (("--feed-commit", args.feed_commit, COMMIT),
+                               ("--manifest-sha256", args.manifest_sha256, DIGEST),
+                               ("--checkpoint-sha256", args.checkpoint_sha256, DIGEST)):
+        if not shape.match(value):
+            print(f"::error::admit-anchor: {name} is not a digest: {value!r}")
+            return 1
+    incoming = args.incoming if os.path.isdir(args.incoming) else None
+    problems = anchor_problems(args.data, incoming, day, args.feed_commit, args.manifest_sha256,
+                               args.checkpoint_sha256) if incoming else []
+    if problems:
+        for p in problems[:20]:
+            print(f"::error::refused anchor upload: {p}")
+        return 1
+    taken = 0
+    for base, _dirs, files in os.walk(incoming) if incoming else []:
+        for name in files:
+            full = os.path.join(base, name)
+            rel = os.path.relpath(full, incoming).replace(os.sep, "/")
+            with open(full, "rb") as fh:
+                _write(os.path.join(args.data, rel), fh.read())
+            taken += 1
+    print(f"admit-anchor: {taken} file(s) taken")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
@@ -1270,10 +1525,25 @@ def main() -> int:
     a.add_argument("--day", default="", help="YYYY-MM-DD the shards ran (default today)")
     a.add_argument("--npm-shards", type=int, default=NPM_SHARDS)
     a.add_argument("--remote-shards", type=int, default=REMOTE_SHARDS)
+    k = sub.add_parser("checkpoint")
+    k.add_argument("--data", required=True, help="a git checkout of the feed branch")
+    k.add_argument("--commit", required=True, help="the published feed commit to describe")
+    k.add_argument("--day", default="", help="YYYY-MM-DD the checkpoint is named for (default today)")
+    k.add_argument("--generator-commit", default="",
+                   help="the main commit whose code wrote it (default: this checkout's HEAD)")
+    k.add_argument("--out", default="", help="where to write it (default DIR/checkpoints/DAY.json)")
+    n = sub.add_parser("admit-anchor")
+    n.add_argument("--data", required=True, help="the feed branch checkout")
+    n.add_argument("--incoming", required=True, help="the anchor job's upload")
+    n.add_argument("--day", required=True)
+    n.add_argument("--feed-commit", required=True)
+    n.add_argument("--manifest-sha256", required=True)
+    n.add_argument("--checkpoint-sha256", required=True)
     args = ap.parse_args()
     return {"seed": seed, "sync": sync, "check": check, "check-remote": check_remote,
             "fold": fold, "render": render, "verify": verify,
-            "admit": admit}[args.command](args)
+            "admit": admit, "checkpoint": checkpoint,
+            "admit-anchor": admit_anchor}[args.command](args)
 
 
 if __name__ == "__main__":
