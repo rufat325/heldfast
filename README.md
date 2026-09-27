@@ -55,7 +55,7 @@ registry, nearly half of all releases change a tool ([we measured it](docs/CHURN
 `--drift graded` lets a change through when it introduced nothing aimed at the
 agent, and still blocks one that did. It is opt-in; the default blocks every
 change. The measuring keeps going, across every npm server and open hosted
-endpoint in the registry, on the [`feed` branch](https://github.com/rufat325/heldfast/tree/feed),
+endpoint in the registry, in [rufat325/heldfast-feed](https://github.com/rufat325/heldfast-feed),
 with an Atom feed to subscribe to.
 
 **Hosted servers, checked against the public record.** Two in three servers in the MCP
@@ -330,7 +330,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1537 tests, stdlib unittest, nothing to install.
+1541 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

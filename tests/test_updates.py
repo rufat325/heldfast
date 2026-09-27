@@ -27,7 +27,7 @@ from heldfast import feedlock  # noqa: E402
 from heldfast.cli import main  # noqa: E402
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
-BASE = f"https://raw.githubusercontent.com/rufat325/heldfast/{SHA}"
+BASE = feedlock.RAW_URL.format(ref=SHA)
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))

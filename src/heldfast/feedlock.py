@@ -4,7 +4,7 @@
 honest workflow asks for a container or a machine you can throw away first.
 Most people skip that step, which is the step that mattered.
 
-The drift feed (research/feed on main, data on the `feed` branch) has already
+The drift feed (research/feed in this repository, data in rufat325/heldfast-feed) has already
 launched the popular servers, in a container with no capabilities and no
 credentials, and kept every catalogue it read. For a server whose config pins
 an exact npm version the feed has measured, `approve --from-feed` records that
@@ -54,8 +54,11 @@ MAX_INFLATED = 50 * 1024 * 1024
 # writer (research/feed/watch.py): it is allowed to grow past MAX_INFLATED,
 # and a reader holding the smaller limit would refuse a record the feed wrote.
 MAX_LOOKUP = 90 * 1024 * 1024
-REPO = "rufat325/heldfast"
-BRANCH = "feed"
+# The feed lives in its own repository, so cloning the tool does not download
+# the log. Until 0.2.1 it was the `feed` branch of rufat325/heldfast, which is
+# no longer updated; `--feed URL` still reads any copy.
+REPO = "rufat325/heldfast-feed"
+BRANCH = "main"
 # How the branch head is found: git's own ref advertisement, the request
 # `git ls-remote` makes. The REST API allows sixty unauthenticated requests
 # an hour per address, which a shared office, CI or cloud address spends
@@ -152,7 +155,7 @@ def parse_advertisement(data: bytes, branch: str = BRANCH) -> str:
 
 
 def branch_head() -> str:
-    """The feed branch's commit, the way `git ls-remote` reads it. Tests replace this."""
+    """The feed's current commit, the way `git ls-remote` reads it. Tests replace this."""
     req = Request(ADVERT_URL, headers={"User-Agent": USER_AGENT})
     try:
         with urlopen(req, timeout=TIMEOUT) as resp:
@@ -182,7 +185,7 @@ def _rate_limited(exc: HTTPError) -> str:
 
 
 def rest_head() -> str:
-    """The feed branch's commit from the REST API: the fallback, authenticated
+    """The feed's current commit from the REST API: the fallback, authenticated
     with GITHUB_TOKEN or GH_TOKEN when one is set. The token goes to
     api.github.com and nowhere else -- never to raw.githubusercontent.com, and
     never to a --feed base someone else chose; a redirect off that host drops
@@ -201,7 +204,7 @@ def rest_head() -> str:
         raise FeedError(f"{HEAD_URL}: {exc}") from exc
     sha = head.get("sha") if isinstance(head, dict) else None
     if not isinstance(sha, str) or not _SHA.match(sha):
-        raise FeedError("could not resolve the feed branch to a commit")
+        raise FeedError("could not resolve the feed to a commit")
     return sha
 
 
@@ -221,7 +224,7 @@ def resolve(base: str | None = None) -> Feed:
         except FeedError as second:
             raise FeedError(f"{second} (reading the branch from git also failed: {first})") from second
     if not isinstance(sha, str) or not _SHA.match(sha):
-        raise FeedError("could not resolve the feed branch to a commit")
+        raise FeedError("could not resolve the feed to a commit")
     return Feed(RAW_URL.format(ref=sha), f"{REPO}@{sha}", sha)
 
 

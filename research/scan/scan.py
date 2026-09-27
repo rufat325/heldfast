@@ -81,7 +81,7 @@ def scan_one(item: tuple[str, str]) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--feed", required=True, help="a checkout of the feed branch")
+    ap.add_argument("--feed", required=True, help="a checkout of rufat325/heldfast-feed")
     ap.add_argument("--out", default=os.path.join(HERE, "results"))
     # Two. Twelve took down the workstation this was first run on.
     ap.add_argument("--jobs", type=int, default=2)

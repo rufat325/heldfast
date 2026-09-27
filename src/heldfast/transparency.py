@@ -26,7 +26,7 @@ This compares what a server shows you with that record:
 - **not in the log** -- the feed does not read this URL (it reads servers
   listed in the registry that answer without credentials).
 
-What it trusts: the log is the feed branch's git history, read at one
+What it trusts: the log is the feed repository's git history, read at one
 commit, so a record cannot change without the commit changing -- but it is
 published by one party, not yet witnessed by others. See docs/TRANSPARENCY.md.
 """

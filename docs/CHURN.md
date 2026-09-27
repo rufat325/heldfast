@@ -170,7 +170,7 @@ in the same container, compared with the last one seen, and recorded -- which to
 words that moved, and whether `--drift graded` would refuse anything, graded
 against the full previous text rather than a lockfile's preview. The record
 starts from the releases measured here and lives on the
-[`feed` branch](https://github.com/rufat325/heldfast/tree/feed): a summary in
+[feed repository](https://github.com/rufat325/heldfast-feed): a summary in
 its README, [an Atom feed](https://github.com/rufat325/heldfast/blob/feed/feed.xml)
 to subscribe to, and every event in `events/`. The workflow that runs it
 (`.github/workflows/feed.yml`) launches the servers in a job with a read-only

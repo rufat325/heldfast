@@ -82,18 +82,26 @@ def rate_limited(url: str, reset: str = "1790000000") -> HTTPError:
 class TestTheAdvertisement(unittest.TestCase):
     def test_the_captured_answer_names_the_branches(self) -> None:
         data = FIXTURE.read_bytes()
-        self.assertEqual(FEED_HEAD, feedlock.parse_advertisement(data))
+        self.assertEqual(FEED_HEAD, feedlock.parse_advertisement(data, "feed"))
         self.assertEqual(MAIN_HEAD, feedlock.parse_advertisement(data, "main"))
 
+    def test_the_feed_repository_advertises_its_main(self) -> None:
+        """Captured from github.com/rufat325/heldfast-feed on the day it moved."""
+        data = (ROOT / "tests" / "fixtures" / "feed-repo-refs.pkt").read_bytes()
+        self.assertRegex(feedlock.parse_advertisement(data), r"^[0-9a-f]{40}$")
+
     def test_a_branch_whose_name_only_starts_the_same_is_not_it(self) -> None:
-        data = advert(f"{'a' * 40} refs/heads/feed-old", f"{SHA} refs/heads/feed")
+        data = advert(f"{'a' * 40} refs/heads/{feedlock.BRANCH}-old",
+                      f"{SHA} refs/heads/{feedlock.BRANCH}")
         self.assertEqual(SHA, feedlock.parse_advertisement(data))
         with self.assertRaises(feedlock.FeedError):
-            feedlock.parse_advertisement(advert(f"{SHA} refs/heads/old-feed"))
+            feedlock.parse_advertisement(advert(f"{SHA} refs/heads/old-{feedlock.BRANCH}"))
+        with self.assertRaises(feedlock.FeedError):
+            feedlock.parse_advertisement(advert(f"{SHA} refs/remotes/origin/{feedlock.BRANCH}"))
 
     def test_a_missing_branch_is_an_error(self) -> None:
         with self.assertRaisesRegex(feedlock.FeedError, "does not advertise"):
-            feedlock.parse_advertisement(advert(f"{SHA} refs/heads/main"))
+            feedlock.parse_advertisement(advert(f"{SHA} refs/heads/elsewhere"))
 
     def test_malformed_input_is_an_error_not_a_crash(self) -> None:
         good = FIXTURE.read_bytes()
@@ -103,7 +111,7 @@ class TestTheAdvertisement(unittest.TestCase):
             "a length that is not hex": b"zzzz" + good[4:],
             "a length below four": b"0002" + good[4:],
             "a length past the end": b"ffff" + good[4:40],
-            "not a commit id": advert(f"{'g' * 40} refs/heads/feed"),
+            "not a commit id": advert(f"{'g' * 40} refs/heads/" + feedlock.BRANCH),
             "empty": b"",
         }
         for label, data in cases.items():
@@ -136,9 +144,9 @@ class TestResolveOrder(unittest.TestCase):
         self.assertEqual([], net.requests)
 
     def test_the_advertisement_first_and_nothing_else(self) -> None:
-        feed, net = self.resolve({feedlock.ADVERT_URL: advert(f"{SHA} refs/heads/feed")})
+        feed, net = self.resolve({feedlock.ADVERT_URL: advert(f"{SHA} refs/heads/" + feedlock.BRANCH)})
         self.assertEqual(SHA, feed.commit)
-        self.assertEqual(f"rufat325/heldfast@{SHA}", feed.source)
+        self.assertEqual(f"{feedlock.REPO}@{SHA}", feed.source)
         self.assertEqual([feedlock.ADVERT_URL], [r.full_url for r in net.requests])
 
     def test_the_api_when_the_advertisement_fails(self) -> None:

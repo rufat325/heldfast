@@ -31,7 +31,7 @@ from heldfast.lockfile import Lock  # noqa: E402
 from heldfast.model import ServerSpec  # noqa: E402
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
-BASE = f"https://raw.githubusercontent.com/rufat325/heldfast/{SHA}"
+BASE = feedlock.RAW_URL.format(ref=SHA)
 READ = {"name": "read_file", "description": "Read a file from disk.",
         "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}}
 
@@ -95,7 +95,7 @@ class TestLookup(unittest.TestCase):
         with mock.patch.object(feedlock, "get_json", fake):
             feed = feedlock.resolve()
         self.assertEqual(BASE, feed.base)
-        self.assertEqual(f"rufat325/heldfast@{SHA}", feed.source)
+        self.assertEqual(f"{feedlock.REPO}@{SHA}", feed.source)
 
     def test_a_branch_that_does_not_resolve_is_an_error(self) -> None:
         with mock.patch.object(feedlock, "get_json", FakeFeed(sha="main")):
@@ -165,7 +165,7 @@ class TestApprove(unittest.TestCase):
         self.assertEqual(0, code, err)
         entries = {v["name"]: v for v in self._lock().values()}
         self.assertEqual(["read_file"], list(entries["files"]["tools"]))
-        self.assertIn(f"rufat325/heldfast@{SHA}", entries["files"]["probe"])
+        self.assertIn(f"{feedlock.REPO}@{SHA}", entries["files"]["probe"])
         self.assertIn("pkg@1.0.0", entries["files"]["probe"])
         self.assertNotIn("tools", entries["floating"])
         self.assertNotIn("tools", entries["local"])

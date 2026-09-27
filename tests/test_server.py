@@ -404,7 +404,7 @@ class TestServerHistory(unittest.TestCase):
     def setUp(self) -> None:
         from heldfast import feedlock
         self.feedlock = feedlock
-        base = f"https://raw.githubusercontent.com/rufat325/heldfast/{self.SHA}"
+        base = feedlock.RAW_URL.format(ref=self.SHA)
         self.asked: list[str] = []
         self.pages = {feedlock.HEAD_URL: {"sha": self.SHA}, f"{base}/index.json": {"packages": {
             "remote/com.example/kb": {"url": "https://kb.example.com/mcp", "versions": [

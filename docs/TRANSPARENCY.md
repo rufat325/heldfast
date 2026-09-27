@@ -119,7 +119,7 @@ commit date, an `observed_at`. So "the log saw this first" would be only as
 good as a claim this project makes about itself. Checkpoints put a bound on
 those dates that nobody holding this repository's credentials can move.
 
-**What is anchored.** After each daily publish, the feed branch gets
+**What is anchored.** After each daily publish, the feed repository gets
 `checkpoints/YYYY-MM-DD.json`. It names one published commit (`feed_commit`)
 and gives `manifest_sha256`: the SHA-256 of a manifest listing the SHA-256 of
 every file in that commit, outside `checkpoints/` itself. The file also says
@@ -141,7 +141,7 @@ proves only that the data existed today.
 digest, then verify the proof. On Linux:
 
 ```bash
-git clone --branch feed --single-branch https://github.com/rufat325/heldfast feed
+git clone https://github.com/rufat325/heldfast-feed feed
 cd feed
 day=2026-09-28   # the checkpoint to check
 commit=$(python3 -c "import json; print(json.load(open('checkpoints/$day.json'))['feed_commit'])")
@@ -195,5 +195,7 @@ The same log also answers the smaller question for any tool, hosted or not
 downloads the whole record, so the log never learns which tools you asked
 about; what the lighter bucket lookup gives away is in [LOOKUP.md](LOOKUP.md).
 
-The data behind this is public: the `feed` branch of this repository, read
-at the commit `verify` prints.
+The data behind this is public: [rufat325/heldfast-feed](https://github.com/rufat325/heldfast-feed),
+read at the commit `verify` prints. Until 27 September 2026 it was the `feed`
+branch of this repository; the history moved with it, dates and checkpoints
+included.

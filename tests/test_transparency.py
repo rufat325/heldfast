@@ -28,7 +28,7 @@ from heldfast.cli import main  # noqa: E402
 from heldfast.probe import ProbeResult, _parse_tools  # noqa: E402
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
-BASE = f"https://raw.githubusercontent.com/rufat325/heldfast/{SHA}"
+BASE = feedlock.RAW_URL.format(ref=SHA)
 URL = "https://mcp.example.com/mcp"
 NAME = "remote/com.example/mcp"
 

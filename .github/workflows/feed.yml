@@ -1,7 +1,11 @@
 # The drift feed: which MCP servers changed a tool definition, release by
 # release, across the official MCP registry. research/feed/watch.py does the
-# work; the record lives on the `feed` branch (README.md, feed.xml, events/,
-# index.json, catalogues/).
+# work; the record lives in rufat325/heldfast-feed (README.md, feed.xml,
+# events/, index.json, catalogues/), its own repository so that cloning the
+# tool does not download the log. Only the jobs that write to it -- sync,
+# publish, record-anchor -- are given FEED_TOKEN, a fine-grained token for
+# that repository alone; the jobs that run or read other people's servers
+# check it out anonymously.
 #
 # This is part of the tool, not beside it. heldfast reads what this builds:
 #
@@ -31,7 +35,7 @@
 #                   servers that changed in the last three days (--busy).
 #   publish         The only job that can write, and it runs nothing a server
 #                   wrote: it takes each shard's upload only for the servers
-#                   the feed branch's watchlist gave that shard, checks every
+#                   the feed repository's watchlist gave that shard, checks every
 #                   file against the names, sizes and formats the feed produces
 #                   (with the code from main), folds the events, renders,
 #                   verifies again, commits.
@@ -86,8 +90,10 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: feed
+          repository: rufat325/heldfast-feed
+          ref: main
           path: feed-data
+          token: ${{ secrets.FEED_TOKEN }}
       - name: Rebuild the watchlist from the registry
         run: python3 tool/research/feed/watch.py sync --data feed-data
       - name: Verify
@@ -101,7 +107,7 @@ jobs:
           git add watchlist.json
           if git diff --cached --quiet; then echo "watchlist unchanged"; exit 0; fi
           git commit -q -m "feed: watchlist $(date -u +%Y-%m-%d)"
-          git push origin HEAD:feed
+          git push origin HEAD:main
 
   measure-npm:
     if: github.event.schedule != '3 5 * * 1' && github.event.schedule != '43 */4 * * *' && !inputs.sync
@@ -132,7 +138,8 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: feed
+          repository: rufat325/heldfast-feed
+          ref: main
           path: feed-data
           persist-credentials: false
       - name: Build the isolate
@@ -182,7 +189,8 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: feed
+          repository: rufat325/heldfast-feed
+          ref: main
           path: feed-data
           persist-credentials: false
       - name: Build the isolate
@@ -236,8 +244,10 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: feed
+          repository: rufat325/heldfast-feed
+          ref: main
           path: feed-data
+          token: ${{ secrets.FEED_TOKEN }}
       # One folder per shard, not merged: a shard's upload is admitted or
       # refused on its own, before anything from it reaches the feed.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -261,7 +271,7 @@ jobs:
           python3 tool/research/feed/watch.py render --data feed-data
           python3 tool/research/feed/watch.py verify --data feed-data --complete
 
-      - name: Commit to the feed branch
+      - name: Commit to the feed repository
         run: |
           set -euo pipefail
           cd feed-data
@@ -273,7 +283,7 @@ jobs:
             exit 0
           fi
           git commit -q -m "feed: $(date -u +%Y-%m-%d)"
-          git push origin HEAD:feed
+          git push origin HEAD:main
 
       # Once a day, even when nothing moved: the anchor proves the whole record
       # existed by today, and a day that is not anchored cannot be later.
@@ -314,7 +324,8 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: feed
+          repository: rufat325/heldfast-feed
+          ref: main
           path: feed-data
           persist-credentials: false
           sparse-checkout: checkpoints
@@ -378,8 +389,10 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: feed
+          repository: rufat325/heldfast-feed
+          ref: main
           path: feed-data
+          token: ${{ secrets.FEED_TOKEN }}
           sparse-checkout: checkpoints
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -396,7 +409,7 @@ jobs:
           python3 tool/research/feed/watch.py admit-anchor --data feed-data --incoming incoming \
             --day "$DAY" --feed-commit "$FEED_COMMIT" \
             --manifest-sha256 "$MANIFEST" --checkpoint-sha256 "$CHECKPOINT"
-      - name: Commit to the feed branch
+      - name: Commit to the feed repository
         env:
           DAY: ${{ needs.publish.outputs.day }}
         run: |
@@ -410,7 +423,7 @@ jobs:
             exit 0
           fi
           git commit -q -m "feed: checkpoint $DAY"
-          git push origin HEAD:feed
+          git push origin HEAD:main
 
   # A failed or cancelled run opens an issue, or comments on the open one,
   # so it reaches the maintainer's inbox instead of waiting to be noticed on

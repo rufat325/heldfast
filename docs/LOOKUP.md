@@ -57,11 +57,12 @@ either way: its bucket name matches nothing anyone else has.
    [LOCK.md](LOCK.md#tool-digest), lowercase hex. Implementations that already
    write `.mcp-pin.lock` have it on disk.
 2. **Fetch the record**, from
-   `https://raw.githubusercontent.com/rufat325/heldfast/<commit>/lookup/all.json`,
-   (or `lookup/all.json.gz`, gzipped), where `<commit>` is the `feed` branch
-   resolved to a commit -- `git ls-remote https://github.com/rufat325/heldfast
-   refs/heads/feed` does that without the rate-limited REST API -- or `feed`
-   itself, if you do not need to record which state of the log you read. It is
+   `https://raw.githubusercontent.com/rufat325/heldfast-feed/<commit>/lookup/all.json`,
+   (or `lookup/all.json.gz`, gzipped), where `<commit>` is the feed
+   repository's `main` resolved to a commit -- `git ls-remote
+   https://github.com/rufat325/heldfast-feed refs/heads/main` does that without
+   the rate-limited REST API -- or `main` itself, if you do not need to record
+   which state of the log you read. It is
    `{"prefix_length": 3, "tools": {"<fingerprint>": {"first_seen": "YYYY-MM-DD", "servers": N}}}`.
    *Or*, knowing what it reveals, fetch only `lookup/<first three hex characters>.json`,
    which is `{"prefix": "abc", "tools": {...}}` with the same entries.
@@ -75,7 +76,7 @@ check it is reading the layout it expects.
 ```python
 import json, urllib.request
 
-LOG = "https://raw.githubusercontent.com/rufat325/heldfast/feed/lookup"
+LOG = "https://raw.githubusercontent.com/rufat325/heldfast-feed/main/lookup"
 
 # The whole record: nothing about your tools leaves this machine.
 with urllib.request.urlopen(f"{LOG}/all.json", timeout=60) as resp:

@@ -133,8 +133,8 @@ def _register_approve(sub: argparse._SubParsersAction) -> None:
     )
     approve.add_argument(
         "--feed", metavar="URL", default=None,
-        help="read the feed from this base URL instead of the `feed` branch "
-             "of rufat325/heldfast (a mirror, or a copy you host)",
+        help="read the feed from this base URL instead of rufat325/heldfast-feed "
+             "(a mirror, or a copy you host)",
     )
 
 
@@ -158,8 +158,8 @@ def _register_updates(sub: argparse._SubParsersAction) -> None:
                          help="bump each quiet update in its config file and "
                               "re-approve it from the feed")
     updates.add_argument("--feed", metavar="URL", default=None,
-                         help="read the feed from this base URL instead of the "
-                              "`feed` branch of rufat325/heldfast")
+                         help="read the feed from this base URL instead of "
+                              "rufat325/heldfast-feed")
     updates.add_argument("--min-age", type=int, default=14, metavar="DAYS",
                          help="propose only releases at least this old (default 14; "
                               "every malicious MCP release so far was reported within 9)")

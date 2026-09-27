@@ -24,7 +24,7 @@ a short list of grey patterns worth naming -- not attacks.
 
 ## Method
 
-`research/scan/scan.py` takes a checkout of the `feed` branch, reads the
+`research/scan/scan.py` takes a checkout of the feed repository, reads the
 latest catalogue of every server that has one, builds the tools with
 `probe._parse_tools` (so the text is exactly what `wrap` would see), and runs
 the rules that read what a tool says:

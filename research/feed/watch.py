@@ -989,7 +989,7 @@ def atom(events: list, generated: str) -> str:
            "  <title>heldfast: MCP server tool changes</title>",
            "  <id>tag:github.com,2026:rufat325/heldfast/feed</id>",
            f"  <updated>{_x(generated)}</updated>",
-           '  <link href="https://github.com/rufat325/heldfast/tree/feed"/>']
+           '  <link href="https://github.com/rufat325/heldfast-feed"/>']
     for e in events:
         title = f"{e['package']} {e['from']} -> {e['to']}: {summary(e)}"
         if e["grade"] == "review":
@@ -1318,7 +1318,7 @@ def admit(args: argparse.Namespace) -> int:
     container that can write the whole feed checkout, so without this one
     package measured anywhere could rewrite any server's catalogue, state or
     history, or the watchlist itself. Ownership is recomputed here from the
-    feed branch's own watchlist -- not from anything a shard uploaded -- and an
+    feed repository's own watchlist -- not from anything a shard uploaded -- and an
     upload with one file outside it is refused whole: that shard's day is lost,
     not the feed. Servers measured side by side in one shard can still write
     each other's records; the isolate is per shard, not per server.
@@ -1611,21 +1611,21 @@ def main() -> int:
     v.add_argument("--complete", action="store_true",
                    help="the whole feed: also check every catalogue's tools are present")
     a = sub.add_parser("admit")
-    a.add_argument("--data", required=True, help="the feed branch checkout (its watchlist)")
+    a.add_argument("--data", required=True, help="the feed repository checkout (its watchlist)")
     a.add_argument("--deltas", required=True, help="one folder per shard's upload")
     a.add_argument("--into", required=True, help="where the admitted uploads are merged")
     a.add_argument("--day", default="", help="YYYY-MM-DD the shards ran (default today)")
     a.add_argument("--npm-shards", type=int, default=NPM_SHARDS)
     a.add_argument("--remote-shards", type=int, default=REMOTE_SHARDS)
     k = sub.add_parser("checkpoint")
-    k.add_argument("--data", required=True, help="a git checkout of the feed branch")
+    k.add_argument("--data", required=True, help="a git checkout of the feed repository")
     k.add_argument("--commit", required=True, help="the published feed commit to describe")
     k.add_argument("--day", default="", help="YYYY-MM-DD the checkpoint is named for (default today)")
     k.add_argument("--generator-commit", default="",
                    help="the main commit whose code wrote it (default: this checkout's HEAD)")
     k.add_argument("--out", default="", help="where to write it (default DIR/checkpoints/DAY.json)")
     n = sub.add_parser("admit-anchor")
-    n.add_argument("--data", required=True, help="the feed branch checkout")
+    n.add_argument("--data", required=True, help="the feed repository checkout")
     n.add_argument("--incoming", required=True, help="the anchor job's upload")
     n.add_argument("--day", required=True)
     n.add_argument("--feed-commit", required=True)
