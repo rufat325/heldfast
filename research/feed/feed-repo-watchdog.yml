@@ -10,11 +10,22 @@
 # schedule was disabled, this keeps running and opens an issue here, with this
 # repository's own token and no other credential. Watch this repository to
 # get the notification.
+#
+# Every hour it also looks for today's checkpoint. GitHub starts scheduled
+# runs late under load, and sometimes not at all, while the four-hourly passes
+# keep publishing -- so a missing daily run never looks like a stall, yet a
+# day without a checkpoint can never be anchored afterwards. Once the daily
+# run is overdue, this starts feed.yml by hand. That takes one more secret
+# here, HELDFAST_DISPATCH_TOKEN: a fine-grained token for rufat325/heldfast
+# alone, with Actions read and write, seen only by the step that starts the
+# run. Without it, the same check opens an issue so a person can start the
+# run. A workflow GitHub has disabled cannot be started this way.
 name: watchdog
 
 on:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "17 */6 * * *"   # is the feed moving; is heldfast near the 60-day rule
+    - cron: "47 * * * *"     # is today's checkpoint recorded
   workflow_dispatch: {}
 
 permissions:
@@ -22,6 +33,7 @@ permissions:
 
 jobs:
   watch:
+    if: github.event.schedule != '47 * * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -79,3 +91,84 @@ jobs:
             gh issue create --repo "$REPO" --title "$title" --body "$warning" >/dev/null
           fi
           echo "$warning"
+
+  # Today's checkpoint, every hour. watchdog.py decides; this step list only
+  # carries the decision out.
+  checkpoint:
+    if: github.event.schedule != '17 */6 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: rufat325/heldfast
+          ref: main
+          path: tool
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          path: feed
+          sparse-checkout: checkpoints
+          filter: blob:none
+          persist-credentials: false
+      - name: Decide about today's checkpoint
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run list --repo rufat325/heldfast --workflow feed.yml --limit 40 \
+            --json createdAt,event,status,url > runs.json
+          decision=$(python3 tool/research/feed/watchdog.py daily --checkpoints feed/checkpoints --runs runs.json)
+          echo "$decision" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "action=${decision%%:*}" >> "$GITHUB_OUTPUT"
+          echo "reason=${decision#*: }" >> "$GITHUB_OUTPUT"
+      # The only step that sees the dispatch token. It runs no code from either
+      # repository, only gh, and only when the decision above says start.
+      - name: Start the daily run
+        id: start
+        if: steps.decide.outputs.action == 'start'
+        env:
+          GH_TOKEN: ${{ secrets.HELDFAST_DISPATCH_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "outcome=no-token" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if gh workflow run feed.yml --repo rufat325/heldfast --ref main 2> refused.txt; then
+            echo "outcome=started" >> "$GITHUB_OUTPUT"
+            echo "started feed.yml" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "outcome=refused" >> "$GITHUB_OUTPUT"
+            cat refused.txt
+          fi
+      - name: Say so
+        if: >-
+          steps.decide.outputs.action == 'alert' ||
+          (steps.decide.outputs.action == 'start' && steps.start.outputs.outcome != 'started')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REASON: ${{ steps.decide.outputs.reason }}
+          OUTCOME: ${{ steps.start.outputs.outcome }}
+        run: |
+          set -euo pipefail
+          day=$(date -u +%Y-%m-%d)
+          title="feed: no checkpoint for $day"
+          case "${OUTCOME:-}" in
+            no-token) next="Start feed.yml by hand: https://github.com/rufat325/heldfast/actions/workflows/feed.yml (Run workflow, on main). To let this watchdog start it, add the HELDFAST_DISPATCH_TOKEN secret here, as the header of .github/workflows/watchdog.yml describes." ;;
+            refused) next="GitHub refused to start feed.yml: $(cat refused.txt 2>/dev/null || true). If the workflow is disabled, turn it back on from heldfast's Actions tab; if the token has expired, replace HELDFAST_DISPATCH_TOKEN." ;;
+            *) next="The watchdog starts no more runs today." ;;
+          esac
+          body=$(printf '%s\n\n%s\n\nA day without a checkpoint can never be anchored afterwards: a stamp made later proves only that the data existed later.' "$REASON" "$next")
+          number=$(gh issue list --repo "$REPO" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            echo "already reported in #$number"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body" >/dev/null
+          fi
+          echo "$body"

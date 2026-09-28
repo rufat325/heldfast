@@ -30,6 +30,20 @@ Read this file and `docs/GUARANTEES.md` instead.
   workflow automatically, on purpose: the best-known keepalive action for
   this was itself disabled by GitHub, and a crawler already sits close to the
   Actions terms.
+- Every hour the same watchdog also looks for today's checkpoint
+  (`watchdog.py daily`). GitHub starts scheduled runs late under load and
+  sometimes drops one, while the four-hourly passes keep publishing, so the
+  stall check never sees a missing daily run -- and a day without a
+  checkpoint can never be anchored afterwards. With no checkpoint by 10:00
+  UTC and no feed run under way, it starts `feed.yml` through
+  `workflow_dispatch`, at most three times a day; after 22:30 UTC it only
+  reports, because a later run would publish into the next day. Starting a
+  run needs the `HELDFAST_DISPATCH_TOKEN` secret in the feed repository: a
+  fine-grained token for `rufat325/heldfast` alone, with Actions read and
+  write; note its expiry date. Without it, the check opens "feed: no
+  checkpoint for YYYY-MM-DD" there instead. This still works around nothing:
+  it neither commits nor re-enables, and GitHub refuses to start a disabled
+  workflow, which the watchdog then reports.
 - `pkgcache.py` is on the launch path and is in the `mypy --strict` job for
   that reason. It opens no socket; if it ever needs to, that is a design
   change, not an implementation detail.

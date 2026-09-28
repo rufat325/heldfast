@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -131,6 +132,108 @@ class TestTheFeedHoldsItsWatchdog(unittest.TestCase):
     def test_a_shard_cannot_upload_it(self) -> None:
         self.put("watchdog.yml")
         self.assertTrue(watch._foreign(self.data, {}, "npm-0"))
+
+
+class TestTodaysCheckpoint(unittest.TestCase):
+    """GitHub starts scheduled runs late under load and sometimes drops one,
+    while the four-hourly passes keep publishing, so `check` stays quiet. A
+    day without a checkpoint can never be anchored afterwards, so `daily`
+    says when to start the daily run by hand -- and when it is too late."""
+
+    WORKFLOW = ROOT / "research" / "feed" / "feed-repo-watchdog.yml"
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = self._tmp.name
+
+    def record(self, day: str) -> None:
+        with open(os.path.join(self.dir, f"{day}.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+
+    def at(self, clock: str) -> datetime:
+        hours, minutes = (int(part) for part in clock.split(":"))
+        return NOW.replace(hour=hours, minute=minutes)
+
+    def decide(self, clock: str, runs: list | None = None) -> tuple[str, str]:
+        return watchdog.daily(self.dir, runs or [], self.at(clock))
+
+    @staticmethod
+    def feed_run(event: str, status: str, created: str, n: int = 1) -> dict:
+        return {"event": event, "status": status, "createdAt": created,
+                "url": f"https://github.com/rufat325/heldfast/actions/runs/{n}"}
+
+    def test_a_recorded_day_needs_nothing(self) -> None:
+        self.record("2026-09-28")
+        self.assertEqual("ok", self.decide("11:00")[0])
+
+    def test_before_it_is_due_it_waits(self) -> None:
+        action, reason = self.decide("09:30")
+        self.assertEqual("wait", action)
+        self.assertIn("until 10:00 UTC", reason)
+
+    def test_overdue_with_nothing_running_it_starts_the_run(self) -> None:
+        self.assertEqual(("start", "no checkpoint for 2026-09-28 at 10:47 UTC and no feed run "
+                                   "under way; starting feed.yml (1 of 3 today)"), self.decide("10:47"))
+
+    def test_yesterdays_checkpoint_is_not_todays(self) -> None:
+        self.record("2026-09-27")
+        self.assertEqual("start", self.decide("11:00")[0])
+
+    def test_a_run_under_way_or_queued_means_wait(self) -> None:
+        for status in ("in_progress", "queued"):
+            with self.subTest(status=status):
+                runs = [self.feed_run("schedule", status, "2026-09-28T10:55:00Z", 7)]
+                action, reason = self.decide("11:00", runs)
+                self.assertEqual("wait", action)
+                self.assertIn("runs/7", reason)
+
+    def test_only_todays_manual_starts_count(self) -> None:
+        runs = [self.feed_run("workflow_dispatch", "completed", "2026-09-28T11:47:00Z", 3),
+                self.feed_run("workflow_dispatch", "completed", "2026-09-28T10:47:00Z", 2),
+                self.feed_run("workflow_dispatch", "completed", "2026-09-27T11:47:00Z", 1),
+                self.feed_run("schedule", "completed", "2026-09-28T05:54:00Z", 0)]
+        action, reason = self.decide("12:47", runs)
+        self.assertEqual("start", action)
+        self.assertIn("3 of 3 today", reason)
+
+    def test_it_stops_after_three_starts_and_says_which_was_last(self) -> None:
+        runs = [self.feed_run("workflow_dispatch", "completed", f"2026-09-28T1{n}:47:00Z", n)
+                for n in (0, 2, 1)]
+        action, reason = self.decide("13:47", runs)
+        self.assertEqual("alert", action)
+        self.assertIn("after 3 started run(s)", reason)
+        self.assertIn("runs/2", reason)
+
+    def test_too_late_to_publish_today_is_said_not_attempted(self) -> None:
+        action, reason = self.decide("22:45")
+        self.assertEqual("alert", action)
+        self.assertIn("2026-09-28 will have no anchor", reason)
+
+    def test_the_command_prints_one_decision_and_exits_0(self) -> None:
+        proc = subprocess.run([sys.executable, str(ROOT / "research" / "feed" / "watchdog.py"),
+                               "daily", "--checkpoints", self.dir,
+                               "--now", self.at("11:00").isoformat()],
+                              capture_output=True, text=True)
+        self.assertEqual(0, proc.returncode)
+        self.assertEqual(1, len(proc.stdout.splitlines()))
+        self.assertTrue(proc.stdout.startswith("start: "))
+
+    def steps(self) -> list[str]:
+        body = self.WORKFLOW.read_text(encoding="utf-8").split("\njobs:\n", 1)[1]
+        return re.split(r"\n      - ", body)[1:]
+
+    def test_only_the_step_that_starts_the_run_sees_the_token(self) -> None:
+        holders = [step for step in self.steps() if "secrets." in step]
+        self.assertEqual(1, len(holders))
+        self.assertIn("secrets.HELDFAST_DISPATCH_TOKEN", holders[0])
+        self.assertIn("gh workflow run feed.yml", holders[0])
+        self.assertNotIn("python3", holders[0])
+
+    def test_the_hourly_check_and_the_six_hourly_watch_stay_apart(self) -> None:
+        text = self.WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("  watch:\n    if: github.event.schedule != '47 * * * *'", text)
+        self.assertIn("  checkpoint:\n    if: github.event.schedule != '17 */6 * * *'", text)
 
 
 if __name__ == "__main__":
