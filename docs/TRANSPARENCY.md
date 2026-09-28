@@ -137,6 +137,15 @@ instead of relying on the commit ID.
 Nothing before that is anchored, and it never can be: a stamp made today
 proves only that the data existed today.
 
+**If the daily run does not come.** GitHub starts scheduled runs late under
+load, sometimes by hours, and occasionally drops one, while the four-hourly
+passes keep publishing. So the feed repository's watchdog looks for the
+day's checkpoint every hour. If there is none by 10:00 UTC and no feed run
+is under way, it starts the daily run itself, up to three times; without
+the token that allows this, it opens an issue instead. A run that would
+publish after midnight UTC is too late: that day has no checkpoint, and the
+watchdog says so rather than hiding the gap.
+
 **How to verify one.** Rebuild the manifest from the commit, compare the
 digest, then verify the proof. On Linux:
 
