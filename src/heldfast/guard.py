@@ -200,6 +200,7 @@ class Guard:
         # is allowed to run.
         self._listed_lock = threading.RLock()
         self._listed: dict[str, ToolSpec] = {}
+        self._conflicting: set[str] = set()  # see _note_conflicts
         self._listed_prompts: dict[str, PromptSpec] = {}
         self._listed_resources: dict[str, ResourceSpec] = {}
         # Outstanding client requests, id -> method. What a result *is* used
@@ -530,7 +531,12 @@ class Guard:
     def _identity_refusal(self, message: dict[str, Any], name: str
                           ) -> dict[str, Any] | None:
         tool = self._listed_tool(name)
-        if tool is not None:
+        with self._listed_lock:
+            conflicting = name in self._conflicting
+        if conflicting:
+            verdict, reason = "deny", ("the server listed this tool more than once "
+                                       "with different definitions")
+        elif tool is not None:
             verdict, reason = self._verdict(tool)
             if verdict == "allow":
                 verdict, content_reason = self._content_verdict(tool)
@@ -635,7 +641,26 @@ class Guard:
             return "deny", f"{top.rule_id} ({top.severity.label}): {top.title}"
         return "allow", ""
 
+    def _note_conflicts(self, tools: list[Any]) -> set[str]:
+        """Names this catalogue lists more than once with different definitions.
+
+        Which copy a client keeps is up to the client, and the call goes to the
+        server by name either way, so the answer used to depend on order:
+        approved-then-poisoned refused calls, poisoned-then-approved let them
+        through. Such a name now gets neither copy, in any order.
+        """
+        seen: dict[str, set[str]] = {}
+        for raw in tools:
+            if isinstance(raw, dict):
+                spec = _tool_from_wire(self.server_name, raw)
+                seen.setdefault(spec.name, set()).add(spec.fingerprint())
+        conflicting = {name for name, prints in seen.items() if len(prints) > 1}
+        with self._listed_lock:
+            self._conflicting = (self._conflicting - set(seen)) | conflicting
+        return conflicting
+
     def filter_tools(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        conflicting = self._note_conflicts(tools)
         kept: list[dict[str, Any]] = []
         for raw in tools:
             if not isinstance(raw, dict):
@@ -645,7 +670,11 @@ class Guard:
             with self._listed_lock:
                 self._listed[tool.name] = tool
 
-            verdict, reason = self._verdict(tool)
+            if tool.name in conflicting:
+                verdict, reason = "deny", ("listed more than once with different "
+                                           "definitions")
+            else:
+                verdict, reason = self._verdict(tool)
             if verdict == "allow":
                 verdict, content_reason = self._content_verdict(tool)
                 if verdict == "deny":

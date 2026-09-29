@@ -403,6 +403,22 @@ class TestCallSiteIsTheBoundary(unittest.TestCase):
         self.assertIsNone(forwarded)
         self.assertIn("BLOCKED BY heldfast", buf.getvalue())
 
+    def test_a_name_listed_twice_differently_is_refused_in_either_order(self) -> None:
+        good, evil = raw_tool("read", BENIGN), raw_tool("read", POISONED)
+        for order in ([good, evil], [evil, good]):
+            with self.subTest(first=order[0]["description"][:20]):
+                g = Guard("svc", make_lock({"read": BENIGN}), quiet=True)
+                shown = g.filter_tools(order)
+                self.assertTrue(all(t["description"].startswith("[BLOCKED") for t in shown))
+                call = {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                        "params": {"name": "read", "arguments": {}}}
+                self.assertIsNotNone(g.check_call(call))
+
+    def test_the_same_definition_twice_is_harmless(self) -> None:
+        g = Guard("svc", make_lock({"read": BENIGN}), quiet=True)
+        shown = g.filter_tools([raw_tool("read", BENIGN), raw_tool("read", BENIGN)])
+        self.assertEqual([BENIGN, BENIGN], [t["description"] for t in shown])
+
     def test_a_call_check_that_raises_refuses_and_keeps_the_pump_alive(self) -> None:
         """A ValueError from check_call used to end _pump_client silently:
         every later client message was dropped and the session hung."""
