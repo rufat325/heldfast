@@ -20,7 +20,7 @@ import tempfile
 from pathlib import Path
 
 
-def atomic_write(path: str | os.PathLike, data: bytes) -> None:
+def atomic_write(path: "str | os.PathLike[str]", data: bytes) -> None:
     """Write `data` to `path` whole, through a fresh temporary file."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
