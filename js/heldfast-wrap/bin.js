@@ -39,8 +39,7 @@ function main(argv) {
   if (!runner) {
     process.stderr.write(
       "heldfast: the Python package is not installed.\n" +
-        "         pipx install heldfast\n" +
-        "         (npx mcp-pin is a different project: GautamTalksDev/mcp-pin)\n"
+        "         pipx install heldfast\n"
     );
     process.exit(2);
   }
