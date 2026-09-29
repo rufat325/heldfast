@@ -21,6 +21,7 @@ from .clients import display_name
 from .model import ServerSpec, SkillSpec, ToolSpec, observed_for
 from .parsers import normalize_tool_grants
 from .rules.credentials import classify_secret, is_indirect_or_placeholder
+from .secrets import redact
 
 
 def classify_env_value(key: str, value: str) -> str:
@@ -56,10 +57,12 @@ def build(servers: list[ServerSpec], skills: list[SkillSpec],
             "disabled": s.disabled,
             "env": {k: classify_env_value(k, v) for k, v in sorted(s.env.items())},
         }
+        # Launch lines carry credentials -- `--token ...`, `?api_key=...` --
+        # and this output is what gets pasted into an issue.
         if s.command:
-            entry["command"] = s.command_line
+            entry["command"] = redact(s.command_line)
         if s.url:
-            entry["url"] = s.url
+            entry["url"] = redact(s.url)
         if s.headers:
             entry["headers"] = sorted(s.headers)
         era = observed_for(eras or {}, s, servers)

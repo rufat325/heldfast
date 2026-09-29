@@ -43,6 +43,20 @@ SECRET_KEY_HINT = re.compile(
 )
 
 
+# Credentials with no provider shape, found by where they sit rather than what
+# they look like: the password in `scheme://user:PASSWORD@host`, the value of
+# a query parameter named like a secret, and the argument after a flag named
+# like one. `heldfast inspect` printed all three verbatim in a server's launch
+# line -- a `--token ghp_...` argument, a `?api_key=...` URL -- and its output
+# is exactly what gets pasted into an issue.
+_SECRET_NAME = (r"(?:[A-Za-z0-9]*[_\-])?(?:token|secret|password|passwd|pwd|api[_\-]?key|"
+                r"apikey|access[_\-]?key|auth|key|sig|signature|credential|session)")
+_URL_PASSWORD = re.compile(r"(?<=://)([^/\s:@]+):([^/\s@]+)@")
+_QUERY_SECRET = re.compile(r"([?&;]" + _SECRET_NAME + r"=)([^&#\s]+)", re.IGNORECASE)
+_FLAG_SECRET = re.compile(r"((?:^|\s)--?" + _SECRET_NAME + r"(?:=|\s+))([^\s-][^\s]*)",
+                          re.IGNORECASE)
+
+
 def redact(text: str) -> str:
     """Replace any recognizable credential in `text` with a labeled marker."""
     if not text:
@@ -51,6 +65,11 @@ def redact(text: str) -> str:
         def _replace(match: re.Match[str], _label: str = label) -> str:
             return f"[REDACTED {_label}]"
         text = pattern.sub(_replace, text)
+    text = _URL_PASSWORD.sub(r"\1:[REDACTED]@", text)
+    text = _QUERY_SECRET.sub(lambda m: m.group(1) + (
+        m.group(2) if m.group(2).startswith("[REDACTED") else "[REDACTED]"), text)
+    text = _FLAG_SECRET.sub(lambda m: m.group(1) + (
+        m.group(2) if m.group(2).startswith("[REDACTED") else "[REDACTED]"), text)
     return text
 
 
