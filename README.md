@@ -90,14 +90,16 @@ pipx install heldfast
 pip install heldfast
 ```
 
-An unrelated project, [GautamTalksDev/mcp-pin](https://github.com/GautamTalksDev/mcp-pin),
-shares this one's old name and pins on first connect; `npx mcp-pin` is theirs. This one
-records a review, then refuses the rest: `pipx install heldfast`.
+From npm:
 
-Neither npm package is published yet, so both run from a clone:
-`node js/heldfast-wrap/bin.js -- <server>` is the same wrap once the Python
-package is installed, and `node js/heldfast-check/bin.js` verifies
-`.mcp-pin.lock` with zero npm dependencies.
+```bash
+npx heldfast -- <server>     # the same wrap, once the Python package is installed
+npx heldfast-check           # verifies .mcp-pin.lock, with zero npm dependencies
+```
+
+`heldfast` (also published as `@rufat325/heldfast`) finds the installed Python
+tool and runs it; it downloads no Python of its own. `heldfast-check` needs no
+Python at all.
 
 Python 3.9+. Zero runtime dependencies, on purpose — a supply-chain scanner that drags in a
 dependency tree is asking you to trust the thing it's auditing.

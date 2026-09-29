@@ -2,11 +2,10 @@
 "use strict";
 
 /**
- * npx @rufat325/heldfast -- <server>
+ * npx heldfast -- <server>   (also published as @rufat325/heldfast)
  *
- * The npm name `heldfast` belongs to GautamTalksDev/mcp-pin (TOFU on first
- * connect). This shim is the wrap for rufat325/heldfast: it locates a Python
- * install of that tool and execs it. It does not download a wheel on its
+ * This shim is the wrap for rufat325/heldfast: it locates a Python install of
+ * that tool and execs it. It does not download a wheel on its
  * own — a supply-chain pin that fetches Python from the network at spawn
  * would be asking you to trust the thing it is pinning.
  */

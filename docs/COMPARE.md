@@ -17,6 +17,6 @@ Snyk and Cisco own "does this text look evil." Gateways own auth and DLP. heldfa
 
 ## The other heldfast
 
-[GautamTalksDev/mcp-pin](https://github.com/GautamTalksDev/mcp-pin) is a different program that shares this project's old name. It pins on first connect (TOFU). This one records a review (`--yes-tool` for a critical change) and then refuses the rest. `npx mcp-pin` is theirs. This tool is `pipx install heldfast`. The npm shim in `js/heldfast-wrap` is not published, so there is no `npx` spelling of this one yet.
+[GautamTalksDev/mcp-pin](https://github.com/GautamTalksDev/mcp-pin) is a different program that shares this project's old name. It pins on first connect (TOFU). This one records a review (`--yes-tool` for a critical change) and then refuses the rest. `npx mcp-pin` is theirs. This tool is `pipx install heldfast`. On npm this one is `npx heldfast` (also `@rufat325/heldfast`), which runs the installed Python tool.
 
 If Warden and Gautam keep their own hashes, a PR that fails on *this* file is still the win.

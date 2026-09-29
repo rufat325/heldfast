@@ -325,8 +325,8 @@ Read this file and `docs/GUARANTEES.md` instead.
 
 33. ~~Surfaces other people occupy.~~ Done, without growing MCPA rules.
     The file you commit is the same check that runs in CI and on the wire.
-    - README leads with wrap, names the collision with GautamTalksDev/mcp-pin
-      in one sentence (`npx mcp-pin` is theirs).
+    - README leads with wrap, and gives the npm spellings (`npx heldfast`,
+      `npx heldfast-check`) beside pipx.
     - `wrap` is `guard`. `heldfast -- <server>` is wrap. `doctor` is scan.
       `ci` refuses `--probe` and keeps `--fail-on high`. `check` verifies
       the lockfile and launches nothing.

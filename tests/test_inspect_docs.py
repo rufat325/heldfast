@@ -535,5 +535,8 @@ class TestTheReadmeMatchesTheCode(unittest.TestCase):
                 self.assertIn(f"| {c.id} |", table)
         self.assertIn(clients.CLIENTS_VERIFIED, table)
 
-    def test_the_readme_names_the_other_heldfast(self) -> None:
-        self.assertIn("GautamTalksDev/mcp-pin", self._readme())
+    def test_the_readme_gives_the_published_npm_spellings(self) -> None:
+        readme = self._readme()
+        for spelling in ("npx heldfast --", "npx heldfast-check"):
+            self.assertIn(spelling, readme)
+        self.assertNotIn("not published", readme)
