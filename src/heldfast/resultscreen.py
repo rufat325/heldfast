@@ -64,7 +64,7 @@ EXFIL_HOSTS = (
 # subdomain and the docstring has always said so. A trailing `.` is not,
 # because `webhook.site.example` is somebody else's domain.
 _EXFIL_RE = re.compile(
-    r"(?<![A-Za-z0-9-])(?:[A-Za-z0-9-]+\.)*(?:"
+    r"(?<![A-Za-z0-9.-])(?:[A-Za-z0-9-]+\.)*(?:"
     + "|".join(re.escape(host) for host in EXFIL_HOSTS)
     + r")(?![A-Za-z0-9.-])",
     re.IGNORECASE,

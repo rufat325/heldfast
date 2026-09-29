@@ -45,8 +45,10 @@ from urllib.parse import unquote, urlsplit
 
 # Leading keyword of a statement, used for both the SQL check and to decide
 # whether a string is SQL at all.
+# No `\s*` before the group: the group already skips whitespace, and the two
+# splitting a run of spaces between them was quadratic.
 _SQL_LEAD = re.compile(
-    r"^\s*(?:--[^\n]*\n|/\*.*?\*/|\s)*([A-Za-z]+)", re.DOTALL)
+    r"^(?:--[^\n]*\n|/\*.*?\*/|\s)*([A-Za-z]+)", re.DOTALL)
 _SQL_KEYWORDS = {
     "select", "insert", "update", "delete", "drop", "alter", "create",
     "truncate", "grant", "revoke", "merge", "replace", "call", "execute",

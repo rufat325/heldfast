@@ -162,7 +162,7 @@ SIGNALS: list[Signal] = [
     Signal(
         "role-hijack",
         re.compile(
-            r"(?:^|\n)\s*(?:<\s*/?\s*(?:system|assistant|human)\s*>|\[/?INST\]|"
+            r"(?:^|\n)[ \t\r\f\v]*(?:<\s*/?\s*(?:system|assistant|human)\s*>|\[/?INST\]|"
             r"<\|(?:im_start|im_end|system|endoftext)\|>|###\s*(?:System|Instruction)\s*:?)|"
             # A bare role label starting a line, which is how the plainest
             # version of this is written: "\nSystem: you are now ...". The

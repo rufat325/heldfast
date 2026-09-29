@@ -58,7 +58,10 @@ _SPACE = re.compile(r"\s+")
 
 # The two forms prices take in the feed: "$0.012 per call", "0.05 USDC".
 # Another form is added with an example from the feed, not in anticipation.
-_AMOUNT = r"(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)"
+# An amount starts where a number starts. Without the lookbehind every digit
+# of a long run was a fresh start, and a description of 100,000 digits took
+# minutes to grade (tests/test_redos.py).
+_AMOUNT = r"(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)"
 PRICES = (re.compile(r"\$\s?" + _AMOUNT),
           re.compile(_AMOUNT + r"\s?USDC?\b", re.IGNORECASE))
 # Prices the feed also states in a service's own units: "debits 8 credits",

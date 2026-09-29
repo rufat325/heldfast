@@ -1719,7 +1719,7 @@ FAIL_OPEN = "_launch(argv, env)" not in source
         id="exfil-host-boundary",
         theorem="T-RESULT-BLOCK",
         path="resultscreen.py",
-        original='    r"(?<![A-Za-z0-9-])(?:[A-Za-z0-9-]+\\.)*(?:"\n',
+        original='    r"(?<![A-Za-z0-9.-])(?:[A-Za-z0-9-]+\\.)*(?:"\n',
         replacement='    r"(?:^|(?<=[./:@ ]))(?:[A-Za-z0-9-]+\\.)*(?:"\n',
         harm=("A collection host preceded by a newline, quote or bracket is "
               "not recognised, so the result is shown to the model."),
