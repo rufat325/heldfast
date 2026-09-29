@@ -1745,6 +1745,15 @@ def anchor_problems(data: str, incoming: str, day: str, feed_commit: str,
             why = "a new proof for an earlier day; only an upgrade may replace one"
         if why is None and os.path.exists(held) and OTS_BITCOIN not in body:
             why = "replaces a proof with one that has not reached a Bitcoin block"
+        if why is None and os.path.exists(held):
+            # Upgrading is pending -> complete, once. A proof that already
+            # reached a Bitcoin block is final: the anchor job never replaces
+            # one, and anything that tries -- a compromised client, a lying
+            # calendar -- would swap a day's only anchor for bytes that merely
+            # contain the marker. That day could never be anchored again.
+            with open(held, "rb") as fh:
+                if OTS_BITCOIN in fh.read():
+                    why = "replaces a proof that already reached a Bitcoin block"
         if why:
             problems.append(f"{rel}: {why}")
     return problems

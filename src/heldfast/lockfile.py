@@ -169,9 +169,11 @@ class Lock:
             payload["identities"] = self.identities
         # Write-then-rename so an interrupted run cannot truncate the record
         # of what was previously approved.
-        tmp = target.with_suffix(target.suffix + ".tmp")
-        tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        tmp.replace(target)
+        # Through a fresh temporary file: a fixed `.mcp-pin.lock.tmp` could be
+        # a link a repository planted, and the write would follow it (fsutil).
+        from .fsutil import atomic_write
+        atomic_write(target, (json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                     .encode("utf-8"))
         self.path = target
         return target
 

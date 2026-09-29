@@ -260,6 +260,14 @@ class TestAdmitAnchor(unittest.TestCase):
         self.put(self.incoming, "checkpoints/2026-09-26.json.ots", proof(self.yesterday))
         self.assertTrue(any("Bitcoin block" in p for p in self.problems()))
 
+    def test_a_proof_that_reached_bitcoin_is_never_replaced(self) -> None:
+        # Final is final: even another "complete" proof -- bytes that carry the
+        # marker -- may not swap out a day's only anchor.
+        self.put(self.data, "checkpoints/2026-09-26.json.ots", proof(self.yesterday, True))
+        self.put(self.incoming, "checkpoints/2026-09-26.json.ots",
+                 proof(self.yesterday, True) + b"tampered")
+        self.assertTrue(any("already reached a Bitcoin block" in p for p in self.problems()))
+
     def test_a_new_proof_for_an_earlier_day_is_refused(self) -> None:
         # Stamping an old file today proves only today; it is not an upgrade.
         old = b'{"date": "2026-09-25"}\n'

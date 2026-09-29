@@ -762,7 +762,8 @@ def _apply_updates(args: argparse.Namespace, previous: Lock, todo: list,
         original = rewrite_config(path, f"{u.package}@{u.current}", f"{u.package}@{u.target}")
         if original is None:
             print(f"heldfast: {u.identity}: \"{u.package}@{u.current}\" does not occur "
-                  f"exactly once in {path}; left for you to bump", file=sys.stderr)
+                  f"exactly once in {path}, or {path} is a link; left for you to bump",
+                  file=sys.stderr)
             continue
         edits.append((path, original))
         applied.append(u.identity)
@@ -771,8 +772,9 @@ def _apply_updates(args: argparse.Namespace, previous: Lock, todo: list,
         code = _reapprove(args, previous, set(applied), feed) if applied else EXIT_OK
     finally:
         if code != EXIT_OK:
+            from .fsutil import atomic_write
             for path, original in reversed(edits):
-                path.write_bytes(original.encode("utf-8"))
+                atomic_write(path, original.encode("utf-8"))
             if edits:
                 print("heldfast: config restored; nothing was bumped", file=sys.stderr)
     return code

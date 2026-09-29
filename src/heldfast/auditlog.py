@@ -395,10 +395,9 @@ class AuditLog:
         payload = json.dumps({"seq": self.seq, "hash": self.prev,
                               "alg": HMAC_ALG if self.key else "sha256",
                               "server": self.server}, sort_keys=True)
-        temp = head.with_name(head.name + ".tmp")
+        from .fsutil import atomic_write
         try:
-            temp.write_text(payload + "\n", encoding="utf-8")
-            os.replace(temp, head)
+            atomic_write(head, (payload + "\n").encode("utf-8"))
         except OSError:
             # The log is the record; the head is a check on it. Losing the
             # check must not stop the proxy passing traffic.

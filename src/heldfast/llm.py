@@ -247,12 +247,10 @@ class Cache:
             "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "verdicts": self.data,
         }
+        from .fsutil import atomic_write
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-            tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n",
-                           encoding="utf-8")
-            tmp.replace(self.path)
+            atomic_write(self.path, (json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                         .encode("utf-8"))
         except OSError:
             pass  # a cache that cannot be written is a performance issue, not an error
 

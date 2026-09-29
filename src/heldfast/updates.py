@@ -176,12 +176,17 @@ def rewrite_config(path: Path, old: str, new: str) -> str | None:
     Returns the original text, so the caller can put it back, or None when
     the edit would be ambiguous and was not made.
     """
+    # A config that is a link points outside the project, at a file this
+    # command was never asked to edit; that is left for a person.
+    if path.is_symlink():
+        return None
     raw = path.read_bytes()
     text = raw.decode("utf-8")
     needle, repl = f'"{old}"', f'"{new}"'
     if text.count(needle) != 1:
         return None
-    path.write_bytes(text.replace(needle, repl).encode("utf-8"))
+    from .fsutil import atomic_write
+    atomic_write(path, text.replace(needle, repl).encode("utf-8"))
     return text
 
 
