@@ -50,9 +50,15 @@ class TestEveryStatedVersionAgrees(unittest.TestCase):
 
     def test_both_npm_manifests_agree(self) -> None:
         for relative in ("js/heldfast-check/package.json",
-                         "js/heldfast-wrap/package.json"):
+                         "js/heldfast-wrap/package.json",
+                         "js/heldfast-npm/package.json"):
             with self.subTest(package=relative):
                 self.assertEqual(__version__, json.loads(_read(relative))["version"])
+
+    def test_the_two_launchers_are_one_launcher(self) -> None:
+        # `heldfast` and `@rufat325/heldfast` publish the same script; a fix
+        # made to one copy and not the other would ship two behaviours.
+        self.assertEqual(_read("js/heldfast-wrap/bin.js"), _read("js/heldfast-npm/bin.js"))
 
     def test_the_checker_prints_the_version_it_is(self) -> None:
         """`--version` is what a user quotes in a bug report."""
