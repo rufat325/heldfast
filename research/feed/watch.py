@@ -623,11 +623,17 @@ class Budget:
 # speak 2026-07-28; those failures, recorded before this, get one more try.
 HANDSHAKE = 2
 _HANDSHAKE_FAILURES = ("no initialize answer", "initialized, no tools/list answer")
+# check-isolated's own failures, not the release's: the download container
+# could not fetch it, or the measuring container gave no answer. The next run
+# tries again rather than letting a fault here stand for the release.
+_OUR_FAILURES = ("download failed", "no answer from the measuring container")
 
 
 def _handshake_retry(attempted: dict) -> bool:
-    return (attempted.get("handshake", 1) < HANDSHAKE
-            and str(attempted.get("why") or "").startswith(_HANDSHAKE_FAILURES))
+    why = str(attempted.get("why") or "")
+    if why.startswith(_OUR_FAILURES):
+        return True
+    return attempted.get("handshake", 1) < HANDSHAKE and why.startswith(_HANDSHAKE_FAILURES)
 
 
 def check_one(data: str, row: dict, budget: Budget | None = None,
@@ -767,6 +773,9 @@ def check(args: argparse.Namespace) -> int:
 # the host and gives each server two throwaway containers of its own, which
 # see only a scratch folder:
 #
+# The scratch folder is mounted at /scratch: the image keeps its own code in
+# /work (the Dockerfile's WORKDIR), and a mount there hid it.
+#
 #   fetch-one    network on: `npm install --ignore-scripts`. The package and
 #                its dependencies are downloaded; none of their code runs.
 #   measure-one  --network none: the install scripts run (`npm rebuild`) and
@@ -780,6 +789,7 @@ def check(args: argparse.Namespace) -> int:
 
 MAX_RESULT = 32 * 1024 * 1024
 CONTAINER_TIMEOUT = 900
+SCRATCH = "/scratch"
 
 
 def _spec(work: str) -> dict:
@@ -860,7 +870,7 @@ def in_containers(image: str, runtime: str = "", memory: str = "6g", pids: int =
             argv += ["--runtime", runtime]
         if hasattr(os, "getuid"):
             argv += ["--user", f"{os.getuid()}:{os.getgid()}"]
-        argv += ["-v", f"{os.path.abspath(work)}:/work", *tail]
+        argv += ["-v", f"{os.path.abspath(work)}:{SCRATCH}", *tail]
         try:
             return subprocess.run(argv, timeout=CONTAINER_TIMEOUT).returncode
         except subprocess.TimeoutExpired:
@@ -873,10 +883,10 @@ def in_containers(image: str, runtime: str = "", memory: str = "6g", pids: int =
             with open(os.path.join(work, "spec.json"), "w", encoding="utf-8") as fh:
                 json.dump({"package": package, "version": version, "tail": list(tail),
                            "required": list(required)}, fh)
-            fetched = docker(work, [image, "fetch-one", "--work", "/work"])
+            fetched = docker(work, [image, "fetch-one", "--work", SCRATCH])
             if fetched:
                 return None, f"download failed (exit {fetched})"
-            ran = docker(work, ["--network", "none", image, "measure-one", "--work", "/work"])
+            ran = docker(work, ["--network", "none", image, "measure-one", "--work", SCRATCH])
             result = _read_result(os.path.join(work, "result.json"))
             if result is None:
                 return None, f"no answer from the measuring container (exit {ran})"

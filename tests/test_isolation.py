@@ -33,7 +33,7 @@ def fake_docker(answer: object = None, fetch_exit: int = 0, plant=None):
 
     def run(argv, *a, **kw):
         calls.append(argv)
-        work = argv[argv.index("-v") + 1].rsplit(":/work", 1)[0]
+        work = argv[argv.index("-v") + 1].rsplit(":" + watch.SCRATCH, 1)[0]
         if "fetch-one" in argv:
             return subprocess.CompletedProcess(argv, fetch_exit)
         if plant is not None:
@@ -67,7 +67,21 @@ class TestTwoContainersPerServer(unittest.TestCase):
             self.assertIn("no-new-privileges", argv)
             # The only thing mounted is the server's own scratch folder.
             self.assertEqual(1, argv.count("-v"))
-            self.assertTrue(argv[argv.index("-v") + 1].endswith(":/work"))
+            self.assertTrue(argv[argv.index("-v") + 1].endswith(":" + watch.SCRATCH))
+            self.assertEqual(watch.SCRATCH, argv[argv.index("--work") + 1])
+
+    def test_the_scratch_mount_does_not_hide_the_image_code(self) -> None:
+        # The first run mounted the scratch folder at /work, the image's
+        # WORKDIR, which hid watch.py: every download "failed" with exit 2.
+        dockerfile = (ROOT / "research" / "feed" / "Dockerfile").read_text(encoding="utf-8")
+        workdirs = [line.split(None, 1)[1].strip() for line in dockerfile.splitlines()
+                    if line.startswith("WORKDIR ")]
+        self.assertTrue(workdirs)
+        for workdir in workdirs:
+            self.assertFalse(watch.SCRATCH == workdir
+                             or workdir.startswith(watch.SCRATCH.rstrip("/") + "/")
+                             or watch.SCRATCH.startswith(workdir.rstrip("/") + "/"),
+                             f"{watch.SCRATCH} overlaps the image's WORKDIR {workdir}")
 
     def test_the_spec_is_all_the_container_is_given(self) -> None:
         seen_files = []
@@ -172,6 +186,18 @@ class TestWhichExecutableRuns(unittest.TestCase):
         p = self.install("srv", {"a": "a.js", "b": "b.js"}, ["a", "b"])
         self.assertIsNone(self.pick(p, "srv"))
         self.assertIsNone(self.pick(p, "srv", "missing"))
+
+
+class TestOurFailuresAreRetried(unittest.TestCase):
+    """A fault of the measuring machinery must not stand for the release."""
+
+    def test_our_failures_retry_and_the_release_s_do_not(self) -> None:
+        self.assertTrue(watch._handshake_retry({"why": "download failed (exit 2)",
+                                                "handshake": 2}))
+        self.assertTrue(watch._handshake_retry(
+            {"why": "no answer from the measuring container (exit 1)", "handshake": 2}))
+        self.assertFalse(watch._handshake_retry({"why": "exited 1 before initialize: x",
+                                                 "handshake": 2}))
 
 
 class TestTheHostWritesTheFeed(unittest.TestCase):
