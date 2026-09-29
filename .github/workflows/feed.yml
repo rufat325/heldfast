@@ -163,8 +163,14 @@ jobs:
       # Two servers at a time, at most 120 launches per shard per day. Six in
       # parallel took down the workstation the churn study first ran on; the
       # budget keeps a day with many new releases inside the job's time limit.
+      # The servers get the feed's files, not its .git. Code that could write
+      # .git/config could make the host's git run a command of its choosing
+      # (core.fsmonitor runs even for ls-files) in the next step, outside the
+      # container -- and from the runner, upload under another shard's name.
       - name: Measure today's due npm servers
         run: |
+          set -euo pipefail
+          mv feed-data/.git feed-git
           docker run --rm --cap-drop ALL --security-opt no-new-privileges \
             --memory 6g --cpus 2 --pids-limit 2048 --user "$(id -u):$(id -g)" \
             -v "$PWD/feed-data:/data" heldfast-feed \
@@ -172,14 +178,19 @@ jobs:
             --shard "${{ matrix.shard }}/16" --label "npm-${{ matrix.shard }}"
       # Also after a failed measuring step: what was measured before it failed
       # is still worth publishing, and the publish job verifies it either way.
+      # git reads only feed-git, which the container never saw; rsync copies
+      # regular files only, so a planted link cannot carry a host file out.
       - name: Collect what changed
         if: always()
         run: |
           set -euo pipefail
-          git -C feed-data ls-files -m -o --exclude-standard > changed.txt
           mkdir -p delta
-          rsync -a --files-from=changed.txt feed-data/ delta/
-          echo "$(wc -l < changed.txt) file(s) changed"
+          if [ ! -d feed-git ]; then echo "nothing was measured"; exit 0; fi
+          git --git-dir=feed-git --work-tree=feed-data \
+            ls-files -m -o --exclude-standard -z > changed.txt
+          rsync -a --no-links --no-devices --no-specials --from0 \
+            --files-from=changed.txt feed-data/ delta/
+          echo "$(tr -cd '\0' < changed.txt | wc -c) file(s) changed"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -214,7 +225,11 @@ jobs:
       - name: Read hosted endpoints
         env:
           BUSY: ${{ github.event.schedule == '43 */4 * * *' && '--busy' || '' }}
+        # No .git in the container, as in measure-npm: what a hosted server
+        # answers is parsed in there, and the rule costs nothing.
         run: |
+          set -euo pipefail
+          mv feed-data/.git feed-git
           docker run --rm --cap-drop ALL --security-opt no-new-privileges \
             --memory 2g --cpus 2 --pids-limit 512 --user "$(id -u):$(id -g)" \
             -v "$PWD/feed-data:/data" heldfast-feed \
@@ -226,10 +241,13 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          git -C feed-data ls-files -m -o --exclude-standard > changed.txt
           mkdir -p delta
-          rsync -a --files-from=changed.txt feed-data/ delta/
-          echo "$(wc -l < changed.txt) file(s) changed"
+          if [ ! -d feed-git ]; then echo "nothing was measured"; exit 0; fi
+          git --git-dir=feed-git --work-tree=feed-data \
+            ls-files -m -o --exclude-standard -z > changed.txt
+          rsync -a --no-links --no-devices --no-specials --from0 \
+            --files-from=changed.txt feed-data/ delta/
+          echo "$(tr -cd '\0' < changed.txt | wc -c) file(s) changed"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -303,19 +321,34 @@ jobs:
 
       # Once a day, even when nothing moved: the anchor proves the whole record
       # existed by today, and a day that is not anchored cannot be later.
+      #
+      # The four-hourly pass anchors too when the day has no checkpoint by
+      # 12:00 UTC. GitHub drops scheduled runs -- the daily one, and the
+      # watchdog's hourly check that would start it -- while these passes
+      # keep coming, so a day is anchored even when its npm measuring is not
+      # done. Noon leaves the watchdog two hours from its 10:00 deadline to
+      # start the daily run first.
       - name: Describe the published commit for the anchor
         id: checkpoint
-        if: github.event.schedule != '43 */4 * * *'
+        env:
+          BUSY: ${{ github.event.schedule == '43 */4 * * *' }}
         run: |
           set -euo pipefail
           day=$(date -u +%Y-%m-%d)
+          if [ "$BUSY" = "true" ]; then
+            if [ -e "feed-data/checkpoints/$day.json" ] || [ "$(date -u +%H)" -lt 12 ]; then
+              echo "the four-hourly pass does not anchor"
+              exit 0
+            fi
+            echo "no checkpoint for $day by 12:00 UTC: this pass records one"
+          fi
           mkdir -p checkpoint
           python3 tool/research/feed/watch.py checkpoint --data feed-data \
             --commit "$(git -C feed-data rev-parse HEAD)" --day "$day" \
             --generator-commit "$(git -C tool rev-parse HEAD)" \
             --out "checkpoint/$day.json" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: steps.checkpoint.outcome == 'success'
+        if: steps.checkpoint.outcome == 'success' && steps.checkpoint.outputs.feed_commit != ''
         with:
           name: feed-checkpoint
           path: checkpoint

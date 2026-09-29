@@ -144,7 +144,11 @@ day's checkpoint every hour. If there is none by 10:00 UTC and no feed run
 is under way, it starts the daily run itself, up to three times; without
 the token that allows this, it opens an issue instead. A run that would
 publish after midnight UTC is too late: that day has no checkpoint, and the
-watchdog says so rather than hiding the gap.
+watchdog says so rather than hiding the gap. The watchdog's own hourly check is
+dropped by GitHub as often as the daily run, so there is a second net: from
+12:00 UTC, the four-hourly pass that re-reads busy hosted servers records the
+day's checkpoint itself if there is still none. That day is then anchored
+without its npm measuring, which lands in the next day's checkpoint.
 
 **How to verify one.** Rebuild the manifest from the commit, compare the
 digest, then verify the proof. On Linux:

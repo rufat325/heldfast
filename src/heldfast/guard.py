@@ -1480,7 +1480,18 @@ def _refuse_one(guard: Guard, trail: AuditLog | None, message: dict[str, Any],
     """True if this frame was answered here and must not be forwarded."""
     if trail is not None:
         _record_request(trail, message)
-    refusal = guard.check_call(message)
+    try:
+        refusal = guard.check_call(message)
+    except Exception as exc:  # noqa: BLE001 -- a check that breaks refuses
+        # This used to escape into _pump_client, whose `except ValueError`
+        # ended the loop: every later message from the client was dropped
+        # without a word and the session hung. A server could trigger it with
+        # one tool its checks could not handle. Now it is that call's refusal.
+        guard.stats.internal_errors.append(f"call check raised: {exc}")
+        guard.log(f"INTERNAL ERROR checking a call: {exc}")
+        if "id" not in message:
+            return True
+        refusal = guard.deny_response(message)
     if refusal is None:
         return False
     if trail is not None:

@@ -403,6 +403,28 @@ class TestCallSiteIsTheBoundary(unittest.TestCase):
         self.assertIsNone(forwarded)
         self.assertIn("BLOCKED BY heldfast", buf.getvalue())
 
+    def test_a_call_check_that_raises_refuses_and_keeps_the_pump_alive(self) -> None:
+        """A ValueError from check_call used to end _pump_client silently:
+        every later client message was dropped and the session hung."""
+        g = Guard("svc", make_lock({"read": BENIGN}), quiet=True)
+
+        def broken(message):
+            raise ValueError("a tool the checks cannot handle")
+        g.check_call = broken
+        call = json.dumps({"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+                           "params": {"name": "read", "arguments": {}}}) + "\n"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            forwarded = _client_to_server(g, None, call, threading.Lock())
+        self.assertIsNone(forwarded)
+        reply = json.loads(buf.getvalue())
+        self.assertEqual(7, reply["id"])
+        self.assertIn("error", reply)
+        self.assertTrue(g.stats.internal_errors)
+        note = json.dumps({"jsonrpc": "2.0", "method": "notifications/cancelled"}) + "\n"
+        with redirect_stdout(io.StringIO()):
+            self.assertIsNone(_client_to_server(g, None, note, threading.Lock()))
+
     def test_identity_runs_on_the_wire_without_argument_policy(self) -> None:
         """The pump used to skip check_call when the lock had no policy."""
         g = Guard("svc", make_lock({"read": BENIGN}), quiet=True)

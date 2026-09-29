@@ -113,7 +113,12 @@ def shard(feed: str, work: str, deltas: str, kind: str, index: int, of: int, ima
     """One shard, like one matrix job: a throwaway clone, the container, and
     the files it changed collected as that shard's upload."""
     copy = os.path.join(work, f"{kind}-{index}")
-    run(["git", "clone", "-q", "--shared", feed, copy])
+    # The repository lives beside the copy, never in it: the container can
+    # write everything it is given, and a .git/config it wrote would have the
+    # host's git run its command (core.fsmonitor) when listing the changes.
+    gitdir = copy + ".git"
+    run(["git", "clone", "-q", "--shared", "--separate-git-dir", gitdir, feed, copy])
+    os.remove(os.path.join(copy, ".git"))
     label = f"{kind}-{index}"
     if kind == "npm":
         args = ["check", "--data", "/data", "--jobs", str(jobs), "--budget", str(budget),
@@ -133,15 +138,23 @@ def shard(feed: str, work: str, deltas: str, kind: str, index: int, of: int, ima
                          f"(exit {result.returncode})")
     if result.returncode:
         log(f"shard {label}: exited {result.returncode}; what it measured is still collected")
-    changed = git(copy, "ls-files", "-m", "-o", "--exclude-standard", "-z",
+    changed = run(["git", f"--git-dir={gitdir}", f"--work-tree={copy}", "-c", "core.autocrlf=false",
+                   "ls-files", "-m", "-o", "--exclude-standard", "-z"],
                   capture_output=True).stdout.decode("utf-8").split("\0")
     out = os.path.join(deltas, f"feed-delta-{kind}-{index}")
     for rel in filter(None, changed):
+        source = os.path.join(copy, *rel.split("/"))
+        # Regular files only: copy2 follows a link, so one the servers planted
+        # would carry a file of this machine's into the upload.
+        if os.path.islink(source) or not os.path.isfile(source):
+            log(f"shard {label}: skipped {rel!r}: not a regular file")
+            continue
         target = os.path.join(out, *rel.split("/"))
         os.makedirs(os.path.dirname(target), exist_ok=True)
-        shutil.copy2(os.path.join(copy, *rel.split("/")), target)
+        shutil.copy2(source, target, follow_symlinks=False)
     log(f"shard {label}: {len([c for c in changed if c])} file(s) changed")
     shutil.rmtree(copy, ignore_errors=True)
+    shutil.rmtree(gitdir, ignore_errors=True)
 
 
 def measure(args: argparse.Namespace) -> str:

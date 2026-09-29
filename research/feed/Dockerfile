@@ -10,7 +10,10 @@
 # environment is passed in, and measure.py strips the environment again
 # before each child starts. It runs as whatever uid owns the mount, so every
 # path it writes to at runtime is under /tmp or /data.
-FROM node:22-bookworm-slim
+# Pinned by digest, like every action in the workflows: a tag can be moved,
+# and this image is the sandbox. To update, look up the new index digest
+# (docker buildx imagetools inspect node:22-bookworm-slim) and replace it.
+FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 ca-certificates git \

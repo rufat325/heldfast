@@ -11,10 +11,10 @@
     "which is legal in JSON but cannot be written as raw UTF-8 -- a rewrite",
     "with ensure_ascii=False will fail or corrupt it.",
     "",
-    "`refuses` is checked in Python only. By the time JavaScript sees a number,",
-    "JSON.parse has already collapsed it to a double, so a literal that lost",
-    "precision looks identical to one that did not. Python's arbitrary-precision",
-    "ints can still tell, so the refusal lives on the side that writes the lock."
+    "`refuses` is checked in Python only: an integer too large for any double.",
+    "JavaScript's JSON.parse makes it Infinity, which its canonicaliser refuses too.",
+    "An integer a double cannot hold exactly is not refused: both sides hash the",
+    "nearest double, the one JSON.parse would have produced."
   ],
   "canonical": [
     {"why": "a float that is integral -- the Pydantic/FastMCP bound that used to split the two sides", "value": 1.0, "expect": "1"},
@@ -50,11 +50,16 @@
     {"why": "array order is preserved, never sorted", "value": [3, 1, 2], "expect": "[3,1,2]"},
     {"why": "keys sort ASCII", "value": {"b": 1, "a": 2}, "expect": "{\"a\":2,\"b\":1}"},
     {"why": "BMP private-use vs astral: UTF-16 order puts the astral pair FIRST, code-point order would not", "value": {"\ue000": 1, "\ud83d\ude00": 2}, "expect": "{\"\ud83d\ude00\":2,\"\ue000\":1}"},
-    {"why": "nesting, with an integral float inside", "value": {"z": [{"y": 1.0}], "a": null}, "expect": "{\"a\":null,\"z\":[{\"y\":1}]}"}
+    {"why": "nesting, with an integral float inside", "value": {"z": [{"y": 1.0}], "a": null}, "expect": "{\"a\":null,\"z\":[{\"y\":1}]}"},
+    {"why": "2**53+1 is not a double: both sides hash the nearest one, as JSON.parse does", "value": 9007199254740993, "expect": "9007199254740992"},
+    {"why": "same, negative", "value": -9007199254740993, "expect": "-9007199254740992"},
+    {"why": "int64's maximum, common in Go and Java schemas: the nearest double, written as ECMAScript writes it", "value": 9223372036854775807, "expect": "9223372036854776000"},
+    {"why": "2**60 is exact as a double, but ECMAScript writes its shortest digits padded with zeros, not the exact value", "value": 1152921504606846976, "expect": "1152921504606847000"},
+    {"why": "the last integral double below 1e16 is written in full", "value": 9999999999999998, "expect": "9999999999999998"}
   ],
   "refuses": [
-    {"why": "an integer that loses precision as a double cannot round-trip through JavaScript", "json": "9007199254740993"},
-    {"why": "same, negative", "json": "-9007199254740993"}
+    {"why": "an integer beyond the largest double is not a JSON number anyone can hash", "json": "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"},
+    {"why": "same, negative", "json": "-10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}
   ],
   "digests": [
     {

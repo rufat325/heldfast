@@ -44,6 +44,16 @@ Read this file and `docs/GUARANTEES.md` instead.
   checkpoint for YYYY-MM-DD" there instead. This still works around nothing:
   it neither commits nor re-enables, and GitHub refuses to start a disabled
   workflow, which the watchdog then reports.
+- The hourly check is itself a scheduled run, and GitHub dropped most of them
+  in its first day. So `feed.yml`'s four-hourly pass also anchors: with no
+  checkpoint for the day by 12:00 UTC, it describes the commit it published
+  and the usual anchor, witness and record-anchor jobs follow.
+- The measuring containers get the feed's files and never its `.git`, in
+  `feed.yml` and in `server/run.py` alike. A package that wrote `.git/config`
+  there could make the host's git run a command of its choosing
+  (`core.fsmonitor` runs even for `ls-files`) outside the container. The
+  changes are listed with `--git-dir` pointing outside the mount, and only
+  regular files are copied into the upload.
 - `pkgcache.py` is on the launch path and is in the `mypy --strict` job for
   that reason. It opens no socket; if it ever needs to, that is a design
   change, not an implementation detail.

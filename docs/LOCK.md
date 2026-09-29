@@ -34,11 +34,12 @@ Two consequences worth stating outright:
 - A key mixing BMP and astral characters sorts differently under UTF-16 than
   under code point. In `{"": 1, "😀": 2}` the emoji comes first.
 - An integer that cannot survive a double round-trip — `9007199254740993` —
-  is **refused**, not hashed. JavaScript has already lost it by the time its
-  parser is done, so no canonical form could agree on it. The refusal happens
-  in Python at approve time, because that is the only side that can still see
-  the difference. Magnitude is not the test: `10000000000000000` is larger
-  and exact, and hashes fine.
+  is hashed as the nearest double, `9007199254740992`, which is what
+  JavaScript's `JSON.parse` makes of it, so both sides agree. Two integers
+  that round to the same double therefore hash alike. Only an integer beyond
+  the largest double is refused. Large integral values are written as
+  ECMAScript writes them: `2**60` is `1152921504606847000`, not its exact
+  digits.
 
 `body` is:
 
