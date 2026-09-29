@@ -1250,8 +1250,8 @@ FAIL_OPEN = refusal is not None
         id="confusable-fold-removed",
         theorem="T-ATTACK",
         path="rules/poisoning.py",
-        original="""    for source in (text, folded) if folded != text else (text,):""",
-        replacement="""    for source in (text,):""",
+        original="""    sources = [text] + [view for view in (folded, *_decoded_views(folded)) if view != text]""",
+        replacement="""    sources = [text]""",
         harm=("An injection spelled with a Cyrillic o reads as English to the "
               "model and to a reviewer, and matches nothing."),
         probe="""

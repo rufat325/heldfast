@@ -152,8 +152,29 @@ SIGNALS: list[Signal] = [
         re.compile(
             r"\b(?:ignore|disregard|forget|override|bypass|skip)\s+(?:all\s+|any\s+|the\s+)?"
             r"(?:previous|prior|preceding|above|earlier|other|system|original)\s+"
-            r"(?:instruction|prompt|rule|direction|guideline|constraint|message)s?\b|"
-            r"\bignore\s+everything\s+(?:above|before)\b",
+            r"(?:instruction|prompt|rule|direction|guideline|constraint|message|guidance|"
+            r"directive|command|context|order)s?\b|"
+            r"\bignore\s+everything\s+(?:above|before)\b|"
+            # The same request in its other shapes, found by rewording it until
+            # it got through: "forget everything the user told you", a notice
+            # claiming the operator's authority. None occurs in the 5,903 real
+            # descriptions of research/churn (tests/test_detection_evasion.py).
+            r"\b(?:ignore|disregard|forget)\s+(?:everything|all|anything)\s+(?:that\s+)?"
+            r"(?:the\s+user|you\s+(?:were|have\s+been)|you\s+were\s+previously)\s+"
+            r"(?:told|said|asked|instructed|given)\b|"
+            r"\b(?:system|admin(?:istrator)?|security|developer|operator)\s+"
+            r"(?:notice|override|alert|directive)\s*:|"
+            r"\b(?:the\s+)?(?:system\s+|platform\s+)?administrator\s+(?:requires|mandates|"
+            r"demands|has\s+instructed|instructs)\s+(?:that\s+)?you\b|"
+            # "Ignore the previous instructions" in the languages an agent reads
+            # as readily as English: es, pt, it, fr, de, ru, zh.
+            r"\bignor[ae]\s+(?:todas\s+)?(?:las|as|le)\s+(?:instrucciones|instru\w+es|"
+            r"istruzioni)\s+(?:anteriores|precedenti)\b|"
+            r"\bignore[zr]?\s+(?:toutes\s+)?les\s+instructions\s+pr[\u00e9e]c[\u00e9e]dentes\b|"
+            r"\bignoriere\s+(?:alle\s+)?(?:vorherigen|bisherigen|obigen)\s+anweisungen\b|"
+            r"\u0438\u0433\u043d\u043e\u0440\u0438\u0440\u0443\w*\s+(?:\u0432\u0441\u0435\s+)?"
+            r"\u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\w*\s+\u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\w*|"
+            r"\u5ffd\u7565(?:\u4e4b\u524d|\u4ee5\u4e0a|\u5148\u524d|\u524d\u9762)\u7684?(?:\u6240\u6709)?(?:\u6307\u4ee4|\u6307\u793a)",
             re.IGNORECASE,
         ),
         Severity.CRITICAL, 0.95, True,
@@ -208,7 +229,12 @@ SIGNALS: list[Signal] = [
             # in 40,091 real chunks either way.
             r"\b(?:send|post|upload|transmit|forward|exfiltrate|report|submit)\b"
             r"[^\n]{0,60}?\b(?:to)\s+(?:https?://|[\w.\-]+@[\w.\-]+\.\w+|"
-            r"(?:our|the|an?)\s+(?:server|endpoint|api|webhook|collector))",
+            r"(?:our|the|an?)\s+(?:server|endpoint|api|webhook|collector))|"
+            # A markdown image whose URL has a placeholder for data in its
+            # query: the client fetches it while rendering the reply, and the
+            # data leaves in the request. No reply to anyone needs one.
+            r"!\[[^\]\n]{0,80}\]\(\s*https?://[^)\s]{0,200}[?&][\w.\-]{1,40}=\s*"
+            r"[{<$%][^)\n]{0,80}\)",
             re.IGNORECASE,
         ),
         Severity.CRITICAL, 0.85, True,
@@ -304,6 +330,50 @@ def _excerpt(text: str, match: re.Match[str], width: int = 90) -> str:
     return ("..." if start else "") + frag[:width] + ("..." if end < len(text) else "")
 
 
+# Letters typed one space apart, "I g n o r e", read as the word they spell.
+_SPACED = re.compile(r"\b(?:[A-Za-z] ){2,}[A-Za-z]\b")
+# A word holding digits in letter positions, "1gn0re", read with the letters.
+_LEET_WORD = re.compile(r"\b(?=[A-Za-z0-9]*[A-Za-z])(?=[A-Za-z0-9]*[013457])[A-Za-z0-9]{4,}\b")
+_LEET = str.maketrans("013457", "oieast")
+# A run long enough to hide a sentence in, and shaped like base64.
+_BASE64 = re.compile(r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{24,}={0,2}(?![A-Za-z0-9+/=])")
+
+
+def _decoded_views(text: str) -> list[str]:
+    """The text as its reader decodes it, where that differs from how it is typed.
+
+    Each is what an evasion counted on the regex not seeing and the model
+    reading anyway: letters spaced apart, digits standing in for letters,
+    an instruction handed over in base64 with "decode and follow". The
+    signals run on these as they run on the folded skeleton, so a phrase
+    they find is the same finding. Measured on the 5,903 real descriptions
+    in research/churn: these views add no override, concealment or
+    exfiltration hit (tests/test_detection_evasion.py).
+    """
+    import base64
+    import binascii
+    views = []
+    spaced = _SPACED.sub(lambda m: m.group(0).replace(" ", ""), text)
+    if spaced != text:
+        views.append(spaced)
+    leet = _LEET_WORD.sub(lambda m: m.group(0).lower().translate(_LEET), text)
+    if leet != text:
+        views.append(leet)
+    decoded = []
+    for m in _BASE64.finditer(text):
+        blob = m.group(0)
+        try:
+            raw = base64.b64decode(blob + "=" * (-len(blob) % 4), validate=True)
+            plain = raw.decode("utf-8")
+        except (binascii.Error, ValueError):
+            continue
+        if plain and sum(ch.isprintable() or ch.isspace() for ch in plain) >= 0.95 * len(plain):
+            decoded.append(plain)
+    if decoded:
+        views.append("\n".join(decoded))
+    return views
+
+
 def _scan_text(text: str, strict: bool) -> Iterable[tuple[Signal, re.Match[str]]]:
     """Every signal that fires, over the text and over its folded skeleton.
 
@@ -317,7 +387,8 @@ def _scan_text(text: str, strict: bool) -> Iterable[tuple[Signal, re.Match[str]]
 
     seen: set[tuple[str, int, str]] = set()
     folded = fold(text)
-    for source in (text, folded) if folded != text else (text,):
+    sources = [text] + [view for view in (folded, *_decoded_views(folded)) if view != text]
+    for source in sources:
         for sig in SIGNALS:
             if strict and not sig.universal:
                 continue
