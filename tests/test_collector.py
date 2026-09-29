@@ -72,6 +72,18 @@ class TestAShardsUpload(unittest.TestCase):
                         Path(data, "state", "a.json").write_text('{"v": 2}\n', encoding="utf-8")
                         Path(data, "incoming").mkdir()
                         Path(data, "incoming", "npm-0.jsonl").write_text("{}\n", encoding="utf-8")
+                        # What a hostile package would plant: a repository whose
+                        # config runs a command when the host lists changes, and
+                        # a link to a file of the host's.
+                        Path(data, ".git").mkdir(exist_ok=True)
+                        Path(data, ".git", "config").write_text(
+                            "[core]\n\tfsmonitor = \"echo escaped > '%s'; false\"\n"
+                            % Path(tmp, "escaped").as_posix(), encoding="utf-8")
+                        try:
+                            os.symlink(os.path.join(feed, "watchlist.json"),
+                                       os.path.join(data, "state", "b.json"))
+                        except OSError:
+                            pass  # no symlinks without privilege on Windows
                         return subprocess.CompletedProcess(argv, 0)
                     return REAL_RUN(argv, *a, **kw)
                 return runner
@@ -85,6 +97,9 @@ class TestAShardsUpload(unittest.TestCase):
             self.assertEqual(["feed-delta-npm-0/incoming/npm-0.jsonl",
                               "feed-delta-npm-0/state/a.json"], got)
             self.assertFalse(os.path.exists(os.path.join(tmp, "work", "npm-0")))
+            self.assertFalse(os.path.exists(os.path.join(tmp, "work", "npm-0.git")))
+            self.assertFalse(os.path.exists(os.path.join(tmp, "escaped")),
+                             "the host's git ran a command the container planted")
 
     def test_a_reused_run_id_starts_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

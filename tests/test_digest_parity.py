@@ -78,16 +78,24 @@ class TestNumberFormatting(unittest.TestCase):
     def test_1e16_is_written_in_full(self) -> None:
         self.assertEqual(canonical_json(1e16), "10000000000000000")
 
-    def test_lossy_integer_is_refused(self) -> None:
-        # 2**53 itself is exactly representable, so it is fine. 2**53+1 is
-        # the first integer a double cannot hold, and refusing is what stops
-        # a lockfile recording a digest the JavaScript checker would never
-        # reproduce. The old magnitude-based guard got this wrong in the
-        # other direction and refused 1e16, which is exact.
+    def test_lossy_integer_hashes_as_the_nearest_double(self) -> None:
+        # 2**53+1 is the first integer a double cannot hold. JSON.parse turns
+        # it into 2**53, and so does this, so the JavaScript checker computes
+        # the same digest. It used to be refused, which for the feed meant a
+        # server with an int64 bound in its schema was never recorded again.
         self.assertEqual(canonical_json(2**53), "9007199254740992")
         self.assertEqual(canonical_json(10**16), "10000000000000000")
+        self.assertEqual(canonical_json(2**53 + 1), "9007199254740992")
+        self.assertEqual(canonical_json(2**63 - 1), "9223372036854776000")
         with self.assertRaises(ValueError):
-            canonical_json(2**53 + 1)
+            canonical_json(10**400)
+
+    def test_large_integral_doubles_use_ecmascript_digits(self) -> None:
+        # Exact as a double, but ECMAScript writes the shortest digits padded
+        # with zeros; str(int(x)) wrote the exact value and split the sides.
+        self.assertEqual(canonical_json(2**60), "1152921504606847000")
+        self.assertEqual(canonical_json(float(2**60)), "1152921504606847000")
+        self.assertEqual(canonical_json(9999999999999998), "9999999999999998")
 
     def test_key_order_is_utf16_not_code_point(self) -> None:
         # U+E000 is below U+1F600 by code point, but its UTF-16 encoding

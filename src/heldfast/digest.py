@@ -92,29 +92,29 @@ def _number(value: Any) -> str:
     """
     if isinstance(value, int):
         # Python's ints are arbitrary precision and JavaScript's numbers are
-        # doubles, so this is the one place the two languages can hold
-        # genuinely different values for the same JSON text. The test is not
-        # magnitude -- 10000000000000000 is above 2**53 and still exact --
-        # but whether the double round-trip loses anything. It refuses here,
-        # at approve time, rather than recording a digest the JavaScript
-        # checker would compute differently and report as drift forever.
+        # doubles. JSON.parse rounds a literal like 9223372036854775807 to the
+        # nearest double, and float() rounds the same way, so hashing that
+        # double is what both sides can agree on. This used to refuse instead,
+        # and a refusal is not neutral: one int64 bound in a schema -- common
+        # from Go and Java -- took the whole server out of the feed, where
+        # every later rewrite of it went unrecorded. The cost is that two
+        # integers rounding to one double hash alike.
         try:
-            as_double = float(value)
+            value = float(value)
         except OverflowError:
             raise ValueError(
                 "integer %d is too large to be a JSON number" % value) from None
-        if as_double != value:
-            raise ValueError(
-                "integer %d cannot round-trip through a JavaScript number, so "
-                "no canonical form can agree across both implementations"
-                % value)
-        value = as_double
     if math.isnan(value) or math.isinf(value):
         raise ValueError("NaN and Infinity are not JSON numbers")
     if value == 0:
         # ECMAScript String(-0) is "0", so JCS folds the sign away.
         return "0"
-    if value == int(value) and abs(value) < 1e21:
+    # Below 1e16 repr() writes an integral double in full and its digits are
+    # the shortest that round-trip, as ECMAScript's are. From 1e16 up, repr()
+    # switches to exponent form, handled below: ECMAScript pads the shortest
+    # digits with zeros, so 2**60 is 1152921504606847000, not the exact
+    # 1152921504606846976 that str(int(value)) would give.
+    if value == int(value) and abs(value) < 1e16:
         return str(int(value))
     text = repr(value)
     match = _EXPONENT.match(text)

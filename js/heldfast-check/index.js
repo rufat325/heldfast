@@ -65,12 +65,9 @@ function canonical(value) {
       throw new TypeError("NaN and Infinity are not JSON numbers");
     }
     // No magnitude check here, deliberately. By this point JSON.parse has
-    // already collapsed the source text to a double, so a literal that lost
-    // precision is indistinguishable from one that did not -- 1e16 is above
-    // 2**53 and exact, 9007199254740993 is above it and is not. Python can
-    // still see the difference, because its ints are arbitrary precision, so
-    // that refusal lives in digest.py at approve time. Here, JCS is simply
-    // ECMAScript Number::toString, with String(-0) folded to "0".
+    // already rounded the source text to the nearest double, and digest.py
+    // rounds Python's ints the same way, so both sides hash that double.
+    // JCS is simply ECMAScript Number::toString, with String(-0) folded to "0".
     return value === 0 ? "0" : String(value);
   }
   if (t === "string") return escapeString(value);
