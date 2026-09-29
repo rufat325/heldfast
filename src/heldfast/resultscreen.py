@@ -75,6 +75,20 @@ def _has_exfil_host(text: str) -> bool:
     return bool(_EXFIL_RE.search(text))
 
 
+def as_read(text: str) -> str:
+    """The text as a model effectively reads it.
+
+    Format characters -- zero-width spaces and joiners, bidirectional
+    controls, soft hyphens (Unicode category Cf) -- are invisible, and a model
+    reads straight through them, so `Ig\u200bnore all previous instructions`
+    is an instruction to it and was not one to the screen. Removing them and
+    folding compatibility forms (NFKC) gives the screen the same reading.
+    """
+    import unicodedata
+    stripped = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    return unicodedata.normalize("NFKC", stripped)
+
+
 def classify(text: str) -> list[str]:
     """Stable IDs for default-block result classes. Empty means pass."""
     if not text:

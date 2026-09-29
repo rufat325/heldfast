@@ -862,16 +862,18 @@ class Guard:
 
     def _rewrite_result_block(self, block: dict[str, Any], text: str,
                               field: str = "text") -> None:
-        from .resultscreen import classify, withheld
+        from .resultscreen import as_read, classify, withheld
 
-        hard = classify(text)
+        # Screened as sent and as read: see resultscreen.as_read.
+        read = as_read(text)
+        hard = classify(text) or (classify(read) if read != text else [])
         if hard:
             self.stats.results_flagged += 1
             self.stats.result_categories.extend(hard)
             self.log(f"tool result matches {', '.join(hard)} -- withheld")
             block[field] = withheld(hard)
             return
-        hits = scan_untrusted_text(text)
+        hits = scan_untrusted_text(text) or (scan_untrusted_text(read) if read != text else [])
         if not hits:
             return
         categories = sorted({c for c, _, _ in hits})
