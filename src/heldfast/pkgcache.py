@@ -164,23 +164,36 @@ def _read_index(path: Path) -> str | None:
     return found
 
 
+# The algorithms that can vouch for bytes, strongest first. sha1 and md5 are
+# in real SRI strings -- old npm entries carry a sha1 beside the sha512 -- and
+# are ignored: a sha1 collision is a solved problem, not a hypothesis.
+_STRONG = ("sha512", "sha384", "sha256")
+
+
+def _parse_sri(value: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for token in str(value or "").split():
+        algo, sep, digest = token.partition("-")
+        if sep and digest:
+            out[algo.lower()] = digest
+    return out
+
+
+def _strongest_shared(approved: str, found: str) -> str | None:
+    """The strongest algorithm both SRI strings carry, or None."""
+    mine, theirs = _parse_sri(approved), _parse_sri(found)
+    return next((algo for algo in _STRONG if algo in mine and algo in theirs), None)
+
+
 def _sri_matches(approved: str, found: str) -> bool | None:
     """True/False when the two SRI strings can be compared, None when not.
 
     An SRI may carry several hashes. Two strings are comparable only where
-    they share an algorithm; `sha512-x` against `sha1-y` says nothing, and
-    saying 'changed' there would refuse a launch over a format difference.
+    they share a strong algorithm; `sha512-x` against `sha1-y` says nothing,
+    and saying 'changed' there would refuse a launch over a format difference.
     """
-    def parse(value: str) -> dict[str, str]:
-        out: dict[str, str] = {}
-        for token in str(value or "").split():
-            algo, sep, digest = token.partition("-")
-            if sep and digest:
-                out[algo.lower()] = digest
-        return out
-
-    mine, theirs = parse(approved), parse(found)
-    shared = set(mine) & set(theirs)
+    mine, theirs = _parse_sri(approved), _parse_sri(found)
+    shared = [algo for algo in _STRONG if algo in mine and algo in theirs]
     if not shared:
         return None
     return all(mine[algo] == theirs[algo] for algo in shared)
@@ -249,9 +262,12 @@ def _check_npm(key: str, approved: str, name: str, version: str,
                 key, "changed",
                 f"npm cache holds {found[:24]} for this version; "
                 f"{approved[:24]} was approved")
-        # The index agrees with the approval. Now read the bytes it points at,
-        # so the answer is about content rather than about a claim.
-        holds = _content_holds(root, found)
+        # The index agrees with the approval. Now read the bytes -- found
+        # through, and hashed against, the *approved* digest in the strongest
+        # algorithm both carry. Following the index's first hash instead let
+        # `sha1-<malicious> sha512-<approved>` verify a tarball nobody approved.
+        algo = _strongest_shared(approved, found)
+        holds = _content_holds(root, f"{algo}-{_parse_sri(approved)[str(algo)]}")
         if holds is None:
             return CacheCheck(
                 key, "absent",

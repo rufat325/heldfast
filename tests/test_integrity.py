@@ -333,12 +333,16 @@ class TestShasumFallbackIsRealSri(unittest.TestCase):
         self.assertEqual("sha1", algo)
         self.assertEqual(base64.b64decode(digest), bytes.fromhex(self.SHASUM))
 
-    def test_it_matches_what_the_cache_actually_holds(self) -> None:
-        """The whole point: the two forms of the same hash compare equal."""
+    def test_it_is_never_called_changed(self) -> None:
+        """The whole point: the same hash in its two forms is not a change.
+
+        It is not a match either: a sha1 cannot vouch for bytes (see
+        pkgcache._STRONG), so a package that only ever had one is
+        incomparable -- "absent", which starts it, never "changed"."""
         integ.get_json = lambda url: {"dist": {"shasum": self.SHASUM}}
         approved = integ.lookup(_npx())["npm:@scope/pkg@1.2.3"]
         cached = "sha1-" + base64.b64encode(bytes.fromhex(self.SHASUM)).decode()
-        self.assertIs(True, pkgcache._sri_matches(approved, cached))
+        self.assertIsNone(pkgcache._sri_matches(approved, cached))
 
     def test_the_guard_does_not_refuse_a_package_that_did_not_move(self) -> None:
         integ.get_json = lambda url: {"dist": {"shasum": self.SHASUM}}

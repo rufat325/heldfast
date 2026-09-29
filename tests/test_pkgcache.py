@@ -71,6 +71,28 @@ class TestNpmCache(unittest.TestCase):
         self.assertEqual(["changed"], [c.state for c in got])
         self.assertIn("do not hash to the entry", got[0].detail)
 
+    def test_a_weak_hash_listed_first_cannot_vouch_for_other_bytes(self) -> None:
+        """The index can list several hashes. Matching the approved sha512
+        while pointing the bytes check at a sha1 of a malicious tarball used
+        to verify: the blob was found through, and hashed with, whichever
+        algorithm the index listed first."""
+        approved = sri_for(b"the approved tarball")
+        evil = b"malicious replacement"
+        with tempfile.TemporaryDirectory() as tmp:
+            with fake_npm_cache(tmp, "@scope/pkg", "1.2.3",
+                                f"{sri_for(evil, 'sha1')} {approved}", content=evil):
+                got = pkgcache.check({"npm:@scope/pkg@1.2.3": approved})
+        self.assertNotEqual("verified", got[0].state)
+
+    def test_only_a_weak_hash_in_common_is_not_a_match(self) -> None:
+        content = b"the approved tarball"
+        both = f"{sri_for(content, 'sha1')} {sri_for(content)}"
+        with tempfile.TemporaryDirectory() as tmp:
+            with fake_npm_cache(tmp, "@scope/pkg", "1.2.3", sri_for(content, "sha1"),
+                                content=content):
+                got = pkgcache.check({"npm:@scope/pkg@1.2.3": both})
+        self.assertNotEqual("verified", got[0].state)
+
     def test_an_index_entry_with_no_bytes_behind_it_is_absent(self) -> None:
         """A pruned cache keeps index entries that content-v2 no longer backs.
         There is nothing to verify, and saying so beats guessing either way."""
