@@ -155,6 +155,21 @@ class TestCache(unittest.TestCase):
             llm.content_key("text", "claude-sonnet-5"),
         )
 
+    def test_the_default_cache_is_not_in_the_scanned_tree(self) -> None:
+        # A scanned repository could carry a "benign" verdict for its own
+        # poisoned text; the default must be somewhere it cannot write.
+        import os
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}):
+                path = llm.default_cache_path()
+            self.assertEqual(Path(tmp) / "heldfast" / "llm-verdicts.json", path)
+            self.assertNotEqual(Path.cwd() / llm.CACHE_NAME, path)
+            c = llm.Cache(path)
+            c.put("k", {"verdict": "benign"})
+            c.save()  # creates the directory it needs
+            self.assertTrue(path.is_file())
+
     def test_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / llm.CACHE_NAME

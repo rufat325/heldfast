@@ -47,6 +47,22 @@ from .secrets import redact
 DEFAULT_MODEL = "claude-opus-5"
 DEFAULT_EFFORT = "medium"
 CACHE_NAME = ".mcp-pin-llm-cache.json"
+
+
+def default_cache_path() -> Path:
+    """Where verdicts are kept unless --llm-cache says otherwise: this user's
+    own cache directory, never the tree being scanned.
+
+    The cache is trusted: a hit skips the model. It used to default to
+    ./.mcp-pin-llm-cache.json, so a pull request scanned in CI could carry a
+    poisoned description *and* a cached "benign" verdict for exactly that text,
+    and the semantic tier would pass it without asking. A file a repository
+    can supply cannot be what vouches for that repository.
+    """
+    import os
+    base = (os.environ.get("XDG_CACHE_HOME") or os.environ.get("LOCALAPPDATA")
+            or os.path.join(os.path.expanduser("~"), ".cache"))
+    return Path(base) / "heldfast" / "llm-verdicts.json"
 MAX_CHARS = 8000
 
 SYSTEM_PROMPT = """\
@@ -232,6 +248,7 @@ class Cache:
             "verdicts": self.data,
         }
         try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.path.with_suffix(self.path.suffix + ".tmp")
             tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n",
                            encoding="utf-8")

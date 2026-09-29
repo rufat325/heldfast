@@ -101,8 +101,9 @@ def _register_scan(sub: argparse._SubParsersAction) -> None:
     llm_group.add_argument("--llm-max-items", type=int, default=50, metavar="N",
                            help="maximum classifications per run (default: 50)")
     llm_group.add_argument("--llm-cache", metavar="PATH", default=None,
-                           help=f"verdict cache (default: ./{llm_mod.CACHE_NAME}; "
-                                "unchanged text is never re-sent)")
+                           help="verdict cache (default: heldfast/llm-verdicts.json in this "
+                                "user's cache directory, never the scanned tree; unchanged "
+                                "text is never re-sent)")
     llm_group.add_argument("--no-llm-cache", action="store_true",
                            help="do not read or write the verdict cache")
 

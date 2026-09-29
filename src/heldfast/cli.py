@@ -365,7 +365,7 @@ def _apply_llm(args: argparse.Namespace, ctx: AuditContext, data: Collected) -> 
         return None
     cache_path = None
     if not args.no_llm_cache:
-        cache_path = Path(args.llm_cache) if args.llm_cache else Path.cwd() / llm_mod.CACHE_NAME
+        cache_path = Path(args.llm_cache) if args.llm_cache else llm_mod.default_cache_path()
     print(
         f"heldfast: --llm will send up to {min(len(targets), args.llm_max_items)} "
         f"text(s) to the Anthropic API ({args.llm_model}).\n"

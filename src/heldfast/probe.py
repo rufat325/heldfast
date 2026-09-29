@@ -31,6 +31,7 @@ from . import __version__
 from .childenv import build as build_child_env
 from .childenv import explain as explain_withheld
 from .fetch import USER_AGENT
+from .fetch import deadline_for, read_bounded
 from .fetch import urlopen as fetch_url
 from .lifetime import bind_child, posix_preexec
 from .model import PromptSpec, ResourceSpec, ServerSpec, ToolSpec
@@ -403,7 +404,8 @@ SESSION_HEADER = "Mcp-Session-Id"
 
 
 def post_rpc(url: str, headers: dict[str, str], payload: dict[str, Any],
-             timeout: float) -> tuple[dict[str, Any], dict[str, str]]:
+             timeout: float, deadline: float | None = None
+             ) -> tuple[dict[str, Any], dict[str, str]]:
     """One JSON-RPC exchange over Streamable HTTP: (reply, response headers).
 
     Public because the gateway speaks to remote backends through it. Keeping
@@ -423,7 +425,10 @@ def post_rpc(url: str, headers: dict[str, str], payload: dict[str, Any],
     # Not urllib's default opener: that one follows a redirect with the
     # Authorization header still attached, and onto cleartext. See fetch.py.
     with fetch_url(req, timeout) as resp:  # noqa: S310 - user-supplied URL by design
-        raw = resp.read().decode("utf-8", errors="replace")
+        # Bounded in size and in total time: a hostile server could otherwise
+        # fill memory or hold the call open by trickling bytes (fetch.py).
+        raw = read_bounded(resp, deadline=deadline or deadline_for(timeout)).decode(
+            "utf-8", errors="replace")
         got = {k: v for k, v in resp.headers.items()}
     raw = raw.strip()
     if raw.startswith("event:") or raw.startswith("data:"):
@@ -438,8 +443,8 @@ def post_rpc(url: str, headers: dict[str, str], payload: dict[str, Any],
 
 
 def _post_jsonrpc(url: str, headers: dict[str, str], payload: dict[str, Any],
-                  timeout: float) -> dict[str, Any]:
-    return post_rpc(url, headers, payload, timeout)[0]
+                  timeout: float, deadline: float | None = None) -> dict[str, Any]:
+    return post_rpc(url, headers, payload, timeout, deadline)[0]
 
 
 # What a 2026-07-28 request carries over HTTP beside the `_meta` in its body.
@@ -450,8 +455,8 @@ class HandshakeFailed(Exception):
     """The server answered, and refused to open a conversation."""
 
 
-def http_handshake(url: str, headers: dict[str, str],
-                   timeout: float) -> tuple[dict[str, Any], dict[str, str], str]:
+def http_handshake(url: str, headers: dict[str, str], timeout: float,
+                   deadline: float | None = None) -> tuple[dict[str, Any], dict[str, str], str]:
     """Open a Streamable HTTP conversation in whichever era the server speaks.
 
     Returns (the handshake reply, the headers every later request needs,
@@ -467,7 +472,8 @@ def http_handshake(url: str, headers: dict[str, str],
     """
     try:
         found, _ = post_rpc(url, headers, {"jsonrpc": "2.0", "id": 0, "method": "server/discover",
-                                           "params": {"_meta": _modern_meta()}}, timeout)
+                                           "params": {"_meta": _modern_meta()}}, timeout,
+                            deadline)
     except urllib.error.HTTPError as exc:
         exc.close()
         found = {}
@@ -476,7 +482,7 @@ def http_handshake(url: str, headers: dict[str, str],
         onward[VERSION_HEADER] = PROTOCOL_VERSION
         return found, onward, "modern"
     init, got = post_rpc(url, headers, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                                        "params": _initialize_params()}, timeout)
+                                        "params": _initialize_params()}, timeout, deadline)
     if "error" in init:
         raise HandshakeFailed(f"initialize failed: {init['error']}")
     # Streamable HTTP hands out a session on initialize and requires it on

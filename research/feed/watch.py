@@ -136,6 +136,8 @@ MAX_INFLATED = 50 * 1024 * 1024
 MAX_TOTAL = 1024 * 1024 * 1024
 # A hosted catalogue bigger than this is not read. No real one comes close.
 MAX_REMOTE_BYTES = 4 * 1024 * 1024
+# Seconds one hosted server's whole reading may take: handshake and tools/list.
+REMOTE_DEADLINE = 60.0
 _NOT_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f" + chr(0xFFFE) + chr(0xFFFF) + "]")
 REMOTE_PREFIX = "remote/"
 
@@ -928,10 +930,15 @@ def measure_remote(url: str, timeout: float = 20.0,
     import urllib.error
     from heldfast.probe import (PROTOCOL_VERSION, HandshakeFailed, _post_jsonrpc,
                                 http_handshake, request_params)
+    import time
+    # One deadline for the whole reading, not one per request: thousands of
+    # servers are read from one shard, and a server trickling its answer a
+    # byte at a time held a worker until the job's own time limit.
+    deadline = time.monotonic() + REMOTE_DEADLINE
     try:
-        init, onward, era = http_handshake(url, {}, timeout)
+        init, onward, era = http_handshake(url, {}, timeout, deadline)
         listed = _post_jsonrpc(url, onward, {"jsonrpc": "2.0", "id": 2, "method": "tools/list",
-                                             "params": request_params(era)}, timeout)
+                                             "params": request_params(era)}, timeout, deadline)
     except HandshakeFailed:
         return None, "initialize failed"
     except urllib.error.HTTPError as exc:

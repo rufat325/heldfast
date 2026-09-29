@@ -83,6 +83,16 @@ class TestPaths(unittest.TestCase):
         self.assertEqual("/~/.ssh", normalize_path("~/.ssh"))
 
 
+class TestUnicodeFolding(unittest.TestCase):
+    def test_fullwidth_dots_do_not_climb_out(self) -> None:
+        # NFKC folds U+FF0E to ".": a server that normalizes its input reads
+        # this as /workspace/../etc/passwd.
+        from heldfast.policy import path_is_allowed
+        self.assertFalse(path_is_allowed("/workspace/．．/etc/passwd",
+                                         ["/workspace/**"]))
+        self.assertTrue(path_is_allowed("/workspace/café.txt", ["/workspace/**"]))
+
+
 class TestDomains(unittest.TestCase):
     def test_the_approved_host(self) -> None:
         self.assertTrue(check("fetch", {"url": "https://api.github.com/repos"}))
@@ -122,6 +132,27 @@ class TestSql(unittest.TestCase):
 
     def test_a_leading_comment_does_not_hide_the_verb(self) -> None:
         self.assertFalse(check("query", {"sql": "/* harmless */ DROP TABLE t"}))
+
+
+class TestSelectWithSideEffects(unittest.TestCase):
+    """SELECT-only reads as read-only; these functions are not that."""
+
+    def test_side_effecting_functions_are_refused(self) -> None:
+        from heldfast.policy import sql_is_allowed
+        for q in ("SELECT pg_read_file('/etc/passwd')", "SELECT lo_export(1, '/tmp/x')",
+                  "select dblink_exec('host=evil', 'DROP TABLE t')",
+                  "SELECT set_config('role', 'admin', false)", "SELECT nextval('s')",
+                  "SELECT pg_catalog.pg_read_file($$x$$)", "SELECT LOAD_FILE('/etc/passwd')",
+                  "WITH a AS (SELECT pg_terminate_backend(1)) SELECT * FROM a"):
+            with self.subTest(q=q):
+                self.assertFalse(sql_is_allowed(q, ["SELECT", "WITH"])[0])
+
+    def test_names_in_data_and_columns_are_not_calls(self) -> None:
+        from heldfast.policy import sql_is_allowed
+        for q in ("SELECT * FROM notes WHERE body = 'pg_read_file(x)'",
+                  "SELECT sleep_minutes, editor FROM t", "SELECT count(*) FROM t"):
+            with self.subTest(q=q):
+                self.assertTrue(sql_is_allowed(q, ["SELECT"])[0])
 
 
 class TestScope(unittest.TestCase):

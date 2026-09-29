@@ -27,7 +27,7 @@ from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request
 
-from .fetch import USER_AGENT, urlopen
+from .fetch import USER_AGENT, deadline_for, read_bounded, urlopen
 from .rules.execution import _FLOATING, extract_package, split_package
 
 TIMEOUT = 8.0
@@ -54,7 +54,10 @@ def get_json(url: str) -> dict[str, Any] | None:
     try:
         req = Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
         with urlopen(req, timeout=TIMEOUT) as resp:
-            raw = resp.read()
+            # Registry metadata for a busy package runs to tens of megabytes;
+            # the bound is for a registry, or something posing as one, that
+            # never stops.
+            raw = read_bounded(resp, 256 * 1024 * 1024, deadline_for(TIMEOUT))
         data = json.loads(raw.decode("utf-8"))
         return data if isinstance(data, dict) else None
     except (OSError, URLError, ValueError, TimeoutError):

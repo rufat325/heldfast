@@ -183,7 +183,21 @@ def path_is_allowed(value: str, patterns: list[str]) -> bool:
     stricter, only broken, and over-blocking is what gets a tool switched off.
     POSIX paths stay case-sensitive, because there /Workspace really is a
     different directory.
+
+    A path must pass as written and after Unicode NFKC folding. On disk
+    `/workspace/\uff0e\uff0e/etc` names a folder called two fullwidth dots, but
+    a server that normalizes its input -- NFKC is common in Python text
+    handling -- reads it as `/workspace/../etc`. The check does not know which
+    kind of server it guards, so it takes the stricter reading.
     """
+    import unicodedata
+    folded = unicodedata.normalize("NFKC", value)
+    if folded != value and not _path_inside(folded, patterns):
+        return False
+    return _path_inside(value, patterns)
+
+
+def _path_inside(value: str, patterns: list[str]) -> bool:
     candidate = normalize_path(value)
     for pattern in patterns:
         normalized = normalize_path(pattern) if "*" not in pattern else \
@@ -234,6 +248,25 @@ _MYSQL_EXEC_COMMENT = re.compile(r"/\*!\d*\s?(.*?)\*/", re.DOTALL)
 # A SELECT that writes a file. The operation allowlist sees SELECT and is
 # satisfied; the engine writes to disk as the server's user.
 _SELECT_WRITES = re.compile(r"\binto\s+(?:out|dump)file\b", re.IGNORECASE)
+# Functions a SELECT can call that read or write the server's files, reach
+# another database or the network, change settings or sequences, or end other
+# sessions. "Permitted: SELECT" reads as "read-only" to whoever wrote it, and
+# `SELECT pg_read_file('/etc/passwd')` or `SELECT lo_export(...)` is not that.
+# Heuristic by nature -- the database's own grants remain the real boundary --
+# but it refuses the well-known ones by name, in PostgreSQL, MySQL, SQLite
+# and SQL Server spellings.
+_SELECT_SIDE_EFFECTS = re.compile(
+    r"\b(?:pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_file|pg_ls_logdir|"
+    r"pg_ls_waldir|pg_ls_tmpdir|pg_ls_archive_statusdir|lo_import|lo_export|lo_unlink|"
+    r"lo_put|lo_from_bytea|dblink|dblink_exec|dblink_connect|dblink_send_query|"
+    r"pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|"
+    r"set_config|nextval|setval|pg_advisory_lock|pg_sleep|pg_file_write|"
+    r"pg_file_rename|pg_file_unlink|pg_logdir_ls|query_to_xml|xpath|"
+    r"load_file|sys_exec|sys_eval|benchmark|sleep|get_lock|"
+    r"load_extension|readfile|writefile|edit|fts3_tokenizer|"
+    r"xp_cmdshell|xp_dirtree|xp_fileexist|openrowset|opendatasource|openquery|"
+    r"utl_http|utl_file|dbms_pipe|dbms_lock)\s*\(",
+    re.IGNORECASE)
 
 
 def unmask_sql(value: str) -> str:
@@ -318,6 +351,15 @@ def sql_is_allowed(value: str, operations: list[str]) -> tuple[bool, str]:
             for escapes in _DIALECTS):
         return False, ("SELECT ... INTO OUTFILE writes a file; permitting SELECT "
                        "permits reading, not writing")
+    if keyword in ("select", "with"):
+        for escapes in _DIALECTS:
+            found = _SELECT_SIDE_EFFECTS.search(
+                _without_literals(value, backslash_escapes=escapes))
+            if found:
+                name = found.group(0).rstrip("( \t\r\n").lower()
+                return False, (f"{name}() reads or writes outside the query's tables, "
+                               "or changes server state; permitting SELECT permits "
+                               "reading tables")
     return True, ""
 
 

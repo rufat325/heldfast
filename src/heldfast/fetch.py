@@ -33,6 +33,7 @@ party, and stops a redirect quietly undoing a guarantee made at startup.
 
 from __future__ import annotations
 
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -151,3 +152,40 @@ _OPENER = build_opener()
 def urlopen(req: Any, timeout: float) -> Any:
     """`urlopen`, through the opener above. Same call, different redirects."""
     return _OPENER.open(req, timeout=timeout)
+
+
+# What one reply may be. A socket timeout bounds each read, not the reply: a
+# server sending a byte every few seconds never trips it, and one sending
+# gigabytes is read into memory whole. Either takes down whatever asked -- a
+# user's probe or gateway, or a shard of the feed reading thousands of
+# servers it does not control.
+MAX_RESPONSE = 64 * 1024 * 1024
+MIN_DEADLINE = 300.0
+
+
+def deadline_for(timeout: float) -> float:
+    """A whole reply's time limit, for a per-read `timeout`: six of them, and
+    never less than five minutes, so a long tool call still fits."""
+    return time.monotonic() + max(timeout * 6, MIN_DEADLINE)
+
+
+def read_bounded(resp: Any, limit: int = MAX_RESPONSE, deadline: float | None = None) -> bytes:
+    """The body, refused past `limit` bytes or past `deadline` (monotonic).
+
+    read1 returns what has arrived rather than waiting to fill a buffer, so
+    the deadline is checked between small reads and a slow drip cannot keep
+    one read open for its whole length.
+    """
+    read = getattr(resp, "read1", None) or resp.read
+    chunks: list[bytes] = []
+    size = 0
+    while True:
+        if deadline is not None and time.monotonic() > deadline:
+            raise TimeoutError("the reply did not finish in time")
+        chunk = read(min(65536, limit + 1 - size))
+        if not chunk:
+            return b"".join(chunks)
+        size += len(chunk)
+        if size > limit:
+            raise ValueError(f"the reply is larger than {limit} bytes")
+        chunks.append(chunk)
