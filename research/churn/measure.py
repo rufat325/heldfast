@@ -96,6 +96,10 @@ def child_env(workdir, required):
         "npm_config_audit": "false",
         "NO_COLOR": "1",
     }
+    # Set by watch.py measure-one, where the package was fetched beforehand
+    # and the container has no network: npm should fail at once, not wait.
+    if os.environ.get("npm_config_offline"):
+        env["npm_config_offline"] = os.environ["npm_config_offline"]
     for key in ("SystemRoot", "SYSTEMROOT", "APPDATA", "LOCALAPPDATA", "ComSpec"):
         if key in os.environ:
             env[key] = os.environ[key]
@@ -126,8 +130,41 @@ def stop(p):
             pass
 
 
-def catalogue(package, version, argv_tail, required, boot_timeout=240, seen=None):
+def installed_bin(prefix, package, name=None):
+    """The executable npx would pick from a package installed under prefix.
+
+    npx runs the only bin a package has, or the one named after the package
+    (without its scope), or the one `-p <package> <bin>` names.
+    """
+    base = os.path.join(prefix, "node_modules", *package.split("/"))
+    try:
+        with open(os.path.join(base, "package.json"), encoding="utf-8") as fh:
+            bins = json.load(fh).get("bin")
+    except (OSError, ValueError):
+        return None
+    short = package.rsplit("/", 1)[-1]
+    if isinstance(bins, str):
+        bins = {short: bins}
+    if not isinstance(bins, dict) or not bins:
+        return None
+    if name is None:
+        name = next(iter(bins)) if len(bins) == 1 else short
+    if name not in bins:
+        return None
+    path = os.path.join(prefix, "node_modules", ".bin", name)
+    if not POSIX and os.path.exists(path + ".cmd"):
+        path += ".cmd"  # npm's launcher on Windows, where the tests run too
+    return path if os.path.exists(path) else None
+
+
+def catalogue(package, version, argv_tail, required, boot_timeout=240, seen=None,
+              prefix=None):
     """(tools, why). tools is None when the catalogue could not be read.
+
+    With `prefix`, the package is already installed there, fetched with its
+    install scripts off: those run now, through `npm rebuild`, and the
+    server starts from that install. Nothing needs the network, which is the
+    point -- watch.py runs this step in a container that has none.
 
     Speaks both protocol eras the way `--probe` does: `server/discover` and
     `initialize` are sent together and whichever is answered decides. A
@@ -146,7 +183,26 @@ def catalogue(package, version, argv_tail, required, boot_timeout=240, seen=None
     tail = list(argv_tail)
     while tail[:1] == ["-y"]:
         tail = tail[1:]
-    if tail[:2] == ["-p", package]:
+    rebuilt = ""
+    if prefix is not None:
+        npm = shutil.which("npm") or shutil.which("npm.cmd")
+        named = tail[2] if tail[:2] == ["-p", package] and len(tail) > 2 else None
+        args = tail[3:] if named else tail
+        if npm:
+            try:
+                done = subprocess.run([npm, "rebuild", "--prefix", prefix], cwd=workdir,
+                                      env=child_env(workdir, required), capture_output=True,
+                                      timeout=boot_timeout)
+                if done.returncode:
+                    rebuilt = f" (install scripts exited {done.returncode} offline)"
+            except (OSError, subprocess.TimeoutExpired):
+                rebuilt = " (install scripts did not finish offline)"
+        path = installed_bin(prefix, package, named)
+        if path is None:
+            shutil.rmtree(workdir, ignore_errors=True)
+            return None, "no executable to run in the package" + rebuilt
+        argv = [path, *args]
+    elif tail[:2] == ["-p", package]:
         argv = [npx, "-y", "-p", f"{package}@{version}", *tail[2:]]
     else:
         argv = [npx, "-y", f"{package}@{version}", *tail]
@@ -239,8 +295,8 @@ def catalogue(package, version, argv_tail, required, boot_timeout=240, seen=None
     if "init" in got:
         return None, "initialized, no tools/list answer"
     if exited is not None:
-        return None, f"exited {exited} before initialize: {tail}"
-    return None, f"no initialize answer in {boot_timeout}s: {tail}"
+        return None, f"exited {exited} before initialize{rebuilt}: {tail}"
+    return None, f"no initialize answer in {boot_timeout}s{rebuilt}: {tail}"
 
 
 def shape(tool):

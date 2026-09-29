@@ -65,6 +65,9 @@ DATASET = "rufat325/heldfast-feed"
 MIRROR = f"https://huggingface.co/datasets/{DATASET}/resolve/main"
 NPM_SHARDS, REMOTE_SHARDS = 16, 4
 IMAGE = "heldfast-feed"
+# The docker runtime the npm servers run under. gVisor's runsc gives each its
+# own kernel; install it (see research/feed/server/MOVING.md) and set this.
+RUNTIME = os.environ.get("HELDFAST_FEED_RUNTIME", "")
 
 
 def log(message: str) -> None:
@@ -120,17 +123,22 @@ def shard(feed: str, work: str, deltas: str, kind: str, index: int, of: int, ima
     run(["git", "clone", "-q", "--shared", "--separate-git-dir", gitdir, feed, copy])
     os.remove(os.path.join(copy, ".git"))
     label = f"{kind}-{index}"
+    log(f"shard {label}: measuring")
     if kind == "npm":
-        args = ["check", "--data", "/data", "--jobs", str(jobs), "--budget", str(budget),
-                "--shard", f"{index}/{of}", "--label", f"npm-{index}", "--day", day]
-        memory, pids = "6g", 2048
+        # As feed.yml does: this process decides and writes, and each server
+        # runs in two containers of its own that never see the feed -- one to
+        # download with scripts off, one to run with no network.
+        argv = [sys.executable, WATCH, "check-isolated", "--data", copy, "--image", image,
+                "--jobs", str(jobs), "--budget", str(budget), "--shard", f"{index}/{of}",
+                "--label", label, "--day", day]
+        if RUNTIME:
+            argv += ["--runtime", RUNTIME]
+        result = subprocess.run(argv)
     else:
         args = ["check-remote", "--data", "/data", "--jobs", "8", "--shard", f"{index}/{of}",
                 "--label", f"remote-{index}", "--day", day] + (["--busy"] if busy else [])
-        memory, pids = "2g", 512
-    log(f"shard {label}: measuring")
-    result = subprocess.run(container(image, copy, args, memory, pids))
-    if result.returncode in (125, 126, 127):
+        result = subprocess.run(container(image, copy, args, "2g", 512))
+    if kind != "npm" and result.returncode in (125, 126, 127):
         # Docker could not run the container at all (no image, no daemon, no
         # permission): nothing was measured, and saying "0 files changed"
         # would publish a day with nothing in it as if it were quiet.

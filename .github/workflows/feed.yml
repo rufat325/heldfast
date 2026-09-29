@@ -158,23 +158,62 @@ jobs:
           ref: main
           path: feed-data
           persist-credentials: false
+      # gVisor gives each container a kernel of its own, so an exploit of the
+      # host's kernel from a server under test does not reach the runner.
+      # Pinned by SHA-512, like every action here by commit. If it cannot be
+      # installed or cannot start a container, the run goes on under Docker's
+      # own runtime and says so: every other wall below still stands.
+      - name: Install gVisor
+        id: gvisor
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/gvisor.tar.bz2" \
+            https://storage.googleapis.com/gvisor/releases/release/20260921.0/x86_64/gvisor.tar.bz2
+          echo "7c899979bed334f0987888c41e545cede8e1f7e67a257978c8de244c3867e32bc30d08491e9af36720273c502acd01d8d86c9844ebcbe125790c43fe6bdf563e  $RUNNER_TEMP/gvisor.tar.bz2" \
+            | sha512sum -c -
+          sudo mkdir -p /opt/gvisor
+          sudo tar -xjf "$RUNNER_TEMP/gvisor.tar.bz2" -C /opt/gvisor
+          sudo /opt/gvisor/runsc install
+          sudo systemctl restart docker
       - name: Build the isolate
         run: docker build -f research/feed/Dockerfile -t heldfast-feed .
+      - name: Choose the runtime
+        id: runtime
+        env:
+          INSTALLED: ${{ steps.gvisor.outcome }}
+        run: |
+          if [ "$INSTALLED" = "success" ] \
+              && docker run --rm --runtime runsc --network none --entrypoint true heldfast-feed; then
+            echo "runtime=runsc" >> "$GITHUB_OUTPUT"
+            echo "servers run under gVisor"
+          else
+            echo "::warning::gVisor is not available: the servers run under Docker's own runtime, each still in its own containers and without network"
+            echo "runtime=" >> "$GITHUB_OUTPUT"
+          fi
       # Two servers at a time, at most 120 launches per shard per day. Six in
       # parallel took down the workstation the churn study first ran on; the
       # budget keeps a day with many new releases inside the job's time limit.
-      # The servers get the feed's files, not its .git. Code that could write
-      # .git/config could make the host's git run a command of its choosing
-      # (core.fsmonitor runs even for ls-files) in the next step, outside the
-      # container -- and from the runner, upload under another shard's name.
+      #
+      # watch.py check-isolated runs here, on the runner, from main: it decides
+      # what to measure and writes feed-data. Each server gets two containers
+      # of its own that see only a scratch folder -- one downloads it with
+      # install scripts off, one runs it with no network -- and hands back a
+      # JSON answer. No server's code sees the feed, another server, or the
+      # network. Memory and processes are per server now, half of what one
+      # container shared between two.
+      #
+      # .git is still moved out of feed-data: nothing should have to trust a
+      # repository the collect step reads.
       - name: Measure today's due npm servers
+        env:
+          RUNTIME: ${{ steps.runtime.outputs.runtime }}
         run: |
           set -euo pipefail
           mv feed-data/.git feed-git
-          docker run --rm --cap-drop ALL --security-opt no-new-privileges \
-            --memory 6g --cpus 2 --pids-limit 2048 --user "$(id -u):$(id -g)" \
-            -v "$PWD/feed-data:/data" heldfast-feed \
-            check --data /data --jobs 2 --budget 120 \
+          python3 research/feed/watch.py check-isolated --data feed-data \
+            --image heldfast-feed --runtime "$RUNTIME" --memory 3g --pids 1024 \
+            --jobs 2 --budget 120 \
             --shard "${{ matrix.shard }}/16" --label "npm-${{ matrix.shard }}"
       # Also after a failed measuring step: what was measured before it failed
       # is still worth publishing, and the publish job verifies it either way.

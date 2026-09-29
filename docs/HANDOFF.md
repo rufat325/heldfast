@@ -54,6 +54,14 @@ Read this file and `docs/GUARANTEES.md` instead.
   (`core.fsmonitor` runs even for `ls-files`) outside the container. The
   changes are listed with `--git-dir` pointing outside the mount, and only
   regular files are copied into the upload.
+- npm servers are measured by `watch.py check-isolated`, on the runner: per
+  server, a `fetch-one` container downloads it with install scripts off, and
+  a `measure-one` container runs it with `--network none` under gVisor
+  (`runsc`, pinned by SHA-512 in `feed.yml`), returning only a JSON answer the
+  host reads as data. No server's code sees the feed, another server or the
+  network. A package whose install needs the network -- a postinstall that
+  downloads a binary -- now fails to start and says so in its state file. If
+  gVisor cannot start a container, the run warns and uses Docker's runtime.
 - `pkgcache.py` is on the launch path and is in the `mypy --strict` job for
   that reason. It opens no socket; if it ever needs to, that is a design
   change, not an implementation detail.

@@ -44,7 +44,11 @@ class TestTheIsolate(unittest.TestCase):
     def test_the_flags_match_the_workflow(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "feed.yml").read_text(encoding="utf-8")
         self.assertIn("--cap-drop ALL --security-opt no-new-privileges", workflow)
-        self.assertRegex(workflow, r"--memory 6g --cpus 2 --pids-limit 2048")
+        # npm servers: watch.py check-isolated, per server, half of what one
+        # shard's container used to share between two (tests/test_isolation.py
+        # pins the docker flags it passes).
+        self.assertIn("watch.py check-isolated", workflow)
+        self.assertIn("--memory 3g --pids 1024", workflow)
         self.assertRegex(workflow, r"--memory 2g --cpus 2 --pids-limit 512")
 
 
@@ -67,8 +71,13 @@ class TestAShardsUpload(unittest.TestCase):
 
             def fake_container(result_copy):
                 def runner(argv, *a, **kw):
-                    if argv and argv[0] == "docker":
-                        data = argv[argv.index("-v") + 1].rsplit(":/data", 1)[0]
+                    # npm shards run watch.py check-isolated on the host, which
+                    # writes the copy itself; stand in for it the same way.
+                    if argv and (argv[0] == "docker" or "check-isolated" in argv):
+                        data = (argv[argv.index("--data") + 1] if "check-isolated" in argv
+                                else argv[argv.index("-v") + 1].rsplit(":/data", 1)[0])
+                        if "check-isolated" in argv:
+                            self.assertIn("--image", argv)
                         Path(data, "state", "a.json").write_text('{"v": 2}\n', encoding="utf-8")
                         Path(data, "incoming").mkdir()
                         Path(data, "incoming", "npm-0.jsonl").write_text("{}\n", encoding="utf-8")

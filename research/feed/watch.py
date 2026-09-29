@@ -630,8 +630,14 @@ def _handshake_retry(attempted: dict) -> bool:
             and str(attempted.get("why") or "").startswith(_HANDSHAKE_FAILURES))
 
 
-def check_one(data: str, row: dict, budget: Budget | None = None) -> dict | None:
-    """Measure the newest stable release if it is new. Returns an event or None."""
+def check_one(data: str, row: dict, budget: Budget | None = None,
+              catalogue=None) -> dict | None:
+    """Measure the newest stable release if it is new. Returns an event or None.
+
+    `catalogue` reads the tools; by default here, in this process.
+    check-isolated passes one that runs the server in its own containers, so
+    this function -- which decides what to measure and writes the feed --
+    stays on the host, and no server's code ever sees the feed."""
     import measure
     package = row["package"]
     state = load_state(data, package) or {"package": package, "tools": {}}
@@ -657,8 +663,8 @@ def check_one(data: str, row: dict, budget: Budget | None = None) -> dict | None
         import tempfile
         tail = [tempfile.gettempdir()]
     seen: dict = {}
-    tools, why = measure.catalogue(package, version, tail, row.get("required_env") or [],
-                                   seen=seen)
+    tools, why = (catalogue or measure.catalogue)(package, version, tail,
+                                                  row.get("required_env") or [], seen=seen)
     if tools is None:
         state["attempted"] = {"version": version, "at": now(), "why": why,
                               "handshake": HANDSHAKE}
@@ -750,6 +756,149 @@ def check(args: argparse.Namespace) -> int:
                   if e]
     write_incoming(args.data, args.label, events)
     print(f"checked {len(rows)} npm server(s); {len(events)} new event(s)")
+    return 0
+
+
+# -- check-isolated (npm) ----------------------------------------------------
+#
+# `check` runs every due server of a shard in one container holding the whole
+# feed checkout, so servers measured side by side could rewrite each other's
+# records, and each ran with the network on. check-isolated keeps the feed on
+# the host and gives each server two throwaway containers of its own, which
+# see only a scratch folder:
+#
+#   fetch-one    network on: `npm install --ignore-scripts`. The package and
+#                its dependencies are downloaded; none of their code runs.
+#   measure-one  --network none: the install scripts run (`npm rebuild`) and
+#                the server is started and asked for its tools. It can write
+#                nothing but its own answer, and send nothing anywhere.
+#
+# The host reads that answer as data -- a regular file, bounded, JSON of a
+# fixed shape -- and this module, from main, writes the feed as before. A
+# package whose install needs the network (a postinstall that downloads a
+# binary) now fails to start, and says so in its state file.
+
+MAX_RESULT = 32 * 1024 * 1024
+CONTAINER_TIMEOUT = 900
+
+
+def _spec(work: str) -> dict:
+    with open(os.path.join(work, "spec.json"), encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def fetch_one(args: argparse.Namespace) -> int:
+    """In the container, with network: download without running anything."""
+    import subprocess
+    import measure
+    spec = _spec(args.work)
+    os.environ["npm_config_cache"] = os.path.join(args.work, "cache")
+    home = os.path.join(args.work, "home")
+    os.makedirs(home, exist_ok=True)
+    env = measure.child_env(home, [])
+    npm = shutil.which("npm") or shutil.which("npm.cmd") or "npm"
+    done = subprocess.run([npm, "install", "--ignore-scripts", "--no-save",
+                           "--prefix", os.path.join(args.work, "pkg"),
+                           f"{spec['package']}@{spec['version']}"], env=env)
+    return done.returncode
+
+
+def measure_one(args: argparse.Namespace) -> int:
+    """In the container, without network: run the install, ask for tools."""
+    import measure
+    spec = _spec(args.work)
+    os.environ["npm_config_cache"] = os.path.join(args.work, "cache")
+    os.environ["npm_config_offline"] = "true"
+    seen: dict = {}
+    tools, why = measure.catalogue(spec["package"], spec["version"], spec.get("tail") or [],
+                                   spec.get("required") or [], seen=seen,
+                                   prefix=os.path.join(args.work, "pkg"))
+    _write(os.path.join(args.work, "result.json"), json.dumps(
+        {"tools": tools, "why": why, "protocol": seen.get("protocol")}).encode("utf-8"))
+    return 0
+
+
+def _read_result(path: str) -> dict | None:
+    """The container's answer, taken only as a bounded regular file of JSON.
+
+    The folder was the server's to write, so the name could be a link to a
+    file of this machine's; lstat and O_NOFOLLOW refuse to follow one."""
+    import stat
+    try:
+        info = os.lstat(path)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_RESULT:
+            return None
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, "rb") as fh:
+            body = json.loads(fh.read(MAX_RESULT + 1).decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(body, dict):
+        return None
+    tools, why, protocol = body.get("tools"), body.get("why"), body.get("protocol")
+    if not (tools is None or isinstance(tools, list)) \
+            or not (why is None or isinstance(why, str)) \
+            or not (protocol is None or isinstance(protocol, str)):
+        return None
+    if tools is None and why is None:
+        return None
+    return {"tools": tools, "why": why, "protocol": protocol}
+
+
+def in_containers(image: str, runtime: str = "", memory: str = "6g", pids: int = 2048):
+    """A measure.catalogue that runs the server in its own two containers."""
+    import subprocess
+    import tempfile
+    import uuid
+
+    def docker(work: str, tail: list) -> int:
+        name = f"heldfast-{uuid.uuid4().hex[:12]}"
+        argv = ["docker", "run", "--rm", "--name", name, "--cap-drop", "ALL",
+                "--security-opt", "no-new-privileges", "--memory", memory, "--cpus", "2",
+                "--pids-limit", str(pids)]
+        if runtime:
+            argv += ["--runtime", runtime]
+        if hasattr(os, "getuid"):
+            argv += ["--user", f"{os.getuid()}:{os.getgid()}"]
+        argv += ["-v", f"{os.path.abspath(work)}:/work", *tail]
+        try:
+            return subprocess.run(argv, timeout=CONTAINER_TIMEOUT).returncode
+        except subprocess.TimeoutExpired:
+            subprocess.run(["docker", "kill", name], capture_output=True)
+            return -1
+
+    def catalogue(package, version, tail, required, seen=None):
+        work = tempfile.mkdtemp(prefix="heldfast-one-")
+        try:
+            with open(os.path.join(work, "spec.json"), "w", encoding="utf-8") as fh:
+                json.dump({"package": package, "version": version, "tail": list(tail),
+                           "required": list(required)}, fh)
+            fetched = docker(work, [image, "fetch-one", "--work", "/work"])
+            if fetched:
+                return None, f"download failed (exit {fetched})"
+            ran = docker(work, ["--network", "none", image, "measure-one", "--work", "/work"])
+            result = _read_result(os.path.join(work, "result.json"))
+            if result is None:
+                return None, f"no answer from the measuring container (exit {ran})"
+            if seen is not None and result["protocol"]:
+                seen["protocol"] = result["protocol"]
+            return result["tools"], result["why"]
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+    return catalogue
+
+
+def check_isolated(args: argparse.Namespace) -> int:
+    rows = _selected(args, "npm")
+    budget = Budget(args.budget)
+    measure_in = in_containers(args.image, args.runtime, args.memory, args.pids)
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        events = [e for e in pool.map(
+            lambda r: isolated(check_one, args.data, r, budget, measure_in), rows) if e]
+    write_incoming(args.data, args.label, events)
+    print(f"checked {len(rows)} npm server(s), each in its own containers; "
+          f"{len(events)} new event(s)")
     return 0
 
 
@@ -1335,8 +1484,8 @@ def admit(args: argparse.Namespace) -> int:
     history, or the watchlist itself. Ownership is recomputed here from the
     feed repository's own watchlist -- not from anything a shard uploaded -- and an
     upload with one file outside it is refused whole: that shard's day is lost,
-    not the feed. Servers measured side by side in one shard can still write
-    each other's records; the isolate is per shard, not per server.
+    not the feed. Within an npm shard, check-isolated already keeps each
+    server's code away from the feed, so this is the second wall there.
     """
     rows = load_watchlist(args.data)
     today = date.fromisoformat(args.day) if args.day else datetime.now(timezone.utc).date()
@@ -1637,7 +1786,7 @@ def main() -> int:
     s = sub.add_parser("seed")
     s.add_argument("--data", required=True)
     s.add_argument("--results", default=os.path.join(ROOT, "research", "churn", "results"))
-    for name in ("check", "check-remote"):
+    for name in ("check", "check-remote", "check-isolated"):
         c = sub.add_parser(name)
         c.add_argument("--data", required=True)
         c.add_argument("--jobs", type=int, default=2)
@@ -1650,6 +1799,13 @@ def main() -> int:
         if name == "check-remote":
             c.add_argument("--busy", action="store_true",
                            help="only the hosted servers that changed recently")
+        if name == "check-isolated":
+            c.add_argument("--image", required=True, help="the image built from Dockerfile")
+            c.add_argument("--runtime", default="", help="docker runtime, e.g. runsc")
+            c.add_argument("--memory", default="6g")
+            c.add_argument("--pids", type=int, default=2048)
+    for name in ("fetch-one", "measure-one"):
+        sub.add_parser(name).add_argument("--work", required=True)
     for name in ("sync", "fold", "render"):
         sub.add_parser(name).add_argument("--data", required=True)
     v = sub.add_parser("verify")
@@ -1679,6 +1835,8 @@ def main() -> int:
     n.add_argument("--checkpoint-sha256", required=True)
     args = ap.parse_args()
     return {"seed": seed, "sync": sync, "check": check, "check-remote": check_remote,
+            "check-isolated": check_isolated, "fetch-one": fetch_one,
+            "measure-one": measure_one,
             "fold": fold, "render": render, "verify": verify,
             "admit": admit, "checkpoint": checkpoint,
             "admit-anchor": admit_anchor}[args.command](args)

@@ -6,7 +6,12 @@
 #     --memory 6g --cpus 2 --pids-limit 2048 --user "$(id -u):$(id -g)" \
 #     -v "$PWD/feed-data:/data" heldfast-feed check --data /data --jobs 2
 #
-# The only host path it can write is the feed data. Nothing from the host
+# For npm servers, watch.py check-isolated runs on the host and starts this
+# image twice per server, with only that server's scratch folder mounted:
+# `fetch-one` (network, install scripts off) and `measure-one` (--network
+# none). `check-remote` still runs as below, with the feed data mounted.
+#
+# The only host path it can write is what is mounted. Nothing from the host
 # environment is passed in, and measure.py strips the environment again
 # before each child starts. It runs as whatever uid owns the mount, so every
 # path it writes to at runtime is under /tmp or /data.
