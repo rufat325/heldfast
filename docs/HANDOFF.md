@@ -331,9 +331,13 @@ Read this file and `docs/GUARANTEES.md` instead.
       `ci` refuses `--probe` and keeps `--fail-on high`. `check` verifies
       the lockfile and launches nothing.
     - `js/heldfast-check` is a zero-dep verifier of `.mcp-pin.lock` (T-DIGEST).
-      `js/heldfast-wrap` would be `npx @rufat325/heldfast`, which execs the
-      Python wheel and does not download one. Neither is published to
-      npm; the docs say `node js/.../bin.js` because that is what works.
+      `js/heldfast-wrap` is `npx @rufat325/heldfast`, and `js/heldfast-npm`
+      the same launcher as `npx heldfast`: both exec the Python wheel and
+      download none. All three are on npm, owned by rufat325 (0.2.2 was
+      published by hand on 2026-09-29 to claim the names). From then on the
+      `npm` job in release.yml publishes them on a `v*` tag through trusted
+      publishing, with provenance and no token; each package needs its
+      trusted publisher set on npmjs.com (see the header of release.yml).
     - Claude Code plugin: SessionStart audit, PreToolUse deny on miss/drift.
       No hash rewrite, no pin file in `~/.claude`, no Sonnet judge.
     - Lock spec + twelve golden tool objects. Pre-commit hooks. Badge.

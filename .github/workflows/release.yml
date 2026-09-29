@@ -8,6 +8,17 @@
 #   pypi.org -> Publishing -> add a pending publisher
 #   project: heldfast   owner: rufat325   repository: heldfast
 #   workflow: release.yml   environment: pypi
+#
+# The npm packages -- heldfast, heldfast-check, @rufat325/heldfast -- go out
+# the same way: npm trusted publishing checks this workflow's OIDC identity,
+# so no npm token exists, and each release carries a provenance statement
+# tying it to the commit that built it. One-time setup on npmjs.com, for each
+# of the three packages:
+#   package -> Settings -> Trusted Publisher -> GitHub Actions
+#   owner: rufat325   repository: heldfast   workflow: release.yml
+#   environment: npm
+# then, on the same page, "Require two-factor authentication and disallow
+# tokens", so the workflow is the only way a version can be published.
 name: release
 
 on:
@@ -89,6 +100,59 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  # The three npm packages, from the tagged commit. `needs: build` means the
+  # tag has already been checked against pyproject.toml; this checks it
+  # against every package.json too, and publishes only what npm does not
+  # already hold, so a re-run after a partial failure finishes the job
+  # instead of failing on the ones that went out.
+  npm:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write  # mint the OIDC token npm trusted publishing checks
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          # Nothing to install, and a shared cache is a way into a release.
+          package-manager-cache: false
+      - name: Check the tag, the packages and the launchers agree
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Trusted publishing needs npm 11.5.1 or later.
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number);
+            if (a<11||(a===11&&(b<5||(b===5&&c<1)))) { console.error("npm "+process.argv[1]+" is too old for trusted publishing"); process.exit(1) }' "$(npm --version)"
+          for dir in js/heldfast-check js/heldfast-wrap js/heldfast-npm; do
+            version=$(node -p "require('./$dir/package.json').version")
+            if [ "$TAG" != "v$version" ]; then
+              echo "tag $TAG does not match $dir/package.json version $version" >&2
+              exit 1
+            fi
+          done
+          cmp js/heldfast-wrap/bin.js js/heldfast-npm/bin.js
+          (cd js/heldfast-check && npm test)
+      - name: Publish what npm does not hold yet
+        run: |
+          set -euo pipefail
+          for dir in js/heldfast-check js/heldfast-wrap js/heldfast-npm; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already on npm"
+              continue
+            fi
+            (cd "$dir" && npm publish --access public --provenance)
+            echo "published $name@$version"
+          done
 
   github-release:
     needs: build
