@@ -10,6 +10,7 @@ from pathlib import Path
 from . import __version__
 from .discovery import discover_config_files
 from .findings import Finding, Severity
+from .fsutil import atomic_write
 from .lockfile import Lock, resolve_lock_path
 from .model import ServerSpec, SkillSpec, ToolSpec, observed_for
 from .parsers import discover_skills, parse_config
@@ -413,7 +414,9 @@ def _emit_report(args: argparse.Namespace, report: str, findings: list[Finding])
         sys.stdout.write(report)
         return None
     try:
-        Path(args.output).write_text(report, encoding="utf-8")
+        # A report lands in a checkout a pull request wrote; a link planted at
+        # its name is replaced, not written through (fsutil).
+        atomic_write(Path(args.output), report.encode("utf-8"))
     except OSError as exc:
         print(f"heldfast: cannot write {args.output}: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -889,7 +892,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 
     if args.output:
         try:
-            Path(args.output).write_text(text, encoding="utf-8")
+            atomic_write(Path(args.output), text.encode("utf-8"))
         except OSError as exc:
             print(f"heldfast: cannot write {args.output}: {exc}", file=sys.stderr)
             return EXIT_ERROR
@@ -1207,7 +1210,7 @@ def cmd_rules(args: argparse.Namespace) -> int:
         if target:
             # Explicit encoding: a shell redirect on Windows picks up the
             # console codepage and silently mangles any non-ASCII byte.
-            Path(target).write_text(markdown, encoding="utf-8")
+            atomic_write(Path(target), markdown.encode("utf-8"))
             return EXIT_OK
         sys.stdout.write(markdown)
         return EXIT_OK
