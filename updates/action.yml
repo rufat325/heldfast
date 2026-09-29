@@ -109,11 +109,22 @@ runs:
         print(f"malware={sum(bool(s.get('alarm')) for s in servers)}")
         print(f"attention={sum(s['grade'] in ('review', 'blocked') or bool(s.get('alarm')) for s in servers)}")
         PY
+        # The report quotes what servers and the feed say, and it goes into a
+        # pull request, an issue and the summary inside a code fence. A fixed
+        # ``` let a server's text close the fence and write its own Markdown
+        # -- a link, a mention -- into the reader's repository. The fence is
+        # one backtick longer than the longest run in the text, so nothing
+        # inside can end it.
+        python - "$RUNNER_TEMP/updates.txt" > "$RUNNER_TEMP/updates.md" <<'PY'
+        import re, sys
+        text = open(sys.argv[1], encoding="utf-8").read()
+        run = max((len(m) for m in re.findall(r"`+", text)), default=0)
+        fence = "`" * max(3, run + 1)
+        sys.stdout.write(fence + "\n" + text + ("" if text.endswith("\n") else "\n") + fence + "\n")
+        PY
         {
           echo '## heldfast updates'
-          echo '```'
-          cat "$RUNNER_TEMP/updates.txt"
-          echo '```'
+          cat "$RUNNER_TEMP/updates.md"
         } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Apply the quiet updates
@@ -153,9 +164,7 @@ runs:
           echo 'Servers pinned to an exact version whose newer release the [drift feed](https://github.com/rufat325/heldfast-feed) has measured.'
           echo 'Each change here is **quiet**: no tool change is critical (one `heldfast approve --yes` would write), no advisory in OSV names the release, it adds no install script, and it has been published long enough for a malicious release to have been reported. Nobody has read its code. Updates that need review are not in this PR.'
           echo
-          echo '```'
-          cat "$RUNNER_TEMP/updates.txt"
-          echo '```'
+          cat "$RUNNER_TEMP/updates.md"
         } > "$RUNNER_TEMP/body.md"
         if url=$(gh pr view "$BRANCH" --json url --jq .url 2>/dev/null); then
           gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/body.md" >/dev/null
@@ -183,9 +192,7 @@ runs:
           echo 'These pinned servers need a person: a newer release changes a tool in a way `approve --yes` would not write, an advisory names it, it adds an install script, or every newer release was reported as malware or pulled.'
           echo 'Read what is named below. To take a release, bump the version and run `heldfast approve --from-feed`, which prints the diff and asks for `--yes-tool NAME` where a change is critical.'
           echo
-          echo '```'
-          cat "$RUNNER_TEMP/updates.txt"
-          echo '```'
+          cat "$RUNNER_TEMP/updates.md"
         } > "$RUNNER_TEMP/issue.md"
         number=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
         if [ -n "$number" ]; then
