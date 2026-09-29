@@ -15,7 +15,9 @@ from __future__ import annotations
 from typing import Any, Iterable, Iterator
 
 from ..findings import Finding, Location, Severity
+from ..lockfile import launch_digest
 from ..model import instructions_fingerprint
+from ..secrets import redact
 from ..textdiff import changed_text
 from .base import AuditContext, rule
 
@@ -314,6 +316,31 @@ def tool_drift(ctx: AuditContext) -> Iterable[Finding]:
             )
 
 
+def _launch_changes(entry: dict, s: Any) -> Iterator[tuple[str, Any, Any]]:
+    """(field, recorded, current) for each part of the launch that moved.
+
+    A lock entry whose launch line held a credential records it redacted,
+    beside `launch_sha256` of the real values; that digest decides whether
+    anything changed, and the redacted forms say what. A change only a
+    credential made shows as the credential, never its value.
+    """
+    digest = entry.get("launch_sha256")
+    if isinstance(digest, str) and launch_digest(s.command_line, s.url) == digest:
+        return
+    moved = False
+    for field_name, current in (("command_line", s.command_line), ("url", s.url)):
+        previous = entry.get(field_name)
+        if previous in (None, "") and current in (None, ""):
+            continue
+        shown = redact(current) if current else current
+        if (shown if isinstance(digest, str) else current) == previous:
+            continue
+        moved = True
+        yield field_name, previous, shown
+    if isinstance(digest, str) and not moved:
+        yield "credential in the launch line or URL", "(redacted)", "(redacted)"
+
+
 @rule("MCPA016", "Server launch command changed since approval", Severity.HIGH)
 def command_drift(ctx: AuditContext) -> Iterable[Finding]:
     """How the server starts is no longer what was approved."""
@@ -325,12 +352,7 @@ def command_drift(ctx: AuditContext) -> Iterable[Finding]:
         entry = known.get(s.identity())
         if not isinstance(entry, dict):
             continue
-        for field_name, current in (("command_line", s.command_line), ("url", s.url)):
-            previous = entry.get(field_name)
-            if previous in (None, "") and current in (None, ""):
-                continue
-            if previous == current:
-                continue
+        for field_name, previous, current in _launch_changes(entry, s):
             yield Finding(
                 rule_id="MCPA016",
                 title="Server launch command changed since approval",

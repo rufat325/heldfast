@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .secrets import redact
 from .artifacts import artifact_digests
 from .textdiff import PREVIEW_CHARS
 from .model import (PromptSpec, ResourceSpec, ServerSpec, SkillSpec, ToolSpec,
@@ -40,8 +41,22 @@ DEFAULT_LOCK_NAME = ".mcp-pin.lock"
 LEGACY_LOCK_NAME = ".mcp-audit.lock"
 
 
+def launch_digest(command_line: str | None, url: str | None) -> str:
+    """SHA-256 of a server's real launch line and URL.
+
+    The lockfile is committed, and a launch line can carry a credential -- a
+    `--token` argument, an `?api_key=` URL -- from a user-level config that
+    was never meant to reach a repository. So `command_line` and `url` are
+    written redacted, and when redacting changed either one this digest of
+    the real values is what "did the launch change" is compared against.
+    """
+    import hashlib
+    payload = json.dumps([command_line or "", url or ""], ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def launch_mismatch(approved: str | None, argv: list[str] | None, *,
-                    pinned: bool = True) -> str | None:
+                    pinned: bool = True, digest: str | None = None) -> str | None:
     """None if the tokens about to run are the ones that were pinned.
 
     An empty `approved` on a server that *has* a lock entry is an old lock or
@@ -64,6 +79,10 @@ def launch_mismatch(approved: str | None, argv: list[str] | None, *,
                 "so there is nothing to pin the binary against; re-run "
                 "`heldfast approve` to record one")
     current = " ".join(shlex.quote(tok) for tok in argv)
+    if digest:
+        # The recorded line is redacted; the digest is of the real one.
+        return None if launch_digest(current, None) == digest else \
+            "launch command changed since approval"
     if current == approved:
         return None
     return "launch command changed since approval"
@@ -233,10 +252,12 @@ class Lock:
                 "client": s.client,
                 "source": s.source,
                 "transport": s.transport,
-                "command_line": s.command_line,
-                "url": s.url,
+                "command_line": redact(s.command_line),
+                "url": redact(s.url) if s.url else s.url,
                 "approved_at": _now(),
             }
+            if entry["command_line"] != s.command_line or entry["url"] != s.url:
+                entry["launch_sha256"] = launch_digest(s.command_line, s.url)
             # Whether a probe was attempted, and whether it answered. An entry
             # with no tools means two opposite things -- nobody probed, or the
             # server was launched and never replied -- and the second is worth
@@ -303,7 +324,7 @@ class Lock:
                 entry = {
                     "name": s.name, "client": s.client, "source": s.source,
                     "approved_at": _now(),
-                    "conflict": sorted({*lines, s.command_line} - {""}),
+                    "conflict": sorted({*lines, redact(s.command_line)} - {""}),
                 }
             self.servers[s.identity()] = entry
 

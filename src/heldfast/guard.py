@@ -1709,8 +1709,10 @@ def _pin_still_holds(guard: Guard, argv: list[str], *,
     # `pinned` is whether a lock entry exists at all. An entry with no
     # command_line is refused; no entry is left to the tool policy, which is
     # what --allow-unapproved is for.
+    digest = entry.get("launch_sha256")
     reason = launch_mismatch(approved if isinstance(approved, str) else None,
-                             argv, pinned=bool(entry))
+                             argv, pinned=bool(entry),
+                             digest=digest if isinstance(digest, str) else None)
     if reason:
         return reason
 

@@ -115,6 +115,14 @@ node js/heldfast-check/bin.js --golden tests/golden/tools
   the failure this whole change exists to prevent.
 - Hostname does not belong in a portable lock.
 - Env values do not belong in a portable lock. The launch command is pinned (`T-LAUNCH`); logs redact env.
+- Credentials do not belong in it either. A launch line or URL that carries
+  one -- a `--token` argument, a `user:password@` or `?api_key=` URL, often
+  from a user-level config that was never meant for a repository -- is
+  written redacted, and `launch_sha256` (SHA-256 of the JSON array
+  `[command_line, url]` of the real values) is recorded beside it. The launch
+  pin and MCPA016 compare that digest, so a changed launch is still caught; a
+  changed credential is reported as one, without its value. A lock with no
+  `launch_sha256` compares `command_line` as written, as before.
 - `heldfast check` / `heldfast-check` verify the file without launching anything.
 - Missing file is MCPA014. Drifted tool is MCPA015.
 

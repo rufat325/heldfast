@@ -30,6 +30,11 @@ def _hosted(lock_servers: dict[str, Any]) -> list[tuple[str, dict]]:
 
 def check_one(key: str, entry: dict, timeout: float) -> dict[str, Any]:
     from .probe import probe_http
+    if "[REDACTED" in entry["url"]:
+        # The lock keeps a URL's credential out of the repository, so this
+        # reading cannot reconnect with it. Unverified, not drifted.
+        return {"state": "unverified", "drifted": [],
+                "why": "the lockfile keeps this URL redacted; its credential is not stored"}
     spec = ServerSpec(name=str(entry.get("name") or key.split(":", 1)[-1]),
                       source=str(entry.get("source") or ""),
                       client=str(entry.get("client") or key.split(":", 1)[0]),

@@ -105,6 +105,7 @@ class Backend:
         self.on_unsolicited: Any = None
         self.recorded_artifacts: dict[str, str] = {}
         self.approved_launch: str = ""
+        self.approved_digest: str | None = None
         # Whether a lock entry exists for this backend at all, as opposed to
         # existing and recording no command. Only the second is a refusal.
         self.pinned: bool = False
@@ -138,7 +139,8 @@ class Backend:
         # guard._pin_still_holds: a changed argv is the cause, and the
         # scripts it happens to name are the symptom.
         return (launch_mismatch(self.approved_launch, self.spec.argv,
-                                pinned=self.pinned)
+                                pinned=self.pinned,
+                                digest=self.approved_digest)
                 or mismatch(self.recorded_artifacts, self.spec)
                 or refusal(self.recorded_integrity, self.artifact_urls,
                            require=self.require_integrity,
@@ -463,6 +465,8 @@ class Gateway:
             recorded = entry.get("artifacts")
             backend.recorded_artifacts = recorded if isinstance(recorded, dict) else {}
             backend.approved_launch = str(entry.get("command_line") or "")
+            digest = entry.get("launch_sha256")
+            backend.approved_digest = digest if isinstance(digest, str) else None
             backend.pinned = bool(entry)
             integrity = entry.get("integrity")
             backend.recorded_integrity = integrity if isinstance(integrity, dict) else {}
