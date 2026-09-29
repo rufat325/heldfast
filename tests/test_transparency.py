@@ -226,5 +226,17 @@ class TestApproveWitness(Cli):
         self.assertIn("without a second witness", err)
 
 
+
+class TestWhatIsNeverAskedAbout(unittest.TestCase):
+    """Private addresses stay private, in the spellings resolvers accept too."""
+
+    def test_shorthand_addresses_and_internal_names_are_private(self) -> None:
+        from heldfast.transparency import public
+        for url in ("http://127.1/x", "http://10.1/x", "http://mcp.corp/x",
+                    "http://files.home/x", "http://0x7f000001/x", "http://2130706433/x"):
+            with self.subTest(url=url):
+                self.assertFalse(public(url))
+        self.assertTrue(public("https://api.example.com/mcp"))
+
 if __name__ == "__main__":
     unittest.main()

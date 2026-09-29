@@ -140,6 +140,19 @@ class TestAMalformedGrantFailsClosed(unittest.TestCase):
                 with self.assertRaises(MalformedIdentity):
                     Identity.from_lock(self._lock({"servers": servers}), "reader")
 
+    def test_a_broken_deny_or_policy_is_refused_not_read_as_empty(self) -> None:
+        # Read as empty, these meant no denials and no argument limits.
+        for entry in ({"deny": {"github": ["delete_repository"]}}, {"deny": 5},
+                      {"policy": [{"query": {"sql": ["SELECT"]}}]}, {"policy": "SELECT"}):
+            with self.subTest(entry=entry):
+                with self.assertRaises(MalformedIdentity):
+                    Identity.from_lock(self._lock(entry), "reader")
+
+    def test_well_formed_deny_and_policy_still_load(self) -> None:
+        ident = Identity.from_lock(self._lock(
+            {"deny": ["wipe"], "policy": {"query": {"sql": ["SELECT"]}}}), "reader")
+        self.assertEqual(["wipe"], ident.deny)
+
     def test_it_is_refused_as_an_unknown_identity_would_be(self) -> None:
         """A subclass, so every caller that already refuses an unknown name
         refuses an unreadable one without being taught to."""

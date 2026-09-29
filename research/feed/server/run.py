@@ -49,6 +49,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -278,6 +279,11 @@ def archive(args: argparse.Namespace) -> None:
     except OSError:
         last = []
     last_commit, last_day = (last + ["", ""])[:2]
+    # Read from outside this machine and passed to git and archive.py: only a
+    # commit and a date count, as in feed.yml; anything else is no copy.
+    if not (re.fullmatch(r"[0-9a-f]{40}", last_commit)
+            and re.fullmatch(r"\d{4}-\d{2}-\d{2}", last_day)):
+        last_commit, last_day = "", ""
     if not last_commit or last_day[:7] != day[:7]:
         run([sys.executable, ARCHIVE, "snapshot", "--data", feed, "--commit", commit, "--day", day,
              "--out", os.path.join(dest, f"snapshot-{day[:7]}.tar.gz")])

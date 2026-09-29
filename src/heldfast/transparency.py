@@ -95,12 +95,19 @@ def public(url: str) -> bool:
     except ValueError:
         return False
     if not host or host == "localhost" or host.endswith((".localhost", ".local", ".internal",
-                                                          ".lan", ".home.arpa")):
+                                                          ".lan", ".home.arpa", ".corp",
+                                                          ".home", ".intranet", ".private")):
         return False
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
-        return "." in host
+        # `127.1` and `10.1` are addresses to the resolver -- inet_aton's
+        # shorthand -- though ipaddress refuses them. Read them the same way.
+        import socket
+        try:
+            ip = ipaddress.ip_address(socket.inet_aton(host))
+        except (OSError, ValueError):
+            return "." in host
     return ip.is_global
 
 

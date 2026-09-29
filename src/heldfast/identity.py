@@ -122,6 +122,23 @@ class Identity:
                 f"to guess -- absent means every server, so reading a broken "
                 f"grant leniently would hand this agent everything."
             )
+        # The same inversion, for the two lists that restrict: a `deny` that
+        # is not a name or a list of names, or a `policy` that is not a
+        # mapping, was read as empty -- no denials, no argument limits -- so a
+        # typo in either quietly widened the agent to everything its servers
+        # allow.
+        deny = entry.get("deny")
+        if deny is not None and not isinstance(deny, (str, list)):
+            raise MalformedIdentity(
+                f"identity {name!r} has a malformed 'deny' entry: expected a tool "
+                f"name or a list of them, found {type(deny).__name__}. Refusing "
+                f"rather than denying nothing.")
+        policy = entry.get("policy")
+        if policy is not None and not isinstance(policy, dict):
+            raise MalformedIdentity(
+                f"identity {name!r} has a malformed 'policy' entry: expected a "
+                f"mapping of tool to limits, found {type(policy).__name__}. "
+                f"Refusing rather than applying no limits.")
         return cls(
             name=name,
             servers=[_clean(s) for s in servers] if servers is not None else None,
