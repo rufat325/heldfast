@@ -6,7 +6,8 @@ public server ever shown this exact definition, and since when?*
 
 The drift feed has recorded every tool definition it read from the official
 MCP registry's servers -- npm packages it launched in a container, hosted
-servers it read as an anonymous client -- about 120,000 distinct definitions.
+servers it read as an anonymous client -- 230,763 distinct definitions at the
+29 September 2026 checkpoint.
 It publishes all of them as static files: the whole record in one file, and
 the same record split into buckets.
 

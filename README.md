@@ -68,8 +68,8 @@ you name it. [docs/TRANSPARENCY.md](docs/TRANSPARENCY.md).
 
 **Safe Browsing for AI tools.** The same log answers a smaller question about any tool,
 hosted or not: *has anyone else been shown this exact definition?* `verify` looks up every
-tool in your lockfile against about 120,000 definitions on record, each with the date it
-was first seen and on how many servers. It downloads the whole record and searches it on your
+tool in your lockfile against the log's 230,763 distinct definitions (29 September 2026),
+each with the date it was first seen and on how many servers. It downloads the whole record and searches it on your
 machine, so nothing about your tools is sent. It is static files and a one-page protocol any
 client can implement, including what the lighter bucket lookup gives away:
 [docs/LOOKUP.md](docs/LOOKUP.md).
