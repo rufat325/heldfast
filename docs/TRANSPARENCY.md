@@ -81,6 +81,10 @@ call site.
 
 Said plainly, because a security tool that overclaims is worse than none:
 
+- **It records what a server says, not what it does.** A tool can keep an
+  identical description and schema while the code behind it changes, and the
+  log would not record that as a change. What a tool does when called is
+  outside what the log reads.
 - **The log is one reader, a few times a day.** Each hosted server is read
   daily, and every four hours while it has changed in the last three days. A
   quiet server that shows a version for only a few hours between two daily
