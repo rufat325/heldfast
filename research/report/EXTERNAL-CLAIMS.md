@@ -17,7 +17,7 @@ coverage) are not here: they come from `research/report/numbers.json`.
 - **Source.** https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks
 - **Verdict.** Partly supported. The post describes exactly this attack, but it is
   dated **1 April 2025**, not 6 April.
-- **Action.** Date corrected in README.md.
+- **Action.** Date corrected in README.md. After the correction the text is supported.
 
 ## E02. Invariant Labs, WhatsApp
 
@@ -27,7 +27,7 @@ coverage) are not here: they come from `research/report/numbers.json`.
 - **Source.** https://invariantlabs.ai/blog/whatsapp-mcp-exploited, dated 7 April 2025.
 - **Verdict.** Partly supported. The attack is as described; the posts are six days
   apart, not one.
-- **Action.** "A day later" and "a day apart" corrected to six days.
+- **Action.** "A day later" and "a day apart" corrected to six days. After the correction the text is supported.
 
 ## E03. The 5.5% figure
 
@@ -42,7 +42,7 @@ coverage) are not here: they come from `research/report/numbers.json`.
   Invariant Labs, and the population is 1,899 open-source servers, not "public MCP
   servers".
 - **Action.** CHURN.md re-attributes it with the population. SCAN.md names and
-  links the study.
+  links the study. After the correction the text is supported.
 
 ## E04. postmark-mcp 1.0.16
 
@@ -132,6 +132,20 @@ coverage) are not here: they come from `research/report/numbers.json`.
 - **Action.** TRANSPARENCY.md now says the fake came to light only because it was
   used against users and Chrome pinned Google's keys, and that browsers require
   proof of logging.
+
+## Sources the report cites (docs/FIRST-WEEK.md)
+
+- **E11. MCP specification 2025-06-18, "Tools".**
+  https://modelcontextprotocol.io/specification/2025-06-18/server/tools. Clients send
+  `tools/list`; a definition has `name`, `description`, `inputSchema`; servers that
+  declare `listChanged` SHOULD send `notifications/tools/list_changed`. Supported.
+- **E12. RFC 6962, Certificate Transparency** (Laurie, Langley, Kasper, June 2013):
+  "publicly auditable, append-only, untrusted logs of all issued certificates".
+  Supported.
+- **E13. OpenTimestamps** (https://opentimestamps.org): "A timestamp proves that some
+  data existed prior to some point in time." Supported.
+- **E14. Sigstore** (https://docs.sigstore.dev/about/overview/): keyless signing, and
+  Rekor as "an immutable, append-only ledger". Supported.
 
 ## Not external
 
