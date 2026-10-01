@@ -184,8 +184,8 @@ CRITICAL MCPA015  Tool definition changed since approval (possible rug pull)
 
 The config file was byte-identical across those two scans.
 
-That shape was published, not invented. [Invariant Labs, 6 April 2025](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks)
-showed tool poisoning: hidden instructions in a tool description. A day later they showed
+That shape was published, not invented. [Invariant Labs, 1 April 2025](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks)
+showed tool poisoning: hidden instructions in a tool description. Six days later they showed
 [a second, untrusted MCP server sitting beside a trusted WhatsApp MCP instance](https://invariantlabs.ai/blog/whatsapp-mcp-exploited),
 shadowing its tools to exfiltrate chats. The WhatsApp helper did not rewrite itself.
 Cross-server shadowing is what MCPA027 and MCPA028 are for. Approval records what you

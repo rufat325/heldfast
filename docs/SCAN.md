@@ -166,8 +166,9 @@ Not attacks. Patterns a reader of tool text should know exist:
 4. **One day.** A server honest today can change tomorrow -- which is what
    the pin and the feed are for.
 
-On the widely cited figure that 5.5% of public MCP servers carry poisoning
-payloads: nothing here reproduces it for the official registry, measured
+On the widely cited figure that 5.5% of MCP servers carry tool poisoning
+([Hasan et al., arXiv:2506.13538](https://arxiv.org/abs/2506.13538), 1,899
+open-source servers): nothing here reproduces it for the official registry, measured
 this way. That is a different population and a different method, not a
 refutation, and it is said here so nobody reads one as the other.
 

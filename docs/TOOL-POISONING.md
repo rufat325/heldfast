@@ -1,6 +1,6 @@
 # The attack this exists for, reproduced
 
-In April 2025 Invariant Labs published two MCP attacks a day apart.
+In April 2025 Invariant Labs published two MCP attacks six days apart.
 [The first](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks)
 was tool poisoning: hidden instructions in a tool *description*.
 [The second](https://invariantlabs.ai/blog/whatsapp-mcp-exploited) was an

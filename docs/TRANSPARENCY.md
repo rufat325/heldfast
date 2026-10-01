@@ -2,8 +2,8 @@
 
 Every supply-chain security tool starts from a package. OSV, Socket, Amazon
 Inspector, Dependabot, an SBOM: each takes a name and a version, downloads
-the code, and reads it. That is how every malicious MCP release so far was
-caught -- the worm releases of Postman's, Browserbase's and AntV's servers,
+the code, and reads it. That is how the malicious MCP releases reported so far
+were caught -- the worm releases of Postman's, Browserbase's and AntV's servers,
 the postmark-mcp backdoor, the "local-only" scanner that uploaded your code
 (see [how `updates` screens for them](MANUAL.md#keeping-pins-current-updates)).
 
@@ -23,11 +23,14 @@ from a package can see this, because there is no package.
 
 ## The web had this problem
 
-Around 2011, certificate authorities were issuing certificates for sites like
-google.com to people who were not Google, and nobody could see it happening:
-each fake was shown only to its victims. The fix was not a better scanner. It
-was **Certificate Transparency**: every certificate has to be written to a
-public log, and browsers refuse one the log has not seen. An attacker can
+In 2011, certificate authorities issued certificates for sites like
+google.com to people who were not Google, and each fake was shown only to its
+victims. DigiNotar's came to light because it was used against users in Iran
+and Chrome happened to pin Google's keys
+([Google, August 2011](https://security.googleblog.com/2011/08/update-on-attempted-man-in-middle.html)).
+The fix was not a better scanner. It was **Certificate Transparency**
+([RFC 6962](https://www.rfc-editor.org/rfc/rfc6962)): every certificate has to
+be written to public logs, and browsers refuse one without proof that it was. An attacker can
 still issue a fake -- but only in public, where the owner is watching.
 
 ## The same idea for hosted MCP servers

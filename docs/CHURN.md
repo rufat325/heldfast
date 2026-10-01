@@ -2,8 +2,9 @@
 
 Tool poisoning is a documented attack: a server rewrites a tool's description
 after you approved it, and the agent reads the new text. Invariant Labs
-demonstrated it in April 2025, and has since reported that 5.5% of public MCP
-servers carry tool-poisoning payloads.
+demonstrated it in April 2025, and a June 2025 study of 1,899 open-source MCP
+servers found tool poisoning in 5.5% of them
+([Hasan et al., arXiv:2506.13538](https://arxiv.org/abs/2506.13538)).
 
 Pinning tool definitions only works as a *defence* if legitimate servers do
 not change them constantly. If they do, every upgrade is an alert, alerts

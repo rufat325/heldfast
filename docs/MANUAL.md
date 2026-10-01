@@ -1459,7 +1459,7 @@ install script, and it is at least 14 days old. Nobody has read its code. ...
 lock of its own and compared with your entry by the same review code, so a critical tool
 change is review, one `--yes-tool NAME` has to name. `--format json` gives the same as data.
 
-**What the tool text cannot show.** Every malicious MCP server release found so far
+**What the tool text cannot show.** The malicious MCP server releases reported so far
 changed code and left the tools alone: postmark-mcp 1.0.16 copied every email it sent to
 its author, the Shai-Hulud npm worms put an install hook into releases of Postman's,
 Browserbase's and AntV's official servers, and a scanner that promised your code never
