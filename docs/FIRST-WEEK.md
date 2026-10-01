@@ -18,8 +18,8 @@ register is the appendix.*
 - 66 events were graded `review`. 58 of them introduced a price, on 41
   servers; 8 introduced something else and are listed for a person to read.
 - Of 19,764 hosted servers with a state file, 13,255 (67.1%) had been read and
-  were current. 4,165 (21.1%) had never been read because they asked for a
-  login or payment.
+  were current. 4,165 (21.1%) had never been read because they answered HTTP
+  401, 402 or 403; a 403 can be a block rather than a login.
 <!-- C01 C03 C05 C06 C02 -->
 
 ## Why hosted servers matter
@@ -31,12 +31,15 @@ server can change its tools after a client has trusted them [2]. A study of
 open-source MCP servers has measured how often such patterns occur [3].
 
 A package scanner, or an advisory database such as OSV [9], starts from a
-name and a version. A hosted server has no release to download: it is a URL, and what it returns can change between two
-requests. At the start of this week 19,746 of the 29,458 servers the log
-watched were hosted. What the log records is the tool list each one returned
+name and a version. A hosted server has no release to download: it is a URL,
+and what it returns can change between two requests. On the watchlist of
+2026-09-28, 19,746 of the 29,458 servers were hosted. What the log records is the tool list each one returned
 to an anonymous client, each time it read one. The idea is Certificate
 Transparency's [5]: after certificates for sites like google.com were issued
 to people who were not Google [6], certificates had to be logged in public.
+lastseen.dev keeps a free register of dated observations of MCP servers,
+including changes to their declared tools, sealed into a daily SHA-256 hash
+chain [10].
 <!-- C01 -->
 
 ## Data and method
@@ -122,21 +125,28 @@ stated amount can be an example rather than a charge. On 16 servers a tool's
 single stated price became a different single price. Prices fell on 10 of
 them, rose on 3, and moved both ways on 3. One server carried 285 of the 414
 before-and-after pairs (68.8%), so these are reported per server. 4 servers
-at least tripled a price. The most servers with such a change within four
-days was 15, from 2026-09-24. An earlier draft's claim of 23 servers in four
-days does not hold under this definition, and is withdrawn.
+at least tripled a price. The most servers with such a readable change within
+four days was 15, from 2026-09-24. Counted more loosely, 55 servers had a
+change in the set of amounts an existing tool stated within four days from
+2026-09-24; that count includes an amount added beside others or dropped from
+a list, so it is not a count of price rises. An earlier draft's claim of 23
+servers in four days was withdrawn because it does not reproduce under the
+strict definition, a readable change together with a tripling.
 <!-- C07 -->
 
 **Coverage.** Of 19,764 hosted state files, 13,255 (67.1%) were read and
 current, and 369 (1.9%) had a catalogue but a failed latest attempt, 151 of
-them with HTTP 429. 6,140 (31.1%) had never been read: 4,165 (21.1%) asked
-for a login or payment (HTTP 401, 402, 403), 586 (3.0%) answered 404, 773
+them with HTTP 429. 6,140 (31.1%) had never been read: 4,165 (21.1%) answered
+HTTP 401, 402 or 403, which usually asks for a login or payment, though a 403
+can be a block rather than a login; 586 (3.0%) answered 404, 773
 (3.9%) failed at the network, 262 (1.3%) returned a 5xx, 248 (1.3%) another
 4xx, and 98 (0.5%) failed the protocol.
 <!-- C02 -->
 
 **Lookup.** The log's lookup file held 230,763 distinct tool definitions, of
-which 217,985 had been seen on exactly one server.
+which 217,985 had been seen on exactly one server. Definitions are compared
+byte for byte after canonicalisation (RFC 8785), so two that differ in nothing
+but a number, such as a ticking counter, count as distinct.
 <!-- C08 -->
 
 **Earlier studies.** The churn study's figures (docs/CHURN.md) reproduced from
@@ -151,6 +161,9 @@ five of sixteen reworded attacks caught.
 
 ## Limitations
 
+- **What a server says, not what it does.** A tool can keep an identical
+  description while its code changes, and the log would not record that as a
+  change (docs/TRANSPARENCY.md, "What it cannot do").
 - **One reader, a few times a day.** A version a server shows for a few hours
   between two readings can be missed (docs/TRANSPARENCY.md, "What it cannot
   do").
@@ -220,6 +233,8 @@ macOS extract into a case-sensitive directory.
   (accessed 2026-10-01)
 - [9] OSV, "Data sources". https://google.github.io/osv.dev/data/
   (accessed 2026-10-01)
+- [10] lastseen.dev, home page and "About". https://lastseen.dev/ ,
+  https://lastseen.dev/about (accessed 2026-10-01)
 
 ## Appendix: claims register
 

@@ -146,6 +146,13 @@ coverage) are not here: they come from `research/report/numbers.json`.
   data existed prior to some point in time." Supported.
 - **E14. Sigstore** (https://docs.sigstore.dev/about/overview/): keyless signing, and
   Rekor as "an immutable, append-only ledger". Supported.
+- **E15. lastseen.dev** (https://lastseen.dev/, https://lastseen.dev/about). Text in
+  docs/FIRST-WEEK.md: "a free register of dated observations of MCP servers,
+  including changes to their declared tools, sealed into a daily SHA-256 hash chain".
+  Its pages say: "dated, append-only, hash-chained", "every dated observation sealed
+  into a daily SHA-256 hash chain", "no login · no account · free", and describe
+  servers that "change their declared tool contract". Supported. The report
+  describes it from its own pages only and makes no comparison.
 
 ## Not external
 
