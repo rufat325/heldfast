@@ -198,7 +198,7 @@ newline there forges a whole row.
 
 ```yaml
 # Pin a commit SHA. `@main` is whoever pushed last.
-- uses: rufat325/heldfast@298f0379979a2b0a45fd4f6f7f739b65f3776ea3
+- uses: rufat325/heldfast@206419536a3707bc1d91bf10ea6d68a5d40b52f1 # v0.2.3
   with:
     fail-on: high
 ```

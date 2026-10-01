@@ -326,7 +326,7 @@ scan --safe → isolate (you provide this) → approve --probe → commit the lo
 
 ```yaml
 # Pin a commit SHA. `@main` is whoever pushed last.
-- uses: rufat325/heldfast@91c060e082e34ff060c0f788c16712262881794c
+- uses: rufat325/heldfast@206419536a3707bc1d91bf10ea6d68a5d40b52f1 # v0.2.3
   with:
     fail-on: high
 ```
