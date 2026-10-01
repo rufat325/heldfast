@@ -173,10 +173,20 @@ refutation, and it is said here so nobody reads one as the other.
 
 ## Reproducing
 
+The data is commit `87b7b05ace47` of
+[rufat325/heldfast-feed](https://github.com/rufat325/heldfast-feed/tree/87b7b05ace472b14f704b6dea5200a418a420710),
+the feed's state at 16:33 UTC on 2026-09-23. At that commit the scan reads exactly
+the 13,170 servers above. The run predates the first checkpoint (27 September
+2026), so this state is not sealed: the commit is the only reference to it.
+
 ```bash
-git clone --depth 1 --branch feed https://github.com/rufat325/heldfast feed-data
+git clone https://github.com/rufat325/heldfast-feed feed-data
+git -C feed-data -c core.autocrlf=false checkout 87b7b05ace472b14f704b6dea5200a418a420710
 python research/scan/scan.py --feed feed-data      # results/findings.jsonl + the counts
 ```
+
+On Windows or macOS, clone into a case-sensitive directory: the feed holds a few
+paths that differ only in case.
 
 Two workers by default. It reads 13,000 gzipped catalogues and runs regular
 expressions; more workers finish sooner and, on the machine this was first
