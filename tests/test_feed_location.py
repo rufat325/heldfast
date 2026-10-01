@@ -29,6 +29,8 @@ OLD = (
     OWNER + ".git/info/refs",
     "ref: " + "feed\n",
     "HEAD:" + "feed",
+    "/blob/" + "feed/",
+    "--branch " + "feed ",
 )
 SCANNED = ("README.md", "PRIVACY.md", "SECURITY.md", "CONTRIBUTING.md", "action.yml",
            "updates/action.yml")
