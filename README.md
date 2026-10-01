@@ -35,6 +35,17 @@ announce it, and can differ from what it tells everyone else. heldfast has three
 
 Transparency does not stop an attack. It takes away the option of attacking in private.
 
+<!-- From research/report/numbers.json (C03 C05 C06), the 2026-09-29 checkpoint.
+     Refresh from a newer sealed snapshot, never by hand. -->
+**Where it stands (29 September 2026).** The log has recorded 13,021 changes to tool
+definitions. Three operators account for 77.4% of the 12,642 hosted ones, and 66
+changes were graded `review`: the ones a graded pin would refuse. That grading is the
+point. Across the most-downloaded servers, nearly half of upgrades change a tool
+([we measured it](https://github.com/rufat325/heldfast/blob/main/docs/CHURN.md)), and a
+pin that stops on every one gets muted. Records from before 27 September 2026 were
+collected the same way but cannot be proven unedited. The first week, with every number
+sourced: [docs/FIRST-WEEK.md](https://github.com/rufat325/heldfast/blob/main/docs/FIRST-WEEK.md).
+
 ![heldfast pinning an official filesystem server, catching a rewritten tool, and checking hosted servers against the public log](https://github.com/rufat325/heldfast/raw/main/docs/demo.gif)
 
 *heldfast was published as `mcp-pin` until 0.1.8. The `mcp-pin` command still

@@ -7,12 +7,13 @@ were caught -- the worm releases of Postman's, Browserbase's and AntV's servers,
 the postmark-mcp backdoor, the "local-only" scanner that uploaded your code
 (see [how `updates` screens for them](MANUAL.md#keeping-pins-current-updates)).
 
-Most MCP servers do not have a package. Of the 27,985 servers and endpoints
-the drift feed watches in the official MCP registry, **18,576 are hosted**:
-a URL your client connects to. There is nothing to download and no version.
-What a hosted server tells your agent can change between one request and the
-next, with no release to announce it -- in a single day the feed saw hosted
-servers change their tools about 5,400 times. And it can differ between one
+Most MCP servers do not have a package. Of the 29,458 servers and endpoints
+the drift feed watched in the official MCP registry on 28 September 2026,
+**19,746 were hosted**: a URL your client connects to. There is nothing to
+download and no version. What a hosted server tells your agent can change
+between one request and the next, with no release to announce it -- on
+24 September 2026 the feed saw hosted servers change their tools 6,028 times
+([the first week, measured](FIRST-WEEK.md)). And it can differ between one
 client and the next.
 
 That last property is the dangerous one. A hosted server can show every
