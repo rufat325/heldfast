@@ -353,9 +353,12 @@ def and_join(items: list) -> str:
 CONTEXT_WORDS = 6
 
 
-def stated_amounts(text: str, words: int = CONTEXT_WORDS) -> list:
-    """Every amount a text states, as ((unit, amount), the amount with about six
-    words on each side), in the order they appear and once each.
+AFTER_WORDS = 4
+
+
+def _stated(text: str, words: int = CONTEXT_WORDS) -> list:
+    """[((unit, amount), the amount with about six words on each side, the four
+    words after it)], in the order the amounts appear and once each.
 
     Found with the report's own price patterns (driftgrade's), which read both
     "$0.99" and "0.004 USDC" as dollars. They cannot tell a price from a fee for
@@ -380,12 +383,19 @@ def stated_amounts(text: str, words: int = CONTEXT_WORDS) -> list:
         if not hit:
             continue
         lo, hi = max(hit[0] - words, 0), min(hit[-1] + words + 1, len(tokens))
-        out.append((key, cut(" ".join(text[a:b] for a, b in tokens[lo:hi]), 140)))
+        out.append((key, cut(" ".join(text[a:b] for a, b in tokens[lo:hi]), 140),
+                    " ".join(text[a:b] for a, b in tokens[hit[-1] + 1:hit[-1] + 1 + AFTER_WORDS])))
     return out
 
 
+def stated_amounts(text: str, words: int = CONTEXT_WORDS) -> list:
+    """Every amount a text states, as ((unit, amount), the amount with about six
+    words on each side), in the order they appear and once each."""
+    return [(key, said) for key, said, _after in _stated(text, words)]
+
+
 def _quoted(items: list, shown: int = 2) -> str:
-    said = "; ".join(f"\u201c{snippet}\u201d" for _, snippet in items[:shown])
+    said = "; ".join(f"\u201c{item[1]}\u201d" for item in items[:shown])
     return said + (f" and {len(items) - shown} more" if len(items) > shown else "")
 
 
@@ -413,7 +423,7 @@ def added_from_diff(diff: str) -> str:
 
 
 def describe(change: dict, part: str, old: dict | None, new: dict | None) -> tuple:
-    """(what happened, the words) for one tool in one event, in plain words.
+    """(what happened, the words, same) for one tool in one event, in plain words.
 
     `part` is "added" or "changed"; `old` and `new` are the tool's definitions
     where the catalogues could be read. An amount is shown as the server wrote
@@ -421,21 +431,28 @@ def describe(change: dict, part: str, old: dict | None, new: dict | None) -> tup
     not say X and Y are the same kind of thing, because they may not be (a fee
     for gas, an example, an amount that belongs to another tool). Words are the
     ones a changed description gained, or, for a new tool, the text that
-    matched."""
+    matched. `same` is what two tools must share for the sheet to list them as
+    one change: the amounts that went and came, each with the four words after
+    it, and the fields that changed; None when the change is not only about
+    amounts."""
     report = _report()
     kinds = {clean(s.get("kind")) for s in change.get("introduced") or []}
     if part == "added":
         if "price" in kinds:
-            amounts = stated_amounts(report.tool_text(new)) if new else []
-            return "new tool with a stated price" + (": " + _quoted(amounts) if amounts else ""), ""
+            amounts = _stated(report.tool_text(new)) if new else []
+            return ("new tool with a stated price" + (": " + _quoted(amounts) if amounts else ""), "",
+                    ("new", tuple((k, a) for k, _, a in amounts)) if amounts else None)
         matched = "; ".join(clean(s.get("match")) for s in change.get("introduced") or []
                             if s.get("match"))
-        return "new tool", cut(matched)
-    phrases, words, said = [], "", False
+        return "new tool", cut(matched), None
+    phrases, words, said, same = [], "", False, None
     if old and new:
-        before, after = stated_amounts(report.tool_text(old)), stated_amounts(report.tool_text(new))
-        gone = [x for x in before if x[0] not in {k for k, _ in after}]
-        came = [x for x in after if x[0] not in {k for k, _ in before}]
+        before, after = _stated(report.tool_text(old)), _stated(report.tool_text(new))
+        gone = [x for x in before if x[0] not in {y[0] for y in after}]
+        came = [x for x in after if x[0] not in {y[0] for y in before}]
+        if gone or came:
+            same = (tuple((k, a) for k, _, a in gone), tuple((k, a) for k, _, a in came),
+                    tuple(change.get("fields") or []))
         if gone and came:
             phrases.append(f"stated amount changed, from {_quoted(gone)} to {_quoted(came)}")
         elif came:
@@ -453,7 +470,7 @@ def describe(change: dict, part: str, old: dict | None, new: dict | None) -> tup
         if "description" in (change.get("fields") or []):
             words = (added_words((old or {}).get("description"), (new or {}).get("description"))
                      if old and new else added_from_diff(change.get("words")))
-    return "; ".join(phrases) or "tool changed", cut(words)
+    return "; ".join(phrases) or "tool changed", cut(words), None if words else same
 
 
 @dataclass
@@ -579,10 +596,10 @@ def count_changes(rec: Record, row: Row, live: list) -> None:
                         old = new = None
                     loaded = True
                 name = change.get("tool")
-                what, words = describe(change, part, (old or {}).get(name), (new or {}).get(name))
+                what, words, same = describe(change, part, (old or {}).get(name), (new or {}).get(name))
                 row.review_items.append({
                     "date": day(event["observed_at"]), "package": row.package,
-                    "tool": clean(name), "kinds": seen, "what": what, "words": words})
+                    "tool": clean(name), "kinds": seen, "what": what, "words": words, "same": same})
                 found.update(seen)
         signals.update(found)
     row.changes, row.kinds, row.graded, row.signals = len(live), dict(kinds), graded, dict(signals)
@@ -957,30 +974,38 @@ def _not_found(sheet: Sheet) -> str:
     return _table([("As submitted", ""), ("Result", "")], body)
 
 
-def _tools(names: list, shown: int = 3) -> str:
-    names = sorted(set(names))
-    return ", ".join(names[:shown]) + (f" and {len(names) - shown} more ({len(names)} tools)"
-                                       if len(names) > shown else "")
+SAME_CHANGE = "Same change on {n} tools: {names}. The words shown are from {first}."
 
 
 def _review(sheet: Sheet) -> str:
-    """Each change graded for review. The tools of one server whose change on one
-    day carried the same signals and the same account share a row."""
+    """Each change graded for review. Tools of one server on one day that carry
+    the same signals and the same change share a row: for a change in amounts,
+    "the same" is the same amount gone, the same amount come and the same four
+    words after each, so a server that changed one figure on twenty tools takes
+    one row, with one example in its own words and every tool named."""
     groups: dict = {}
     for g in sheet.groups:
         for i in g.row.review_items:
-            key = (i["date"], i["package"], tuple(i["kinds"]), i["what"], i["words"])
-            groups.setdefault(key, (_label(g.row), []))[1].append(i["tool"])
+            account = ("amounts", i["same"]) if i.get("same") else ("words", i["what"], i["words"])
+            key = (i["date"], i["package"], tuple(i["kinds"]), account)
+            groups.setdefault(key, (_label(g.row), i, []))[2].append(i["tool"])
     if not groups:
         return "<p>None.</p>"
     body = []
-    for (date, package, kinds, what, words), (label, tools) in sorted(groups.items(), reverse=True):
+    for (date, package, kinds, _account), (label, example, tools) in sorted(
+            groups.items(), key=lambda kv: (kv[0][0], kv[0][1]), reverse=True):
+        names = sorted(set(tools))
         signals = ", ".join(f'<span class="nb">{esc(k)}</span>' for k in kinds)
-        said = esc(what) + (f' <span class="words">\u201c{esc(words)}\u201d</span>' if words else "")
+        said = esc(example["what"]) + (f' <span class="words">\u201c{esc(example["words"])}\u201d</span>'
+                                      if example["words"] else "")
+        if len(names) > 1:
+            said += (f' <span class="same">{esc(SAME_CHANGE.format(n=len(names), names=", ".join(names), first=names[0]))}'
+                     "</span>")
+        shown = esc(names[0]) if len(names) == 1 else f"{len(names)} tools"
         body.append(
-            f'<tr data-package="{esc(package)}">{_cell(date, "nw", col="date")}'
+            f'<tr data-package="{esc(package)}" data-tools="{len(names)}">{_cell(date, "nw", col="date")}'
             f'{_cell(label, col="server")}'
-            f'<td data-col="tool" title="{esc(", ".join(sorted(set(tools))))}">{esc(_tools(tools))}</td>'
+            f'<td data-col="tool">{shown}</td>'
             f'<td class="sig" data-col="signal">{signals}</td><td data-col="what">{said}</td></tr>')
     table = _table([("Date", "nw"), ("Server", ""), ("Tool", ""), ("Signal", "sig"),
                     ("What happened", "")], body)
