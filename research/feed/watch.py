@@ -70,6 +70,9 @@ Layout under DIR:
   lookup/<abc>.json              every tool definition ever logged, by the first
                                  three hex characters of its fingerprint: when
                                  first seen, on how many servers (docs/LOOKUP.md)
+  lookup/all.json(.gz)           the same record in one file; the .gz is the same
+                                 bytes as a run of gzip members, one per bucket,
+                                 so git can store each day as a small delta
   feed.json, feed.xml            the latest events, as JSON and as Atom
   stats.json                     every event counted per operator and by kind
                                  of change (operators.py)
@@ -92,8 +95,10 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import threading
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from xml.sax.saxutils import escape
@@ -1098,22 +1103,111 @@ def lookup_buckets(data: str) -> dict[str, dict]:
     return buckets
 
 
+# lookup/all.json.gz is the plain record as a run of gzip members: the header,
+# one member per bucket, the footer. A gzip of the whole file shares no bytes
+# with yesterday's, so git stored every version in full (9 MB each, 41% of the
+# feed repository in its first ten days). A member depends only on its bucket's
+# text, so a bucket nothing touched compresses to the same bytes and git stores
+# the day as a delta. Every member is written with the same fixed header and
+# settings: mtime 0, level 9, OS 255 (unknown), nothing else. Readers must
+# follow the members (gzip.GzipFile, zcat, Node's zlib.gunzipSync do;
+# zlib.decompressobj(31) stops after the first). docs/LOOKUP.md says so.
+GZIP_HEADER = bytes.fromhex("1f8b0800" "00000000" "02" "ff")
+GZIP_LEVEL = 9
+
+
+def gzip_member(data: bytes) -> bytes:
+    """One gzip member with the fixed header and the fixed deflate settings."""
+    deflate = zlib.compressobj(GZIP_LEVEL, zlib.DEFLATED, -zlib.MAX_WBITS,
+                               zlib.DEF_MEM_LEVEL, zlib.Z_DEFAULT_STRATEGY)
+    return (GZIP_HEADER + deflate.compress(data) + deflate.flush()
+            + struct.pack("<II", zlib.crc32(data), len(data) & 0xFFFFFFFF))
+
+
+def lookup_pieces(buckets: dict[str, dict]) -> list[bytes]:
+    """lookup/all.json as pieces whose concatenation is the file: the header,
+    one piece per bucket, the footer. One line per definition, so a day that
+    adds a few changes a few lines and git stores the day as a small delta."""
+    head = b'{"prefix_length": %d, "tools": {\n' % LOOKUP_PREFIX
+    if not buckets:
+        return [head + b"\n", b"}}\n"]
+    pieces, last = [head], len(buckets) - 1
+    for i, tools in enumerate(buckets.values()):
+        lines = ",\n".join(f"{json.dumps(fp)}: {json.dumps(row, sort_keys=True)}"
+                           for fp, row in tools.items())
+        pieces.append((lines + (",\n" if i < last else "\n")).encode("utf-8"))
+    return pieces + [b"}}\n"]
+
+
+def _members(blob: bytes) -> dict[bytes, tuple[bytes, bytes]] | None:
+    """{bucket: (member bytes, its text)} of a record in the layout above, or
+    None for anything else -- the single-member file written before it, or a
+    file that does not parse. Read in small chunks: a member's unused tail is
+    copied at every step, and there are 4,098 members."""
+    out: dict[bytes, tuple[bytes, bytes]] = {}
+    view, pos = memoryview(blob), 0
+    while pos < len(blob):
+        if bytes(view[pos:pos + len(GZIP_HEADER)]) != GZIP_HEADER:
+            return None
+        deflate, text, at = zlib.decompressobj(-zlib.MAX_WBITS), [], pos + len(GZIP_HEADER)
+        try:
+            while not deflate.eof:
+                chunk = view[at:at + 16384]
+                if not chunk:
+                    return None
+                text.append(deflate.decompress(chunk))
+                at += len(chunk)
+        except zlib.error:
+            return None
+        end = at - len(deflate.unused_data) + 8
+        body = b"".join(text)
+        if end > len(blob) or bytes(view[end - 8:end]) != struct.pack(
+                "<II", zlib.crc32(body), len(body) & 0xFFFFFFFF):
+            return None
+        out[body[1:1 + LOOKUP_PREFIX] if body[:1] == b'"' else body[:1]] = (
+            bytes(view[pos:end]), body)
+        pos = end
+    return out
+
+
+def warn_if_recompressed(path: str, pieces: list[bytes], members: list[bytes]) -> None:
+    """Say so when most buckets compress to different bytes from the same text.
+
+    That is what a change of zlib on the runner looks like: the text did not
+    move and the bytes did, so the next commit stores most of the file again,
+    once. Nothing is wrong with the record; the repository grows by about one
+    commit's worth, and a person should know why. A day on which most buckets
+    really changed (a bulk re-read) has few unchanged ones and cannot trip it."""
+    try:
+        with open(path, "rb") as fh:
+            before = _members(fh.read(MAX_LOOKUP_ALL + 1))
+    except OSError:
+        return
+    if before is None:
+        return
+    after = {p[1:1 + LOOKUP_PREFIX]: (m, p) for p, m in zip(pieces[1:-1], members[1:-1])}
+    same_text = [k for k, (blob, text) in after.items() if k in before and before[k][1] == text]
+    moved = [k for k in same_text if before[k][0] != after[k][0]]
+    if after and len(moved) * 2 > len(after):
+        print(f"::warning::lookup/all.json.gz: {len(moved)} of {len(after)} buckets "
+              f"compressed to different bytes from the same text; zlib on this runner "
+              f"probably changed, so the next commit stores most of the file again, once "
+              f"(docs/LOOKUP.md)")
+
+
 def write_lookup(data: str) -> int:
     buckets = lookup_buckets(data)
     for prefix, tools in buckets.items():
         _write(os.path.join(data, "lookup", prefix + ".json"),
                _json_bytes({"prefix": prefix, "tools": tools}))
-    # One line per definition, so a day that adds a few changes a few lines
-    # and git stores the day as a small delta, not a new copy.
-    whole = ('{"prefix_length": %d, "tools": {\n' % LOOKUP_PREFIX
-             + ",\n".join(f"{json.dumps(fp)}: {json.dumps(row, sort_keys=True)}"
-                           for tools in buckets.values() for fp, row in tools.items())
-             + "\n}}\n").encode("utf-8")
-    _write(os.path.join(data, "lookup", "all.json"), whole)
+    pieces = lookup_pieces(buckets)
+    members = [gzip_member(p) for p in pieces]
+    gz_path = os.path.join(data, "lookup", "all.json.gz")
+    warn_if_recompressed(gz_path, pieces, members)
+    _write(os.path.join(data, "lookup", "all.json"), b"".join(pieces))
     # The same bytes gzipped, about a third of the size, which is what clients
-    # ask for first. mtime 0 and no file name, so the same record gives the
-    # same bytes. The plain file stays for clients from before this.
-    _write(os.path.join(data, "lookup", "all.json.gz"), gzip.compress(whole, 9, mtime=0))
+    # ask for first. The plain file stays for clients from before this.
+    _write(gz_path, b"".join(members))
     _write(os.path.join(data, "lookup", "meta.json"), _json_bytes({
         "prefix_length": LOOKUP_PREFIX,
         "fingerprint": "the tool fingerprint of docs/LOCK.md, lowercase hex",

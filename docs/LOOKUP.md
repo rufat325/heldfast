@@ -38,6 +38,23 @@ for first. It keeps what it downloaded in your cache directory under the feed
 commit it read, since a commit's content never changes: `verify` against an
 unchanged feed downloads nothing.
 
+**`all.json.gz` is a run of gzip members, not one.** It is the plain file
+compressed in pieces: the first line, one member for each bucket's lines, and
+the closing line. This is so that git, which stores the feed's history, can
+store each day as a small change: a gzip of the whole file shares no bytes with
+the one before it, and the file was most of the repository. Concatenated
+members are valid gzip (RFC 1952), and what they inflate to is byte for byte
+`all.json`, but **a reader has to follow the members.** `gzip.GzipFile` and
+`gzip.decompress` in Python, `zcat` and `gzip -dc`, and `zlib.gunzipSync` in
+Node do. A reader that stops after the first member, such as Python's
+`zlib.decompressobj(31)` used once, gets the first line and nothing else, and
+the JSON it parses is cut off; read `all.json` instead, or loop over
+`unused_data`. The file is about 3% larger than a single-member gzip. Every
+member is written with the same header (modification time 0, level 9, OS
+byte 255) and the same deflate settings, so a bucket that did not change
+compresses to the same bytes; if the runner's zlib changes, most buckets will
+compress to new bytes once, and the collector says so in its log.
+
 **Buckets** (`lookup/<abc>.json`, `verify --lookup buckets`). The same record
 split 4,096 ways by the first three hex characters of the fingerprint, a few
 dozen definitions per bucket (a median of 29). One bucket hides one tool
