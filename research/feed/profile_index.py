@@ -14,14 +14,19 @@ reads a checkout and writes nothing inside it.
   profile_index.py --data DIR --index OUT
       the native-to-profile map for every tool file, written to OUT, which
       must be outside DIR
+  profile_index.py --data DIR --audit
+      how often the native digest folds distinct shapes of a definition: the
+      tool files in the shape class where that can happen, and the native
+      digests that map to more than one profile digest (see `audit`)
 
 `--check` follows both catalogue layouts. The current one lists a tool by its
 native digest and the definition is the file in tools/, which holds the first
 raw seen under that digest. The first layout, gzipped, carries each reading's
 own definition. DIGEST is `sha256:<hex>`, or the hex alone.
 
-Exit status: 0 when something was found (or the index was written), 1 when
-nothing matched, 2 when the arguments or the checkout are not usable.
+Exit status: 0 when something was found (or the index was written, or an audit
+found no native digest with several profile digests), 1 when nothing matched
+(or an audit found one), 2 when the arguments or the checkout are not usable.
 """
 from __future__ import annotations
 
@@ -144,6 +149,88 @@ def check(data: str, package: str, tool: str, wanted: str, profile: str) -> int:
     return 0
 
 
+# The fields the profile hashes besides the name. The native digest turns a
+# missing one, a null, "" and {} into the same bytes (a non-object schema into
+# {}), and the profile keeps them apart, so a definition served in two of those
+# shapes has one native digest and two profile digests.
+_SHAPE_FIELDS = ("title", "description", "inputSchema", "outputSchema", "annotations")
+
+
+def _folded(field: str, value: object) -> bool:
+    """Is `value`, present in the definition, a shape the native digest folds?"""
+    if field in ("title", "description"):
+        return value is None or value == "" or not isinstance(value, str)
+    return value is None or value == {} or not isinstance(value, dict)
+
+
+def audit(data: str, profile: str) -> dict:
+    """What it would take for a profile digest to disagree with the native one.
+
+    Two counts, over the same files a reader can open:
+    - the shape class: tool files in which a hashed field is present in a
+      shape the native digest folds. Only these can have been served in two
+      shapes under one native digest.
+    - the native digests that map to more than one profile digest, over every
+      file in tools/ and every reading the first-layout catalogues keep whole
+      (each carries its own definition). The current layout lists a tool by
+      digest, so it adds no definition tools/ does not hold.
+    """
+    make = PROFILES[profile]
+    mapped: dict = {}  # native digest -> the set of profile digests seen
+    stats = {"tool_files": 0, "unreadable": 0, "no_profile_digest": 0, "folded": 0,
+             "by_field": dict.fromkeys(_SHAPE_FIELDS, 0), "legacy_catalogues": 0,
+             "legacy_unreadable": 0, "legacy_readings": 0}
+    for native, path in tool_files(data):
+        raw = _json_load(path)
+        if not isinstance(raw, dict):
+            stats["unreadable"] += 1
+            continue
+        stats["tool_files"] += 1
+        digest = make(raw)
+        stats["no_profile_digest"] += digest is None
+        mapped.setdefault(native, set()).add(digest)
+        hit = [f for f in _SHAPE_FIELDS if f in raw and _folded(f, raw[f])]
+        stats["folded"] += bool(hit)
+        for field in hit:
+            stats["by_field"][field] += 1
+    for pkg_dir, version in watch.catalogue_versions(data):
+        base = os.path.join(data, "catalogues", pkg_dir, version)
+        if os.path.exists(base + ".json") or not os.path.exists(base + ".json.gz"):
+            continue
+        stats["legacy_catalogues"] += 1
+        try:
+            body = watch.read_gz(base + ".json.gz")
+        except (OSError, ValueError, EOFError):
+            stats["legacy_unreadable"] += 1
+            continue
+        for raw in (body.get("tools") if isinstance(body, dict) else None) or []:
+            if isinstance(raw, dict):
+                try:
+                    native = watch.tool_digest(raw)
+                except ValueError:  # a number JSON cannot hold; verify refuses it too
+                    continue
+                stats["legacy_readings"] += 1
+                mapped.setdefault(native, set()).add(make(raw))
+    stats["native_digests"] = len(mapped)
+    stats["with_several_profile_digests"] = sum(len(v) > 1 for v in mapped.values())
+    return stats
+
+
+def _print_audit(stats: dict, profile: str) -> None:
+    n, d = stats["tool_files"], stats["native_digests"]
+    pct = 100 * stats["folded"] / n if n else 0.0
+    by = ", ".join(f"{f} {c:,}" for f, c in stats["by_field"].items() if c)
+    print(f"audit of {profile}")
+    print(f"tool files read: {n:,} ({stats['unreadable']:,} unreadable, "
+          f"{stats['no_profile_digest']:,} with no profile digest)")
+    print(f"shape class: {stats['folded']:,} of {n:,} ({pct:.3f}%)"
+          + (f" [{by}; a file can be in several]" if by else ""))
+    print(f"readings kept whole by {stats['legacy_catalogues']:,} first-layout catalogues: "
+          f"{stats['legacy_readings']:,} ({stats['legacy_unreadable']:,} catalogues unreadable)")
+    print(f"native digests: {d:,}; with more than one profile digest: "
+          f"{stats['with_several_profile_digests']:,}")
+
+
 def _inside(path: str, folder: str) -> bool:
     path, folder = os.path.realpath(path), os.path.realpath(folder)
     try:
@@ -191,6 +278,7 @@ def main(argv=None) -> int:
     what.add_argument("--lookup", metavar="DIGEST", type=_digest)
     what.add_argument("--check", nargs=3, metavar=("PACKAGE", "TOOL", "DIGEST"))
     what.add_argument("--index", metavar="OUT")
+    what.add_argument("--audit", action="store_true")
     args = ap.parse_args(argv)
     if not (os.path.isdir(os.path.join(args.data, "tools"))
             or os.path.isdir(os.path.join(args.data, "catalogues"))):
@@ -198,6 +286,10 @@ def main(argv=None) -> int:
         return 2
     if args.index:
         return index(args.data, args.index, args.profile)
+    if args.audit:
+        stats = audit(args.data, args.profile)
+        _print_audit(stats, args.profile)
+        return 0 if not stats["with_several_profile_digests"] else 1
     if args.check:
         try:
             wanted = _digest(args.check[2])

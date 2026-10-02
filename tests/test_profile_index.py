@@ -303,5 +303,89 @@ class TestReadOnly(Feed):
         self.assertEqual(2, run("--data", self.data)[0])
 
 
+class TestAudit(Feed):
+    """The two figures docs/TRANSPARENCY.md states, from the files themselves."""
+
+    def audit(self) -> tuple:
+        return run("--data", self.data, "--audit")
+
+    def test_counts_the_shape_class_and_the_digests_that_split(self) -> None:
+        # Same native digest as `read`'s file, a different profile digest: a
+        # title of "" and no title fold together natively and not here.
+        plain = tool("t", "d")
+        titled = tool("t", "d", title="")
+        self.assertEqual(watch.tool_digest(plain), watch.tool_digest(titled))
+        self.assertNotEqual(agentavow_v1_digest(plain), agentavow_v1_digest(titled))
+        self.write("2.0.0", "04", plain)
+        self.legacy("0.9.0", "01", titled)
+        code, out, _ = self.audit()
+        self.assertEqual(1, code)
+        self.assertIn("native digests: 4; with more than one profile digest: 1", out)
+        self.assertIn("tool files read: 4 (0 unreadable, 0 with no profile digest)", out)
+        # Only `plain`'s own file is read: nothing in it is in a folded shape.
+        self.assertIn("shape class: 0 of 4 (0.000%)", out)
+
+    def test_a_clean_record_passes(self) -> None:
+        code, out, _ = self.audit()
+        self.assertEqual(0, code)
+        self.assertIn("native digests: 3; with more than one profile digest: 0", out)
+
+    def test_the_shape_class_names_the_fields(self) -> None:
+        self.write("2.0.0", "04",
+                   tool("a", "d", title="", outputSchema={}, annotations=None),
+                   tool("b", ""),
+                   tool("c", "d", outputSchema={"type": "object"}))
+        code, out, _ = self.audit()
+        self.assertEqual(0, code)
+        self.assertIn("shape class: 2 of 6 (33.333%)", out)
+        self.assertIn("title 1, description 1, outputSchema 1, annotations 1", out)
+
+    def test_each_folded_form_is_in_the_class(self) -> None:
+        for field, value in (("title", None), ("title", ""), ("title", 5),
+                             ("description", ""), ("inputSchema", {}),
+                             ("inputSchema", []), ("outputSchema", None),
+                             ("annotations", {}), ("annotations", "x")):
+            with self.subTest(field=field, value=value):
+                self.assertTrue(profile_index._folded(field, value))
+        for field, value in (("title", "T"), ("description", "d"),
+                             ("inputSchema", {"type": "object"}),
+                             ("outputSchema", {"a": 1}), ("annotations", {"a": 1})):
+            with self.subTest(field=field, value=value):
+                self.assertFalse(profile_index._folded(field, value))
+
+    def test_a_missing_field_is_not_in_the_class(self) -> None:
+        """Absent is the common case; the class is the shapes that are present."""
+        self.assertEqual(0, profile_index.audit(self.data, "agentavow.mcp-tool-definition.v1")["folded"])
+
+    def test_a_version_held_in_both_layouts_is_read_as_the_current_one(self) -> None:
+        """The collector's reader prefers the plain catalogue, so the gzipped
+        copy is not a reading of its own."""
+        self.legacy("1.0.1", "01", tool("read", APPROVED, title=""))
+        self.assertIn("readings kept whole by 0 first-layout catalogues: 0",
+                      self.audit()[1])
+
+    def test_the_same_checkout_gives_the_same_report(self) -> None:
+        self.legacy("0.9.0", "01", tool("read", "Read an invoice."))
+        self.assertEqual(self.audit(), self.audit())
+
+    def test_it_changes_nothing_in_the_checkout(self) -> None:
+        self.legacy("0.9.0", "01", tool("read", "Read an invoice."))
+        before = tree(self.data)
+        self.audit()
+        self.assertEqual(before, tree(self.data))
+
+    def test_an_unreadable_file_is_counted_not_fatal(self) -> None:
+        bad = os.path.join(self.data, "tools", "ab", "ab" + "0" * 62 + ".json")
+        os.makedirs(os.path.dirname(bad), exist_ok=True)
+        Path(bad).write_text("{not json", encoding="utf-8")
+        legacy = watch.catalogue_path(self.data, self.PKG, "0.8.0", legacy=True)
+        os.makedirs(os.path.dirname(legacy), exist_ok=True)
+        Path(legacy).write_bytes(b"not gzip")
+        code, out, _ = self.audit()
+        self.assertEqual(0, code)
+        self.assertIn("(1 unreadable,", out)
+        self.assertIn("(1 catalogues unreadable)", out)
+
+
 if __name__ == "__main__":
     unittest.main()

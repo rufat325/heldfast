@@ -270,12 +270,15 @@ nothing inside it:
 python3 research/feed/profile_index.py --data feed --lookup sha256:<profile digest>
 python3 research/feed/profile_index.py --data feed --check <package> <tool> sha256:<profile digest>
 python3 research/feed/profile_index.py --data feed --index ../native-to-profile.json
+python3 research/feed/profile_index.py --data feed --audit
 ```
 
 `--lookup` names the tool files whose definition has that profile digest.
 `--check` lists the readings of one tool, with `measured_at`, whose definition
 yields it, and the first and last seen. `--index` writes the native-to-profile
-map for every tool file, to a file outside the checkout.
+map for every tool file, to a file outside the checkout. `--audit` prints the
+two figures below for the checkout it is given, and exits 1 if any native
+digest maps to more than one profile digest.
 
 **The first raw seen.** A profile digest here is computed from the definition
 `tools/` holds, which is the first raw seen under a native digest (the
@@ -284,7 +287,8 @@ distinct shapes of a field -- missing, `null`, `""` or `{}` -- into one, and
 this profile does not. A server that serves one definition in two such shapes
 has one file in `tools/`, and the profile digest of the shape it served later
 cannot be re-derived from it. Measured on the feed at commit `cdd6cc6`, as of
-1 October 2026:
+1 October 2026, and reproducible with `--audit` on a checkout of that commit
+(a later checkout counts a later record):
 
 - 1,326 of 120,018 tool files (1.105%) have a hashed field present in a shape
   the native digest folds. That is the class in which such a flip is possible.
