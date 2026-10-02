@@ -247,6 +247,61 @@ before the job reports success. The job that uploads to Hugging Face holds
 only that token, and the one that publishes releases only the feed
 repository's, so neither copy can be written by what writes the other.
 
+## Comparing with another record
+
+Another record can name the same tool definition by a different digest. The
+key here is the native digest of [LOCK.md](LOCK.md): `tools/` holds each
+definition once, named by it, and every catalogue lists a tool by it. The feed
+stores no other digest. A digest from another record is recomputed from
+`tools/`, so a comparison needs nothing a clone does not already hold.
+
+One profile is implemented: `agentavow.mcp-tool-definition.v1`, the digest
+AgentAvow's signed attestations carry for each tool
+([their description and vectors](https://github.com/AgentAvow/AgentAvow/tree/main/docs/standards/tool-manifest-digest-vectors-v1)).
+`src/heldfast/profiles.py` implements the rules as that page states them. No
+file of theirs is copied into this repository, because the folder carries no
+licence of its own; the one test that reads their vectors runs only when
+`AGENTAVOW_VECTORS_DIR` names a local copy.
+
+`research/feed/profile_index.py` reads a checkout of the feed and writes
+nothing inside it:
+
+```bash
+python3 research/feed/profile_index.py --data feed --lookup sha256:<profile digest>
+python3 research/feed/profile_index.py --data feed --check <package> <tool> sha256:<profile digest>
+python3 research/feed/profile_index.py --data feed --index ../native-to-profile.json
+python3 research/feed/profile_index.py --data feed --audit
+```
+
+`--lookup` names the tool files whose definition has that profile digest.
+`--check` lists the readings of one tool, with `measured_at`, whose definition
+yields it, and the first and last seen. `--index` writes the native-to-profile
+map for every tool file, to a file outside the checkout. `--audit` prints the
+two figures below for the checkout it is given, and exits 1 if any native
+digest maps to more than one profile digest.
+
+**The first raw seen.** A profile digest here is computed from the definition
+`tools/` holds, which is the first raw seen under a native digest (the
+first-layout catalogues carry each reading's own). The native digest folds
+distinct shapes of a field -- missing, `null`, `""` or `{}` -- into one, and
+this profile does not. A server that serves one definition in two such shapes
+has one file in `tools/`, and the profile digest of the shape it served later
+cannot be re-derived from it. Measured on the feed at commit `cdd6cc6`, as of
+1 October 2026, and reproducible with `--audit` on a checkout of that commit
+(a later checkout counts a later record):
+
+- 1,326 of 120,018 tool files (1.105%) have a hashed field present in a shape
+  the native digest folds. That is the class in which such a flip is possible.
+- 0 of 240,344 native digests map to more than one profile digest, counting
+  every file in `tools/` and the 587,436 readings the first-layout catalogues
+  keep whole.
+
+**What it does not say.** A digest the record does not hold means the feed did
+not read that definition, and the feed is one anonymous reader a few times a
+day (above). heldfast reproduces the published digests and key encoding for the
+pinned fixture as of 2 October 2026. It makes no claim about AgentAvow's
+grades.
+
 ## Where this goes
 
 - **Independent readers.** The same reading, taken from different networks by
