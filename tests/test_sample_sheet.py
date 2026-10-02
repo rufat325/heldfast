@@ -596,7 +596,7 @@ class TestNumbers(Rendered):
         self.assertEqual(self.sheet.summary, found)
         s = self.sheet.summary
         self.assertIn(f'<b data-count="lines">{s["lines"]}</b> lines, '
-                      f'<b data-count="distinct">{s["distinct"]}</b> distinct servers', self.page)
+                      f'<b data-count="distinct">{s["distinct"]}</b> distinct entries', self.page)
 
     def test_never_read_and_latest_attempt_failed_are_never_added_together(self) -> None:
         self.assertNotIn("could not be read", self.page.lower())
@@ -805,11 +805,22 @@ class TestWhatHappened(Rendered):
         self.assertIn("<th>What happened</th>", part)
         self.assertNotIn("Changed words", self.page)
         self.assertIn("\u201cnew tool\u201d was not in the previous tool list", part)
-        self.assertIn("\u201cprice changed A to B\u201d", part)
+        self.assertIn("\u201cstated amount changed, from X to Y\u201d", part)
+        self.assertIn("does not say the two are the same kind of amount", part)
+        self.assertIn("A reader should judge the context", part)
+        self.assertIn("a fee for gas, an example, or belong to another tool", part)
         self.assertIn("never the words it lost", part)
 
-    def test_a_price_that_rose_is_given_as_before_and_after(self) -> None:
-        self.assertEqual("price changed $0.01 to $0.02", self._what("remote/com.example/priced", "quote"))
+    def test_an_amount_that_changed_is_shown_as_written_with_its_context(self) -> None:
+        self.assertEqual(
+            "stated amount changed, from \u201cReturns a quote. Costs $0.01 per call.\u201d "
+            "to \u201cReturns a quote. Costs $0.02 per call.\u201d",
+            self._what("remote/com.example/priced", "quote"))
+
+    def test_the_sheet_never_states_a_verdict_on_a_price(self) -> None:
+        for phrase in ("price changed", "price rose", "price fell", "price increased",
+                       "price cut", "now costs", "raised"):
+            self.assertNotIn(phrase, self.page)
 
     def _what(self, package: str, tool_name: str) -> str:
         part = section(self.page, "review")
@@ -820,8 +831,8 @@ class TestWhatHappened(Rendered):
         raise AssertionError(f"no review row for {package} {tool_name}")
 
     def test_a_new_tool_that_states_a_price_says_so(self) -> None:
-        self.assertEqual("new tool with a stated price ($0.5)",
-                         self._what("remote/com.example/priced", "bulk"))
+        self.assertEqual("new tool with a stated price: \u201cReturns many quotes. Costs $0.50 per "
+                         "batch.\u201d", self._what("remote/com.example/priced", "bulk"))
 
     def test_a_changed_description_shows_the_words_it_gained(self) -> None:
         said = self._what("remote/com.example/kb", "search")
@@ -839,23 +850,74 @@ class TestWhatHappened(Rendered):
         self.assertEqual("", sample_sheet.added_from_diff("-only removed"))
         self.assertEqual("", sample_sheet.added_from_diff(""))
 
+    # The pair that made the first version of this column wrong: a fee for gas on a free
+    # tool, and, after the tool was retired, the price of another tool.
+    ARC_BEFORE = ("Give an agent an ERC-8004 identity on Arc for free. Pass its name, what it does "
+                  "and where it can be reached; we write a correct registration file, host it, "
+                  "check that its endpoints answer, and return the unsigned register() transaction "
+                  "for Arc's identity registry. The wallet that sends it owns the agent from the "
+                  "first block (about 0.004 USDC of gas; one claim from arc_faucet_claim covers "
+                  "it). Then call arc_passport_confirm with the transaction hash. No key ever "
+                  "leaves your side.")
+    ARC_AFTER = ("RETIRED 1 Oct 2026: an Arc Agent Passport costs $0.99. A person pays from a "
+                 "browser wallet at https://apexfaucet.xyz/arc/passport/ ; an agent buys it with "
+                 "arc_passport_buy. This tool now only returns that answer.")
+
+    def test_a_gas_fee_that_became_another_tools_price_is_not_called_a_price_change(self) -> None:
+        tool = lambda text: {"name": "arc_passport_draft", "description": text,  # noqa: E731
+                             "inputSchema": {}}
+        change = {"tool": "arc_passport_draft", "fields": ["description"],
+                  "introduced": [{"kind": "price", "match": "0.99"}]}
+        what, _ = sample_sheet.describe(change, "changed", tool(self.ARC_BEFORE), tool(self.ARC_AFTER))
+        self.assertEqual("stated amount changed, from \u201cagent from the first block (about "
+                         "0.004 USDC of gas; one claim from arc_faucet_claim\u201d to \u201c2026: "
+                         "an Arc Agent Passport costs $0.99. A person pays from a browser\u201d",
+                         what)
+        self.assertNotIn("price changed", what)
+        self.assertNotIn("$0.004", what)
+        self.assertNotRegex(what, r"\$0\.004 to")
+        before, after = what.split(" to \u201c")
+        self.assertIn("gas", before)
+        self.assertIn("costs", after)
+
+    def test_an_amount_is_shown_with_about_six_words_on_each_side(self) -> None:
+        text = "one two three four five six seven Costs $0.99 per call. a b c d e f g h"
+        ((key, said),) = sample_sheet.stated_amounts(text)
+        self.assertEqual(("$", 0.99), key)
+        self.assertEqual("three four five six seven Costs $0.99 per call. a b c d", said)
+        self.assertEqual([(("$", 5.0), "Costs $5.")], sample_sheet.stated_amounts("Costs $5."))
+
+    def test_amounts_are_found_with_the_reports_patterns_in_the_order_they_appear(self) -> None:
+        found = sample_sheet.stated_amounts(
+            "Debits 8 credits. Gas about 0.004 USDC. Then $12,000.50 once. A $80M fund. 200 sats."
+            " Again $12,000.50.")
+        # A size ($80M) is not an amount; one amount is listed once; USDC reads as dollars,
+        # which is why no pair of them is called a price change.
+        self.assertEqual([("credits", 8.0), ("$", 0.004), ("$", 12000.5), ("sats", 200.0)],
+                         [k for k, _ in found])
+
     def test_each_kind_of_account(self) -> None:
         d = sample_sheet.describe
         tool = lambda text: {"name": "t", "description": text, "inputSchema": {}}  # noqa: E731
         price = {"introduced": [{"kind": "price", "match": "0.02"}], "fields": ["description"]}
-        self.assertEqual(("price changed $0.01 to $0.02", ""), d(
-            price, "changed", tool("Costs $0.01 per call."), tool("Costs $0.02 per call.")))
-        self.assertEqual("price changed 8 credits to 9 credits", d(
-            price, "changed", tool("Debits 8 credits."), tool("Debits 9 credits."))[0])
-        self.assertTrue(d(price, "changed", tool("$1 or $2"), tool("$1 or $3"))[0]
-                        .startswith("stated prices changed"))
-        self.assertTrue(d(price, "changed", tool("Free."), tool("Costs $3."))[0]
-                        .startswith("a price was added to the text"))
-        self.assertTrue(d(price, "changed", tool("Costs $3."), tool("Free."))[0]
-                        .startswith("a stated price was removed"))
-        self.assertEqual("new tool with a stated price ($3)", d(
-            price, "added", None, tool("Costs $3."))[0])
+        self.assertEqual(
+            "stated amount changed, from \u201cCosts $0.01 per call.\u201d to \u201cCosts $0.02 per "
+            "call.\u201d", d(price, "changed", tool("Costs $0.01 per call."),
+                              tool("Costs $0.02 per call."))[0])
+        self.assertEqual(
+            "stated amount changed, from \u201cDebits 8 credits.\u201d to \u201cDebits 9 credits.\u201d",
+            d(price, "changed", tool("Debits 8 credits."), tool("Debits 9 credits."))[0])
+        self.assertEqual("a stated amount was added: \u201cCosts $3.\u201d",
+                         d(price, "changed", tool("Free."), tool("Costs $3."))[0])
+        self.assertEqual("a stated amount was removed: \u201cCosts $3.\u201d",
+                         d(price, "changed", tool("Costs $3."), tool("Free."))[0])
+        many = d(price, "changed", tool("Free."), tool("$1 or $2 or $3"))[0]
+        self.assertIn("and 1 more", many)
+        self.assertEqual("new tool with a stated price: \u201cCosts $3.\u201d",
+                         d(price, "added", None, tool("Costs $3."))[0])
         self.assertEqual("new tool with a stated price", d(price, "added", None, None)[0])
+        self.assertEqual("a stated amount changed; the earlier text could not be read",
+                         d(dict(price, fields=[]), "changed", None, None)[0])
         hidden = {"introduced": [{"kind": "credential-path", "match": "~/.ssh"}]}
         self.assertEqual(("new tool", "~/.ssh"), d(hidden, "added", None, tool("x")))
         schema = {"introduced": [{"kind": "critical-word", "match": "x"}], "fields": ["inputSchema"]}
@@ -867,11 +929,6 @@ class TestWhatHappened(Rendered):
         text = {"introduced": hidden["introduced"], "fields": ["description"], "words": "-a +b c"}
         self.assertEqual(("description changed", "b c"), d(text, "changed", None, None))
         self.assertEqual(200, len(d(dict(text, words="+" + "w" * 500), "changed", None, None)[1]))
-
-    def test_amounts_are_written_the_way_they_were_stated(self) -> None:
-        self.assertEqual("$0.0025", sample_sheet.money("$", 0.0025))
-        self.assertEqual("$5", sample_sheet.money("$", 5.0))
-        self.assertEqual("200 sats", sample_sheet.money("sats", 200.0))
 
 
 class TestPageOne(Rendered):
@@ -937,9 +994,50 @@ class TestFooter(Rendered):
             Path(tmp, "s.txt").write_text("com.example/kb\n", encoding="utf-8")
             self.assertEqual(0, quiet(sample_sheet.main, [
                 "--feed", FEED, "--input", os.path.join(tmp, "s.txt"), "--out", os.path.join(tmp, "o"),
-                "--today", "2026-10-02", "--prepared-by", "Q. Analyst", "--contact", "q@example.com"]))
+                "--today", "2026-10-02", "--prepared-by", "Q. Analyst", "--contact", "q@analyst.test"]))
             page = Path(tmp, "o", "sheet.html").read_text(encoding="utf-8")
-        self.assertIn("Prepared by Q. Analyst, q@example.com", page)
+        self.assertIn("Prepared by Q. Analyst, q@analyst.test", page)
+
+
+class TestContact(unittest.TestCase):
+    def run_cli(self, *extra: str) -> tuple:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "s.txt").write_text("com.example/kb\n", encoding="utf-8")
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = sample_sheet.main(["--feed", FEED, "--input", os.path.join(tmp, "s.txt"),
+                                          "--out", os.path.join(tmp, "o"), *extra])
+            return code, err.getvalue(), os.path.exists(os.path.join(tmp, "o", "sheet.html"))
+
+    def test_a_real_sheet_needs_a_contact(self) -> None:
+        code, err, written = self.run_cli()
+        self.assertEqual((2, False), (code, written))
+        self.assertIn("--contact is required", err)
+        self.assertIn("--demo", err)
+
+    def test_a_stand_in_contact_is_refused_unless_it_is_a_demo(self) -> None:
+        for contact in ("hello@example.com", "me@EXAMPLE.org", "x@example.net", "placeholder",
+                        "TODO", "your@email.com", "<your contact>"):
+            with self.subTest(contact):
+                code, err, written = self.run_cli("--contact", contact)
+                self.assertEqual((2, False), (code, written))
+                self.assertIn("looks like a placeholder", err)
+                self.assertEqual(0, self.run_cli("--demo", "--contact", contact)[0])
+
+    def test_a_real_contact_is_accepted(self) -> None:
+        for contact in ("q@analyst.test", "Q. Analyst, +1 555 0100", "https://analyst.test/hello"):
+            with self.subTest(contact):
+                code, _, written = self.run_cli("--contact", contact)
+                self.assertEqual((0, True), (code, written))
+
+    def test_a_demo_may_leave_the_contact_out(self) -> None:
+        code, _, written = self.run_cli("--demo")
+        self.assertEqual((0, True), (code, written))
+
+    def test_the_rule_is_one_function(self) -> None:
+        self.assertEqual("", sample_sheet.contact_problem("", True))
+        self.assertNotEqual("", sample_sheet.contact_problem("   ", False))
+        self.assertEqual("", sample_sheet.contact_problem("q@analyst.test", False))
 
 
 class TestDuplicates(unittest.TestCase):
@@ -980,7 +1078,7 @@ class TestDuplicates(unittest.TestCase):
         self.assertEqual({"lines": 7, "distinct": 3}, {k: self.sheet.summary[k]
                                                     for k in ("lines", "distinct")})
         self.assertIn('<b data-count="lines">7</b> lines, <b data-count="distinct">3</b> '
-                      "distinct servers", self.page)
+                      "distinct entries", self.page)
         s = self.sheet.summary
         self.assertEqual(s["distinct"], s["matched"] + s["not_in_record"] + s["ambiguous"])
         self.assertEqual(2, s["matched"])
@@ -1107,11 +1205,11 @@ class TestWhereItWrites(unittest.TestCase):
                     with self.assertRaises(sample_sheet.SheetError) as caught:
                         sample_sheet.run(FEED, servers, out, SINCE, TODAY)
                     self.assertIn("never writes into a feed checkout", str(caught.exception))
-            code = quiet(sample_sheet.main, ["--feed", FEED, "--input", servers, "--out",
+            code = quiet(sample_sheet.main, ["--demo", "--feed", FEED, "--input", servers, "--out",
                                              os.path.join(FEED, "out")])
             self.assertEqual(2, code)
             self.assertEqual(before, tree(FEED))
-            self.assertEqual(0, quiet(sample_sheet.main, ["--feed", FEED, "--input", servers,
+            self.assertEqual(0, quiet(sample_sheet.main, ["--demo", "--feed", FEED, "--input", servers,
                                                           "--out", os.path.join(tmp, "o")]))
             self.assertEqual(before, tree(FEED))
 
@@ -1123,13 +1221,13 @@ class TestWhereItWrites(unittest.TestCase):
             os.symlink(FEED, os.path.join(tmp, "link"))
             before = tree(FEED)
             self.assertEqual(2, quiet(sample_sheet.main, [
-                "--feed", FEED, "--input", servers, "--out", os.path.join(tmp, "link", "o")]))
+                "--demo", "--feed", FEED, "--input", servers, "--out", os.path.join(tmp, "link", "o")]))
             self.assertEqual(before, tree(FEED))
 
     def test_a_folder_that_is_not_a_feed_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "s.txt").write_text("a\n", encoding="utf-8")
-            code = quiet(sample_sheet.main, ["--feed", tmp, "--input", os.path.join(tmp, "s.txt"),
+            code = quiet(sample_sheet.main, ["--demo", "--feed", tmp, "--input", os.path.join(tmp, "s.txt"),
                                              "--out", os.path.join(tmp, "o")])
             self.assertEqual(2, code)
             self.assertFalse(os.path.exists(os.path.join(tmp, "o")))
@@ -1142,7 +1240,7 @@ class TestWhereItWrites(unittest.TestCase):
                     mock.patch("socket.create_connection", side_effect=AssertionError("network")), \
                     mock.patch("socket.getaddrinfo", side_effect=AssertionError("network")):
                 self.assertEqual(0, quiet(sample_sheet.main, [
-                    "--feed", FEED, "--input", servers, "--out", os.path.join(tmp, "o"),
+                    "--demo", "--feed", FEED, "--input", servers, "--out", os.path.join(tmp, "o"),
                     "--today", "2026-10-02"]))
 
 

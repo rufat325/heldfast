@@ -9,8 +9,8 @@ that only reordered. A server's own text is never judged here. A signal the
 collector found in a change is reported as a lead for a reader, and the sheet
 says plainly what it is not.
 
-  sample_sheet.py --feed DIR --input servers.txt [--out ./out]
-                  [--title T] [--prepared-by P] [--since 2026-09-23]
+  sample_sheet.py --feed DIR --input servers.txt --contact C [--out ./out]
+                  [--title T] [--prepared-by P] [--since 2026-09-23] [--demo]
 
 Reads DIR and the input file. Writes `sheet.csv` and a self-contained,
 printable `sheet.html` into --out, which must not be inside DIR. Both come from
@@ -350,9 +350,43 @@ def and_join(items: list) -> str:
     return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def money(unit: str, amount: float) -> str:
-    text = ("%f" % amount).rstrip("0").rstrip(".") or "0"
-    return f"${text}" if unit == "$" else f"{text} {unit}"
+CONTEXT_WORDS = 6
+
+
+def stated_amounts(text: str, words: int = CONTEXT_WORDS) -> list:
+    """Every amount a text states, as ((unit, amount), the amount with about six
+    words on each side), in the order they appear and once each.
+
+    Found with the report's own price patterns (driftgrade's), which read both
+    "$0.99" and "0.004 USDC" as dollars. They cannot tell a price from a fee for
+    gas, an example, or an amount belonging to another tool, so nothing here
+    calls an amount a price: the words around it are shown and a reader judges."""
+    report = _report()
+    found = []
+    for pattern in report.PRICES:
+        for m in pattern.finditer(text):
+            if report._priced(text, m):
+                found.append((m.start(), m.end(), ("$", float(report._amount(m.group(1))))))
+    for unit, pattern in report.UNIT_PRICES:
+        for m in pattern.finditer(text):
+            found.append((m.start(), m.end(), (unit, float(report._amount(m.group(1))))))
+    tokens = [(m.start(), m.end()) for m in re.finditer(r"\S+", text)]
+    out, seen = [], set()
+    for start, end, key in sorted(found):
+        if key in seen:
+            continue
+        seen.add(key)
+        hit = [i for i, (a, b) in enumerate(tokens) if a < end and b > start]
+        if not hit:
+            continue
+        lo, hi = max(hit[0] - words, 0), min(hit[-1] + words + 1, len(tokens))
+        out.append((key, cut(" ".join(text[a:b] for a, b in tokens[lo:hi]), 140)))
+    return out
+
+
+def _quoted(items: list, shown: int = 2) -> str:
+    said = "; ".join(f"\u201c{snippet}\u201d" for _, snippet in items[:shown])
+    return said + (f" and {len(items) - shown} more" if len(items) > shown else "")
 
 
 def added_words(old: str, new: str) -> str:
@@ -382,33 +416,37 @@ def describe(change: dict, part: str, old: dict | None, new: dict | None) -> tup
     """(what happened, the words) for one tool in one event, in plain words.
 
     `part` is "added" or "changed"; `old` and `new` are the tool's definitions
-    where the catalogues could be read. Only a price whose before and after
-    are both readable is given as "$A to $B". Words are the ones a changed
-    description gained, or, for a new tool, the text that matched."""
+    where the catalogues could be read. An amount is shown as the server wrote
+    it, with a few words around it, and never as a verdict: "from X to Y" does
+    not say X and Y are the same kind of thing, because they may not be (a fee
+    for gas, an example, an amount that belongs to another tool). Words are the
+    ones a changed description gained, or, for a new tool, the text that
+    matched."""
     report = _report()
     kinds = {clean(s.get("kind")) for s in change.get("introduced") or []}
     if part == "added":
-        found = report.prices(report.tool_text(new)) if new else {}
         if "price" in kinds:
-            shown = "; ".join(money(u, a) for u, v in sorted(found.items()) for a in v[:2])
-            return "new tool with a stated price" + (f" ({shown})" if shown else ""), ""
+            amounts = stated_amounts(report.tool_text(new)) if new else []
+            return "new tool with a stated price" + (": " + _quoted(amounts) if amounts else ""), ""
         matched = "; ".join(clean(s.get("match")) for s in change.get("introduced") or []
                             if s.get("match"))
         return "new tool", cut(matched)
-    phrases, words = [], ""
-    pairs, before, after = [], {}, {}
+    phrases, words, said = [], "", False
     if old and new:
-        before, after = report.prices(report.tool_text(old)), report.prices(report.tool_text(new))
-        pairs = [(u, before[u][0], after[u][0]) for u in sorted(set(before) & set(after))
-                 if len(before[u]) == 1 and len(after[u]) == 1 and before[u][0] != after[u][0]]
-    if pairs:
-        phrases.append("price changed " + "; ".join(f"{money(u, a)} to {money(u, b)}"
-                                                    for u, a, b in pairs[:3]))
+        before, after = stated_amounts(report.tool_text(old)), stated_amounts(report.tool_text(new))
+        gone = [x for x in before if x[0] not in {k for k, _ in after}]
+        came = [x for x in after if x[0] not in {k for k, _ in before}]
+        if gone and came:
+            phrases.append(f"stated amount changed, from {_quoted(gone)} to {_quoted(came)}")
+        elif came:
+            phrases.append(f"a stated amount was added: {_quoted(came)}")
+        elif gone:
+            phrases.append(f"a stated amount was removed: {_quoted(gone)}")
+        said = bool(phrases)
     elif "price" in kinds:
-        phrases.append("a price was added to the text" if after and not before
-                       else "a stated price was removed" if before and not after
-                       else "stated prices changed")
-    if not pairs or kinds - {"price"}:
+        phrases.append("a stated amount changed; the earlier text could not be read")
+        said = True
+    if not said or kinds - {"price"}:
         fields = [FIELD_NAMES[f] for f in change.get("fields") or [] if f in FIELD_NAMES]
         if fields:
             phrases.append(and_join(fields) + " changed")
@@ -731,11 +769,12 @@ EARLIER = ("\u2021 The last change is from the earlier study: the date is the re
            "version that changed, measured later.")
 
 WHAT_LEGEND = (
-    "What happened: \u201cnew tool\u201d was not in the previous tool list. \u201cprice "
-    "changed A to B\u201d is the one price a tool\u2019s text stated becoming another; an "
-    "amount quoted in text can be an example and not what a call costs. \u201cdescription "
-    "changed\u201d is followed by the words it gained, never the words it lost. Words are the "
-    "server\u2019s own, as recorded, cut to 200 characters.")
+    "What happened: \u201cnew tool\u201d was not in the previous tool list. \u201cstated amount "
+    "changed, from X to Y\u201d shows each amount as the server wrote it, with a few words around "
+    "it. It does not say the two are the same kind of amount. A reader should judge the context: "
+    "an amount can be a price, a fee for gas, an example, or belong to another tool. "
+    "\u201cdescription changed\u201d is followed by the words it gained, never the words it lost. "
+    "Words are the server\u2019s own, as recorded, and cut.")
 
 CSS = """
 @page { size: A4; margin: 12mm; }
@@ -981,7 +1020,7 @@ def render_html(sheet: Sheet) -> str:
     summary = "".join(f'<span><b data-count="{k}">{s[k]}</b> {esc(label)}</span>'
                       for k, label in counts)
     headline = (f'<b data-count="lines">{s["lines"]}</b> lines, '
-                f'<b data-count="distinct">{s["distinct"]}</b> distinct servers')
+                f'<b data-count="distinct">{s["distinct"]}</b> distinct entries')
     disclaimer = "".join(f'<p class="disclaimer">{esc(t.format(window=WINDOW_START))}</p>'
                          for t in DISCLAIMER)
     method = "".join(f"<p>{esc(t.format(window=WINDOW_START, sealed=SEALED_FROM))}</p>"
@@ -1030,6 +1069,24 @@ def run(feed: str, inputs: str, out: str, since: str = WINDOW_START,
     return sheet
 
 
+# A contact that is plainly a stand-in. A sheet for a customer carries a real one.
+PLACEHOLDER = re.compile(r"example\.(com|org|net)|placeholder|\btodo\b|\byour[\w.]*@|<[^>]*>",
+                         re.IGNORECASE)
+
+
+def contact_problem(contact: str, demo: bool) -> str:
+    """Why a contact cannot be used, or '' when it can. A real sheet needs one,
+    and not a stand-in; a demo sheet may have none."""
+    if demo:
+        return ""
+    if not contact.strip():
+        return "--contact is required: it is printed on page one. Pass --demo for a sample."
+    if PLACEHOLDER.search(contact):
+        return (f"--contact {contact!r} looks like a placeholder; a sheet for a customer needs a "
+                f"real one. Pass --demo for a sample.")
+    return ""
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--feed", required=True, help="a checkout of the feed (read only)")
@@ -1037,12 +1094,19 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default="out", help="where to write; must be outside the feed")
     ap.add_argument("--title", default=TITLE_DEFAULT, help="the title of the page")
     ap.add_argument("--prepared-by", default="", help="who prepared it, shown at the foot of page one")
-    ap.add_argument("--contact", default="", help="how to reach them, plain text, shown beside it")
+    ap.add_argument("--contact", default="", help="how to reach them, plain text, shown beside it; "
+                    "required unless --demo")
+    ap.add_argument("--demo", action="store_true",
+                    help="a sample for review, not for a customer: --contact may be left out")
     ap.add_argument("--since", default=WINDOW_START, metavar="YYYY-MM-DD",
                     help="start of the window changes are counted in")
     ap.add_argument("--today", default=None, metavar="YYYY-MM-DD",
                     help="the date days-since are counted to (default: today, UTC)")
     args = ap.parse_args(argv)
+    problem = contact_problem(args.contact, args.demo)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
     try:
         today = datetime.date.fromisoformat(args.today) if args.today else None
         datetime.date.fromisoformat(args.since)
