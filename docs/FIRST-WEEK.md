@@ -134,6 +134,20 @@ servers in four days was withdrawn because it does not reproduce under the
 strict definition, a readable change together with a tripling.
 <!-- C07 -->
 
+A pair is two stated amounts in the same unit; the report does not check that
+both describe the same charge. The 414 pairs were compared by the words around
+each amount, and every pair whose words differ beyond the number was read by
+hand (research/report/c07-audit.md): 412 read as the same per-call or per-item
+charge on both sides, one changed its billing basis (`xyz.apexfaucet/apex-x1`,
+`leads_verify_domains`, from `$1 per call` to `$0.20 per 1,000 domains`), and
+one compares a range with an exact figure (`com.odilelabs/odile`,
+`estimate_media_job`). Both of those are amounts that fell, so neither is among
+the 4 servers that at least tripled a price. Of those 4,
+`world.agentindex/x402` rests on one settlement amount, `$0.000001` in one
+version and `$0.001` in the next; the text does not show whether that is a
+change or a rewording. Every figure above is kept as first published.
+<!-- C07 -->
+
 **Coverage.** Of 19,764 hosted state files, 13,255 (67.1%) were read and
 current, and 369 (1.9%) had a catalogue but a failed latest attempt, 151 of
 them with HTTP 429. 6,140 (31.1%) had never been read: 4,165 (21.1%) answered
@@ -196,11 +210,16 @@ git checkout b9f7ec8c10367e74abb5044ac02aee86405236a0
 python research/report/numbers.py --feed ../feed-snapshot --out research/report/numbers.json
 python research/report/numbers.py --feed ../feed-snapshot --verify
 python research/report/check_numbers.py docs/FIRST-WEEK.md
+python research/report/audit_c07.py ../feed-snapshot research/report/audit_c07.json   # the 414 price pairs, with their words
 ```
 
 Checking the checkpoint itself is described in docs/TRANSPARENCY.md, "How to
 verify one". Some paths in the feed differ in nothing but case, so on Windows or
 macOS extract into a case-sensitive directory.
+
+## Corrections and clarifications
+
+- 2 October 2026: Prices clarified; no figure changed.
 
 ## References
 

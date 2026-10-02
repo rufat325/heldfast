@@ -302,6 +302,15 @@ day (above). heldfast reproduces the published digests and key encoding for the
 pinned fixture as of 2 October 2026. It makes no claim about AgentAvow's
 grades.
 
+## A change-history sheet for a list of servers
+
+`research/feed/sample_sheet.py` reads a checkout of the feed and a file of
+servers (registry names, URLs, npm names or GitHub URLs) and writes a CSV and a
+printable HTML page of what the record holds for each: whether it could be read,
+its tool count, when it was first recorded, and its changes since 2026-09-23. It
+makes no network request, writes nothing inside the checkout, gives no score,
+and shows a server that could not be read as unread, never as unchanged.
+
 ## Where this goes
 
 - **Independent readers.** The same reading, taken from different networks by
