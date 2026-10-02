@@ -1164,6 +1164,11 @@ def _members(blob: bytes) -> dict[bytes, tuple[bytes, bytes]] | None:
         if end > len(blob) or bytes(view[end - 8:end]) != struct.pack(
                 "<II", zlib.crc32(body), len(body) & 0xFFFFFFFF):
             return None
+        if not out and body.count(b"\n") != 1:
+            # The first member is the one-line header. A whole record in one
+            # member is the single-member file, which on Python 3.9 and 3.13
+            # starts with the very same ten bytes.
+            return None
         out[body[1:1 + LOOKUP_PREFIX] if body[:1] == b'"' else body[:1]] = (
             bytes(view[pos:end]), body)
         pos = end

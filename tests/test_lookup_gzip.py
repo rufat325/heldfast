@@ -201,6 +201,16 @@ class TestMembersParser(Feed):
         assert parsed is not None
         self.assertEqual(self.plain(), b"".join(text for _, text in parsed.values()))
 
+    def test_a_single_member_with_the_same_header_is_not_this_layout(self) -> None:
+        """Python 3.9 and 3.13 write `gzip.compress(..., mtime=0)` with the ten
+        header bytes this layout uses, so the header cannot tell them apart."""
+        whole = self.plain()
+        deflate = zlib.compressobj(9, zlib.DEFLATED, -15)
+        one = (HEADER + deflate.compress(whole) + deflate.flush()
+               + zlib.crc32(whole).to_bytes(4, "little") + len(whole).to_bytes(4, "little"))
+        self.assertEqual(whole, gzip.decompress(one))
+        self.assertIsNone(watch._members(one))
+
     def test_anything_else_is_not_this_layout(self) -> None:
         good = self.gz()
         old = gzip.compress(self.plain(), 9, mtime=0)
