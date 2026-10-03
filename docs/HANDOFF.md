@@ -419,6 +419,16 @@ Read this file and `docs/GUARANTEES.md` instead.
     `heldfast --`) reported as unenforced. `mcp-pin` is deliberately not
     recognised as this tool: on npm it is another publisher's package.
 
+38. ~~Publishers could not see their release the way pinned clients do.~~
+    Done: `catalog` and `diff` ([PUBLISHERS.md](PUBLISHERS.md)). `diff`
+    asks every verdict of a `Guard` holding a lock recorded from the old
+    side, so it cannot drift from runtime (T-DIFF-PARITY). The new side must
+    be full definitions: grading a lockfile's preview would miss a schema
+    change, which would be the report failing open. Markdown output escapes
+    server text because a PR renders it (T-DIFF-MARKDOWN). `catalog` writes
+    exactly the fields the fingerprint covers, and a test holds the round
+    trip to the same digest.
+
 ## Lessons that cost something
 
 Kept in the tracked file rather than in local notes, because every one of them

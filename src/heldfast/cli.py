@@ -1145,6 +1145,16 @@ def cmd_fleet(args: argparse.Namespace) -> int:
     return fleet(args)
 
 
+def cmd_diff(args: argparse.Namespace) -> int:
+    from .cli_fleet import diff
+    return diff(args)
+
+
+def cmd_catalog(args: argparse.Namespace) -> int:
+    from .cli_fleet import catalog
+    return catalog(args)
+
+
 def cmd_gateway(args: argparse.Namespace) -> int:
     from . import gateway as gateway_mod
 
@@ -1298,6 +1308,8 @@ _COMMANDS = {
     "ci": cmd_ci,
     "inventory": cmd_inventory,
     "fleet": cmd_fleet,
+    "diff": cmd_diff,
+    "catalog": cmd_catalog,
     "serve": lambda _args: _serve(),
     "scan": cmd_scan,
     "doctor": cmd_scan,

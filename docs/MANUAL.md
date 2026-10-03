@@ -11,6 +11,7 @@ surface, and the measurements behind the rules.
 - [Usage](#usage)
 - [Where things stand (`status`)](#where-things-stand-status)
 - [Across an organisation (`inventory`, `fleet`)](#across-an-organisation-inventory-fleet)
+- [If you publish a server (`catalog`, `diff`)](#if-you-publish-a-server-catalog-diff)
 - [Rules](#rules)
 - [When a server changes its mind mid-session](#when-a-server-changes-its-mind-mid-session)
 - [Pinning the code, not just the command](#pinning-the-code-not-just-the-command)
@@ -105,6 +106,8 @@ heldfast inventory -f json -o m.json  # what this machine runs, as a file; launc
 heldfast inventory --policy org.json  # ...checked against the organisation's policy
 heldfast fleet inventories/           # every machine's inventory, joined into one report
 heldfast fleet inventories/ --html report.html  # ...as one self-contained page
+heldfast catalog -- node build/index.js > tools.json  # a server's tools/list, for diff (launches it)
+heldfast diff tools.json tools.next.json   # a release, as clients that pinned the last one see it
 heldfast serve                        # run as an MCP server
 ```
 
@@ -557,6 +560,18 @@ OSV about every exact release in the fleet.
 
 The whole of it, with the policy format and how to collect inventories:
 [FLEET.md](FLEET.md).
+
+## If you publish a server (`catalog`, `diff`)
+
+The view from the other end. A client that pinned your last release withholds
+any tool you changed or added until someone re-approves it, and one on
+`--drift graded` forwards a change only when it introduced nothing aimed at
+the agent. `heldfast catalog` writes your server's `tools/list` holding exactly
+what a pin fingerprints, and `heldfast diff` compares two of them and says, per
+tool, which of those happens -- asked of the same check `wrap` runs, so the
+report cannot disagree with a pinned client. `-f markdown` is for a pull
+request, escaped so a tool description cannot add markup to it.
+[PUBLISHERS.md](PUBLISHERS.md).
 
 ## Rules
 
@@ -1648,7 +1663,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1954 tests, stdlib unittest, nothing to install.
+1971 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

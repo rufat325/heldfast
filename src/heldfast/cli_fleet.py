@@ -1,7 +1,8 @@
-"""`inventory` and `fleet`: the organisation's view, one machine at a time.
+"""`inventory`, `fleet`, `diff` and `catalog`: the views from outside one machine.
 
-Kept off `cli.py` for the reason `cli_parser.py` is: these are two commands,
-not a reason to grow the file that runs every other one.
+The organisation's, one machine at a time, and the publisher's, one release
+at a time. Kept off `cli.py` for the reason `cli_parser.py` is: these are
+commands, not a reason to grow the file that runs every other one.
 """
 
 from __future__ import annotations
@@ -144,3 +145,59 @@ def fleet(args: argparse.Namespace) -> int:
     if written is not None:
         return written
     return EXIT_FINDINGS if fleet_mod.failed(report) else EXIT_OK
+
+
+def diff(args: argparse.Namespace) -> int:
+    from . import catalogdiff as cd
+
+    try:
+        old = cd.load(Path(args.old), server=args.server)
+        new = cd.load(Path(args.new), full=True)
+    except ValueError as exc:
+        print(f"heldfast: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    notes = old.notes + new.notes
+    if old.lock.stale_digests:
+        notes.append(f"{args.old} was written before the current tool digest, so "
+                     f"every tool reads as changed; re-approve it to compare")
+    changes = cd.compare(old, new)
+    totals = cd.summary(changes, len(new.tools or {}))
+    if args.format == "json":
+        text = json.dumps({"summary": totals, "changes": [c.to_dict() for c in changes],
+                           "notes": notes}, indent=2) + "\n"
+    elif args.format == "markdown":
+        text = cd.render_markdown(changes, totals, notes)
+    else:
+        text = cd.render_text(changes, totals, notes)
+    written = _write(args, text)
+    if written is not None:
+        return written
+    return EXIT_FINDINGS if cd.failed(changes, args.fail_on) else EXIT_OK
+
+
+def catalog(args: argparse.Namespace) -> int:
+    from .catalogdiff import wire
+    from .model import ServerSpec
+    from .probe import probe
+
+    argv = list(args.server_command or [])
+    if argv and argv[0] == "--":
+        argv = argv[1:]
+    if bool(args.url) == bool(argv):
+        print("heldfast: catalog reads one server: give --url URL, or -- COMMAND",
+              file=sys.stderr)
+        return EXIT_ERROR
+    spec = ServerSpec(name="server", source="<catalog>", client="catalog",
+                      transport="http" if args.url else "stdio", url=args.url,
+                      command=None if args.url else argv[0],
+                      args=[] if args.url else argv[1:])
+    if not args.url:
+        print("heldfast: catalog launches " + spec.command_line + " to read its tools "
+              "-- this is a pin, not a sandbox", file=sys.stderr)
+    (result,) = probe([spec], timeout=args.timeout, share_env=set(args.share_env))
+    if result.error:
+        print(f"heldfast: could not read the server: {result.error}", file=sys.stderr)
+        return EXIT_ERROR
+    text = json.dumps({"tools": [wire(t) for t in result.tools]}, indent=2,
+                      ensure_ascii=False) + "\n"
+    return _write(args, text) or EXIT_OK

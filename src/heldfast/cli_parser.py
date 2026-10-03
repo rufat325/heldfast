@@ -668,6 +668,56 @@ def _register_fleet(sub: argparse._SubParsersAction) -> None:
     fleet.add_argument("--no-color", action="store_true")
 
 
+def _register_diff(sub: argparse._SubParsersAction) -> None:
+    diff = sub.add_parser(
+        "diff",
+        help="what a release changes, as the clients that pinned the last one "
+             "will see it (for server publishers)",
+        description=(
+            "Compares two tools/list results -- the release you shipped and the one "
+            "you are about to -- and says, per tool, what a pinned client does: the "
+            "default pin withholds every changed or added tool until it is "
+            "re-approved, and `--drift graded` forwards a change that introduced "
+            "nothing aimed at the agent. The verdicts come from the same check "
+            "`wrap` runs. OLD may also be a lockfile."
+        ),
+    )
+    diff.add_argument("old", metavar="OLD",
+                      help="the tools/list result you shipped, or a lockfile")
+    diff.add_argument("new", metavar="NEW",
+                      help="the tools/list result you are about to ship")
+    diff.add_argument("--server", metavar="NAME", default=None,
+                      help="which server, when OLD is a lockfile that records several")
+    diff.add_argument("-f", "--format", choices=("text", "markdown", "json"),
+                      default="text", help="markdown is for a pull request comment")
+    diff.add_argument("-o", "--output", metavar="FILE", help="write to FILE")
+    diff.add_argument("--fail-on", choices=("never", "withheld", "change"),
+                      default="never",
+                      help="exit 1 when a tool would be withheld under --drift graded, "
+                           "or on any change (default: never)")
+
+
+def _register_catalog(sub: argparse._SubParsersAction) -> None:
+    cat = sub.add_parser(
+        "catalog",
+        help="print one server's tools/list as JSON, for `diff` (launches it)",
+        description=(
+            "Reads one server's tool definitions and prints them as a tools/list "
+            "result holding exactly the fields a pin fingerprints. For a publisher's "
+            "own server in CI, to feed `heldfast diff`. A local server is LAUNCHED to "
+            "be read; a hosted one is read over HTTP, which runs none of its code."
+        ),
+    )
+    cat.add_argument("--url", metavar="URL", default=None,
+                     help="read a hosted server at this address instead of launching one")
+    cat.add_argument("--timeout", type=float, default=20.0, metavar="SECONDS")
+    cat.add_argument("--share-env", metavar="NAME", action="append", default=[],
+                     help="pass this environment variable to the launched server "
+                          "(repeatable); it gets nothing else of yours")
+    cat.add_argument("-o", "--output", metavar="FILE", help="write to FILE")
+    cat.add_argument("server_command", nargs=argparse.REMAINDER, metavar="-- COMMAND")
+
+
 def _register_serve(sub: argparse._SubParsersAction) -> None:
     sub.add_parser(
         "serve",
@@ -715,6 +765,8 @@ def build_parser() -> argparse.ArgumentParser:
     _register_ci(sub)
     _register_inventory(sub)
     _register_fleet(sub)
+    _register_diff(sub)
+    _register_catalog(sub)
     _register_serve(sub)
     # The command names come from the parser rather than a second list.
     # A hardcoded set is how `verify-log` was silently treated as a path

@@ -129,6 +129,11 @@ require rules, checked on each machine, in the GitHub Action and across the flee
 `wrap` and `gateway` refuse to start a server it denies, from the copy your administrator
 deployed to the machine: [docs/FLEET.md](https://github.com/rufat325/heldfast/blob/main/docs/FLEET.md).
 
+**If you publish a server.** Every client that pinned your last release compares your next
+one, and withholds what changed. `heldfast diff` says before you ship which tools a pinned
+client will withhold and why -- asked of the same check `wrap` runs -- as a pull request
+comment if you like: [docs/PUBLISHERS.md](https://github.com/rufat325/heldfast/blob/main/docs/PUBLISHERS.md).
+
 If you run agents across a company, or build something that needs this data (alerts for a
 named list of servers, an advisory feed of the changes worth reading, monitoring of your own
 or private MCP servers), I would like to hear what you need:
@@ -390,7 +395,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1954 tests, stdlib unittest, nothing to install.
+1971 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

@@ -96,6 +96,8 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-ADVISORY-UNKNOWN | An advisory lookup that failed reads as unknown, never as "no machine runs malware". | `tests/test_fleet.py`, `tests/test_mutation.py` |
 | T-ORG-LAUNCH | With an organisation policy in force, `wrap`/`guard` and `gateway` start no server it denies, none it leaves unlisted when unlisted servers are denied, and none that misses `approved`, `pinned` or `exact_versions` -- decided before the process exists. `--allow-unapproved` cannot waive `approved`. | `tests/test_fleet.py`, `tests/test_mutation.py` |
 | T-ORG-MANAGED | The policy at the machine's managed path applies to every launch, whatever is passed; one named by `--org-policy` or `HELDFAST_ORG_POLICY` is checked as well, never instead. A managed file that exists and cannot be read refuses every launch. | `tests/test_fleet.py`, `tests/test_mutation.py` |
+| T-DIFF-PARITY | `heldfast diff` reports a changed tool as forwarded under `--drift graded` exactly when `guard` would forward it: every verdict is asked of a `Guard` holding a lock recorded from the old side, not derived a second time. | `tests/test_diff.py`, `tests/test_mutation.py` |
+| T-DIFF-MARKDOWN | Text a server supplied reaches `diff -f markdown` as the characters it is: every punctuation mark CommonMark acts on is escaped, so a description cannot add a link, an image or a table cell to the comment. | `tests/test_diff.py`, `tests/test_mutation.py` |
 
 ## Best-effort
 
