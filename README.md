@@ -126,8 +126,8 @@ report, or one HTML page with no script in it: which servers run where, at which
 how many are approved, who breaks the organisation's policy, and with `--advisories`, which
 machines run a release OSV reports as malware. The policy is one JSON file of allow, deny and
 require rules, checked on each machine, in the GitHub Action and across the fleet -- and
-`wrap` and `gateway` refuse to start a server it denies, from the copy your administrator
-deployed to the machine: [docs/FLEET.md](https://github.com/rufat325/heldfast/blob/main/docs/FLEET.md).
+`wrap`, `gateway` and the Claude Code plugin refuse a server it denies, from the copy your
+administrator deployed to the machine: [docs/FLEET.md](https://github.com/rufat325/heldfast/blob/main/docs/FLEET.md).
 
 **If you publish a server.** Every client that pinned your last release compares your next
 one, and withholds what changed. `heldfast diff` says before you ship which tools a pinned
@@ -395,7 +395,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1974 tests, stdlib unittest, nothing to install.
+1988 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

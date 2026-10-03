@@ -166,6 +166,17 @@ heldfast guard: organisation policy Acme engineering (sha256:369994a93706) refus
 
 Exit 2, and `npx` never ran.
 
+**In Claude Code.** Claude Code starts its MCP servers itself, so heldfast
+meets them at the call instead: with the [plugin](../plugin/heldfast/README.md)
+installed, a call to a server the policy refuses is denied. The plugin reads
+the same policy on every call, makes the same decision `wrap` makes -- the
+JS and the Python are held to one answer by shared vectors and a differential
+test (T-ORG-PARITY) -- and judges the server both as the lockfile approved it
+and as Claude Code's own config (`.mcp.json`, `~/.claude.json`) now starts it,
+so a lock entry for an allowed release cannot speak for a config that was
+changed to run a denied one (T-ORG-HOOK). A policy that is there and cannot be
+read refuses every MCP call.
+
 **Where the policy comes from.** The machine's managed path, where MDM puts
 it, is always in force:
 
@@ -296,12 +307,13 @@ download each repository's latest artifact and run `fleet` over them.
   rewritten under an approved name does not show in `inventory` or `fleet`.
   That is what `wrap`, `gateway` and [`verify`](TRANSPARENCY.md) are for, and
   why "checked at call time" is in the report.
-- **The policy stops only what starts through heldfast.** `wrap` and
-  `gateway` refuse a denied server; a client configured to start the same
-  server directly is not stopped by anything here, and the Claude Code plugin
-  does not read the organisation policy yet (it refuses what the lockfile does
-  not name). That is why `"enforced": true` exists: the fleet report shows
-  every server that goes around, by machine.
+- **The policy stops what heldfast is in the path of.** `wrap` and `gateway`
+  refuse to start a denied server, and the Claude Code plugin refuses to call
+  one. In Claude Code that means the process has already started -- Claude
+  Code starts its servers itself, and a hook only sees calls -- so a server
+  whose harm is in starting at all wants `wrap` as well. A client with none of
+  the three is not stopped by anything here. That is why `"enforced": true`
+  exists: the fleet report shows every server that goes around, by machine.
 - **A managed policy is as strong as the directory it lives in.** It is
   meant to be written by whoever manages the machine into a directory its
   user cannot write. A user who can write there, or who runs a heldfast they

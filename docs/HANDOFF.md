@@ -410,9 +410,7 @@ Read this file and `docs/GUARANTEES.md` instead.
       force and a local one can only add to it (T-ORG-MANAGED). Both gates
       sit *after* the existing pin gates rather than inside them, so the
       catalogued mutants for those gates still match one snippet each.
-    - Not done, and said in FLEET.md: the Claude Code plugin does not read
-      the organisation policy. Doing it means matching packages and URLs in
-      JS the way `orgpolicy.py` does, with parity vectors like T-DIGEST's.
+    - The Claude Code plugin reads the policy too: item 39.
 
     Found on the way: `coverage` matched only the word `guard`, so a server
     wrapped the way the README's quick start writes it (`heldfast wrap`, or
@@ -428,6 +426,32 @@ Read this file and `docs/GUARANTEES.md` instead.
     server text because a PR renders it (T-DIFF-MARKDOWN). `catalog` writes
     exactly the fields the fingerprint covers, and a test holds the round
     trip to the same digest.
+
+39. ~~The org policy stopped at `wrap`; Claude Code went around it.~~ Done:
+    `plugin/heldfast/scripts/orgpolicy.js` is `orgpolicy.py` plus the parts of
+    `inventory.py` that say what a server is, and the PreToolUse hook denies a
+    call to a server the policy refuses (T-ORG-HOOK). It reads the policy on
+    every call: verdicts cached in a state file would be one `echo` from an
+    agent with a shell away from gone.
+    - Parity is T-ORG-PARITY: `tests/golden/orgpolicy_vectors.json` (each
+      case with its reason) and a seeded differential over a few thousand
+      inputs, Python against Node. Planting a one-character bug in the JS
+      fails it, which was checked before it was believed.
+    - Porting found three things in the Python. `urlsplit` reads
+      `https://evil.example\\@good.example/` as good.example; Node, which
+      Claude Code connects with, reads evil.example -- so an allow rule for
+      good.example approved a server talking to evil.example, and a deny on
+      evil.example missed it. `endpoint()` now parses by hand and refuses
+      anything two parsers could disagree on, and an address it refuses
+      matches every URL deny rule and no allow rule. Paths too: Node resolves
+      `/ok/x\\..\\..\\admin` to `/admin`, which `/ok/*` matched as written.
+      `"unlisted": {}` raised TypeError instead of refusing the file, and
+      `Path.exists()` read a symlink loop at the managed path as "no policy".
+    - Globs are `*` and `?` only, matched without a regex: fnmatch's classes
+      were the hardest thing to reproduce exactly, and a backtracking regex is
+      exponential on many stars.
+    - The mutation harness copies `src/heldfast`, so the JS has its own small
+      catalogue in `tests/test_plugin_orgpolicy.py`.
 
 ## Lessons that cost something
 

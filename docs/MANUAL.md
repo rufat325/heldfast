@@ -555,7 +555,8 @@ and checked at call time. An organisation policy (allow and deny rules by
 package, address or command, and requirements such as "approved" and "exact
 versions") is checked by both, and by the GitHub Action's `org-policy` input,
 and `wrap` and `gateway` refuse to start a server it denies -- the machine's
-managed policy always, and `--org-policy` on top. `fleet --advisories` asks
+managed policy always, and `--org-policy` on top -- while the Claude Code
+plugin refuses to call one, by the same decision. `fleet --advisories` asks
 OSV about every exact release in the fleet.
 
 The whole of it, with the policy format and how to collect inventories:
@@ -1663,7 +1664,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1974 tests, stdlib unittest, nothing to install.
+1988 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

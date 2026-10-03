@@ -43,7 +43,10 @@ your machine; a local or private address is never looked up.
 
 **The Claude Code plugin** runs on your machine. It reads `.mcp-pin.lock`
 and the environment variable `HELDFAST_ALLOW_UNPINNED`, and by default runs
-nothing else and sends nothing anywhere. With `HELDFAST_SESSION_CHECK=1`, it
+nothing else and sends nothing anywhere. When an organisation policy is in
+force -- the machine's managed one, or one `HELDFAST_ORG_POLICY` names -- it
+also reads that file and the MCP server entries in the project's `.mcp.json`
+and your `~/.claude.json`, on your machine, to see what each server starts. With `HELDFAST_SESSION_CHECK=1`, it
 runs the `heldfast` you installed once per session to read the tool lists of
 the hosted servers your lockfile records, at the URLs recorded there, with no
 credentials: those servers learn that a client connected.
