@@ -1056,6 +1056,21 @@ def cmd_policy(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def status_findings(args: argparse.Namespace, data: Collected, lock: Lock) -> list[Finding]:
+    """Every rule's verdict on what was collected, as `status` reports them."""
+    ctx = AuditContext(
+        servers=data.servers, skills=data.skills, tools=data.tools,
+        prompts=data.prompts, resources=data.resources,
+        instructions=data.instructions, source_flows=data.source_flows,
+        config_errors=data.errors,
+        unreadable=data.unreadable,
+        lock={"servers": lock.servers, "skills": lock.skills,
+              "stale_digests": lock.stale_digests},
+        options=_rule_options(args, data),
+    )
+    return run_rules(ctx)
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     from . import status as status_mod
 
@@ -1067,17 +1082,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
     data = collect(args)
-    ctx = AuditContext(
-        servers=data.servers, skills=data.skills, tools=data.tools,
-        prompts=data.prompts, resources=data.resources,
-        instructions=data.instructions, source_flows=data.source_flows,
-        config_errors=data.errors,
-        unreadable=data.unreadable,
-        lock={"servers": lock.servers, "skills": lock.skills,
-              "stale_digests": lock.stale_digests},
-        options=_rule_options(args, data),
-    )
-    findings = run_rules(ctx)
+    findings = status_findings(args, data, lock)
 
     log_path = Path(args.log) if args.log else None
     payload = status_mod.build(lock, data.servers, findings, log_path,
@@ -1112,6 +1117,16 @@ def cmd_coverage(args: argparse.Namespace) -> int:
         sys.stdout.write(coverage_mod.render(
             payload, color=not args.no_color, verbose=args.verbose))
     return EXIT_OK
+
+
+def cmd_inventory(args: argparse.Namespace) -> int:
+    from .cli_fleet import inventory
+    return inventory(args)
+
+
+def cmd_fleet(args: argparse.Namespace) -> int:
+    from .cli_fleet import fleet
+    return fleet(args)
 
 
 def cmd_gateway(args: argparse.Namespace) -> int:
@@ -1261,6 +1276,8 @@ _COMMANDS = {
     "grade-drift": cmd_grade_drift,
     "hosted-drift": cmd_hosted_drift,
     "ci": cmd_ci,
+    "inventory": cmd_inventory,
+    "fleet": cmd_fleet,
     "serve": lambda _args: _serve(),
     "scan": cmd_scan,
     "doctor": cmd_scan,

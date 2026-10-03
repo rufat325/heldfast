@@ -118,10 +118,20 @@ poisoned first version is the version you approved. Pair it with OS isolation,
 least-privilege credentials and server-side authorization. The rest of the
 limits are under [What it doesn't do](#what-it-doesnt-do).
 
-**Teams, and products built on the record.** If you run agents across a company, or build
-something that needs this data (alerts for a named list of servers, an advisory feed of
-the changes worth reading, monitoring of your own or private MCP servers), I would like to
-hear what you need: [open an issue](https://github.com/rufat325/heldfast/issues). Nothing here is paid today.
+**Across a company.** A lockfile answers for one repository. `heldfast inventory` writes
+what one machine or repository runs to a file -- packages, versions, hosted addresses, what
+is approved and what checks it at call time, and no environment values, headers or
+arguments -- and launches nothing to do it. `heldfast fleet` joins hundreds of them into one
+report, or one HTML page with no script in it: which servers run where, at which versions,
+how many are approved, who breaks the organisation's policy, and with `--advisories`, which
+machines run a release OSV reports as malware. The policy is one JSON file of allow, deny and
+require rules, checked on each machine, in the GitHub Action and across the fleet:
+[docs/FLEET.md](https://github.com/rufat325/heldfast/blob/main/docs/FLEET.md).
+
+If you run agents across a company, or build something that needs this data (alerts for a
+named list of servers, an advisory feed of the changes worth reading, monitoring of your own
+or private MCP servers), I would like to hear what you need:
+[open an issue](https://github.com/rufat325/heldfast/issues).
 
 ## Install
 
@@ -165,6 +175,8 @@ heldfast ci                           # fail the PR when config, scripts or skil
 heldfast check                        # the lockfile, nothing else
 heldfast scan ./my-project            # scan one project
 heldfast scan --safe                  # never execute, never connect
+heldfast inventory --policy org.json  # what this machine runs, against the company's policy
+heldfast fleet inventories/ --html report.html  # every machine's inventory, one page
 ```
 
 `--safe` is the scan you run on a machine that is not disposable. `--probe` launches configured STDIO servers; a scan without it does not run anyone else's code. Keep `--llm` optional and disclosed: it sends tool text to an API.
@@ -338,6 +350,10 @@ them, so only on a disposable runner. A hosted server that cannot be read,
 for example one that wants a login, is listed in the job summary as not
 verified and does not fail the job unless `require-probe: true`.
 
+`inventory: heldfast-inventory.json` also writes the repository's inventory for
+`heldfast fleet`, and `org-policy: <file>` fails the job when a server breaks the
+organisation's policy ([docs/FLEET.md](docs/FLEET.md#collecting-inventories)).
+
 A runner that must not pass on "could not see" wants
 `heldfast scan --require-integrity`, which makes an unverifiable artifact
 high rather than a note. An air-gapped runner will fail on it, which is the
@@ -373,7 +389,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1901 tests, stdlib unittest, nothing to install.
+1944 tests, stdlib unittest, nothing to install.
 
 `tests/fixtures/fake_server.py` rewrites its tool descriptions when
 `MCP_PIN_FIXTURE_MODE=poisoned`. The fixture config passes that variable

@@ -583,6 +583,81 @@ def _register_ci(sub: argparse._SubParsersAction) -> None:
     ci.add_argument("--no-ignore", action="store_true")
 
 
+def _register_inventory(sub: argparse._SubParsersAction) -> None:
+    inv = sub.add_parser(
+        "inventory",
+        help="what MCP servers this machine or repository runs, as a file "
+             "`fleet` can join (runs nothing, contacts nothing)",
+        description=(
+            "The `status` page as data, made to be collected from many machines: "
+            "every configured server, what it runs (package, version, hosted "
+            "address), whether a lockfile approves it, and what checks it at "
+            "call time. Carries no environment values, headers or arguments. "
+            "Never launches a server or opens a connection. With --policy, "
+            "checks this machine against an organisation policy and exits 1 "
+            "on a violation."
+        ),
+    )
+    inv.add_argument("paths", nargs="*", default=None,
+                     help="directories to read configs from (default: current directory)")
+    inv.add_argument("--no-user-configs", action="store_true",
+                     help="skip per-user client configs; read only the given paths "
+                          "(the shape for a repository's CI job)")
+    inv.add_argument("--no-skills", action="store_true", help="skip SKILL.md discovery")
+    inv.add_argument("--lock", metavar="PATH", default=None,
+                     help="approval lockfile (default: .mcp-pin.lock in the tree)")
+    inv.add_argument("--depth", type=int, default=6, metavar="N")
+    inv.add_argument("--exclude", metavar="PATH", action="append", default=[])
+    inv.add_argument("--label", metavar="NAME", default=None,
+                     help="what to call this machine or repository in a fleet "
+                          "report (default: the host name)")
+    inv.add_argument("--policy", metavar="FILE", default=None,
+                     help="organisation policy (heldfast.org-policy/1) to check "
+                          "against; exit 1 when a server violates it")
+    inv.add_argument("-f", "--format", choices=("text", "json", "cyclonedx"),
+                     default="text",
+                     help="cyclonedx writes a CycloneDX 1.6 BOM for tools that ingest one")
+    inv.add_argument("-o", "--output", metavar="FILE", help="write to FILE")
+    inv.add_argument("--no-color", action="store_true")
+    # What collect() reads. Fixed, not flags: an inventory is pushed to
+    # machines nobody is watching, so it cannot be asked to launch anything.
+    inv.set_defaults(safe=True, probe=False, no_source=True, no_stdio_probe=True,
+                     probe_timeout=0.0, probe_gate="high", share_env=[],
+                     require_integrity=False, verbose=False)
+
+
+def _register_fleet(sub: argparse._SubParsersAction) -> None:
+    fleet = sub.add_parser(
+        "fleet",
+        help="join inventories from many machines into one organisation report",
+        description=(
+            "Reads `heldfast inventory` files (or directories of them) and "
+            "answers the organisation's questions: which servers run where, at "
+            "which versions, how many are approved, pinned and enforced, and "
+            "which machines break the policy. --html writes one "
+            "self-contained page. Contacts nothing unless --advisories is "
+            "given."
+        ),
+    )
+    fleet.add_argument("paths", nargs="+", metavar="PATH",
+                       help="inventory files, or directories holding them")
+    fleet.add_argument("--policy", metavar="FILE", default=None,
+                       help="organisation policy to check every inventory against; "
+                            "it replaces whatever each machine was checked with")
+    fleet.add_argument("--advisories", action="store_true",
+                       help="ask OSV (api.osv.dev) about every exact package "
+                            "version in the fleet. Sends package names and "
+                            "versions, nothing about the machines")
+    fleet.add_argument("--max-age", type=int, default=14, metavar="DAYS",
+                       help="call an inventory older than this stale (default 14)")
+    fleet.add_argument("-f", "--format", choices=("text", "json", "html"), default="text")
+    fleet.add_argument("-o", "--output", metavar="FILE", help="write to FILE")
+    fleet.add_argument("--html", metavar="FILE", default=None,
+                       help="write the self-contained HTML report to FILE "
+                            "(the same as -f html -o FILE)")
+    fleet.add_argument("--no-color", action="store_true")
+
+
 def _register_serve(sub: argparse._SubParsersAction) -> None:
     sub.add_parser(
         "serve",
@@ -628,6 +703,8 @@ def build_parser() -> argparse.ArgumentParser:
     _register_grade_drift(sub)
     _register_hosted_drift(sub)
     _register_ci(sub)
+    _register_inventory(sub)
+    _register_fleet(sub)
     _register_serve(sub)
     # The command names come from the parser rather than a second list.
     # A hardcoded set is how `verify-log` was silently treated as a path

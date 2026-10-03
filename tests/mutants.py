@@ -2230,6 +2230,133 @@ lookup.seen(["ab" * 32, "cd" * 32], feedlock.Feed("https://log.example", "log"))
 FAIL_OPEN = any(not url.endswith("/all.json") for url in asked)
 """,
     ),
+    Mutant(
+        id="org-policy-unknown-key-open",
+        theorem="T-ORG-POLICY-UNKNOWN",
+        path="orgpolicy.py",
+        original="""    unknown = sorted(set(data) - _TOP_KEYS)
+    if unknown:
+        raise ValueError(f"unknown key(s) {', '.join(unknown)}; refusing a policy "
+                         f"this version would only partly enforce")
+""",
+        replacement="",
+        harm='A misspelt "requre" is skipped, and every machine reads as meeting a '
+             'requirement nothing checks.',
+        probe="""
+from heldfast.orgpolicy import SCHEMA, parse
+try:
+    parse({"policy": SCHEMA, "requre": {"approved": True}})
+    FAIL_OPEN = True
+except ValueError:
+    FAIL_OPEN = False
+""",
+    ),
+    Mutant(
+        id="org-url-one-glob",
+        theorem="T-ORG-URL",
+        path="orgpolicy.py",
+        original="""    scheme, host, port, path = want
+    if not fnmatch.fnmatchcase(got[0], scheme) or not fnmatch.fnmatchcase(got[1], host):
+        return False
+""",
+        replacement="""    return fnmatch.fnmatchcase(endpoint.lower(), rule.url.lower())
+""",
+        harm="As one glob, `*` crosses `/`: https://evil.example/.acme.com/ is "
+             "allowed by https://*.acme.com/*.",
+        probe="""
+from heldfast.orgpolicy import Rule, matches
+row = {"identity": "c:s", "kind": "hosted", "endpoint": "https://evil.example/.acme.com/"}
+FAIL_OPEN = matches(Rule(url="https://*.acme.com/*"), row)
+""",
+    ),
+    Mutant(
+        id="inventory-endpoint-keeps-query",
+        theorem="T-INVENTORY-SECRETLESS",
+        path="inventory.py",
+        original="""    return f"{parts.scheme.lower()}://{netloc}{path}"
+""",
+        replacement="""    return f"{parts.scheme.lower()}://{netloc}{path}" + (
+        f"?{parts.query}" if parts.query else "")
+""",
+        harm="An API key passed in a hosted server's query string leaves every "
+             "machine inside its inventory.",
+        probe="""
+from heldfast.inventory import endpoint
+FAIL_OPEN = "s3cret" in (endpoint("https://mcp.example.com/sse?api_key=s3cret") or "")
+""",
+    ),
+    Mutant(
+        id="inventory-launches-with-probe",
+        theorem="T-INVENTORY-INERT",
+        path="cli_parser.py",
+        original="""    inv.set_defaults(safe=True, probe=False, no_source=True, no_stdio_probe=True,""",
+        replacement="""    inv.add_argument("--probe", action="store_true")
+    inv.set_defaults(safe=False, no_source=True, no_stdio_probe=True,""",
+        harm="An inventory pushed to every machine can be asked to launch every "
+             "configured server.",
+        probe="""
+from heldfast.cli_parser import build_parser
+try:
+    args = build_parser().parse_args(["inventory", "--probe"])
+    FAIL_OPEN = bool(args.probe) or not args.safe
+except SystemExit:
+    FAIL_OPEN = False
+""",
+    ),
+    Mutant(
+        id="fleet-advisory-failure-reads-clean",
+        theorem="T-ADVISORY-UNKNOWN",
+        path="fleet.py",
+        original="""    asked = "failed" if advisory_error else "asked" if advisories is not None else "not asked"
+""",
+        replacement="""    asked = "asked" if advisories is not None or advisory_error else "not asked"
+""",
+        harm="OSV could not be reached, and the report says no machine runs malware.",
+        probe="""
+from heldfast import fleet
+report = fleet.build([], advisories=None, advisory_error="403 Forbidden")
+FAIL_OPEN = report["advisories"] == "asked"
+""",
+    ),
+    Mutant(
+        id="fleet-html-unescaped",
+        theorem="T-FLEET-UNTRUSTED",
+        path="fleet_html.py",
+        original="""    return escape(str(value), quote=True)
+""",
+        replacement="""    return str(value)
+""",
+        harm="A server named <script> in one machine's config runs in the browser "
+             "of whoever opens the organisation's report.",
+        probe="""
+from heldfast import fleet
+from heldfast.fleet_html import render_html
+inv = {"label": "<script>x</script>", "generated": "", "source": "", "platform": "",
+       "heldfast": "", "plugin": False, "lockfile": False, "unreadable": 0,
+       "servers": [], "reported_policy": "", "reported": []}
+FAIL_OPEN = "<script>" in render_html(fleet.build([inv]))
+""",
+    ),
+    Mutant(
+        id="fleet-row-type-unchecked",
+        theorem="T-FLEET-UNTRUSTED",
+        path="fleet.py",
+        original="""    return value if isinstance(value, str) and value in allowed else default
+""",
+        replacement="""    return value if value in allowed else default
+""",
+        harm="One inventory with an object where a word belongs takes the whole "
+             "organisation's report down.",
+        probe="""
+from heldfast.fleet import _inventory
+try:
+    _inventory({"schema": "heldfast.inventory/1", "label": "m", "servers": [
+        {"identity": "c:s", "kind": {"a": 1}}]}, "m.json", [])
+    FAIL_OPEN = False
+except TypeError:
+    FAIL_OPEN = True
+""",
+    ),
 )
 
 

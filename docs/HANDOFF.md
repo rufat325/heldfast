@@ -381,6 +381,39 @@ Read this file and `docs/GUARANTEES.md` instead.
     says "not a sandbox" on stderr, and the Action example is the identity
     merge rather than a SHA from before it. Do not implement a sandbox.
 
+37. ~~Nothing answered for more than one machine.~~ Done: `inventory`,
+    an organisation policy, and `fleet` ([FLEET.md](FLEET.md)). The lock is
+    still the product; these are how a company sees how far it reaches.
+    - `inventory` is `status` as data, made to be copied off the machine: no
+      env values, headers or arguments, a hosted address without query or
+      user info and with token-shaped path segments `{redacted}`, and it
+      launches nothing -- it does not accept `--probe` (T-INVENTORY-INERT,
+      T-INVENTORY-SECRETLESS). `-f cyclonedx` for BOM tools.
+    - `orgpolicy.py` reads the policy the way `Policy.check` reads limits:
+      an unknown key anywhere refuses the file (T-ORG-POLICY-UNKNOWN). URL
+      rules match host and path apart; as one glob, `*` crossed `/` and
+      `https://*.acme.com/*` was met by `https://evil.example/.acme.com/`
+      (T-ORG-URL). In the `mypy --strict` set.
+    - `fleet` reads inventories as untrusted input. The type fuzz test found
+      a crash on its first run: a dict where a word belongs raised TypeError
+      from a set lookup, so one inventory took the whole report down. The
+      HTML has a CSP that allows no script, on top of escaping
+      (T-FLEET-UNTRUSTED). Counts, never a score, for the reason `coverage`
+      gives.
+    - `--advisories` asks OSV in batches. The first version printed "Running
+      malware: 0" when OSV could not be reached -- the all-clear this project
+      keeps refusing to print. A failed lookup is "unknown" now
+      (T-ADVISORY-UNKNOWN).
+    - The Action takes `inventory` and `org-policy`.
+    - Not done, and said in FLEET.md: the policy is checked, not enforced at
+      the call site. Teaching `gateway`/`guard` and the plugin to refuse a
+      denied server is the next real feature here.
+
+    Found on the way: `coverage` matched only the word `guard`, so a server
+    wrapped the way the README's quick start writes it (`heldfast wrap`, or
+    `heldfast --`) reported as unenforced. `mcp-pin` is deliberately not
+    recognised as this tool: on npm it is another publisher's package.
+
 ## Lessons that cost something
 
 Kept in the tracked file rather than in local notes, because every one of them

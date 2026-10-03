@@ -10,6 +10,7 @@ surface, and the measurements behind the rules.
 - [Install](#install)
 - [Usage](#usage)
 - [Where things stand (`status`)](#where-things-stand-status)
+- [Across an organisation (`inventory`, `fleet`)](#across-an-organisation-inventory-fleet)
 - [Rules](#rules)
 - [When a server changes its mind mid-session](#when-a-server-changes-its-mind-mid-session)
 - [Pinning the code, not just the command](#pinning-the-code-not-just-the-command)
@@ -99,6 +100,10 @@ heldfast gateway --as finance         # ...restricted to one declared identity
 heldfast gateway --share-env CI       # ...also passing one env var to every backend
 heldfast status                       # what is approved, what moved, what happened
 heldfast coverage                     # which guarantees are in force, and why not
+heldfast inventory -f json -o m.json  # what this machine runs, as a file; launches nothing
+heldfast inventory --policy org.json  # ...checked against the organisation's policy
+heldfast fleet inventories/           # every machine's inventory, joined into one report
+heldfast fleet inventories/ --html report.html  # ...as one self-contained page
 heldfast serve                        # run as an MCP server
 ```
 
@@ -529,6 +534,26 @@ MCPA007 internal-*   # globs work
 Suppressed findings still show up as a count, and with `-v` you get each one plus the line
 that suppressed it. They're never silently dropped — you should be able to see what got
 excluded. `--no-ignore` turns it off.
+
+## Across an organisation (`inventory`, `fleet`)
+
+`status` is one person at one terminal. A security team asks the same question
+of every laptop and repository: which MCP servers run here, how many did
+anyone approve, who runs something we said no to, and -- the day a release is
+reported as malware -- which machines run it.
+
+`heldfast inventory` writes what one machine runs to a JSON file (or a
+CycloneDX 1.6 BOM) that carries no environment values, headers or arguments,
+and launches nothing to write it. `heldfast fleet` joins any number of them
+into one report -- text, JSON, or a single HTML page with no script in it --
+with every server, the versions in use, and counts of what is approved, pinned
+and checked at call time. An organisation policy (allow and deny rules by
+package, address or command, and requirements such as "approved" and "exact
+versions") is checked by both, and by the GitHub Action's `org-policy` input.
+`fleet --advisories` asks OSV about every exact release in the fleet.
+
+The whole of it, with the policy format and how to collect inventories:
+[FLEET.md](FLEET.md).
 
 ## Rules
 
@@ -1620,7 +1645,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1901 tests, stdlib unittest, nothing to install.
+1944 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

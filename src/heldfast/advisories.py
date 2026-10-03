@@ -100,6 +100,36 @@ def known(package: str, versions: list[str]) -> dict[str, list[str]]:
     return out
 
 
+# OSV's names for the two registries heldfast reads package launches from.
+OSV_ECOSYSTEM = {"npm": "npm", "pypi": "PyPI"}
+# OSV answers at most this many queries in one querybatch request.
+BATCH = 1000
+
+
+def batch(queries: list[tuple[str, str, str]]) -> dict[tuple[str, str, str], list[str]]:
+    """OSV advisory ids for many (ecosystem, name, version) at once.
+
+    `fleet --advisories` asks about every exact release any machine runs, which
+    is one request per thousand rather than one per package. The ecosystem is
+    heldfast's spelling (`npm`, `pypi`); anything else is not asked about.
+    """
+    asked = [q for q in dict.fromkeys(queries) if q[0] in OSV_ECOSYSTEM]
+    out: dict[tuple[str, str, str], list[str]] = {}
+    for start in range(0, len(asked), BATCH):
+        chunk = asked[start:start + BATCH]
+        body = post_json(OSV_URL, {"queries": [
+            {"package": {"name": name, "ecosystem": OSV_ECOSYSTEM[eco]}, "version": version}
+            for eco, name, version in chunk]})
+        results = body.get("results") if isinstance(body, dict) else None
+        if not isinstance(results, list) or len(results) != len(chunk):
+            raise AdvisoryError(f"{OSV_URL}: not an answer to {len(chunk)} queries")
+        for query, result in zip(chunk, results):
+            vulns = result.get("vulns") if isinstance(result, dict) else None
+            out[query] = sorted(str(v["id"]) for v in vulns or []
+                                if isinstance(v, dict) and v.get("id"))
+    return out
+
+
 def malware(ids: list[str]) -> list[str]:
     return [i for i in ids if i.startswith("MAL-")]
 
