@@ -332,6 +332,11 @@ def _register_gateway(sub: argparse._SubParsersAction) -> None:
     gateway_p.add_argument("--require-integrity", action="store_true",
                            help="refuse to start a backend whose recorded registry "
                                 "artifact cannot be verified locally")
+    gateway_p.add_argument("--org-policy", metavar="FILE", default=None,
+                           help="also refuse what this organisation policy denies "
+                                "(heldfast.org-policy/1). The machine's managed policy "
+                                "applies whether or not this is given; HELDFAST_ORG_POLICY "
+                                "names one too")
     gateway_p.add_argument("--allow-unapproved", action="store_true",
                            help="start servers that are not in the lockfile "
                                 "(they are refused by default)")
@@ -470,6 +475,11 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
     guard_p.add_argument("--require-integrity", action="store_true",
                          help="refuse to start when a recorded registry artifact "
                               "cannot be verified against the local package cache")
+    guard_p.add_argument("--org-policy", metavar="FILE", default=None,
+                         help="also refuse what this organisation policy denies "
+                              "(heldfast.org-policy/1). The machine's managed policy "
+                              "applies whether or not this is given; HELDFAST_ORG_POLICY "
+                              "names one too")
     guard_p.add_argument("--quiet", action="store_true", help="suppress stderr diagnostics")
     guard_p.add_argument("--dry-run", action="store_true",
                          help="report what the argument policy would block, and "
@@ -583,6 +593,131 @@ def _register_ci(sub: argparse._SubParsersAction) -> None:
     ci.add_argument("--no-ignore", action="store_true")
 
 
+def _register_inventory(sub: argparse._SubParsersAction) -> None:
+    inv = sub.add_parser(
+        "inventory",
+        help="what MCP servers this machine or repository runs, as a file "
+             "`fleet` can join (runs nothing, contacts nothing)",
+        description=(
+            "The `status` page as data, made to be collected from many machines: "
+            "every configured server, what it runs (package, version, hosted "
+            "address), whether a lockfile approves it, and what checks it at "
+            "call time. Carries no environment values, headers or arguments. "
+            "Never launches a server or opens a connection. With --policy, "
+            "checks this machine against an organisation policy and exits 1 "
+            "on a violation."
+        ),
+    )
+    inv.add_argument("paths", nargs="*", default=None,
+                     help="directories to read configs from (default: current directory)")
+    inv.add_argument("--no-user-configs", action="store_true",
+                     help="skip per-user client configs; read only the given paths "
+                          "(the shape for a repository's CI job)")
+    inv.add_argument("--no-skills", action="store_true", help="skip SKILL.md discovery")
+    inv.add_argument("--lock", metavar="PATH", default=None,
+                     help="approval lockfile (default: .mcp-pin.lock in the tree)")
+    inv.add_argument("--depth", type=int, default=6, metavar="N")
+    inv.add_argument("--exclude", metavar="PATH", action="append", default=[])
+    inv.add_argument("--label", metavar="NAME", default=None,
+                     help="what to call this machine or repository in a fleet "
+                          "report (default: the host name)")
+    inv.add_argument("--policy", metavar="FILE", default=None,
+                     help="organisation policy (heldfast.org-policy/1) to check "
+                          "against; exit 1 when a server violates it")
+    inv.add_argument("-f", "--format", choices=("text", "json", "cyclonedx"),
+                     default="text",
+                     help="cyclonedx writes a CycloneDX 1.6 BOM for tools that ingest one")
+    inv.add_argument("-o", "--output", metavar="FILE", help="write to FILE")
+    inv.add_argument("--no-color", action="store_true")
+    # What collect() reads. Fixed, not flags: an inventory is pushed to
+    # machines nobody is watching, so it cannot be asked to launch anything.
+    inv.set_defaults(safe=True, probe=False, no_source=True, no_stdio_probe=True,
+                     probe_timeout=0.0, probe_gate="high", share_env=[],
+                     require_integrity=False, verbose=False)
+
+
+def _register_fleet(sub: argparse._SubParsersAction) -> None:
+    fleet = sub.add_parser(
+        "fleet",
+        help="join inventories from many machines into one organisation report",
+        description=(
+            "Reads `heldfast inventory` files (or directories of them) and "
+            "answers the organisation's questions: which servers run where, at "
+            "which versions, how many are approved, pinned and enforced, and "
+            "which machines break the policy. --html writes one "
+            "self-contained page. Contacts nothing unless --advisories is "
+            "given."
+        ),
+    )
+    fleet.add_argument("paths", nargs="+", metavar="PATH",
+                       help="inventory files, or directories holding them")
+    fleet.add_argument("--policy", metavar="FILE", default=None,
+                       help="organisation policy to check every inventory against; "
+                            "it replaces whatever each machine was checked with")
+    fleet.add_argument("--advisories", action="store_true",
+                       help="ask OSV (api.osv.dev) about every exact package "
+                            "version in the fleet. Sends package names and "
+                            "versions, nothing about the machines")
+    fleet.add_argument("--max-age", type=int, default=14, metavar="DAYS",
+                       help="call an inventory older than this stale (default 14)")
+    fleet.add_argument("-f", "--format", choices=("text", "json", "html"), default="text")
+    fleet.add_argument("-o", "--output", metavar="FILE", help="write to FILE")
+    fleet.add_argument("--html", metavar="FILE", default=None,
+                       help="write the self-contained HTML report to FILE "
+                            "(the same as -f html -o FILE)")
+    fleet.add_argument("--no-color", action="store_true")
+
+
+def _register_diff(sub: argparse._SubParsersAction) -> None:
+    diff = sub.add_parser(
+        "diff",
+        help="what a release changes, as the clients that pinned the last one "
+             "will see it (for server publishers)",
+        description=(
+            "Compares two tools/list results -- the release you shipped and the one "
+            "you are about to -- and says, per tool, what a pinned client does: the "
+            "default pin withholds every changed or added tool until it is "
+            "re-approved, and `--drift graded` forwards a change that introduced "
+            "nothing aimed at the agent. The verdicts come from the same check "
+            "`wrap` runs. OLD may also be a lockfile."
+        ),
+    )
+    diff.add_argument("old", metavar="OLD",
+                      help="the tools/list result you shipped, or a lockfile")
+    diff.add_argument("new", metavar="NEW",
+                      help="the tools/list result you are about to ship")
+    diff.add_argument("--server", metavar="NAME", default=None,
+                      help="which server, when OLD is a lockfile that records several")
+    diff.add_argument("-f", "--format", choices=("text", "markdown", "json"),
+                      default="text", help="markdown is for a pull request comment")
+    diff.add_argument("-o", "--output", metavar="FILE", help="write to FILE")
+    diff.add_argument("--fail-on", choices=("never", "withheld", "change"),
+                      default="never",
+                      help="exit 1 when a tool would be withheld under --drift graded, "
+                           "or on any change (default: never)")
+
+
+def _register_catalog(sub: argparse._SubParsersAction) -> None:
+    cat = sub.add_parser(
+        "catalog",
+        help="print one server's tools/list as JSON, for `diff` (launches it)",
+        description=(
+            "Reads one server's tool definitions and prints them as a tools/list "
+            "result holding exactly the fields a pin fingerprints. For a publisher's "
+            "own server in CI, to feed `heldfast diff`. A local server is LAUNCHED to "
+            "be read; a hosted one is read over HTTP, which runs none of its code."
+        ),
+    )
+    cat.add_argument("--url", metavar="URL", default=None,
+                     help="read a hosted server at this address instead of launching one")
+    cat.add_argument("--timeout", type=float, default=20.0, metavar="SECONDS")
+    cat.add_argument("--share-env", metavar="NAME", action="append", default=[],
+                     help="pass this environment variable to the launched server "
+                          "(repeatable); it gets nothing else of yours")
+    cat.add_argument("-o", "--output", metavar="FILE", help="write to FILE")
+    cat.add_argument("server_command", nargs=argparse.REMAINDER, metavar="-- COMMAND")
+
+
 def _register_serve(sub: argparse._SubParsersAction) -> None:
     sub.add_parser(
         "serve",
@@ -628,6 +763,10 @@ def build_parser() -> argparse.ArgumentParser:
     _register_grade_drift(sub)
     _register_hosted_drift(sub)
     _register_ci(sub)
+    _register_inventory(sub)
+    _register_fleet(sub)
+    _register_diff(sub)
+    _register_catalog(sub)
     _register_serve(sub)
     # The command names come from the parser rather than a second list.
     # A hardcoded set is how `verify-log` was silently treated as a path

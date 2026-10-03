@@ -1730,6 +1730,19 @@ def _pin_still_holds(guard: Guard, argv: list[str], *,
                    require=require_integrity, expected=expects_hash(launch))
 
 
+def _org_refusal(guard: Guard, argv: list[str], policies: list) -> str | None:
+    """The organisation policy's verdict on this launch, before it exists."""
+    from .inventory import org_refusal
+
+    for org, where in policies:
+        guard.log(f"organisation policy {org.name or '(unnamed)'} "
+                  f"(sha256:{org.digest[:12]}) from {where}")
+    launch = ServerSpec(name=guard.server_name, source="<guard>", client="guard",
+                        transport="stdio",
+                        command=argv[0] if argv else None, args=list(argv[1:]))
+    return org_refusal(launch, guard._resolve_entry(), policies)
+
+
 def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         server_name: str | None = None, strict: bool = True,
         block_severity: Severity = Severity.CRITICAL, quiet: bool = False,
@@ -1739,7 +1752,7 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
         dry_run: bool = False, require_integrity: bool = False,
         sign_command: str | None = None, lock_was_explicit: bool = True,
         share_env: set[str] | None = None, isolate_env: bool = False,
-        drift: str = "block") -> int:
+        drift: str = "block", org_policies: list | None = None) -> int:
     """Launch `argv` and proxy stdio between it and our own stdin/stdout."""
     if not argv:
         print("heldfast guard: no server command given", file=sys.stderr)
@@ -1765,6 +1778,10 @@ def run(argv: list[str], *, lock_path: Path, policy: str = DEFAULT_POLICY,
     reason = _pin_still_holds(guard, argv, require_integrity=require_integrity)
     if reason:
         print(f"heldfast guard: {reason}", file=sys.stderr)
+        return 2
+    refused = _org_refusal(guard, argv, org_policies or [])
+    if refused:
+        print(f"heldfast guard: {refused}", file=sys.stderr)
         return 2
 
     env, withheld = _child_env(share_env, isolate_env)

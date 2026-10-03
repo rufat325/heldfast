@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import _candidates, named_scripts
-from .enforcement import behind_gateway, fronting_clients, is_gateway, subcommand
+from .enforcement import behind_gateway, fronting_clients, is_gateway, subcommand, wraps
 from .identity import all_identities
 from .lockfile import Lock
 from .secrets import safe_name
@@ -260,8 +260,11 @@ def _in_path(key: str, entry: dict | None, spec: Any, fronting: set) -> Layer:
     not in the path, which is worse than having no boundary because it reads
     like one.
     """
-    if spec is not None and subcommand(spec) == "guard":
-        return Layer("enforced", "yes", "wrapped by `heldfast guard`")
+    if spec is not None and wraps(spec):
+        # `wrap` is `guard`. Matching only the word `guard` reported every
+        # server wrapped the way the README's quick start writes it as one
+        # nothing checks.
+        return Layer("enforced", "yes", f"wrapped by `heldfast {subcommand(spec)}`")
     if behind_gateway(key, entry, fronting):
         return Layer("enforced", "yes", "reached through the gateway")
     if spec is not None and spec.client in fronting:

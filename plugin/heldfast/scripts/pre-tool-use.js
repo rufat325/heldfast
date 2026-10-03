@@ -48,8 +48,21 @@
  * with what it is and how to approve it. HELDFAST_ALLOW_UNPINNED
  * (comma-separated, matched exactly, e.g. `plugin_other-plugin_db`) lets named
  * ones through, unpinned, and says so on every call.
+ *
+ * THE ORGANISATION POLICY
+ * -----------------------
+ * When the machine has a managed policy (/etc/heldfast/org-policy.json and
+ * the macOS and Windows equivalents) or HELDFAST_ORG_POLICY names one, a call
+ * to a server it refuses is denied -- by the same decision `wrap` makes before
+ * starting one (orgpolicy.js, T-ORG-PARITY). It is read on every call, never
+ * cached in a state file an agent with a shell could rewrite. A policy that is
+ * there and cannot be read refuses every MCP call. The server is described
+ * both as the lock approved it and as Claude Code's own config now starts
+ * it, and refused if either is refused, so a lock entry for an allowed
+ * package cannot speak for a config that was changed to run a denied one.
  */
 
+const org = require("./orgpolicy.js");
 const { loadLock, findServerEntry, parseMcpTool, resolveMcpTool, readStdin,
         readSessionState, LOCK_VERSION, DIGEST_CHANGED_IN } = require("./lib.js");
 
@@ -81,9 +94,14 @@ function allowedUnpinned(toolName) {
     toolName.length > ("mcp__" + server + "__").length) || "";
 }
 
-function unmatched(toolName) {
+function unmatched(toolName, policies) {
   if (toolName.startsWith(PLUGIN_PREFIX)) {
     const server = allowedUnpinned(toolName);
+    if (server && policies.length) {
+      return deny("'" + toolName + "' is not in the lockfile, and an organisation policy is " +
+        "in force: a server nothing records cannot be checked against it, so " +
+        "HELDFAST_ALLOW_UNPINNED cannot let it through");
+    }
     if (server) {
       process.stderr.write("heldfast: " + toolName + " is called UNPINNED: '" + server +
         "' is another plugin's MCP server, let through by HELDFAST_ALLOW_UNPINNED.\n");
@@ -103,6 +121,14 @@ async function decide(event) {
   const toolName = String(event.tool_name || event.toolName || "");
   const named = parseMcpTool(toolName);
   if (!named) return allow();
+
+  let policies;
+  try {
+    policies = org.forLaunch(process.env, process.platform);
+  } catch (err) {
+    return deny("the organisation policy could not be read (" +
+      String(err && err.message || err) + "); refusing every MCP call until it can be");
+  }
 
   const cwd = event.cwd || process.cwd();
   let lockPath;
@@ -135,7 +161,7 @@ async function decide(event) {
       "lockfile (" + parsed.ambiguous.join(", ") + ") that Claude Code writes the same " +
       "way, so this hook cannot tell which one is being called; give them distinct names");
   }
-  if (!parsed) return unmatched(toolName);
+  if (!parsed) return unmatched(toolName, policies);
 
   const found = findServerEntry(data, parsed.server);
   if (found && found.ambiguous) {
@@ -150,6 +176,12 @@ async function decide(event) {
   if (entry.conflict) {
     return deny("the lockfile entry for '" + parsed.server + "' covers more than one " +
       "server definition, so it cannot say which was approved; re-run `heldfast approve`");
+  }
+
+  if (policies.length) {
+    const key = Object.keys(data.servers).find((k) => data.servers[k] === entry) || parsed.server;
+    const refused = org.refusalFor(policies, key, entry, cwd);
+    if (refused) return deny(refused);
   }
 
   // No `tools` key means the entry was never probed, so nothing was approved.

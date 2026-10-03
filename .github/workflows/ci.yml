@@ -96,7 +96,8 @@ jobs:
             src/heldfast/pkgcache.py \
             src/heldfast/auditlog.py \
             src/heldfast/confusables.py \
-            src/heldfast/digest.py
+            src/heldfast/digest.py \
+            src/heldfast/orgpolicy.py
 
   # The default matrix runs without the optional extra, so the wire-shape
   # tests skip there. This job installs it so the classifier's request is
@@ -168,6 +169,52 @@ jobs:
           test -f vuln.sarif || { echo "a failing gate must still leave the report"; exit 1; }
           python -c "import json;d=json.load(open('vuln.sarif'));assert d['version']=='2.1.0';print(len(d['runs'][0]['results']),'SARIF results')"
           echo "gate fired correctly with $FINDINGS finding(s)"
+
+      - name: Write an inventory and meet a policy
+        id: inv_ok
+        uses: ./
+        with:
+          path: tests/fixtures/clean
+          format: json
+          output: clean-again.json
+          upload-sarif: "false"
+          inventory: inventory.json
+          inventory-label: fixtures/clean
+          org-policy: tests/fixtures/org-policy-allow.json
+
+      - name: The inventory names the repository and its servers
+        env:
+          VIOLATIONS: ${{ steps.inv_ok.outputs.policy-violations }}
+        run: |
+          test "$VIOLATIONS" = "0" || { echo "expected 0 violations, got $VIOLATIONS"; exit 1; }
+          python - <<'EOF'
+          import json
+          d = json.load(open("inventory.json"))
+          assert d["label"] == "fixtures/clean", d["label"]
+          assert any(s.get("package") and s["package"]["name"] == "@modelcontextprotocol/server-github"
+                     for s in d["servers"]), d["servers"]
+          print(len(d["servers"]), "servers in the inventory")
+          EOF
+
+      - name: Break a policy
+        id: inv_bad
+        continue-on-error: true
+        uses: ./
+        with:
+          path: tests/fixtures/clean
+          format: json
+          output: clean-third.json
+          upload-sarif: "false"
+          org-policy: tests/fixtures/org-policy-deny.json
+
+      - name: The policy gate must have failed
+        env:
+          OUTCOME: ${{ steps.inv_bad.outcome }}
+          VIOLATIONS: ${{ steps.inv_bad.outputs.policy-violations }}
+        run: |
+          test "$OUTCOME" = "failure" || { echo "a denied server passed the policy gate"; exit 1; }
+          test "$VIOLATIONS" != "0" || { echo "expected violations, got $VIOLATIONS"; exit 1; }
+          echo "policy gate fired with $VIOLATIONS violation(s)"
 
       # probe-hosted is on by default: a hosted server rewritten since
       # approval fails the job, and one behind a login is reported as not

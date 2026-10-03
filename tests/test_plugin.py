@@ -112,6 +112,7 @@ def _decide(tmp: Path, tool_name: str, env: dict | None = None, **event) -> tupl
     merged = dict(os.environ)
     merged.pop("HELDFAST_ALLOW_UNPINNED", None)
     merged.pop("MCP_PIN_DRIFT", None)
+    merged.pop("HELDFAST_ORG_POLICY", None)
     merged.update(env or {})
     payload = {"hook_event_name": "PreToolUse", "cwd": str(tmp), "tool_name": tool_name,
                "tool_input": {}}

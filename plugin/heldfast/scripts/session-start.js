@@ -14,6 +14,7 @@
  */
 
 const { spawnSync } = require("child_process");
+const org = require("./orgpolicy.js");
 const { loadLock, readStdin, sessionStatePath, writeSessionState } = require("./lib.js");
 
 const CHECK_TIMEOUT_MS = 25000;
@@ -78,6 +79,27 @@ function sessionCheck(event, lockPath) {
     ".\n");
 }
 
+/** Say which organisation policy is in force and what it refuses. Never throws. */
+function orgSummary(cwd, data) {
+  let policies;
+  try {
+    policies = org.forLaunch(process.env, process.platform);
+  } catch (err) {
+    process.stdout.write("heldfast: the organisation policy could not be read (" +
+      String(err && err.message || err) + "); every MCP call will be refused until it can be.\n");
+    return;
+  }
+  const servers = data && data.servers && typeof data.servers === "object" ? data.servers : {};
+  for (const { policy, where } of policies) {
+    const refused = Object.keys(servers).filter((key) =>
+      servers[key] && org.refusalFor([{ policy, where }], key, servers[key], cwd));
+    process.stdout.write("heldfast: organisation policy " + (policy.name || "(unnamed)") +
+      " (sha256:" + policy.digest.slice(0, 12) + ") from " + where +
+      (refused.length ? "; it refuses " + refused.join(", ") + ", and calls to them are denied"
+        : "; every approved server meets it") + ".\n");
+  }
+}
+
 (async () => {
   let event = {};
   try {
@@ -88,6 +110,7 @@ function sessionCheck(event, lockPath) {
   }
   const cwd = event.cwd || process.cwd();
   const { path: lockPath, data } = loadLock(cwd);
+  orgSummary(cwd, data);
   if (!lockPath) {
     process.stdout.write(
       "heldfast: no .mcp-pin.lock in " + cwd +

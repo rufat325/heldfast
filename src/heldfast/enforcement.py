@@ -20,12 +20,20 @@ from __future__ import annotations
 
 from typing import Any
 
-# What heldfast is called once installed, however it was installed.
-_SELF = {"heldfast", "heldfast.exe", "heldfast"}
+# What heldfast is called once installed, however it was installed. Not
+# `mcp-pin`, although the wheel still installs that console script: on npm
+# that name is another publisher's package, so `npx -y mcp-pin gateway` runs
+# their code, and reading it as this gateway would let a package name switch
+# off MCPA032.
+_SELF = {"heldfast", "heldfast.exe"}
+
+# Subcommands that wrap one server: `wrap` is `guard`, and `heldfast --
+# <server>` is `wrap` (see `subcommand`).
+WRAPPING = {"guard", "wrap"}
 
 # Subcommands that put this tool between the client and a server. `scan` and
 # the rest are not enforcement and must not be mistaken for it.
-ENFORCING = {"gateway", "guard"}
+ENFORCING = {"gateway"} | WRAPPING
 
 
 def unwrap_launcher(command: str, args: list) -> tuple[str, list]:
@@ -66,9 +74,20 @@ def subcommand(server: Any) -> str:
         if text.replace("\\", "/").rsplit("/", 1)[-1] in _SELF:
             seen_self = True
             continue
+        # `heldfast -- <server>` is `wrap` with the word left out, which is
+        # how the README spells it. Read as anything else it named the
+        # wrapped server's runner as the subcommand, so the entry doing the
+        # enforcing was reported as a server nothing enforces.
+        if seen_self and text == "--":
+            return "wrap"
         if seen_self and not text.startswith("-"):
             return text
     return ""
+
+
+def wraps(server: Any) -> bool:
+    """True for an entry that runs one server through `guard` or `wrap`."""
+    return subcommand(server) in WRAPPING
 
 
 def fronting_clients(servers: list) -> set[str]:

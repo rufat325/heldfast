@@ -56,6 +56,23 @@ inputs:
     description: "Python version used to run the scanner"
     required: false
     default: "3.12"
+  inventory:
+    description: >-
+      Also write this repository's `heldfast inventory` (JSON) to this path, for
+      `heldfast fleet` to join with every other repository's and machine's.
+      Reads configs only; launches nothing. Empty writes none.
+    required: false
+    default: ""
+  inventory-label:
+    description: "What to call this repository in a fleet report (default: owner/repo)"
+    required: false
+    default: ""
+  org-policy:
+    description: >-
+      An organisation policy file (heldfast.org-policy/1). The repository's
+      MCP servers are checked against it, and a violation fails the job.
+    required: false
+    default: ""
 
 outputs:
   findings:
@@ -70,6 +87,12 @@ outputs:
   report:
     description: "Path to the written report file"
     value: ${{ steps.scan.outputs.report }}
+  inventory:
+    description: "Path to the written inventory, when one was asked for"
+    value: ${{ steps.inventory.outputs.inventory }}
+  policy-violations:
+    description: "Servers that break the organisation policy at deny level"
+    value: ${{ steps.inventory.outputs.violations }}
 
 runs:
   using: "composite"
@@ -150,6 +173,35 @@ runs:
           python -m heldfast.report.probe_summary "$summary"
         } >> "$GITHUB_STEP_SUMMARY"
 
+    - name: Inventory
+      id: inventory
+      if: ${{ inputs.inventory != '' || inputs.org-policy != '' }}
+      shell: bash
+      env:
+        IN_PATH: ${{ inputs.path }}
+        IN_INVENTORY: ${{ inputs.inventory }}
+        IN_LABEL: ${{ inputs.inventory-label }}
+        IN_ORG_POLICY: ${{ inputs.org-policy }}
+      run: |
+        set -euo pipefail
+        args=(inventory "$IN_PATH" --no-user-configs --label "${IN_LABEL:-$GITHUB_REPOSITORY}")
+        if [ -n "$IN_ORG_POLICY" ]; then
+          args+=(--policy "$IN_ORG_POLICY")
+        fi
+        out="${IN_INVENTORY:-$RUNNER_TEMP/heldfast-inventory.json}"
+        status=0
+        heldfast "${args[@]}" -f json -o "$out" || status=$?
+        if [ "$status" = "2" ]; then
+          echo "heldfast: the inventory could not be written (see above)"
+          exit 2
+        fi
+        violations=$(python -c "import json,sys;print(sum(1 for v in json.load(open(sys.argv[1])).get('policy', {}).get('violations', []) if v['level'] == 'deny'))" "$out")
+        {
+          echo "inventory=$out"
+          echo "violations=$violations"
+        } >> "$GITHUB_OUTPUT"
+        heldfast "${args[@]}" --no-color || true
+
     - name: Upload SARIF
       if: ${{ inputs.upload-sarif == 'true' && inputs.format == 'sarif' && hashFiles(inputs.output) != '' }}
       uses: github/codeql-action/upload-sarif@fca7ace96b7d713c7035871441bd52efbe39e27e # v3.28.19
@@ -196,3 +248,15 @@ runs:
         print(f"heldfast: {total} finding(s); highest '{highest}' is below "
               f"the '{threshold}' threshold")
         EOF
+
+    - name: Enforce the organisation policy
+      if: ${{ inputs.org-policy != '' }}
+      shell: bash
+      env:
+        VIOLATIONS: ${{ steps.inventory.outputs.violations }}
+      run: |
+        if [ "${VIOLATIONS:-0}" != "0" ]; then
+          echo "heldfast: $VIOLATIONS server(s) break the organisation policy"
+          exit 1
+        fi
+        echo "heldfast: every server meets the organisation policy"

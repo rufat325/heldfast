@@ -381,6 +381,78 @@ Read this file and `docs/GUARANTEES.md` instead.
     says "not a sandbox" on stderr, and the Action example is the identity
     merge rather than a SHA from before it. Do not implement a sandbox.
 
+37. ~~Nothing answered for more than one machine.~~ Done: `inventory`,
+    an organisation policy, and `fleet` ([FLEET.md](FLEET.md)). The lock is
+    still the product; these are how a company sees how far it reaches.
+    - `inventory` is `status` as data, made to be copied off the machine: no
+      env values, headers or arguments, a hosted address without query or
+      user info and with token-shaped path segments `{redacted}`, and it
+      launches nothing -- it does not accept `--probe` (T-INVENTORY-INERT,
+      T-INVENTORY-SECRETLESS). `-f cyclonedx` for BOM tools.
+    - `orgpolicy.py` reads the policy the way `Policy.check` reads limits:
+      an unknown key anywhere refuses the file (T-ORG-POLICY-UNKNOWN). URL
+      rules match host and path apart; as one glob, `*` crossed `/` and
+      `https://*.acme.com/*` was met by `https://evil.example/.acme.com/`
+      (T-ORG-URL). In the `mypy --strict` set.
+    - `fleet` reads inventories as untrusted input. The type fuzz test found
+      a crash on its first run: a dict where a word belongs raised TypeError
+      from a set lookup, so one inventory took the whole report down. The
+      HTML has a CSP that allows no script, on top of escaping
+      (T-FLEET-UNTRUSTED). Counts, never a score, for the reason `coverage`
+      gives.
+    - `--advisories` asks OSV in batches. The first version printed "Running
+      malware: 0" when OSV could not be reached -- the all-clear this project
+      keeps refusing to print. A failed lookup is "unknown" now
+      (T-ADVISORY-UNKNOWN).
+    - The Action takes `inventory` and `org-policy`.
+    - `wrap`/`guard` and `gateway` refuse a server the policy denies before
+      it starts (T-ORG-LAUNCH). The machine's managed policy is always in
+      force and a local one can only add to it (T-ORG-MANAGED). Both gates
+      sit *after* the existing pin gates rather than inside them, so the
+      catalogued mutants for those gates still match one snippet each.
+    - The Claude Code plugin reads the policy too: item 39.
+
+    Found on the way: `coverage` matched only the word `guard`, so a server
+    wrapped the way the README's quick start writes it (`heldfast wrap`, or
+    `heldfast --`) reported as unenforced. `mcp-pin` is deliberately not
+    recognised as this tool: on npm it is another publisher's package.
+
+38. ~~Publishers could not see their release the way pinned clients do.~~
+    Done: `catalog` and `diff` ([PUBLISHERS.md](PUBLISHERS.md)). `diff`
+    asks every verdict of a `Guard` holding a lock recorded from the old
+    side, so it cannot drift from runtime (T-DIFF-PARITY). The new side must
+    be full definitions: grading a lockfile's preview would miss a schema
+    change, which would be the report failing open. Markdown output escapes
+    server text because a PR renders it (T-DIFF-MARKDOWN). `catalog` writes
+    exactly the fields the fingerprint covers, and a test holds the round
+    trip to the same digest.
+
+39. ~~The org policy stopped at `wrap`; Claude Code went around it.~~ Done:
+    `plugin/heldfast/scripts/orgpolicy.js` is `orgpolicy.py` plus the parts of
+    `inventory.py` that say what a server is, and the PreToolUse hook denies a
+    call to a server the policy refuses (T-ORG-HOOK). It reads the policy on
+    every call: verdicts cached in a state file would be one `echo` from an
+    agent with a shell away from gone.
+    - Parity is T-ORG-PARITY: `tests/golden/orgpolicy_vectors.json` (each
+      case with its reason) and a seeded differential over a few thousand
+      inputs, Python against Node. Planting a one-character bug in the JS
+      fails it, which was checked before it was believed.
+    - Porting found three things in the Python. `urlsplit` reads
+      `https://evil.example\\@good.example/` as good.example; Node, which
+      Claude Code connects with, reads evil.example -- so an allow rule for
+      good.example approved a server talking to evil.example, and a deny on
+      evil.example missed it. `endpoint()` now parses by hand and refuses
+      anything two parsers could disagree on, and an address it refuses
+      matches every URL deny rule and no allow rule. Paths too: Node resolves
+      `/ok/x\\..\\..\\admin` to `/admin`, which `/ok/*` matched as written.
+      `"unlisted": {}` raised TypeError instead of refusing the file, and
+      `Path.exists()` read a symlink loop at the managed path as "no policy".
+    - Globs are `*` and `?` only, matched without a regex: fnmatch's classes
+      were the hardest thing to reproduce exactly, and a backtracking regex is
+      exponential on many stars.
+    - The mutation harness copies `src/heldfast`, so the JS has its own small
+      catalogue in `tests/test_plugin_orgpolicy.py`.
+
 ## Lessons that cost something
 
 Kept in the tracked file rather than in local notes, because every one of them

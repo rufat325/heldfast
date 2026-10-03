@@ -913,6 +913,9 @@ def cmd_guard(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return EXIT_ERROR
 
+    org = _org_policies(args)
+    if org is None:
+        return EXIT_ERROR
     lock_path = _resolve_lock_path(args)
     return guard_mod.run(
         argv,
@@ -935,7 +938,20 @@ def cmd_guard(args: argparse.Namespace) -> int:
         share_env=set(getattr(args, "share_env", None) or []),
         isolate_env=bool(getattr(args, "isolate_env", False)),
         drift=getattr(args, "drift", "block"),
+        org_policies=org,
     )
+
+
+def _org_policies(args: argparse.Namespace) -> list | None:
+    """Every organisation policy this launch must meet, or None after saying
+    why one could not be read -- which refuses the launch."""
+    from .orgpolicy import for_launch
+    try:
+        return for_launch(getattr(args, "org_policy", None))
+    except ValueError as exc:
+        print(f"heldfast: {exc}; refusing to start anything until it can be read",
+              file=sys.stderr)
+        return None
 
 
 def cmd_hosted_drift(args: argparse.Namespace) -> int:
@@ -1056,6 +1072,21 @@ def cmd_policy(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def status_findings(args: argparse.Namespace, data: Collected, lock: Lock) -> list[Finding]:
+    """Every rule's verdict on what was collected, as `status` reports them."""
+    ctx = AuditContext(
+        servers=data.servers, skills=data.skills, tools=data.tools,
+        prompts=data.prompts, resources=data.resources,
+        instructions=data.instructions, source_flows=data.source_flows,
+        config_errors=data.errors,
+        unreadable=data.unreadable,
+        lock={"servers": lock.servers, "skills": lock.skills,
+              "stale_digests": lock.stale_digests},
+        options=_rule_options(args, data),
+    )
+    return run_rules(ctx)
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     from . import status as status_mod
 
@@ -1067,17 +1098,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
     data = collect(args)
-    ctx = AuditContext(
-        servers=data.servers, skills=data.skills, tools=data.tools,
-        prompts=data.prompts, resources=data.resources,
-        instructions=data.instructions, source_flows=data.source_flows,
-        config_errors=data.errors,
-        unreadable=data.unreadable,
-        lock={"servers": lock.servers, "skills": lock.skills,
-              "stale_digests": lock.stale_digests},
-        options=_rule_options(args, data),
-    )
-    findings = run_rules(ctx)
+    findings = status_findings(args, data, lock)
 
     log_path = Path(args.log) if args.log else None
     payload = status_mod.build(lock, data.servers, findings, log_path,
@@ -1114,9 +1135,32 @@ def cmd_coverage(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_inventory(args: argparse.Namespace) -> int:
+    from .cli_fleet import inventory
+    return inventory(args)
+
+
+def cmd_fleet(args: argparse.Namespace) -> int:
+    from .cli_fleet import fleet
+    return fleet(args)
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    from .cli_fleet import diff
+    return diff(args)
+
+
+def cmd_catalog(args: argparse.Namespace) -> int:
+    from .cli_fleet import catalog
+    return catalog(args)
+
+
 def cmd_gateway(args: argparse.Namespace) -> int:
     from . import gateway as gateway_mod
 
+    org = _org_policies(args)
+    if org is None:
+        return EXIT_ERROR
     lock_path = _resolve_lock_path(args)
     data = collect(args)
     if not data.servers:
@@ -1139,6 +1183,7 @@ def cmd_gateway(args: argparse.Namespace) -> int:
         share_env=set(args.share_env or []),
         require_integrity=bool(getattr(args, "require_integrity", False)),
         drift=getattr(args, "drift", "block"),
+        org_policies=org,
     )
 
 
@@ -1261,6 +1306,10 @@ _COMMANDS = {
     "grade-drift": cmd_grade_drift,
     "hosted-drift": cmd_hosted_drift,
     "ci": cmd_ci,
+    "inventory": cmd_inventory,
+    "fleet": cmd_fleet,
+    "diff": cmd_diff,
+    "catalog": cmd_catalog,
     "serve": lambda _args: _serve(),
     "scan": cmd_scan,
     "doctor": cmd_scan,

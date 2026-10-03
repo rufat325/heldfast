@@ -112,6 +112,36 @@ def _as_map(data: Any) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def enabled(plugin: str) -> bool:
+    """Whether a plugin of this name is installed and switched on here.
+
+    Read from the same record and settings `plugin_servers` reads, so the two
+    cannot disagree about what Claude Code will load.
+    """
+    try:
+        installs = _installs(_load(plugins_root() / "installed_plugins.json"))
+    except (OSError, ValueError):
+        return False
+    try:
+        settings = _load(config_dir() / "settings.json")
+    except (OSError, ValueError):
+        settings = {}
+    switches = settings.get("enabledPlugins") if isinstance(settings, dict) else None
+    switches = switches if isinstance(switches, dict) else {}
+    for plugin_id, root in installs:
+        if plugin_id.split("@", 1)[0] != plugin:
+            continue
+        try:
+            manifest_path = root / ".claude-plugin" / "plugin.json"
+            manifest = _load(manifest_path) if manifest_path.is_file() else {}
+        except (OSError, ValueError):
+            manifest = {}
+        if not _switched_off(plugin_id, manifest if isinstance(manifest, dict) else {},
+                             switches):
+            return True
+    return False
+
+
 def plugin_servers() -> tuple[list[ServerSpec], list[str]]:
     """(servers, notes) for every enabled installed plugin's MCP servers."""
     record_path = plugins_root() / "installed_plugins.json"

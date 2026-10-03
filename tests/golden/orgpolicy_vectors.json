@@ -1,0 +1,1253 @@
+{
+ "about": "Inputs and the answers both src/heldfast/orgpolicy.py (with inventory.py) and plugin/heldfast/scripts/orgpolicy.js must give. Written from the Python and checked against both by tests/test_orgpolicy_parity.py.",
+ "glob": [
+  {
+   "why": "a star crosses dots",
+   "input": [
+    "x.acme.com",
+    "*.acme.com"
+   ],
+   "expect": true
+  },
+  {
+   "why": "a star does not invent the dot before it",
+   "input": [
+    "acme.com",
+    "*.acme.com"
+   ],
+   "expect": false
+  },
+  {
+   "why": "? is exactly one character",
+   "input": [
+    "abc",
+    "a?c"
+   ],
+   "expect": true
+  },
+  {
+   "why": "? is not zero characters",
+   "input": [
+    "ac",
+    "a?c"
+   ],
+   "expect": false
+  },
+  {
+   "why": "brackets are literal, unlike fnmatch",
+   "input": [
+    "[x]",
+    "[x]"
+   ],
+   "expect": true
+  },
+  {
+   "why": "a bracket expression is not a character class",
+   "input": [
+    "x",
+    "[x]"
+   ],
+   "expect": false
+  },
+  {
+   "why": "? is one code point, not one UTF-16 unit",
+   "input": [
+    "\ud83d\ude00b",
+    "?b"
+   ],
+   "expect": true
+  },
+  {
+   "why": "a star matches nothing",
+   "input": [
+    "",
+    "*"
+   ],
+   "expect": true
+  },
+  {
+   "why": "an empty pattern matches only the empty string",
+   "input": [
+    "a",
+    ""
+   ],
+   "expect": false
+  },
+  {
+   "why": "matching is case-sensitive; callers lower what they mean to",
+   "input": [
+    "MCP",
+    "mcp"
+   ],
+   "expect": false
+  }
+ ],
+ "endpoint": [
+  {
+   "why": "Python's urlsplit reads good.example, a Node client connects to evil.example",
+   "input": "https://evil.example\\@mcp.linear.app/sse",
+   "expect": null
+  },
+  {
+   "why": "user info never names the host",
+   "input": "https://mcp.linear.app@evil.example/sse",
+   "expect": "https://evil.example/sse"
+  },
+  {
+   "why": "user info, query and fragment are dropped",
+   "input": "https://user:pw@mcp.example.com/sse?api_key=abc#frag",
+   "expect": "https://mcp.example.com/sse"
+  },
+  {
+   "why": "two @ in the authority is refused",
+   "input": "https://a@b@mcp.example.com/",
+   "expect": null
+  },
+  {
+   "why": "a percent-encoded host is refused",
+   "input": "https://ex%61mple.com/",
+   "expect": null
+  },
+  {
+   "why": "a non-ASCII host is refused: Node would punycode it",
+   "input": "https://b\u00fccher.example/",
+   "expect": null
+  },
+  {
+   "why": "Node resolves a dot segment before it asks",
+   "input": "https://x.example/ok/../admin",
+   "expect": null
+  },
+  {
+   "why": "and an encoded one",
+   "input": "https://x.example/ok/%2e%2e/admin",
+   "expect": null
+  },
+  {
+   "why": "matches /ok/* as written; Node resolves it to /admin",
+   "input": "https://x.example/ok/x\\..\\..\\admin",
+   "expect": null
+  },
+  {
+   "why": "whitespace anywhere is refused",
+   "input": "https://x.example/a b",
+   "expect": null
+  },
+  {
+   "why": "surrounding ASCII whitespace is trimmed",
+   "input": "  https://x.example/sse \n",
+   "expect": "https://x.example/sse"
+  },
+  {
+   "why": "str.strip() would take \\x1c; this does not, and refuses it",
+   "input": "\u001chttps://x.example/",
+   "expect": null
+  },
+  {
+   "why": "a port is read as a number",
+   "input": "https://x.example:0443/p",
+   "expect": "https://x.example:443/p"
+  },
+  {
+   "why": "an empty port is no port",
+   "input": "https://x.example:/p",
+   "expect": "https://x.example/p"
+  },
+  {
+   "why": "a port past 65535 is refused",
+   "input": "https://x.example:99999/",
+   "expect": null
+  },
+  {
+   "why": "a bracketed IPv6 host",
+   "input": "http://[::1]:8080/mcp",
+   "expect": "http://[::1]:8080/mcp"
+  },
+  {
+   "why": "an unclosed bracket is refused",
+   "input": "https://[::1/x",
+   "expect": null
+  },
+  {
+   "why": "scheme and host lower-cased, path kept",
+   "input": "HTTPS://MCP.Linear.App/SSE",
+   "expect": "https://mcp.linear.app/SSE"
+  },
+  {
+   "why": "no path is /",
+   "input": "https://mcp.linear.app",
+   "expect": "https://mcp.linear.app/"
+  },
+  {
+   "why": "a long mixed segment is a credential",
+   "input": "https://actions.zapier.com/mcp/sk-ak-9f8e7d6c5b4a3f2e1d0c9b8a7/sse",
+   "expect": "https://actions.zapier.com/mcp/{redacted}/sse"
+  },
+  {
+   "why": "a provider token shape is a credential",
+   "input": "https://gw.example/ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8/mcp",
+   "expect": "https://gw.example/{redacted}/mcp"
+  },
+  {
+   "why": "redact() reads ;token= as a secret parameter",
+   "input": "https://gw.example/x;token=abc/mcp",
+   "expect": "https://gw.example/{redacted}/mcp"
+  },
+  {
+   "why": "an already-redacted value is left alone",
+   "input": "https://gw.example/a;session=[REDACTED]/mcp",
+   "expect": "https://gw.example/a;session=[REDACTED]/mcp"
+  },
+  {
+   "why": "no scheme is no address",
+   "input": "mcp.example.com",
+   "expect": null
+  }
+ ],
+ "shlex": [
+  {
+   "why": "single quotes keep spaces",
+   "input": "npx -y '@scope/a b'",
+   "expect": [
+    "npx",
+    "-y",
+    "@scope/a b"
+   ]
+  },
+  {
+   "why": "a backslash escapes a quote inside double quotes",
+   "input": "a \"b\\\"c\" d",
+   "expect": [
+    "a",
+    "b\"c",
+    "d"
+   ]
+  },
+  {
+   "why": "and is kept before anything else there",
+   "input": "a \"b\\c\"",
+   "expect": [
+    "a",
+    "b\\c"
+   ]
+  },
+  {
+   "why": "a backslash escapes a space outside quotes",
+   "input": "a\\ b",
+   "expect": [
+    "a b"
+   ]
+  },
+  {
+   "why": "an empty quoted word is a word",
+   "input": "''",
+   "expect": [
+    ""
+   ]
+  },
+  {
+   "why": "an unclosed quote is an error",
+   "input": "a 'b",
+   "expect": "ERROR"
+  },
+  {
+   "why": "a trailing backslash is an error",
+   "input": "a\\",
+   "expect": "ERROR"
+  },
+  {
+   "why": "\\v is not shlex whitespace",
+   "input": "a\u000bb",
+   "expect": [
+    "a\u000bb"
+   ]
+  },
+  {
+   "why": "# is not a comment for shlex.split",
+   "input": "x #y",
+   "expect": [
+    "x",
+    "#y"
+   ]
+  }
+ ],
+ "describe": [
+  {
+   "why": "a pinned npm package",
+   "input": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": [
+     "-y",
+     "@scope/srv@1.2.3"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "@scope/srv",
+     "version": "1.2.3",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "npm reads 1.2 as a range",
+   "input": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": [
+     "-y",
+     "pkg@1.2"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.2",
+     "exact": false
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "a leading v is stripped from an exact version",
+   "input": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": [
+     "-y",
+     "pkg@v1.2.3"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.2.3",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "a PEP 508 pin",
+   "input": {
+    "transport": "stdio",
+    "command": "uvx",
+    "args": [
+     "mcp-server-fetch==2025.4.7"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "pypi",
+     "name": "mcp-server-fetch",
+     "version": "2025.4.7",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "uvx"
+   }
+  },
+  {
+   "why": "a PEP 508 range, extras dropped from the name",
+   "input": {
+    "transport": "stdio",
+    "command": "uvx",
+    "args": [
+     "Mcp[cli]>=1"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "pypi",
+     "name": "Mcp",
+     "version": ">=1",
+     "exact": false
+    },
+    "endpoint": null,
+    "command": "uvx"
+   }
+  },
+  {
+   "why": "Windows' cmd /c is seen through",
+   "input": {
+    "transport": "stdio",
+    "command": "cmd",
+    "args": [
+     "/c",
+     "npx",
+     "-y",
+     "pkg@1.0.0"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.0.0",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "a Windows path and suffix",
+   "input": {
+    "transport": "stdio",
+    "command": "C:\\nodejs\\NPX.CMD",
+    "args": [
+     "-y",
+     "pkg@1.0.0"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.0.0",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "deno's npm: specifier",
+   "input": {
+    "transport": "stdio",
+    "command": "deno",
+    "args": [
+     "run",
+     "-A",
+     "npm:pkg@1.0.0"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.0.0",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "deno"
+   }
+  },
+  {
+   "why": "a flag that takes a value",
+   "input": {
+    "transport": "stdio",
+    "command": "pnpm",
+    "args": [
+     "dlx",
+     "--package",
+     "x",
+     "pkg@1.0.0"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.0.0",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "pnpm"
+   }
+  },
+  {
+   "why": "a wrapped server is described by what it wraps",
+   "input": {
+    "transport": "stdio",
+    "command": "heldfast",
+    "args": [
+     "wrap",
+     "--name",
+     "s",
+     "--",
+     "npx",
+     "-y",
+     "pkg@1.0.0"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.0.0",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "heldfast -- is wrap",
+   "input": {
+    "transport": "stdio",
+    "command": "heldfast",
+    "args": [
+     "--",
+     "npx",
+     "-y",
+     "pkg@1.0.0"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.0.0",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "a local path is not a package",
+   "input": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": [
+     "-y",
+     "./local"
+    ]
+   },
+   "expect": {
+    "kind": "local",
+    "transport": "stdio",
+    "package": null,
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "a local command",
+   "input": {
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+     "server.js"
+    ]
+   },
+   "expect": {
+    "kind": "local",
+    "transport": "stdio",
+    "package": null,
+    "endpoint": null,
+    "command": "node"
+   }
+  },
+  {
+   "why": "an address that cannot be read is empty, not absent",
+   "input": {
+    "transport": "http",
+    "command": null,
+    "args": [],
+    "url": "https://evil.example\\@good.example/"
+   },
+   "expect": {
+    "kind": "hosted",
+    "transport": "http",
+    "package": null,
+    "endpoint": "",
+    "command": null
+   }
+  },
+  {
+   "why": "Arabic-Indic digits are not a version",
+   "input": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": [
+     "-y",
+     "pkg@\u0661.\u0662.\u0663"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "\u0661.\u0662.\u0663",
+     "exact": false
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  }
+ ],
+ "lock": [
+  {
+   "why": "the quoting `approve` writes",
+   "input": {
+    "command_line": "npx -y '@scope/srv@1.2.3'",
+    "transport": "stdio"
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "@scope/srv",
+     "version": "1.2.3",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "a line that does not split describes nothing",
+   "input": {
+    "command_line": "npx -y 'unclosed",
+    "transport": "stdio"
+   },
+   "expect": {
+    "kind": "local",
+    "transport": "stdio",
+    "package": null,
+    "endpoint": null,
+    "command": null
+   }
+  },
+  {
+   "why": "a hosted entry",
+   "input": {
+    "command_line": "",
+    "transport": "http",
+    "url": "https://mcp.example.com/sse"
+   },
+   "expect": {
+    "kind": "hosted",
+    "transport": "http",
+    "package": null,
+    "endpoint": "https://mcp.example.com/sse",
+    "command": null
+   }
+  },
+  {
+   "why": "wrong types read the way Python reads them",
+   "input": {
+    "command_line": {},
+    "transport": {},
+    "url": 3
+   },
+   "expect": {
+    "kind": "local",
+    "transport": "unknown",
+    "package": null,
+    "endpoint": null,
+    "command": null
+   }
+  }
+ ],
+ "config": [
+  {
+   "why": "a Claude Code stdio entry",
+   "input": {
+    "command": "npx",
+    "args": [
+     "-y",
+     "pkg@1.0.0"
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.0.0",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "a Claude Code hosted entry",
+   "input": {
+    "type": "http",
+    "url": "https://mcp.example.com/mcp"
+   },
+   "expect": {
+    "kind": "hosted",
+    "transport": "http",
+    "package": null,
+    "endpoint": "https://mcp.example.com/mcp",
+    "command": null
+   }
+  },
+  {
+   "why": "no type: sse in the URL",
+   "input": {
+    "url": "https://mcp.example.com/sse"
+   },
+   "expect": {
+    "kind": "hosted",
+    "transport": "sse",
+    "package": null,
+    "endpoint": "https://mcp.example.com/sse",
+    "command": null
+   }
+  },
+  {
+   "why": "args as one string",
+   "input": {
+    "command": "npx",
+    "args": "pkg@1.0.0"
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "pkg",
+     "version": "1.0.0",
+     "exact": true
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "an empty object is falsy to Python",
+   "input": {
+    "command": "npx",
+    "args": {}
+   },
+   "expect": {
+    "kind": "local",
+    "transport": "stdio",
+    "package": null,
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "so is an empty command",
+   "input": {
+    "command": {},
+    "url": "https://x.example/"
+   },
+   "expect": {
+    "kind": "hosted",
+    "transport": "http",
+    "package": null,
+    "endpoint": "https://x.example/",
+    "command": null
+   }
+  },
+  {
+   "why": "str() of JSON true and null",
+   "input": {
+    "command": "npx",
+    "args": [
+     "-y",
+     true,
+     null
+    ]
+   },
+   "expect": {
+    "kind": "package",
+    "transport": "stdio",
+    "package": {
+     "ecosystem": "npm",
+     "name": "True",
+     "version": "",
+     "exact": false
+    },
+    "endpoint": null,
+    "command": "npx"
+   }
+  },
+  {
+   "why": "serverUrl is read like url",
+   "input": {
+    "serverUrl": "https://x.example/mcp"
+   },
+   "expect": {
+    "kind": "hosted",
+    "transport": "http",
+    "package": null,
+    "endpoint": "https://x.example/mcp",
+    "command": null
+   }
+  }
+ ],
+ "parse": [
+  {
+   "why": "the smallest policy",
+   "input": {
+    "policy": "heldfast.org-policy/1"
+   },
+   "expect": "ok"
+  },
+  {
+   "why": "an unknown top-level key",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "requre": {}
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "an unknown rule key",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "deny": [
+     {
+      "pakage": "npm:x"
+     }
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "an unknown requirement",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "require": {
+     "aproved": true
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "an object where a word belongs",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "unlisted": {}
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "a list where a severity belongs",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "require": {
+     "fail_on": []
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "a rule with no selector",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "deny": [
+     {
+      "reason": "x"
+     }
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "a package without an ecosystem",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "deny": [
+     {
+      "package": "postmark-mcp"
+     }
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "a URL without a scheme",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "deny": [
+     {
+      "url": "mcp.example.com"
+     }
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "versions beside a package",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "deny": [
+     {
+      "package": "npm:x",
+      "versions": [
+       "1.0.0"
+      ]
+     }
+    ]
+   },
+   "expect": "ok"
+  },
+  {
+   "why": "versions beside nothing they could mean",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "deny": [
+     {
+      "url": "https://x/",
+      "versions": [
+       "1"
+      ]
+     }
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "1 is not true",
+   "input": {
+    "policy": "heldfast.org-policy/1",
+    "require": {
+     "approved": 1
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "why": "a list is not a policy",
+   "input": [],
+   "expect": "ERROR"
+  }
+ ],
+ "load": [
+  {
+   "why": "a file that parses",
+   "input": "eyJwb2xpY3kiOiAiaGVsZGZhc3Qub3JnLXBvbGljeS8xIiwgIm5hbWUiOiAieCJ9",
+   "expect": "ok"
+  },
+  {
+   "why": "a BOM: json.loads refuses it, and so does the plugin",
+   "input": "77u/eyJwb2xpY3kiOiAiaGVsZGZhc3Qub3JnLXBvbGljeS8xIn0=",
+   "expect": "ERROR"
+  },
+  {
+   "why": "NaN is not JSON",
+   "input": "eyJwb2xpY3kiOiAiaGVsZGZhc3Qub3JnLXBvbGljeS8xIiwgImRlc2NyaXB0aW9uIjogTmFOfQ==",
+   "expect": "ERROR"
+  },
+  {
+   "why": "nor is Infinity",
+   "input": "eyJwb2xpY3kiOiAiaGVsZGZhc3Qub3JnLXBvbGljeS8xIiwgImRlc2NyaXB0aW9uIjogSW5maW5pdHl9",
+   "expect": "ERROR"
+  },
+  {
+   "why": "a truncated file",
+   "input": "ew==",
+   "expect": "ERROR"
+  },
+  {
+   "why": "bytes that are not UTF-8",
+   "input": "/3sicG9saWN5IjogImhlbGRmYXN0Lm9yZy1wb2xpY3kvMSJ9",
+   "expect": "ERROR"
+  }
+ ],
+ "refusal": [
+  {
+   "why": "a denied release",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "deny": [
+      {
+       "package": "npm:postmark-mcp",
+       "versions": [
+        "1.0.16"
+       ],
+       "reason": "backdoored"
+      }
+     ]
+    },
+    "spec": {
+     "command": "npx",
+     "args": [
+      "-y",
+      "postmark-mcp@1.0.16"
+     ]
+    },
+    "entry": {
+     "tools": {
+      "t": {}
+     }
+    }
+   },
+   "expect": "organisation policy (unnamed) (sha256:000000000000) refuses this server: postmark-mcp@1.0.16 is denied: backdoored"
+  },
+  {
+   "why": "a floating version may be the denied one",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "deny": [
+      {
+       "package": "npm:postmark-mcp",
+       "versions": [
+        "1.0.16"
+       ]
+      }
+     ]
+    },
+    "spec": {
+     "command": "npx",
+     "args": [
+      "-y",
+      "postmark-mcp"
+     ]
+    },
+    "entry": {
+     "tools": {
+      "t": {}
+     }
+    }
+   },
+   "expect": "organisation policy (unnamed) (sha256:000000000000) refuses this server: postmark-mcp is denied: matches deny rule (package npm:postmark-mcp; versions 1.0.16); no exact version is pinned, so it may run a denied release"
+  },
+  {
+   "why": "an unreadable address meets a URL deny rule",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "deny": [
+      {
+       "url": "https://*.ngrok-free.app/*"
+      }
+     ]
+    },
+    "spec": {
+     "type": "http",
+     "url": "https://evil.ngrok-free.app\\@mcp.linear.app/sse"
+    },
+    "entry": {
+     "tools": {
+      "t": {}
+     }
+    }
+   },
+   "expect": "organisation policy (unnamed) (sha256:000000000000) refuses this server: claude-code:s is denied: matches deny rule (url https://*.ngrok-free.app/*); its address cannot be read unambiguously, so it may be the denied one"
+  },
+  {
+   "why": "and never an allow rule",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "allow": [
+      {
+       "url": "https://mcp.linear.app/*"
+      }
+     ],
+     "unlisted": "deny"
+    },
+    "spec": {
+     "type": "http",
+     "url": "https://evil.ngrok-free.app\\@mcp.linear.app/sse"
+    },
+    "entry": {
+     "tools": {
+      "t": {}
+     }
+    }
+   },
+   "expect": "organisation policy (unnamed) (sha256:000000000000) refuses this server: claude-code:s is not on the allow list"
+  },
+  {
+   "why": "a warning does not refuse a launch",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "allow": [
+      {
+       "package": "npm:other"
+      }
+     ],
+     "unlisted": "warn"
+    },
+    "spec": {
+     "command": "npx",
+     "args": [
+      "-y",
+      "pkg@1.0.0"
+     ]
+    },
+    "entry": {
+     "tools": {
+      "t": {}
+     }
+    }
+   },
+   "expect": null
+  },
+  {
+   "why": "approval cannot be waived",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "require": {
+      "approved": true
+     }
+    },
+    "spec": {
+     "command": "node",
+     "args": [
+      "s.js"
+     ]
+    },
+    "entry": null
+   },
+   "expect": "organisation policy (unnamed) (sha256:000000000000) refuses this server: it requires every server to be approved in a lockfile, and --allow-unapproved cannot waive that"
+  },
+  {
+   "why": "an approval that pins nothing",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "require": {
+      "pinned": true
+     }
+    },
+    "spec": {
+     "command": "node",
+     "args": [
+      "s.js"
+     ]
+    },
+    "entry": {
+     "prompts": {}
+    }
+   },
+   "expect": "organisation policy (unnamed) (sha256:000000000000) refuses this server: it requires tool definitions to be pinned, and this approval pins none"
+  },
+  {
+   "why": "instructions are something pinned",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "require": {
+      "pinned": true
+     }
+    },
+    "spec": {
+     "command": "node",
+     "args": [
+      "s.js"
+     ]
+    },
+    "entry": {
+     "instructions": "x"
+    }
+   },
+   "expect": null
+  },
+  {
+   "why": "a partial version is not exact",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "require": {
+      "exact_versions": true
+     }
+    },
+    "spec": {
+     "command": "npx",
+     "args": [
+      "-y",
+      "pkg@1.2"
+     ]
+    },
+    "entry": {
+     "tools": {
+      "t": {}
+     }
+    }
+   },
+   "expect": "organisation policy (unnamed) (sha256:000000000000) refuses this server: pkg runs whatever was published last, and it requires an exact version"
+  },
+  {
+   "why": "a command rule is compared lower-cased",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "deny": [
+      {
+       "command": "PY*"
+      }
+     ]
+    },
+    "spec": {
+     "command": "/usr/bin/python3",
+     "args": [
+      "s.py"
+     ]
+    },
+    "entry": {
+     "tools": {
+      "t": {}
+     }
+    }
+   },
+   "expect": "organisation policy (unnamed) (sha256:000000000000) refuses this server: python3 is denied: matches deny rule (command PY*)"
+  },
+  {
+   "why": "the name is the policy's own words",
+   "input": {
+    "policy": {
+     "policy": "heldfast.org-policy/1",
+     "name": "Acme\nengineering",
+     "deny": [
+      {
+       "kind": "local"
+      }
+     ]
+    },
+    "spec": {
+     "command": "node",
+     "args": [
+      "s.js"
+     ]
+    },
+    "entry": {
+     "tools": {
+      "t": {}
+     }
+    }
+   },
+   "expect": "organisation policy Acme\nengineering (sha256:000000000000) refuses this server: node is denied: matches deny rule (kind local)"
+  }
+ ]
+}
