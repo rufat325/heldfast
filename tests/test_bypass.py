@@ -30,6 +30,7 @@ from heldfast.model import ServerSpec  # noqa: E402
 from heldfast.rules import run_rules  # noqa: E402
 from heldfast.rules.base import AuditContext  # noqa: E402
 from heldfast.enforcement import subcommand as _heldfast_subcommand  # noqa: E402
+from heldfast.enforcement import wraps  # noqa: E402
 
 
 def server(name: str, command: str = "npx", args: list | None = None,
@@ -160,6 +161,46 @@ class TestRecognisingItsOwnInvocation(unittest.TestCase):
         rule."""
         self.assertEqual("", _heldfast_subcommand(
             server("g", "npx", ["-y", "heldfast-helper"])))
+
+    def test_the_old_name_on_npm_is_somebody_else(self) -> None:
+        """`mcp-pin` on npm is another publisher's package. Reading
+        `npx -y mcp-pin gateway` as this gateway would let their code stand
+        in for the enforcement and silence MCPA032."""
+        self.assertEqual("", _heldfast_subcommand(
+            server("g", "npx", ["-y", "mcp-pin", "gateway"])))
+
+
+class TestWrapIsGuard(unittest.TestCase):
+    """`wrap` is `guard`, and `heldfast -- <server>` is `wrap`. The README's
+    quick start writes the first, and `coverage` read only the word `guard`,
+    so the setup the README recommends reported as a server nothing checks."""
+
+    def test_wrap_and_the_bare_separator_are_wrapping(self) -> None:
+        for args in (["guard", "--name", "a", "--", "npx", "-y", "a@1.0.0"],
+                     ["wrap", "--name", "a", "--", "npx", "-y", "a@1.0.0"],
+                     ["--", "npx", "-y", "a@1.0.0"]):
+            with self.subTest(args=args):
+                self.assertTrue(wraps(server("a", "heldfast", args)))
+        self.assertEqual("wrap", _heldfast_subcommand(
+            server("a", "heldfast", ["--", "npx", "-y", "a@1.0.0"])))
+        self.assertFalse(wraps(server("a", "heldfast", ["gateway"])))
+        self.assertFalse(wraps(server("a")))
+
+    def test_coverage_counts_a_wrapped_server_as_enforced(self) -> None:
+        from heldfast import coverage
+        specs = [server("a", "heldfast", ["wrap", "--name", "a", "--", "npx", "-y", "a@1.0.0"]),
+                 server("b", "heldfast", ["--", "npx", "-y", "b@1.0.0"]),
+                 server("c", "npx", ["-y", "c@1.0.0"])]
+        lock = Lock()
+        lock.record(specs, [], [])
+        enforced = {}
+        for key in ("claude-code:a", "claude-code:b", "claude-code:c"):
+            spec = next(s for s in specs if s.identity() == key)
+            layer = next(x for x in coverage.for_server(lock, key, spec, offline=True)
+                         if x.name == "enforced")
+            enforced[key] = layer.state
+        self.assertEqual({"claude-code:a": "yes", "claude-code:b": "yes",
+                          "claude-code:c": "no"}, enforced)
 
 
 if __name__ == "__main__":
