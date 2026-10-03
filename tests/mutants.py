@@ -2256,10 +2256,10 @@ except ValueError:
         theorem="T-ORG-URL",
         path="orgpolicy.py",
         original="""    scheme, host, port, path = want
-    if not fnmatch.fnmatchcase(got[0], scheme) or not fnmatch.fnmatchcase(got[1], host):
+    if not glob(got[0], scheme) or not glob(got[1], host):
         return False
 """,
-        replacement="""    return fnmatch.fnmatchcase(endpoint.lower(), rule.url.lower())
+        replacement="""    return glob(endpoint.lower(), rule.url.lower())
 """,
         harm="As one glob, `*` crosses `/`: https://evil.example/.acme.com/ is "
              "allowed by https://*.acme.com/*.",
@@ -2273,10 +2273,9 @@ FAIL_OPEN = matches(Rule(url="https://*.acme.com/*"), row)
         id="inventory-endpoint-keeps-query",
         theorem="T-INVENTORY-SECRETLESS",
         path="inventory.py",
-        original="""    return f"{parts.scheme.lower()}://{netloc}{path}"
+        original="""    return f"{scheme.lower()}://{host}{':' + port if port is not None else ''}{path}"
 """,
-        replacement="""    return f"{parts.scheme.lower()}://{netloc}{path}" + (
-        f"?{parts.query}" if parts.query else "")
+        replacement="""    return f"{scheme.lower()}://{host}{':' + port if port is not None else ''}{path}" + text[m.end():]
 """,
         harm="An API key passed in a hosted server's query string leaves every "
              "machine inside its inventory.",
@@ -2536,6 +2535,39 @@ from heldfast import catalogdiff as cd
 c = cd.ToolChange("t", "added", "withheld", "withheld", "x",
                   diff="+![x](https://t.example/p.gif)")
 FAIL_OPEN = "+![x](" in cd.render_markdown([c], cd.summary([c], 1), [])
+""",
+    ),
+    Mutant(
+        id="org-unreadable-address-escapes-deny",
+        theorem="T-ORG-URL",
+        path="orgpolicy.py",
+        original="""            if not (deny and row.get("kind") == "hosted"):
+""",
+        replacement="""            if True:
+""",
+        harm="`https://evil.example\\\\@good.example/` reads as no address, and a deny "
+             "rule on evil.example -- the host a Node client connects to -- misses it.",
+        probe="""
+from heldfast.inventory import endpoint
+from heldfast.orgpolicy import Rule, matches
+row = {"identity": "c:s", "kind": "hosted",
+       "endpoint": endpoint("https://evil.example\\\\@good.example/sse")}
+FAIL_OPEN = not matches(Rule(url="https://evil.example/*"), row, deny=True)
+""",
+    ),
+    Mutant(
+        id="endpoint-trusts-urlsplit-on-backslash",
+        theorem="T-ORG-URL",
+        path="inventory.py",
+        original="""    if "\\\\" in text or re.search(r"[\\x00-\\x20\\x7f]", text):
+""",
+        replacement="""    if re.search(r"[\\x00-\\x20\\x7f]", text):
+""",
+        harm="A backslash in a path is kept, so a URL rule for /allowed/* matches "
+             "/allowed\\\\..\\\\admin while a Node client requests /admin.",
+        probe="""
+from heldfast.inventory import endpoint
+FAIL_OPEN = endpoint("https://good.example/allowed\\\\..\\\\admin") is not None
 """,
     ),
 )

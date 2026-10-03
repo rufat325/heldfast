@@ -26,6 +26,8 @@ nobody is checking, which is the failure this project keeps naming.
 
 What a selector matches:
 
+Globs are `*` (any run of characters) and `?` (one); nothing else is special.
+
 - `package` -- `<ecosystem>:<name glob>`, ecosystem `npm`, `pypi` or `*`. PyPI
   names are compared in their normalised form (PEP 503), npm names as written.
 - `versions` -- globs over the exact version. A server that pins no exact
@@ -35,7 +37,8 @@ What a selector matches:
   matched separately, so `https://*.acme.com/*` cannot be met by
   `https://evil.example/.acme.com/`. The host is compared without case, as DNS
   does; the path with case, as RFC 3986 does. With no port in the pattern any
-  port matches; with no path, any path.
+  port matches; with no path, any path. A hosted server whose address cannot
+  be read unambiguously matches every URL deny rule and no URL allow rule.
 - `command` -- a glob over the launched program's name (`node`, `docker`,
   `npx`), without directory or `.exe`.
 - `kind` -- `hosted`, `package` or `local`.
@@ -56,7 +59,6 @@ guess past.
 
 from __future__ import annotations
 
-import fnmatch
 import hashlib
 import json
 import os
@@ -152,13 +154,19 @@ def load(path: Path) -> OrgPolicy:
     except OSError as exc:
         raise ValueError(f"{path}: cannot read policy ({exc})") from None
     try:
-        data = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        data = json.loads(raw.decode("utf-8"), parse_constant=_no_constant)
+    except (UnicodeDecodeError, ValueError) as exc:
         raise ValueError(f"{path}: not JSON ({exc})") from None
     try:
         return parse(data, hashlib.sha256(raw).hexdigest())
     except ValueError as exc:
         raise ValueError(f"{path}: {exc}") from None
+
+
+def _no_constant(name: str) -> Any:
+    """`NaN` and `Infinity` are not JSON, and the plugin's JSON.parse refuses
+    them; json.loads would read them. Refused here too, so both agree."""
+    raise ValueError(f"{name} is not JSON")
 
 
 def parse(data: Any, digest: str = "") -> OrgPolicy:
@@ -171,7 +179,7 @@ def parse(data: Any, digest: str = "") -> OrgPolicy:
     if data.get("policy") != SCHEMA:
         raise ValueError(f'"policy" must be "{SCHEMA}"')
     unlisted = data.get("unlisted", "warn")
-    if unlisted not in _UNLISTED:
+    if not isinstance(unlisted, str) or unlisted not in _UNLISTED:
         raise ValueError(f'"unlisted" must be one of {", ".join(sorted(_UNLISTED))}')
     return OrgPolicy(
         name=_text(data.get("name", ""), "name"),
@@ -238,7 +246,7 @@ def _require(value: Any) -> dict[str, Any]:
         raise ValueError(f"require: unknown key(s) {', '.join(unknown)}")
     for key, flag in value.items():
         if key == "fail_on":
-            if flag not in _SEVERITIES:
+            if not isinstance(flag, str) or flag not in _SEVERITIES:
                 raise ValueError(f"require.fail_on is one of {', '.join(_SEVERITIES)}")
         elif not isinstance(flag, bool):
             raise ValueError(f"require.{key} must be true or false")
@@ -249,12 +257,12 @@ def _require(value: Any) -> dict[str, Any]:
 # Matching
 
 
-_URL = re.compile(r"^(?P<scheme>[A-Za-z*][A-Za-z0-9+.*-]*)://(?P<host>[^/?#]+)(?P<path>/[^?#]*)?$")
+_URL = re.compile(r"^(?P<scheme>[A-Za-z*][A-Za-z0-9+.*-]*)://(?P<host>[^/?#]+)(?P<path>/[^?#]*)?\Z")
 
 
 def _url_parts(text: str) -> tuple[str, str, str | None, str | None] | None:
     """(scheme, host, port or None, path or None) of a URL or URL pattern."""
-    m = _URL.match(text.strip())
+    m = _URL.match(text.strip(" \t\n\r\x0b\x0c"))
     if not m:
         return None
     host = m.group("host").lower()
@@ -276,6 +284,35 @@ def _url_parts(text: str) -> tuple[str, str, str | None, str | None] | None:
     return m.group("scheme").lower(), host, port, m.group("path")
 
 
+def glob(text: str, pattern: str) -> bool:
+    """`*` is any run of characters and `?` any one; nothing else is special.
+
+    Not fnmatch: its `[...]` classes are intricate to reproduce exactly, and
+    the plugin's JS has to read every pattern the way this does. Not a regex
+    either: a pattern with many stars against a long name is exponential for
+    a backtracking engine. This is the greedy walk that retries from the last
+    star, linear in practice and O(len(text) * len(pattern)) at worst.
+    """
+    t = p = 0
+    star, mark = -1, 0
+    while t < len(text):
+        if p < len(pattern) and pattern[p] != "*" and (pattern[p] == "?" or pattern[p] == text[t]):
+            t += 1
+            p += 1
+        elif p < len(pattern) and pattern[p] == "*":
+            star, mark = p, t
+            p += 1
+        elif star >= 0:
+            p = star + 1
+            mark += 1
+            t = mark
+        else:
+            return False
+    while p < len(pattern) and pattern[p] == "*":
+        p += 1
+    return p == len(pattern)
+
+
 def _pep503(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -283,14 +320,14 @@ def _pep503(name: str) -> str:
 def _package_matches(rule: Rule, package: dict[str, Any] | None) -> bool:
     if not package:
         return False
-    eco, _, glob = rule.package.partition(":")
+    eco, _, pattern = rule.package.partition(":")
     eco = eco.lower()
     if eco != "*" and eco != package.get("ecosystem"):
         return False
     name = str(package.get("name") or "")
     if package.get("ecosystem") == "pypi":
-        return fnmatch.fnmatchcase(_pep503(name), _pep503(glob))
-    return fnmatch.fnmatchcase(name, glob)
+        return glob(_pep503(name), _pep503(pattern))
+    return glob(name, pattern)
 
 
 def _versions_match(rule: Rule, package: dict[str, Any], deny: bool) -> bool:
@@ -300,32 +337,41 @@ def _versions_match(rule: Rule, package: dict[str, Any], deny: bool) -> bool:
         # It runs whatever was published last, which may be the named one.
         return deny
     version = str(package.get("version") or "")
-    return any(fnmatch.fnmatchcase(version, glob) for glob in rule.versions)
+    return any(glob(version, pattern) for pattern in rule.versions)
 
 
-def _url_matches(rule: Rule, endpoint: str | None) -> bool:
-    if not endpoint:
-        return False
+def _url_matches(rule: Rule, endpoint: str) -> bool:
     want, got = _url_parts(rule.url), _url_parts(endpoint)
     if want is None or got is None:
         return False
     scheme, host, port, path = want
-    if not fnmatch.fnmatchcase(got[0], scheme) or not fnmatch.fnmatchcase(got[1], host):
+    if not glob(got[0], scheme) or not glob(got[1], host):
         return False
-    if port is not None and not fnmatch.fnmatchcase(got[2] or "", port):
+    if port is not None and not glob(got[2] or "", port):
         return False
-    return path is None or fnmatch.fnmatchcase(got[3] or "/", path)
+    return path is None or glob(got[3] or "/", path)
 
 
 def matches(rule: Rule, row: dict[str, Any], *, deny: bool = False) -> bool:
-    """Whether every selector in `rule` matches this inventory row."""
+    """Whether every selector in `rule` matches this inventory row.
+
+    A hosted server whose address could not be read unambiguously (no
+    `endpoint`; see inventory.endpoint) may be the one a URL rule names. So,
+    like a floating version, it matches a deny rule and never an allow rule:
+    otherwise `https://evil.example\\@good.example/` would slip past a deny
+    on evil.example, which is the host a Node client connects to.
+    """
     if rule.kind and rule.kind != row.get("kind"):
         return False
-    if rule.command and not fnmatch.fnmatchcase(str(row.get("command") or ""),
-                                                rule.command.lower()):
+    if rule.command and not glob(str(row.get("command") or ""), rule.command.lower()):
         return False
-    if rule.url and not _url_matches(rule, row.get("endpoint")):
-        return False
+    if rule.url:
+        endpoint = row.get("endpoint")
+        if not endpoint:
+            if not (deny and row.get("kind") == "hosted"):
+                return False
+        elif not _url_matches(rule, str(endpoint)):
+            return False
     if rule.package:
         package = row.get("package")
         if not _package_matches(rule, package):
@@ -354,6 +400,9 @@ def _denied(policy: OrgPolicy, row: dict[str, Any]) -> Violation | None:
             package = row.get("package") or {}
             if rule.versions and package and not package.get("exact"):
                 why += "; no exact version is pinned, so it may run a denied release"
+            if rule.url and not row.get("endpoint"):
+                why += ("; its address cannot be read unambiguously, so it may be "
+                        "the denied one")
             return Violation(row["identity"], "deny", "denied",
                              f"{_what(row)} is denied: {why}")
     return None
@@ -462,8 +511,13 @@ def for_launch(explicit: str | None = None,
     found: list[tuple[OrgPolicy, str]] = []
     managed = managed_path()
     if managed is not None:
+        # Absent only when nothing is there. Path.exists() also reads a
+        # symlink loop as absent, which is a way to switch the policy off.
         try:
-            present = managed.exists()
+            managed.stat()
+            present = True
+        except (FileNotFoundError, NotADirectoryError):
+            present = False
         except OSError as exc:
             raise ValueError(f"{managed}: the managed policy cannot be checked ({exc})") from None
         if present:

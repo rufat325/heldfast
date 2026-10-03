@@ -105,13 +105,15 @@ One JSON file, written once, checked everywhere:
 }
 ```
 
-**Selectors.** A rule matches when every selector it gives matches.
+**Selectors.** A rule matches when every selector it gives matches. Globs
+are `*` (any run of characters) and `?` (one character); nothing else is
+special.
 
 | selector | matches |
 |---|---|
 | `package` | `<npm\|pypi\|*>:<name glob>`. PyPI names are compared normalised (PEP 503) |
 | `versions` | globs over the exact version, beside a `package`. A server that pins no exact version may run any release, so it matches a deny rule that names versions and never an allow rule that does |
-| `url` | `<scheme>://<host glob>[:port][/<path glob>]`. Host and path are matched apart, so `https://*.acme.com/*` is not met by `https://evil.example/.acme.com/`; user info never names the host. Host without case, path with it. No port means any port; no path means any path |
+| `url` | `<scheme>://<host glob>[:port][/<path glob>]`. Host and path are matched apart, so `https://*.acme.com/*` is not met by `https://evil.example/.acme.com/`; user info never names the host. Host without case, path with it. No port means any port; no path means any path. An address URL parsers could read differently -- a backslash, a second `@`, `%` or non-ASCII in the host, `%` or `..` in the path -- matches every URL deny rule and no allow rule |
 | `command` | a glob over the launched program's name: `node`, `docker`, `npx` |
 | `kind` | `hosted`, `package` or `local` |
 

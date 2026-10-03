@@ -29,7 +29,7 @@ import re
 import uuid
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote
 
 from . import __version__
 from .enforcement import (behind_gateway, fronting_clients, is_gateway, unwrap_launcher,
@@ -51,13 +51,13 @@ _ECOSYSTEM = {"npx": "npm", "pnpx": "npm", "bunx": "npm", "yarn": "npm",
 # A full version, not a range: npm reads `pkg@1.2` as 1.2.x and `pkg@1` as
 # 1.x.x, so only three numbers (and a pre-release or build tag) name one
 # release.
-_EXACT_NPM = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$")
-_EXACT_PYPI = re.compile(r"^===?\s*[0-9A-Za-z][0-9A-Za-z.!+_-]*$")
+_EXACT_NPM = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]+)?\Z")
+_EXACT_PYPI = re.compile(r"^===?[ \t]*[0-9A-Za-z][0-9A-Za-z.!+_-]*\Z")
 
 # A path segment that is probably a credential or an account id rather than a
 # route: long, and mixing letters with digits. Zapier and several gateways put
 # the API key in the path, where neither a query strip nor `redact` sees it.
-_OPAQUE = re.compile(r"^(?=.*[0-9])(?=.*[A-Za-z])[A-Za-z0-9_\-.~%=]{20,}$")
+_OPAQUE = re.compile(r"^(?=.*[0-9])(?=.*[A-Za-z])[A-Za-z0-9_\-.~%=]{20,}\Z")
 REDACTED = "{redacted}"
 
 # Server states (status.py) worth counting as findings in a summary line.
@@ -68,35 +68,85 @@ _SEVERITIES = ("critical", "high", "medium", "low", "info")
 # Describing one server without its secrets
 
 
+# An absolute URL as this reads one: scheme, then `//` and an authority, then a
+# path. The query and fragment are matched and dropped.
+_ABSOLUTE = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([^?#]*)")
+# What RFC 3986 allows in an authority, less `%`: a percent-encoded host is
+# read differently by different parsers, and that difference is the attack.
+_AUTHORITY = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@\[\]-]*\Z")
+_IPV6 = re.compile(r"^\[[0-9A-Fa-f:.]+\]\Z")
+
+
+def _hostport(authority: str) -> tuple[str, str | None] | None:
+    """(host, port) of an authority, or None where two parsers could disagree."""
+    if not _AUTHORITY.match(authority) or authority.count("@") > 1:
+        return None
+    hostport = authority.rpartition("@")[2]
+    if hostport.startswith("["):
+        end = hostport.find("]")
+        host, rest = hostport[:end + 1], hostport[end + 1:]
+        if end < 0 or not _IPV6.match(host) or (rest and not rest.startswith(":")):
+            return None
+        port = rest[1:] if rest else None
+    else:
+        if "[" in hostport or "]" in hostport or hostport.count(":") > 1:
+            return None
+        host, sep, port_text = hostport.partition(":")
+        port = port_text if sep else None
+    if not host:
+        return None
+    if port == "":
+        port = None
+    if port is not None:
+        if not port.isascii() or not port.isdigit() or int(port) > 65535:
+            return None
+        port = str(int(port))
+    return host.lower(), port
+
+
 def endpoint(url: str | None) -> str | None:
-    """A hosted server's address, fit to leave the machine.
+    """A hosted server's address, fit to leave the machine and to match on.
 
     Rebuilt from the parsed parts rather than edited, so user info never
-    survives (`https://good.example@evil.example/` is evil.example) and the
-    host is the host a client would connect to.
+    survives (`https://good.example@evil.example/` is evil.example). Parsed by
+    hand, and refused -- None -- wherever two URL parsers could name different
+    hosts: `https://evil.example\\@good.example/` is good.example to Python's
+    urlsplit and evil.example to the WHATWG parser a Node client connects
+    with, so a policy matched on one would vouch for a host the client never
+    reaches. A backslash, whitespace or a control character anywhere, a second
+    `@`, `%` or anything outside ASCII in the authority, `%` or a dot segment
+    in the path, or a bracket or port that does not parse, and there is no
+    address to vouch for. The plugin's
+    JS (plugin/heldfast/scripts/orgpolicy.js) runs this same algorithm.
     """
     if not url:
         return None
-    try:
-        parts = urlsplit(url.strip())
-        host = (parts.hostname or "").lower()
-        port = parts.port
-    except ValueError:
+    # Only ASCII whitespace is trimmed: str.strip() also takes \x1c-\x1f and
+    # Unicode spaces, which the JS port would have to list to agree.
+    text = url.strip(" \t\n\r\x0b\x0c")
+    if "\\" in text or re.search(r"[\x00-\x20\x7f]", text):
         return None
-    if not parts.scheme or not host:
+    m = _ABSOLUTE.match(text)
+    if not m:
         return None
-    if ":" in host:
-        host = f"[{host}]"
-    netloc = host if port is None else f"{host}:{port}"
+    scheme, authority, path = m.groups()
+    found = _hostport(authority)
+    # The path too, because a URL rule can name one: a Node client resolves
+    # `/allowed/../admin` and `/allowed/%2e%2e/admin` to `/admin` before it
+    # asks, and a server decodes `%` escapes after. Either way the path a rule
+    # would be matched on is not the one requested.
+    if found is None or "%" in path or any(seg in (".", "..") for seg in path.split("/")):
+        return None
+    host, port = found
     segments = []
-    for segment in parts.path.split("/"):
+    for segment in path.split("/"):
         if segment and (_OPAQUE.match(segment) or redact(segment) != segment):
             segment = REDACTED
         segments.append(segment)
     path = "/".join(segments)
     if not path.startswith("/"):
         path = "/" + path
-    return f"{parts.scheme.lower()}://{netloc}{path}"
+    return f"{scheme.lower()}://{host}{':' + port if port is not None else ''}{path}"
 
 
 def inner(spec: ServerSpec) -> ServerSpec:

@@ -125,10 +125,50 @@ class TestUrlPatterns(unittest.TestCase):
         self.assertTrue(self.matches("https://mcp.linear.app/sse", "HTTPS://MCP.Linear.App/sse"))
         self.assertFalse(self.matches("https://mcp.linear.app/sse", "https://mcp.linear.app/SSE"))
 
+    def test_an_address_parsers_disagree_on_is_never_vouched_for(self) -> None:
+        """Python's urlsplit reads `https://evil.example\\@good.example/` as
+        good.example; the WHATWG parser a Node client connects with reads it
+        as evil.example. A policy matched on the first approved the second."""
+        for url in ("https://evil.example\\@mcp.linear.app/sse",
+                    "https://a@b@mcp.linear.app/", "https://mcp.linear.app%2eevil.example/",
+                    "https://mcp.linear.app /sse", "https://bücher.example/",
+                    "https://[::1/x", "https://mcp.linear.app:99999/"):
+            with self.subTest(url=url):
+                self.assertIsNone(inventory.endpoint(url))
+                r = row(kind="hosted", package=None, endpoint=inventory.endpoint(url))
+                self.assertFalse(orgpolicy.matches(orgpolicy.Rule(url="https://mcp.linear.app/*"),
+                                                   r))
+                self.assertTrue(orgpolicy.matches(orgpolicy.Rule(url="https://*.example/*"),
+                                                  r, deny=True))
+        p = policy(deny=[{"url": "https://*.ngrok-free.app/*"}])
+        (v,) = orgpolicy.evaluate(p, [row(kind="hosted", package=None, endpoint=None)])
+        self.assertIn("cannot be read unambiguously", v.message)
+
     def test_ports_and_missing_paths(self) -> None:
         self.assertTrue(self.matches("https://mcp.acme.com", "https://mcp.acme.com:8443/x"))
         self.assertFalse(self.matches("https://mcp.acme.com:443", "https://mcp.acme.com:8443/x"))
         self.assertTrue(self.matches("https://mcp.acme.com/*", "https://mcp.acme.com"))
+
+
+class TestGlobs(unittest.TestCase):
+    """`*` and `?`, nothing else, in linear time: the plugin's JS reads every
+    pattern this way, and a name a server chose cannot make it backtrack."""
+
+    def test_only_star_and_question_mark_are_special(self) -> None:
+        for text, pattern, want in (("abc", "a*c", True), ("abc", "a?c", True),
+                                    ("ac", "a*c", True), ("abcd", "a*c", False),
+                                    ("", "*", True), ("a", "", False),
+                                    ("[x]", "[x]", True), ("x", "[x]", False),
+                                    ("x.acme.com", "*.acme.com", True),
+                                    ("acme.com", "*.acme.com", False)):
+            with self.subTest(text=text, pattern=pattern):
+                self.assertEqual(want, orgpolicy.glob(text, pattern))
+
+    def test_many_stars_against_a_long_name_stay_fast(self) -> None:
+        import time
+        started = time.perf_counter()
+        self.assertFalse(orgpolicy.glob("a" * 5000, "*a" * 40 + "b"))
+        self.assertLess(time.perf_counter() - started, 2.0)
 
 
 class TestPackagePatterns(unittest.TestCase):
