@@ -221,6 +221,25 @@ def describe(spec: ServerSpec) -> dict[str, Any]:
     }
 
 
+def org_refusal(spec: ServerSpec, entry: Any, policies: list) -> str | None:
+    """Why an organisation policy forbids starting `spec`, or None.
+
+    The one place `guard` and `gateway` ask it, so both describe a launch the
+    way an inventory does and a policy cannot mean one thing in a report and
+    another at the call site.
+    """
+    if not policies:
+        return None
+    from .orgpolicy import launch_refusal
+    row = dict(describe(spec), identity=spec.identity())
+    lock_entry = entry if isinstance(entry, dict) else None
+    for policy, _where in policies:
+        reason = launch_refusal(policy, row, lock_entry)
+        if reason:
+            return reason
+    return None
+
+
 # ---------------------------------------------------------------------------
 # One machine
 

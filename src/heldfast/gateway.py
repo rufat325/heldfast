@@ -112,6 +112,10 @@ class Backend:
         self.recorded_integrity: dict[str, str] = {}
         self.artifact_urls: dict[str, str] = {}
         self.require_integrity: bool = False
+        # The organisation policies in force, and this backend's lock entry
+        # (None when it has none) for the requirements they state.
+        self.org_policies: list = []
+        self.lock_entry: dict[str, Any] | None = None
         self._id = 0
         self._lock = threading.Lock()
         self.needs_refresh = False
@@ -154,9 +158,15 @@ class Backend:
         gateway ended up missing three screens the guard had, and a new
         transport that forgot it would fail open in the one place that matters.
         """
+        from .inventory import org_refusal
+
         reason = self.pin_reason()
         if reason:
             self.error = reason
+            return False
+        refused = org_refusal(self.spec, self.lock_entry, self.org_policies)
+        if refused:
+            self.error = refused
             return False
         return self._start()
 
@@ -418,7 +428,8 @@ class Gateway:
                  isolate_env: bool = True,
                  share_env: set | None = None,
                  require_integrity: bool = False,
-                 drift: str = "block") -> None:
+                 drift: str = "block",
+                 org_policies: list | None = None) -> None:
         self.lock = lock
         self.quiet = quiet
         self.trail = trail
@@ -473,6 +484,9 @@ class Gateway:
             urls = entry.get("artifact_urls")
             backend.artifact_urls = urls if isinstance(urls, dict) else {}
             backend.require_integrity = require_integrity
+            backend.org_policies = list(org_policies or [])
+            resolved = guard._resolve_entry()
+            backend.lock_entry = resolved if isinstance(resolved, dict) else None
             backend.on_unsolicited = self.screen_server_message
             if spec.name in self.backends:
                 other = self.backends[spec.name].spec.identity()
@@ -868,7 +882,8 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
         act_as: str | None = None, max_calls: int = 0,
         deny_sampling: bool = False, deny_elicitation: bool = False,
         isolate_env: bool = True, share_env: set | None = None,
-        require_integrity: bool = False, drift: str = "block") -> int:
+        require_integrity: bool = False, drift: str = "block",
+        org_policies: list | None = None) -> int:
     """Serve the gateway on stdio until the client goes away."""
     try:
         lock = Lock.load(lock_path)
@@ -902,7 +917,10 @@ def run(servers: list[ServerSpec], lock_path: Path, *, policy: str = "block",
                       deny_sampling=deny_sampling,
                       deny_elicitation=deny_elicitation,
                       isolate_env=isolate_env, share_env=share_env, drift=drift,
-                      require_integrity=require_integrity)
+                      require_integrity=require_integrity, org_policies=org_policies)
+    for org, where in org_policies or []:
+        gateway.log(f"organisation policy {org.name or '(unnamed)'} "
+                    f"(sha256:{org.digest[:12]}) from {where}")
     if not gateway.backends:
         print("heldfast gateway: nothing approved to serve. Run "
               "`heldfast approve --probe` first, or pass --allow-unapproved.",

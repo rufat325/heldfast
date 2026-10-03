@@ -98,6 +98,7 @@ heldfast policy --probe               # propose argument limits to review
 heldfast gateway                      # one endpoint in front of every approved server
 heldfast gateway --as finance         # ...restricted to one declared identity
 heldfast gateway --share-env CI       # ...also passing one env var to every backend
+heldfast gateway --org-policy org.json  # ...refusing what the organisation's policy denies
 heldfast status                       # what is approved, what moved, what happened
 heldfast coverage                     # which guarantees are in force, and why not
 heldfast inventory -f json -o m.json  # what this machine runs, as a file; launches nothing
@@ -549,8 +550,10 @@ into one report -- text, JSON, or a single HTML page with no script in it --
 with every server, the versions in use, and counts of what is approved, pinned
 and checked at call time. An organisation policy (allow and deny rules by
 package, address or command, and requirements such as "approved" and "exact
-versions") is checked by both, and by the GitHub Action's `org-policy` input.
-`fleet --advisories` asks OSV about every exact release in the fleet.
+versions") is checked by both, and by the GitHub Action's `org-policy` input,
+and `wrap` and `gateway` refuse to start a server it denies -- the machine's
+managed policy always, and `--org-policy` on top. `fleet --advisories` asks
+OSV about every exact release in the fleet.
 
 The whole of it, with the policy format and how to collect inventories:
 [FLEET.md](FLEET.md).
@@ -1645,7 +1648,7 @@ python tests/fixtures/make_fixtures.py
 python -m unittest discover -s tests -v
 ```
 
-1944 tests, stdlib unittest, nothing to install.
+1954 tests, stdlib unittest, nothing to install.
 
 What is a theorem, a heuristic, or out of scope lives in
 [`docs/GUARANTEES.md`](GUARANTEES.md). Continue work from

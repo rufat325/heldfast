@@ -47,6 +47,14 @@ def _org_policy(path: str | None) -> Any:
     return load(Path(path))
 
 
+def _report_policy(path: str | None) -> Any:
+    """The policy an inventory is checked against: the one named, else the
+    machine's managed one, else HELDFAST_ORG_POLICY. Raises ValueError."""
+    from .orgpolicy import for_report
+    found = for_report(path)
+    return found[0] if found else None
+
+
 def _scope(args: argparse.Namespace) -> dict[str, Any]:
     from .inventory import _home
     paths = [str(Path(p).resolve()) for p in (args.paths or ["."])]
@@ -59,7 +67,7 @@ def inventory(args: argparse.Namespace) -> int:
     from .orgpolicy import evaluate, failed
 
     try:
-        policy = _org_policy(args.policy)
+        policy = _report_policy(args.policy)
         lock = Lock.load(_resolve_lock_path(args))
     except ValueError as exc:
         print(f"heldfast: {exc}", file=sys.stderr)

@@ -42,6 +42,16 @@ What a selector matches:
 
 Every selector given must match. A rule with none would match everything,
 which is never what was meant, so it is refused.
+
+At launch (`wrap`, `guard`, `gateway`) the same file is a refusal, not a
+report: a denied server, an unlisted one when unlisted servers are denied, and
+one that misses `approved`, `pinned` or `exact_versions` is not started. The
+policy an administrator put at the machine's managed path (MANAGED_PATHS) is
+always in force there; one named by `--org-policy` or `HELDFAST_ORG_POLICY`
+is checked as well, so a local policy can tighten the managed one and never
+loosen it. A managed file that exists and cannot be read refuses every
+launch: a policy the administrator wrote and this cannot read is not one to
+guess past.
 """
 
 from __future__ import annotations
@@ -49,11 +59,12 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import json
+import os
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
-from urllib.parse import urlsplit
+from typing import Any, Mapping
 
 SCHEMA = "heldfast.org-policy/1"
 
@@ -73,6 +84,20 @@ _COVERED_ELSEWHERE = {"MCPA014"}
 
 # Server states (status.py) that mean the server is not running here.
 _NOT_RUNNING = {"GONE"}
+
+# Where an administrator puts the policy every launch on the machine obeys --
+# the same idea as a client's managed settings: written by whoever manages the
+# machine, in a directory its user cannot write.
+MANAGED_PATHS = {
+    "linux": "/etc/heldfast/org-policy.json",
+    "darwin": "/Library/Application Support/heldfast/org-policy.json",
+    "win32": "%ProgramData%\\heldfast\\org-policy.json",
+}
+ENV_VAR = "HELDFAST_ORG_POLICY"
+
+# What a lock entry records about what a server says. Approved with none of
+# them is approved with nothing pinned (status.py's UNPINNED).
+_PINNED_KEYS = ("tools", "prompts", "resources", "instructions")
 
 
 @dataclass(frozen=True)
@@ -411,3 +436,84 @@ def evaluate(policy: OrgPolicy, rows: list[dict[str, Any]]) -> list[Violation]:
 
 def failed(violations: list[Violation]) -> bool:
     return any(v.level == "deny" for v in violations)
+
+
+# ---------------------------------------------------------------------------
+# At launch
+
+
+def managed_path(platform: str | None = None) -> Path | None:
+    """The managed policy's path on this platform, or None where there is none."""
+    name = platform or sys.platform
+    key = "linux" if name.startswith(("linux", "freebsd", "openbsd", "netbsd")) else name
+    raw = MANAGED_PATHS.get(key)
+    return Path(os.path.expandvars(raw)) if raw else None
+
+
+def for_launch(explicit: str | None = None,
+               env: Mapping[str, str] | None = None) -> list[tuple[OrgPolicy, str]]:
+    """(policy, where it was read) for every policy a launch must meet.
+
+    Raises ValueError when one that is there cannot be read. The caller is on
+    the launch path and refuses to start rather than guessing which rules
+    would have applied.
+    """
+    env = os.environ if env is None else env
+    found: list[tuple[OrgPolicy, str]] = []
+    managed = managed_path()
+    if managed is not None:
+        try:
+            present = managed.exists()
+        except OSError as exc:
+            raise ValueError(f"{managed}: the managed policy cannot be checked ({exc})") from None
+        if present:
+            found.append((load(managed), str(managed)))
+    named = explicit or env.get(ENV_VAR)
+    if named:
+        found.append((load(Path(named)), named))
+    return found
+
+
+def for_report(explicit: str | None = None,
+               env: Mapping[str, str] | None = None) -> tuple[OrgPolicy, str] | None:
+    """The one policy an inventory is checked against: the one named, else the
+    machine's managed one, else the one in HELDFAST_ORG_POLICY."""
+    if explicit:
+        return load(Path(explicit)), explicit
+    env = os.environ if env is None else env
+    managed = managed_path()
+    if managed is not None and managed.is_file():
+        return load(managed), str(managed)
+    named = env.get(ENV_VAR)
+    return (load(Path(named)), named) if named else None
+
+
+def launch_refusal(policy: OrgPolicy, row: dict[str, Any],
+                   entry: Mapping[str, Any] | None) -> str | None:
+    """Why `policy` forbids starting this server, or None.
+
+    `row` describes the launch (inventory.describe, plus an identity) and
+    `entry` is its lock entry, None when it has none. Only what is knowable
+    before the process exists is asked: the deny and allow lists, and the
+    requirements a lock entry or a launch command can settle. `enforced` holds
+    by being asked here, and findings are a scan's to judge.
+    """
+    head = (f"organisation policy {policy.name or '(unnamed)'} "
+            f"(sha256:{policy.digest[:12]}) refuses this server: ")
+    denied = _denied(policy, row)
+    if denied is not None:
+        return head + denied.message
+    unlisted = _unlisted(policy, row)
+    if unlisted is not None and unlisted.level == "deny":
+        return head + unlisted.message
+    need = policy.require
+    if need.get("approved") and entry is None:
+        return head + ("it requires every server to be approved in a lockfile, "
+                       "and --allow-unapproved cannot waive that")
+    if need.get("pinned") and entry is not None and not any(entry.get(k) for k in _PINNED_KEYS):
+        return head + "it requires tool definitions to be pinned, and this approval pins none"
+    package = row.get("package")
+    if need.get("exact_versions") and package and not package.get("exact"):
+        return head + (f"{package['name']} runs whatever was published last, and it "
+                       f"requires an exact version")
+    return None

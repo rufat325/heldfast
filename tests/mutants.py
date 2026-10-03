@@ -2357,6 +2357,146 @@ except TypeError:
     FAIL_OPEN = True
 """,
     ),
+    Mutant(
+        id="gateway-start-ignores-org-policy",
+        theorem="T-ORG-LAUNCH",
+        path="gateway.py",
+        original="""        refused = org_refusal(self.spec, self.lock_entry, self.org_policies)
+""",
+        replacement="""        refused = None
+""",
+        harm="A server the organisation denies is started by the gateway anyway.",
+        probe="""
+from heldfast.gateway import Backend
+from heldfast.model import ServerSpec
+from heldfast.orgpolicy import SCHEMA, parse
+deny = parse({"policy": SCHEMA, "deny": [{"kind": "local"}]})
+b = Backend(ServerSpec(name="t", source="<p>", client="p", transport="stdio",
+                       command="/nonexistent/heldfast-probe", args=[]), timeout=2)
+b.org_policies = [(deny, "<probe>")]
+b.start()
+FAIL_OPEN = "refuses this server" not in str(b.error)
+""",
+    ),
+    Mutant(
+        id="guard-run-ignores-org-policy",
+        theorem="T-ORG-LAUNCH",
+        path="guard.py",
+        original="""    refused = _org_refusal(guard, argv, org_policies or [])
+""",
+        replacement="""    refused = None
+""",
+        harm="`wrap` starts a server the organisation denies.",
+        probe="""
+import contextlib, io, tempfile
+from pathlib import Path
+from heldfast import guard
+from heldfast.orgpolicy import SCHEMA, parse
+deny = parse({"policy": SCHEMA, "deny": [{"kind": "local"}]})
+err = io.StringIO()
+with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(err):
+    guard.run(["/nonexistent/heldfast-probe"], lock_path=Path(tmp) / "none.lock",
+              allow_unapproved=True, org_policies=[(deny, "<probe>")])
+FAIL_OPEN = "refuses this server" not in err.getvalue()
+""",
+    ),
+    Mutant(
+        id="allow-unapproved-waives-org-approval",
+        theorem="T-ORG-LAUNCH",
+        path="orgpolicy.py",
+        original="""    if need.get("approved") and entry is None:
+""",
+        replacement="""    if need.get("approved") and entry is None and False:
+""",
+        harm="--allow-unapproved starts an unapproved server the organisation "
+             "requires to be approved.",
+        probe="""
+from heldfast.orgpolicy import SCHEMA, launch_refusal, parse
+p = parse({"policy": SCHEMA, "require": {"approved": True}})
+FAIL_OPEN = launch_refusal(p, {"identity": "c:s", "kind": "local"}, None) is None
+""",
+    ),
+    Mutant(
+        id="managed-policy-skipped",
+        theorem="T-ORG-MANAGED",
+        path="orgpolicy.py",
+        original="""        if present:
+            found.append((load(managed), str(managed)))
+""",
+        replacement="""        if present and False:
+            found.append((load(managed), str(managed)))
+""",
+        harm="The policy an administrator put on the machine applies to nothing.",
+        probe="""
+import json, tempfile
+from pathlib import Path
+from heldfast import orgpolicy
+with tempfile.TemporaryDirectory() as tmp:
+    managed = Path(tmp) / "org-policy.json"
+    managed.write_text(json.dumps({"policy": orgpolicy.SCHEMA, "name": "managed"}))
+    orgpolicy.managed_path = lambda platform=None: managed
+    FAIL_OPEN = not orgpolicy.for_launch(None, env={})
+""",
+    ),
+    Mutant(
+        id="local-policy-replaces-managed",
+        theorem="T-ORG-MANAGED",
+        path="orgpolicy.py",
+        original="""    named = explicit or env.get(ENV_VAR)
+    if named:
+        found.append((load(Path(named)), named))
+    return found
+""",
+        replacement="""    named = explicit or env.get(ENV_VAR)
+    if named:
+        return [(load(Path(named)), named)]
+    return found
+""",
+        harm="A developer's own lax policy replaces the one their administrator set.",
+        probe="""
+import json, tempfile
+from pathlib import Path
+from heldfast import orgpolicy
+with tempfile.TemporaryDirectory() as tmp:
+    managed = Path(tmp) / "managed.json"
+    managed.write_text(json.dumps({"policy": orgpolicy.SCHEMA, "name": "managed"}))
+    local = Path(tmp) / "local.json"
+    local.write_text(json.dumps({"policy": orgpolicy.SCHEMA, "name": "local"}))
+    orgpolicy.managed_path = lambda platform=None: managed
+    names = [p.name for p, _ in orgpolicy.for_launch(str(local), env={})]
+    FAIL_OPEN = "managed" not in names
+""",
+    ),
+    Mutant(
+        id="unreadable-managed-policy-ignored",
+        theorem="T-ORG-MANAGED",
+        path="cli.py",
+        original="""        return for_launch(getattr(args, "org_policy", None))
+    except ValueError as exc:
+        print(f"heldfast: {exc}; refusing to start anything until it can be read",
+              file=sys.stderr)
+        return None
+""",
+        replacement="""        return for_launch(getattr(args, "org_policy", None))
+    except ValueError as exc:
+        print(f"heldfast: {exc}; refusing to start anything until it can be read",
+              file=sys.stderr)
+        return []
+""",
+        harm="A managed policy the launch cannot read is treated as no policy.",
+        probe="""
+import argparse, contextlib, io, tempfile
+from pathlib import Path
+from heldfast import cli, orgpolicy
+with tempfile.TemporaryDirectory() as tmp:
+    managed = Path(tmp) / "managed.json"
+    managed.write_text("{ not json")
+    orgpolicy.managed_path = lambda platform=None: managed
+    with contextlib.redirect_stderr(io.StringIO()):
+        got = cli._org_policies(argparse.Namespace(org_policy=None))
+FAIL_OPEN = got is not None
+""",
+    ),
 )
 
 

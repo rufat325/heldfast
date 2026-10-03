@@ -405,9 +405,14 @@ Read this file and `docs/GUARANTEES.md` instead.
       keeps refusing to print. A failed lookup is "unknown" now
       (T-ADVISORY-UNKNOWN).
     - The Action takes `inventory` and `org-policy`.
-    - Not done, and said in FLEET.md: the policy is checked, not enforced at
-      the call site. Teaching `gateway`/`guard` and the plugin to refuse a
-      denied server is the next real feature here.
+    - `wrap`/`guard` and `gateway` refuse a server the policy denies before
+      it starts (T-ORG-LAUNCH). The machine's managed policy is always in
+      force and a local one can only add to it (T-ORG-MANAGED). Both gates
+      sit *after* the existing pin gates rather than inside them, so the
+      catalogued mutants for those gates still match one snippet each.
+    - Not done, and said in FLEET.md: the Claude Code plugin does not read
+      the organisation policy. Doing it means matching packages and URLs in
+      JS the way `orgpolicy.py` does, with parity vectors like T-DIGEST's.
 
     Found on the way: `coverage` matched only the word `guard`, so a server
     wrapped the way the README's quick start writes it (`heldfast wrap`, or

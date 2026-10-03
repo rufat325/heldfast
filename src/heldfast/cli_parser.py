@@ -332,6 +332,11 @@ def _register_gateway(sub: argparse._SubParsersAction) -> None:
     gateway_p.add_argument("--require-integrity", action="store_true",
                            help="refuse to start a backend whose recorded registry "
                                 "artifact cannot be verified locally")
+    gateway_p.add_argument("--org-policy", metavar="FILE", default=None,
+                           help="also refuse what this organisation policy denies "
+                                "(heldfast.org-policy/1). The machine's managed policy "
+                                "applies whether or not this is given; HELDFAST_ORG_POLICY "
+                                "names one too")
     gateway_p.add_argument("--allow-unapproved", action="store_true",
                            help="start servers that are not in the lockfile "
                                 "(they are refused by default)")
@@ -470,6 +475,11 @@ def _register_guard(sub: argparse._SubParsersAction) -> None:
     guard_p.add_argument("--require-integrity", action="store_true",
                          help="refuse to start when a recorded registry artifact "
                               "cannot be verified against the local package cache")
+    guard_p.add_argument("--org-policy", metavar="FILE", default=None,
+                         help="also refuse what this organisation policy denies "
+                              "(heldfast.org-policy/1). The machine's managed policy "
+                              "applies whether or not this is given; HELDFAST_ORG_POLICY "
+                              "names one too")
     guard_p.add_argument("--quiet", action="store_true", help="suppress stderr diagnostics")
     guard_p.add_argument("--dry-run", action="store_true",
                          help="report what the argument policy would block, and "

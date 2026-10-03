@@ -913,6 +913,9 @@ def cmd_guard(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return EXIT_ERROR
 
+    org = _org_policies(args)
+    if org is None:
+        return EXIT_ERROR
     lock_path = _resolve_lock_path(args)
     return guard_mod.run(
         argv,
@@ -935,7 +938,20 @@ def cmd_guard(args: argparse.Namespace) -> int:
         share_env=set(getattr(args, "share_env", None) or []),
         isolate_env=bool(getattr(args, "isolate_env", False)),
         drift=getattr(args, "drift", "block"),
+        org_policies=org,
     )
+
+
+def _org_policies(args: argparse.Namespace) -> list | None:
+    """Every organisation policy this launch must meet, or None after saying
+    why one could not be read -- which refuses the launch."""
+    from .orgpolicy import for_launch
+    try:
+        return for_launch(getattr(args, "org_policy", None))
+    except ValueError as exc:
+        print(f"heldfast: {exc}; refusing to start anything until it can be read",
+              file=sys.stderr)
+        return None
 
 
 def cmd_hosted_drift(args: argparse.Namespace) -> int:
@@ -1132,6 +1148,9 @@ def cmd_fleet(args: argparse.Namespace) -> int:
 def cmd_gateway(args: argparse.Namespace) -> int:
     from . import gateway as gateway_mod
 
+    org = _org_policies(args)
+    if org is None:
+        return EXIT_ERROR
     lock_path = _resolve_lock_path(args)
     data = collect(args)
     if not data.servers:
@@ -1154,6 +1173,7 @@ def cmd_gateway(args: argparse.Namespace) -> int:
         share_env=set(args.share_env or []),
         require_integrity=bool(getattr(args, "require_integrity", False)),
         drift=getattr(args, "drift", "block"),
+        org_policies=org,
     )
 
 

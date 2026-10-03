@@ -198,6 +198,127 @@ class TestEvaluation(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# At launch
+
+
+def writer(marker: Path) -> list:
+    """An argv that leaves `marker` behind if anything runs it."""
+    return [sys.executable, "-c", f"open({str(marker)!r}, 'w').write('ran')"]
+
+
+class TestLaunchRefusal(unittest.TestCase):
+    """At launch the policy is a refusal: decided before the process exists."""
+
+    def refuse(self, p: orgpolicy.OrgPolicy, r: dict, entry: dict | None = None) -> str | None:
+        return orgpolicy.launch_refusal(p, r, entry if entry is not None else {"tools": {"t": {}}})
+
+    def test_what_refuses_a_launch(self) -> None:
+        floating = row(package={"ecosystem": "npm", "name": "pkg", "version": "", "exact": False})
+        self.assertIn("denied", self.refuse(policy(deny=[{"package": "npm:pkg"}]), row()))
+        self.assertIn("allow list", self.refuse(
+            policy(allow=[{"package": "npm:other"}], unlisted="deny"), row()))
+        self.assertIn("exact version", self.refuse(
+            policy(require={"exact_versions": True}), floating))
+        self.assertIn("pinned", self.refuse(policy(require={"pinned": True}), row(),
+                                            {"command_line": "npx -y pkg@1.0.0"}))
+
+    def test_what_does_not(self) -> None:
+        """A warning is a report, and findings are a scan's to judge."""
+        self.assertIsNone(self.refuse(policy(allow=[{"package": "npm:other"}],
+                                             unlisted="warn"), row()))
+        self.assertIsNone(self.refuse(policy(require={"fail_on": "info", "enforced": True,
+                                                      "no_drift": True}), row()))
+
+    def test_allow_unapproved_cannot_waive_approval(self) -> None:
+        p = policy(require={"approved": True})
+        self.assertIn("--allow-unapproved cannot waive",
+                      orgpolicy.launch_refusal(p, row(), None))
+
+
+class TestWhichPoliciesALaunchMeets(unittest.TestCase):
+    """The managed policy is always in force; a local one tightens it and
+    never replaces it."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.managed = self.dir / "managed.json"
+        self._real = orgpolicy.managed_path
+        orgpolicy.managed_path = lambda platform=None: self.managed  # type: ignore[assignment]
+        self.local = self.dir / "local.json"
+        self.local.write_text(json.dumps({"policy": orgpolicy.SCHEMA, "name": "local"}))
+
+    def tearDown(self) -> None:
+        orgpolicy.managed_path = self._real  # type: ignore[assignment]
+        self._tmp.cleanup()
+
+    def test_managed_and_local_both_apply(self) -> None:
+        self.managed.write_text(json.dumps({"policy": orgpolicy.SCHEMA, "name": "managed"}))
+        names = [p.name for p, _ in orgpolicy.for_launch(str(self.local), env={})]
+        self.assertEqual(["managed", "local"], names)
+        names = [p.name for p, _ in orgpolicy.for_launch(None, env={orgpolicy.ENV_VAR:
+                                                                    str(self.local)})]
+        self.assertEqual(["managed", "local"], names)
+
+    def test_no_managed_file_is_no_managed_policy(self) -> None:
+        self.assertEqual([], orgpolicy.for_launch(None, env={}))
+
+    def test_a_managed_file_that_cannot_be_read_refuses(self) -> None:
+        self.managed.write_text("{ not json")
+        with self.assertRaises(ValueError):
+            orgpolicy.for_launch(None, env={})
+
+    def test_an_inventory_reports_against_the_managed_policy_by_default(self) -> None:
+        self.managed.write_text(json.dumps({"policy": orgpolicy.SCHEMA, "name": "managed"}))
+        self.assertEqual("managed", orgpolicy.for_report(None, env={})[0].name)
+        self.assertEqual("local", orgpolicy.for_report(str(self.local), env={})[0].name)
+
+
+class TestGuardAndGatewayRefuse(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.marker = self.dir / "RAN"
+        self.deny = self.dir / "deny.json"
+        self.deny.write_text(json.dumps({"policy": orgpolicy.SCHEMA, "name": "no-local",
+                                         "deny": [{"kind": "local", "reason": "no local"}]}))
+        self.approve = self.dir / "approve.json"
+        self.approve.write_text(json.dumps({"policy": orgpolicy.SCHEMA,
+                                            "require": {"approved": True}}))
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_wrap_refuses_before_the_process_exists(self) -> None:
+        for p, extra in ((self.deny, []), (self.approve, ["--allow-unapproved"])):
+            with self.subTest(policy=p.name):
+                r = run_cli("wrap", "--org-policy", str(p), "--lock",
+                            str(self.dir / "none.lock"), "--name", "t", *extra,
+                            "--", *writer(self.marker))
+                self.assertEqual(2, r.returncode, r.stderr)
+                self.assertIn("organisation policy", r.stderr)
+                self.assertFalse(self.marker.exists(), "the denied server ran")
+
+    def test_an_unreadable_policy_refuses_everything(self) -> None:
+        bad = self.dir / "bad.json"
+        bad.write_text(json.dumps({"policy": orgpolicy.SCHEMA, "dney": []}))
+        r = run_cli("wrap", "--org-policy", str(bad), "--allow-unapproved", "--name", "t",
+                    "--", *writer(self.marker))
+        self.assertEqual(2, r.returncode)
+        self.assertIn("refusing to start anything", r.stderr)
+        self.assertFalse(self.marker.exists())
+
+    def test_a_gateway_backend_is_refused_before_it_starts(self) -> None:
+        from heldfast.gateway import Backend
+        argv = writer(self.marker)
+        backend = Backend(spec(name="t", command=argv[0], args=argv[1:]))
+        backend.org_policies = [(orgpolicy.load(self.deny), str(self.deny))]
+        self.assertFalse(backend.start())
+        self.assertIn("organisation policy no-local", str(backend.error))
+        self.assertFalse(self.marker.exists())
+
+
+# ---------------------------------------------------------------------------
 # One machine
 
 

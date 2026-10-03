@@ -94,6 +94,8 @@ If one of these fails, it is a bug. CI must be able to falsify it.
 | T-ORG-URL | A URL rule matches the host and the path apart, so `*` in one cannot be met by text in the other, and user info never names the host. `https://*.acme.com/*` does not match `https://evil.example/.acme.com/` or `https://x.acme.com@evil.example/`. | `tests/test_fleet.py`, `tests/test_mutation.py` |
 | T-FLEET-UNTRUSTED | No field of an inventory, of any JSON type, takes the fleet report down, and no text from one runs as script in `fleet --html`: every string is escaped, and the page's Content-Security-Policy allows no script at all. | `tests/test_fleet.py`, `tests/test_mutation.py` |
 | T-ADVISORY-UNKNOWN | An advisory lookup that failed reads as unknown, never as "no machine runs malware". | `tests/test_fleet.py`, `tests/test_mutation.py` |
+| T-ORG-LAUNCH | With an organisation policy in force, `wrap`/`guard` and `gateway` start no server it denies, none it leaves unlisted when unlisted servers are denied, and none that misses `approved`, `pinned` or `exact_versions` -- decided before the process exists. `--allow-unapproved` cannot waive `approved`. | `tests/test_fleet.py`, `tests/test_mutation.py` |
+| T-ORG-MANAGED | The policy at the machine's managed path applies to every launch, whatever is passed; one named by `--org-policy` or `HELDFAST_ORG_POLICY` is checked as well, never instead. A managed file that exists and cannot be read refuses every launch. | `tests/test_fleet.py`, `tests/test_mutation.py` |
 
 ## Best-effort
 

@@ -14,7 +14,7 @@ Three commands answer that, and none of them needs a service:
 | command | runs on | what it does |
 |---|---|---|
 | `heldfast inventory` | every machine and every repository's CI | writes what that machine runs to one JSON file. Launches nothing, opens no connection |
-| an organisation policy | one file you write | which servers are allowed or denied, and what each must have |
+| an organisation policy | one file you write, deployed to each machine or named per project | which servers are allowed or denied, and what each must have -- refused at launch by `wrap` and `gateway` |
 | `heldfast fleet` | wherever the inventories are collected | joins them into one report: text, JSON, or a single HTML page |
 
 ```bash
@@ -134,6 +134,54 @@ something skipped (T-ORG-POLICY-UNKNOWN). A policy that skipped a misspelt
 `"requre"` would report every machine compliant with a requirement nothing
 checks.
 
+## At launch: the policy as a boundary
+
+Checked in a report, a policy says who broke it. Checked at launch, it stops
+them. `heldfast wrap` (`guard`) and `heldfast gateway` read the organisation
+policy before they start a server, and refuse -- before the process exists --
+one that the policy:
+
+- denies;
+- does not list, when `"unlisted": "deny"`;
+- requires to be `approved` and no lockfile approves. `--allow-unapproved`
+  cannot waive this: it is the developer's flag, and the policy is not theirs;
+- requires to be `pinned`, and the approval pins nothing;
+- requires `exact_versions`, and the package floats.
+
+`enforced` holds by being asked there at all, `no_drift` is already the
+lockfile's to refuse, and findings are a scan's to judge, so those three are
+left to `inventory` and `fleet`.
+
+With the policy above at the managed path:
+
+```
+$ heldfast wrap --name postmark -- npx -y postmark-mcp@1.0.16
+heldfast guard: lockfile: /home/alice/work/.mcp-pin.lock (found in the working directory; pass --lock to pin it)
+heldfast guard: server 'postmark' is not in .mcp-pin.lock, so its tools are withheld. Run `heldfast approve --probe` to review and pin it, or pass --allow-unapproved to forward it unchecked.
+heldfast guard: organisation policy Acme engineering (sha256:369994a93706) from /etc/heldfast/org-policy.json
+heldfast guard: organisation policy Acme engineering (sha256:369994a93706) refuses this server: postmark-mcp@1.0.16 is denied: 1.0.16 copied every email it sent to its author
+```
+
+Exit 2, and `npx` never ran.
+
+**Where the policy comes from.** The machine's managed path, where MDM puts
+it, is always in force:
+
+| platform | managed path |
+|---|---|
+| Linux | `/etc/heldfast/org-policy.json` |
+| macOS | `/Library/Application Support/heldfast/org-policy.json` |
+| Windows | `%ProgramData%\heldfast\org-policy.json` |
+
+A policy named with `--org-policy FILE` or `HELDFAST_ORG_POLICY` is checked as
+well, never instead: a project can tighten the organisation's policy and
+cannot loosen it (T-ORG-MANAGED). A managed file that exists and cannot be read
+-- not JSON, an unknown key, a permission error -- refuses every launch until
+it can be: a policy someone wrote and this cannot read is not one to guess
+past. `heldfast inventory` without `--policy` reports against the managed
+policy too, so a machine checks itself against the file its administrator
+deployed.
+
 ## Many machines: `fleet`
 
 ```
@@ -246,11 +294,16 @@ download each repository's latest artifact and run `fleet` over them.
   rewritten under an approved name does not show in `inventory` or `fleet`.
   That is what `wrap`, `gateway` and [`verify`](TRANSPARENCY.md) are for, and
   why "checked at call time" is in the report.
-- **The policy is checked, not enforced at the call site.** `inventory
-  --policy` and the Action fail a check; nothing here stops a denied server
-  from starting on a developer's machine. What stops a call is the lockfile,
-  in `wrap`, `gateway` and the Claude Code plugin -- so `"approved": true` plus
-  "checked at call time" is how a policy becomes a boundary.
+- **The policy stops only what starts through heldfast.** `wrap` and
+  `gateway` refuse a denied server; a client configured to start the same
+  server directly is not stopped by anything here, and the Claude Code plugin
+  does not read the organisation policy yet (it refuses what the lockfile does
+  not name). That is why `"enforced": true` exists: the fleet report shows
+  every server that goes around, by machine.
+- **A managed policy is as strong as the directory it lives in.** It is
+  meant to be written by whoever manages the machine into a directory its
+  user cannot write. A user who can write there, or who runs a heldfast they
+  modified, is not stopped by it.
 - **Path redaction is a heuristic.** A credential in a URL path that is short,
   or all letters, or all digits, is not recognised as one. Credentials belong
   in headers, which an inventory never carries.
