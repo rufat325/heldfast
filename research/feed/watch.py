@@ -1361,7 +1361,9 @@ def readme(events: list, generated: str, data: str, counted: dict | None = None)
         "# MCP server tool changes", "",
         f"Last change observed {generated}. Built by `research/feed/watch.py` on the "
         f"`main` branch. Watching {len(npm)} npm servers from the official MCP registry "
-        f"({len(daily)} daily, the rest weekly) and {len(hosted)} hosted endpoints (daily).", "",
+        f"(checked for a new release: {len(daily)} daily, the rest weekly; a new release "
+        f"is started in a container with no network) and {len(hosted)} hosted endpoints "
+        f"(read daily, and every four hours while they keep changing).", "",
         f"{len(events)} changes to a tool definition: {len(events) - len(readings)} npm "
         f"releases ({len(live) - len(readings)} observed live, {len(events) - len(live)} "
         f"from the [churn study](https://github.com/rufat325/heldfast/blob/main/docs/CHURN.md)) "
@@ -1374,9 +1376,19 @@ def readme(events: list, generated: str, data: str, counted: dict | None = None)
         "ask for something to be removed, open an issue.", "",
         "Subscribe: [feed.xml](feed.xml) (Atom) or [feed.json](feed.json). Every event, "
         "with the words that moved: [events/](events).", "",
-        "Each day's commit is anchored in Bitcoin with OpenTimestamps: "
-        "[checkpoints/](checkpoints), and how to check one in "
-        "[TRANSPARENCY.md](https://github.com/rufat325/heldfast/blob/main/docs/TRANSPARENCY.md#checkpoints).", "",
+        "Each day's commit is anchored in Bitcoin with OpenTimestamps and signed with "
+        "Sigstore: [checkpoints/](checkpoints). To check a day, rebuild the manifest of "
+        "the commit it names, compare it with `manifest_sha256`, then verify the proof "
+        "(the full steps, and what each one trusts, are in "
+        "[TRANSPARENCY.md](https://github.com/rufat325/heldfast/blob/main/docs/TRANSPARENCY.md#checkpoints)):", "",
+        "```bash",
+        "day=2026-09-28",
+        "commit=$(python3 -c \"import json; print(json.load(open('checkpoints/$day.json'))['feed_commit'])\")",
+        "mkdir ../at && git -c core.autocrlf=false archive \"$commit\" | tar -x -C ../at",
+        "(cd ../at && find . -type f ! -path './checkpoints/*' -printf '%P\\0' \\",
+        "  | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum)   # = manifest_sha256",
+        "pip install opentimestamps-client && ots verify checkpoints/$day.json.ots",
+        "```", "",
         "`quiet`: a graded pin forwards every changed tool (new tools still need "
         "approval). `review`: a change introduced an agent-directed instruction, hidden "
         "character, credential path or look-alike letter, or, from 2026-09-27, a price "

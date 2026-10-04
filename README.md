@@ -16,8 +16,9 @@ Two in three servers in the official MCP registry are hosted: a URL, no package,
 nothing to download and scan. What one tells your agent can change with no release to
 announce it, and can differ from what it tells everyone else. heldfast has three parts:
 
-- **The log.** Every day it reads each open hosted server as an anonymous client, and
-  starts every npm server daily or weekly in a container with no network, and keeps
+- **The log.** Every day it reads each open hosted server as an anonymous client (every
+  four hours while one keeps changing). It checks every npm server for a new release,
+  daily or weekly, and starts each new release in a container with no network. It keeps
   every tool definition it was shown. It grades every change `quiet` or `review`. Since
   27 September 2026 each day's record is anchored in Bitcoin, so anyone can check that
   it existed by then and has not been edited since. [heldfast-feed](https://github.com/rufat325/heldfast-feed)
@@ -38,9 +39,10 @@ Transparency does not stop an attack. It takes away the option of attacking in p
 <!-- From research/report/numbers.json (C03 C05 C06), the 2026-09-29 checkpoint.
      Refresh from a newer sealed snapshot, never by hand. -->
 **Where it stands (29 September 2026).** The log has recorded 13,021 changes to tool
-definitions. Three operators account for 77.4% of the 12,642 hosted ones, and 66
-changes were graded `review`: the ones a graded pin would refuse. That grading is the
-point. Across the most-downloaded servers, nearly half of upgrades change a tool
+definitions. Three operators account for 77.4% of the 12,642 changes on hosted servers,
+so a raw count describes them more than the registry (the feed counts each operator
+apart). 66 changes were graded `review`: the ones a graded pin would refuse. That
+grading is the point. Across the most-downloaded servers, nearly half of upgrades change a tool
 ([we measured it](https://github.com/rufat325/heldfast/blob/main/docs/CHURN.md)), and a
 pin that stops on every one gets muted. Records from before 27 September 2026 were
 collected the same way but cannot be proven unedited. The first week, with every number

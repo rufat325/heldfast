@@ -196,6 +196,10 @@ tags:
 - supply-chain
 size_categories:
 - 10K<n<100K
+configs:
+- config_name: checkpoints
+  data_files: checkpoints/????-??-??.json
+  default: true
 ---
 
 # heldfast drift feed
@@ -217,6 +221,10 @@ outside GitHub.
   Sigstore bundle, as they are in the feed
 - `MIRRORED_FROM` -- the feed commit this copy is current to, and its day
 
+The dataset viewer shows the checkpoints, one row a day: the feed commit,
+how many files and events it held, and the digest that was anchored. The
+records themselves are in the archives, which the viewer does not open.
+
 Unpack a snapshot, then each daily archive after it in order, deleting the
 paths each lists, and you have the feed at that day's checkpoint. Every
 archive is deterministic, so it can be rebuilt from the feed repository and
@@ -228,9 +236,10 @@ rebuilds it in memory.
 
 ## How it is collected
 
-One vantage point, in GitHub Actions: npm servers are launched in a
-container with no capabilities and no credentials when they publish a new
-release; hosted servers are read daily, and every four hours while they keep
+One vantage point, in GitHub Actions. Every npm server is checked for a new
+release, the most-downloaded daily and the rest weekly; a new release is
+started in a container with no network, no capabilities and no credentials.
+Hosted servers are read daily, and every four hours while they keep
 changing, by a client that identifies itself as heldfast. Hosted history
 starts on 23 September 2026. What each file holds, and why the collection
 runs continuously: [TRANSPARENCY.md](https://github.com/rufat325/heldfast/blob/main/docs/TRANSPARENCY.md).
@@ -240,8 +249,20 @@ runs continuously: [TRANSPARENCY.md](https://github.com/rufat325/heldfast/blob/m
 Each day's commit is described by `checkpoints/YYYY-MM-DD.json`, a digest of
 every file in it, anchored in Bitcoin with OpenTimestamps and signed with
 Sigstore. Rebuild the tree, compute the manifest the checkpoint describes,
-compare the digest, then verify the proof:
-[how](https://github.com/rufat325/heldfast/blob/main/docs/TRANSPARENCY.md#checkpoints).
+compare the digest, then verify the proof. From a clone of the feed
+repository, on Linux:
+
+```bash
+day=2026-09-28
+commit=$(python3 -c "import json; print(json.load(open('checkpoints/$day.json'))['feed_commit'])")
+mkdir ../at && git -c core.autocrlf=false archive "$commit" | tar -x -C ../at
+(cd ../at && find . -type f ! -path './checkpoints/*' -printf '%P\\0' \\
+  | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum)   # = manifest_sha256
+pip install opentimestamps-client && ots verify checkpoints/$day.json.ots
+```
+
+The Sigstore check, and what each step trusts:
+[TRANSPARENCY.md](https://github.com/rufat325/heldfast/blob/main/docs/TRANSPARENCY.md#checkpoints).
 A checkpoint proves the data existed no later than its anchor; it does not
 prove the data is accurate.
 
