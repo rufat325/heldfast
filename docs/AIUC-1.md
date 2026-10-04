@@ -122,4 +122,4 @@ rewrite ([TRANSPARENCY.md](TRANSPARENCY.md)). That supports an assessment; it is
 - CI runs of `heldfast ci` or the GitHub Action failing on drift.
 
 Preparing for an AIUC-1 audit and want help fitting this to your setup? Email
-rufatm726@gmail.com.
+ewawes4@gmail.com.
