@@ -369,6 +369,7 @@ point: silence there is indistinguishable from a pass.
 
 Inputs are in [action.yml](action.yml). Private reports: [SECURITY.md](SECURITY.md). What it sends where: [PRIVACY.md](PRIVACY.md).
 Rules: [docs/rules.md](docs/rules.md). `heldfast explain MCPA015` prints one.
+AIUC-1's MCP controls, what heldfast covers and what to hand an auditor: [docs/AIUC-1.md](docs/AIUC-1.md).
 
 ## What it doesn't do
 
