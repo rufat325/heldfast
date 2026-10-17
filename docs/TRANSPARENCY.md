@@ -237,7 +237,7 @@ tree grows with the number of servers, not with time:
   first day and servers ([LOOKUP.md](LOOKUP.md)). To read an older reading,
   read the feed at a commit that held it.
 - **Events go to one file a day** (`events/YYYY-MM-DD.jsonl`), gzipped once
-  the day is a month past. Each event carries its own kind of change and
+  the day is a month past (the monthly files of before, at once). Each event carries its own kind of change and
   operator, so `stats.json` stops growing with every event; `index.json`
   lists a hosted server's recent events and counts the rest.
 - **The whole lookup record comes in 16 parts** as well as one file.

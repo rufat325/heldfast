@@ -170,7 +170,7 @@ MAX_TOTAL = 2 * 1024 * 1024 * 1024
 HOSTED_KEEP = 3
 # An events file is gzipped once nothing more can be appended to it: a daily
 # file EVENTS_OPEN_DAYS after its day, a monthly one (the layout before
-# 2026-10-17) once a later month has begun.
+# 2026-10-17) at once.
 EVENTS_OPEN_DAYS = 31
 # `capacity` warns when anything reaches this share of its limit.
 CAPACITY_WARN = 0.75
@@ -551,7 +551,9 @@ def close_events(data: str) -> int:
             continue
         period = m.group(1)
         if len(period) == 7:
-            done = period < newest[:7]
+            # The monthly layout is no longer appended to: every event since
+            # 2026-10-17 goes to a daily file, so each monthly one is closed.
+            done = True
         else:
             done = (newest_day - date.fromisoformat(period)).days > EVENTS_OPEN_DAYS
         if not done:
@@ -1820,7 +1822,9 @@ REPO_LIMIT = 5 * 1000 ** 3
 
 def capacity_rows(data: str, repo_bytes: int = 0) -> list[tuple[str, int, int]]:
     """(what, bytes used, the limit it is held to) for every size bound the
-    feed has: the ones `verify` refuses a publish over, and GitHub's own."""
+    feed has that something can still grow into: the ones `verify` refuses a
+    publish over, and GitHub's own. A closed events file is left out; it
+    never changes again."""
     total, largest = 0, ("", 0)
     for root, dirs, files in os.walk(data):
         dirs[:] = [d for d in dirs if d != ".git"]
@@ -1847,16 +1851,6 @@ def capacity_rows(data: str, repo_bytes: int = 0) -> list[tuple[str, int, int]]:
         size, shard = max(parts)
         rows.append((f"the largest lookup part, lookup/all-{shard}.json.gz, inflated",
                      size, MAX_LOOKUP_ALL))
-    folder = os.path.join(data, "events")
-    gz = [n for n in os.listdir(folder) if n.endswith(".gz")] if os.path.isdir(folder) else []
-    if gz:
-        inflated = []
-        for name in gz:
-            with gzip.open(os.path.join(folder, name), "rb") as fh:
-                inflated.append((len(fh.read(MAX_INFLATED + 1)), name))
-        size, name = max(inflated)
-        rows.append((f"the largest closed events file, events/{name}, inflated",
-                     size, MAX_INFLATED))
     if repo_bytes:
         rows.append(("the repository on GitHub, history included", repo_bytes, REPO_LIMIT))
     return rows

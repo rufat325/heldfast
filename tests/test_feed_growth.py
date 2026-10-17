@@ -153,6 +153,16 @@ class TestEvents(Feed):
         self.assertEqual(3, len(watch.all_events(self.data)))
         self.assertEqual(0, quiet(watch.verify, SimpleNamespace(data=self.data)))
 
+    def test_a_monthly_file_is_closed_at_once(self) -> None:
+        """Nothing is appended to the monthly layout any more, so the month
+        still under way is closed too, not left to grow a warning."""
+        os.makedirs(os.path.join(self.data, "events"))
+        with open(os.path.join(self.data, "events", "2026-10.jsonl"), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(self.event("2026-10-02T00:00:00Z")) + "\n")
+        watch.append_events(self.data, [self.event("2026-10-17T05:00:00Z")])
+        watch.close_events(self.data)
+        self.assertEqual(["2026-10-17.jsonl", "2026-10.jsonl.gz"], self.names())
+
     def test_a_closed_day_is_gzipped_the_same_way_every_time(self) -> None:
         watch.append_events(self.data, [self.event("2026-08-01T00:00:00Z"),
                                         self.event("2026-10-17T05:00:00Z")])
