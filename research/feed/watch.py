@@ -130,7 +130,9 @@ ALLOWED = re.compile(
 TOOL_FILE = re.compile(r"^tools/([0-9a-f]{2})/([0-9a-f]{64})\.json$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MEASURED_PROTOCOL = "2025-06-18"
-MAX_FILE = 20 * 1024 * 1024
+# Under GitHub's 50 MB warning. 20 MB stopped the feed on 2026-10-14, when a
+# month of events outgrew it.
+MAX_FILE = 45 * 1024 * 1024
 # The whole lookup record in one file. GitHub refuses a file over 100 MB. The
 # same bound is the reader's (heldfast.feedlock), so a record this writes is
 # never one a client refuses for its size -- plain or inflated from the .gz.
@@ -138,7 +140,8 @@ MAX_LOOKUP_ALL = MAX_LOOKUP
 # A gzip that inflates past this is refused, not read: the text inside came
 # from a server, and a server can send a catalogue built to be one.
 MAX_INFLATED = 50 * 1024 * 1024
-MAX_TOTAL = 1024 * 1024 * 1024
+# The whole tree. 1 GiB stopped the feed on 2026-10-14.
+MAX_TOTAL = 2 * 1024 * 1024 * 1024
 # A hosted catalogue bigger than this is not read. No real one comes close.
 MAX_REMOTE_BYTES = 4 * 1024 * 1024
 # Seconds one hosted server's whole reading may take: handshake and tools/list.
