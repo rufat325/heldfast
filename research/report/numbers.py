@@ -113,11 +113,8 @@ class Register:
 # -- reading --------------------------------------------------------------
 
 def load_events(feed: str) -> list[dict]:
-    out = []
-    for path in sorted(glob.glob(os.path.join(feed, "events", "*.jsonl"))):
-        with open(path, encoding="utf-8") as fh:
-            out.extend(json.loads(line) for line in fh if line.strip())
-    return out
+    """Every event, from daily or monthly files, plain or gzipped once closed."""
+    return watch.all_events(feed)
 
 
 def load_json(feed: str, rel: str):
@@ -179,7 +176,10 @@ def recompute(feed: str, events: list, cats: Catalogues) -> tuple[dict, dict]:
         key = operators.event_key(e)
         before, after = cats.pair(e)
         if before is None or after is None:
-            kinds[key], ops[key] = "unclassified", operators.operator(e["package"], None)
+            # A catalogue `retire` took out of the tree: the event's own
+            # answer, given when both were there, is all there is to compare.
+            kinds[key] = e.get("kind") or "unclassified"
+            ops[key] = e.get("operator") or operators.operator(e["package"], None)
             continue
         kinds[key] = operators.classify_event(named(before), named(after))
         url = after.get("url") if hosted(e) else None
@@ -631,8 +631,14 @@ def compute(feed: str, out_dir: str | None, churn: bool = True) -> dict:
     cats = Catalogues(feed)
     c01(r, feed)
     c02(r, feed)
-    kinds = (stats or {}).get("classified") or {}
-    ops = (stats or {}).get("operator_of") or {}
+    # stats.json answers for the events folded before 2026-10-17; later
+    # events carry their own kind and operator.
+    kinds = dict((stats or {}).get("classified") or {})
+    ops = dict((stats or {}).get("operator_of") or {})
+    for e in events:
+        if isinstance(e.get("kind"), str) and isinstance(e.get("operator"), str):
+            kinds[operators.event_key(e)] = e["kind"]
+            ops[operators.event_key(e)] = e["operator"]
     c03_c05(r, events, kinds, ops, ev_in + ["stats.json"])
     stated = (stats or {}).get("kinds")
     re_kinds, _ = recompute(feed, events, cats)

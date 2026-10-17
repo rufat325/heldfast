@@ -236,6 +236,11 @@ class TestTheCache(unittest.TestCase):
         self.asked.append(url)
         return self.RECORD if url.endswith("/lookup/all.json.gz") else None
 
+    def downloads(self) -> list[str]:
+        """The requests that found the record: a feed from before the parts
+        is asked for lookup/all-0.json.gz first, and has none."""
+        return [url for url in self.asked if url.endswith("/lookup/all.json.gz")]
+
     def read(self, commit: str = SHA) -> dict:
         feed = feedlock.Feed(f"https://raw.example/{commit}", "x", commit)
         with mock.patch.object(feedlock, "get_json", self.get):
@@ -244,13 +249,13 @@ class TestTheCache(unittest.TestCase):
     def test_a_second_read_of_the_same_commit_downloads_nothing(self) -> None:
         self.assertEqual(self.RECORD["tools"], self.read())
         self.assertEqual(self.RECORD["tools"], self.read())
-        self.assertEqual(1, len(self.asked))
+        self.assertEqual(1, len(self.downloads()))
         self.assertTrue((self.tmp / f"lookup-{SHA}.json.gz").exists())
 
     def test_another_commit_is_a_miss(self) -> None:
         self.read()
         self.read("f" * 40)
-        self.assertEqual(2, len(self.asked))
+        self.assertEqual(2, len(self.downloads()))
 
     def test_a_corrupt_copy_is_fetched_again_not_used(self) -> None:
         for junk in (b"not gzip", gzip.compress(b"not json"), gzip.compress(b'{"tools": []}')):
@@ -258,7 +263,7 @@ class TestTheCache(unittest.TestCase):
                 (self.tmp / f"lookup-{SHA}.json.gz").write_bytes(junk)
                 self.asked.clear()
                 self.assertEqual(self.RECORD["tools"], self.read())
-                self.assertEqual(1, len(self.asked))
+                self.assertEqual(1, len(self.downloads()))
 
     def test_only_the_newest_two_are_kept(self) -> None:
         for i, commit in enumerate(("1" * 40, "2" * 40, "3" * 40)):
@@ -275,7 +280,7 @@ class TestTheCache(unittest.TestCase):
         with mock.patch.object(feedlock, "get_json", self.get):
             lookup.everything(feedlock.Feed("https://mirror.example", "mirror"))
             lookup.everything(feedlock.Feed("https://mirror.example", "mirror"))
-        self.assertEqual(2, len(self.asked))
+        self.assertEqual(2, len(self.downloads()))
         self.assertEqual([], list(self.tmp.iterdir()))
 
     def test_a_cache_that_cannot_be_written_costs_only_a_download(self) -> None:

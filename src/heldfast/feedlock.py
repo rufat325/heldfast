@@ -94,10 +94,15 @@ class FeedEntry:
     tools: list[ToolSpec] = field(default_factory=list)
 
 
+_LOOKUP_WHOLE = re.compile(r"^all(?:-[0-9a-f])?\.json(?:\.gz)?$")
+
+
 def _limit(url: str) -> int:
-    """The lookup record's own bound for lookup/all.json(.gz); MAX_INFLATED else."""
-    return MAX_LOOKUP if url.rsplit("/", 2)[-2:] in (["lookup", "all.json"],
-                                                     ["lookup", "all.json.gz"]) else MAX_INFLATED
+    """The lookup record's own bound for lookup/all.json(.gz) and its parts
+    lookup/all-<0-f>.json.gz; MAX_INFLATED else."""
+    tail = url.rsplit("/", 2)[-2:]
+    whole = len(tail) == 2 and tail[0] == "lookup" and _LOOKUP_WHOLE.match(tail[1])
+    return MAX_LOOKUP if whole else MAX_INFLATED
 
 
 def get_json(url: str) -> Any:

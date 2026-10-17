@@ -133,12 +133,47 @@ class TestClient(Published):
         """The set of buckets a server's tools fall in identifies the server
         for most servers, so the default asks for no bucket at all."""
         self.look(READ, WRITE, PRIVATE)
-        self.assertEqual([f"{BASE}/lookup/all.json.gz"], self.asked)
+        self.assertEqual([f"{BASE}/lookup/all-{s}.json.gz" for s in lookup.SHARDS], self.asked)
+
+    def _before_the_parts(self) -> None:
+        for s in lookup.SHARDS:
+            os.remove(os.path.join(self.data, "lookup", f"all-{s}.json.gz"))
+
+    def test_a_feed_from_before_the_parts_is_read_from_the_whole_file(self) -> None:
+        self._before_the_parts()
+        found = self.look(READ, WRITE, PRIVATE)
+        self.assertEqual(2, found[self.fingerprint(READ)]["servers"])
+        self.assertEqual([f"{BASE}/lookup/all-0.json.gz", f"{BASE}/lookup/all.json.gz"],
+                         self.asked)
 
     def test_a_feed_without_the_gzipped_record_is_read_from_the_plain_one(self) -> None:
+        self._before_the_parts()
         os.remove(os.path.join(self.data, "lookup", "all.json.gz"))
         self.look(READ, WRITE, PRIVATE)
-        self.assertEqual([f"{BASE}/lookup/all.json.gz", f"{BASE}/lookup/all.json"], self.asked)
+        self.assertEqual([f"{BASE}/lookup/all-0.json.gz", f"{BASE}/lookup/all.json.gz",
+                          f"{BASE}/lookup/all.json"], self.asked)
+
+    def test_the_parts_together_are_the_whole_record(self) -> None:
+        with open(os.path.join(self.data, "lookup", "all.json"), encoding="utf-8") as fh:
+            record = json.load(fh)["tools"]
+        joined = {}
+        for s in lookup.SHARDS:
+            with gzip.open(os.path.join(self.data, "lookup", f"all-{s}.json.gz"), "rb") as fh:
+                part = json.loads(fh.read().decode("utf-8"))["tools"]
+            self.assertTrue(all(fp.startswith(s) for fp in part))
+            joined.update(part)
+        self.assertEqual(record, joined)
+
+    def test_a_part_holding_another_parts_fingerprint_is_refused(self) -> None:
+        wrong = os.path.join(self.data, "lookup", "all-1.json.gz")
+        with gzip.open(wrong, "wb") as fh:
+            fh.write(json.dumps({"tools": {"0" * 64: {"first_seen": "", "servers": 1}}}).encode())
+        with self.assertRaises(feedlock.FeedError):
+            self.look(READ)
+
+    def test_a_part_has_the_whole_records_bound(self) -> None:
+        self.assertEqual(feedlock.MAX_LOOKUP, feedlock._limit(f"{BASE}/lookup/all-a.json.gz"))
+        self.assertEqual(feedlock.MAX_INFLATED, feedlock._limit(f"{BASE}/lookup/abc.json"))
 
     def test_the_gzipped_record_is_the_plain_one(self) -> None:
         with open(os.path.join(self.data, "lookup", "all.json"), "rb") as plain,                 gzip.open(os.path.join(self.data, "lookup", "all.json.gz"), "rb") as packed:

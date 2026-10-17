@@ -150,8 +150,11 @@ def _logged_tools(feed: Feed, name: str, version: str, identity: str) -> list[tu
 def witness(identity: str, url: str, live: list[ToolSpec], log_name: str,
             entry: dict[str, Any], feed: Feed, depth: int = DEPTH) -> Witness:
     """Compare the tools a server showed this client with the public log."""
+    # index.json lists a hosted server's recent events and counts them all.
+    total = entry.get("events_total")
     out = Witness(identity, url, log_name=log_name,
-                  changes_logged=len(entry.get("events") or []))
+                  changes_logged=total if isinstance(total, int) and total >= 0
+                  else len(entry.get("events") or []))
     versions = [str(v.get("version")) for v in entry.get("versions") or []
                 if isinstance(v, dict) and v.get("version")][-depth:]
     if not versions:

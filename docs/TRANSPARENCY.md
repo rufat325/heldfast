@@ -219,6 +219,33 @@ everyone what it showed the log. That the log has not left something out.
 Only an upper bound on each date is anchored, never when a reading was
 really taken.
 
+## What the tree holds
+
+On 2026-10-14 the feed stopped publishing. Its repository's tree had reached
+the 1 GiB `verify` allows, and a month of events the 20 MB it allows one file,
+so every publish was refused and three days were never anchored. The limits
+were right to refuse; nothing had said they were near. Since 2026-10-17 the
+tree grows with the number of servers, not with time:
+
+- **Hosted servers keep their newest three readings** (`watch.py retire`,
+  `HOSTED_KEEP`), and the one their state names. npm catalogues all stay:
+  `approve --from-feed` pins any measured release. `tools/` holds the
+  definitions those catalogues name.
+- **Nothing retired is lost.** It stays in git history, in every checkpointed
+  commit it was part of, and in the archives below; and what it showed is
+  added to `lookup/retired/` first, so the lookup keeps every definition's
+  first day and servers ([LOOKUP.md](LOOKUP.md)). To read an older reading,
+  read the feed at a commit that held it.
+- **Events go to one file a day** (`events/YYYY-MM-DD.jsonl`), gzipped once
+  the day is a month past. Each event carries its own kind of change and
+  operator, so `stats.json` stops growing with every event; `index.json`
+  lists a hosted server's recent events and counts the rest.
+- **The whole lookup record comes in 16 parts** as well as one file.
+- **Every publish measures how full each limit is** (`watch.py capacity`),
+  and from three quarters full the feed workflow opens an issue, "feed:
+  nearing a size limit", while there are weeks left. The repository's size on
+  GitHub, history included, is measured against the 5 GB GitHub asks for.
+
 ## Copies outside GitHub
 
 The whole record lived in one repository on one host. It is now also kept in
@@ -251,7 +278,8 @@ repository's, so neither copy can be written by what writes the other.
 
 Another record can name the same tool definition by a different digest. The
 key here is the native digest of [LOCK.md](LOCK.md): `tools/` holds each
-definition once, named by it, and every catalogue lists a tool by it. The feed
+definition a catalogue in the tree names, once, named by it, and every
+catalogue lists a tool by it (older ones are in git history). The feed
 stores no other digest. A digest from another record is recomputed from
 `tools/`, so a comparison needs nothing a clone does not already hold.
 

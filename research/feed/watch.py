@@ -33,8 +33,13 @@ between two readings was never logged at all.
   watch.py check-remote --data DIR [--shard i/N] [--jobs N]
                                                     hosted endpoints (connects)
   watch.py fold         --data DIR                  incoming/ -> events/
+  watch.py retire       --data DIR                  hosted catalogues past each
+                                                    server's newest few, and the
+                                                    definitions none names, out
+                                                    of the tree
   watch.py render       --data DIR                  index.json, feed.*, README.md
   watch.py verify       --data DIR                  refuse anything unexpected
+  watch.py capacity     --data DIR [--repo-bytes N] how full every size limit is
   watch.py admit        --data DIR --deltas DIR --into DIR
                                                     take each shard's upload only
                                                     for the servers it was given
@@ -54,25 +59,35 @@ rest read and write JSON and run nothing a server wrote.
 Layout under DIR:
   watchlist.json                 which servers, how often, and the rule
   state/<name>.json              the last version seen and its tool digests
-  tools/<ab>/<digest>.json       every tool definition ever measured, once,
-                                 as the server sent it, named by the SHA-256
-                                 of its canonical form (the tool digest)
+  tools/<ab>/<digest>.json       every tool definition a catalogue in the tree
+                                 names, once, as the server sent it, named by
+                                 the SHA-256 of its canonical form (the tool
+                                 digest)
   catalogues/<name>/<version>.json
-                                 each catalogue measured: which tools, by
-                                 digest and by lockfile fingerprint. What
-                                 `heldfast approve --from-feed` pins
+                                 a catalogue measured: which tools, by digest
+                                 and by lockfile fingerprint. What `heldfast
+                                 approve --from-feed` pins. Every npm one; a
+                                 hosted server's newest HOSTED_KEEP (`retire`)
   catalogues/<name>/<version>.json.gz
                                  the first layout: the whole catalogue,
                                  gzipped. Still read; no longer written
   incoming/<label>.jsonl         events from one run, before `fold`
-  events/YYYY-MM.jsonl           one line per release that changed something
+  events/YYYY-MM-DD.jsonl        one line per change, by the day it was seen;
+                                 gzipped (.jsonl.gz) once the day is closed.
+                                 events/YYYY-MM.jsonl(.gz) is the layout
+                                 before 2026-10-17, one file per month
   index.json                     per server: measured versions and events
   lookup/<abc>.json              every tool definition ever logged, by the first
                                  three hex characters of its fingerprint: when
                                  first seen, on how many servers (docs/LOOKUP.md)
-  lookup/all.json(.gz)           the same record in one file; the .gz is the same
-                                 bytes as a run of gzip members, one per bucket,
-                                 so git can store each day as a small delta
+  lookup/all-<h>.json.gz         the same record in 16 parts, by the first hex
+                                 character of the fingerprint
+  lookup/all.json(.gz)           the same record in one file, while it fits
+                                 MAX_LOOKUP_ALL; the .gz is the same bytes as a
+                                 run of gzip members, one per bucket, so git
+                                 can store each day as a small delta
+  lookup/retired/<abc>.json      what the catalogues `retire` took out of the
+                                 tree showed, so the lookup keeps it
   feed.json, feed.xml            the latest events, as JSON and as Atom
   stats.json                     every event counted per operator and by kind
                                  of change (operators.py)
@@ -85,6 +100,11 @@ Layout under DIR:
   checkpoints/YYYY-MM-DD.json.sigstore.json
                                  its Sigstore bundle: signed by this repository's
                                  feed workflow, recorded in the Rekor log
+
+The tree grows with the number of servers, not with time: `retire` keeps it
+so, and `capacity` says when a size limit is near (docs/TRANSPARENCY.md,
+"What the tree holds"). Everything retired stays in git history and in the
+archives.
 """
 from __future__ import annotations
 
@@ -122,8 +142,9 @@ ALLOWED = re.compile(
     r"^(?:watchlist\.json|index\.json|feed\.json|feed\.xml|README\.md|stats\.json|"
     # The feed repository's own watchdog (research/feed/feed-repo-watchdog.yml).
     r"\.github/workflows/watchdog\.yml|"
-    r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}\.jsonl|"
+    r"state/[A-Za-z0-9@._\-]+\.json|events/\d{4}-\d{2}(?:-\d{2})?\.jsonl(?:\.gz)?|"
     r"incoming/[a-z0-9\-]+\.jsonl|lookup/(?:[0-9a-f]{3}|meta|all)\.json|lookup/all\.json\.gz|"
+    r"lookup/all-[0-9a-f]\.json\.gz|lookup/retired/[0-9a-f]{3}\.json|"
     r"tools/[0-9a-f]{2}/[0-9a-f]{64}\.json|"
     r"checkpoints/\d{4}-\d{2}-\d{2}\.json(?:\.ots|\.sigstore\.json)?|"
     r"catalogues/[A-Za-z0-9@._\-]+/[A-Za-z0-9][A-Za-z0-9._+\-]*\.json(?:\.gz)?)$")
@@ -142,6 +163,17 @@ MAX_LOOKUP_ALL = MAX_LOOKUP
 MAX_INFLATED = 50 * 1024 * 1024
 # The whole tree. 1 GiB stopped the feed on 2026-10-14.
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
+# What keeps the tree from growing with time (`retire`). A hosted server keeps
+# its newest HOSTED_KEEP catalogues in the tree; older ones stay in git history
+# and in the archives, and what they showed stays in the lookup. npm
+# catalogues all stay: `approve --from-feed` pins any measured release.
+HOSTED_KEEP = 3
+# An events file is gzipped once nothing more can be appended to it: a daily
+# file EVENTS_OPEN_DAYS after its day, a monthly one (the layout before
+# 2026-10-17) once a later month has begun.
+EVENTS_OPEN_DAYS = 31
+# `capacity` warns when anything reaches this share of its limit.
+CAPACITY_WARN = 0.75
 # A hosted catalogue bigger than this is not read. No real one comes close.
 MAX_REMOTE_BYTES = 4 * 1024 * 1024
 # Seconds one hosted server's whole reading may take: handshake and tools/list.
@@ -331,7 +363,12 @@ def write_tool(data: str, raw: dict) -> str:
     path = tool_path(data, digest)
     if not os.path.exists(path):
         try:
-            _write(path, _json_bytes(raw))
+            # Without indentation: a quarter smaller, and tools/ is the biggest
+            # part of the tree. Files written before 2026-10-17 are indented;
+            # readers parse either, and the name is the hash of the definition,
+            # not of the file's bytes.
+            _write(path, (json.dumps(raw, sort_keys=True, separators=(",", ":"))
+                          + "\n").encode("utf-8"))
         except OSError:
             # Windows refuses to replace a file another thread is replacing
             # at that moment. Both wrote the same bytes -- the name is their
@@ -448,15 +485,34 @@ def write_incoming(data: str, label: str, events: list) -> None:
             fh.write(json.dumps(event, sort_keys=True) + "\n")
 
 
+EVENTS_NAME = re.compile(r"^(\d{4}-\d{2}(?:-\d{2})?)\.jsonl(\.gz)?$")
+
+
 def append_events(data: str, events: list) -> None:
+    """One file per day the log saw the change, events/YYYY-MM-DD.jsonl. Until
+    2026-10-17 it was one per month of `published`, and a month of events
+    outgrew MAX_FILE; those files are read as they are. The day observed, not
+    published: an npm release can be measured weeks after it was published,
+    and its event must not land in a day already closed."""
     os.makedirs(os.path.join(data, "events"), exist_ok=True)
     for event in sorted(events, key=lambda e: (e["published"], e["package"], e["to"])):
-        month = event["published"][:7]
-        if not re.match(r"^\d{4}-\d{2}$", month):
-            month = event["observed_at"][:7]
-        path = os.path.join(data, "events", month + ".jsonl")
+        day = str(event.get("observed_at") or "")[:10]
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
+            day = str(event.get("published") or "")[:10]
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
+            raise ValueError(f"event without a day: {event.get('package')!r}")
+        path = os.path.join(data, "events", day + ".jsonl")
         with open(path, "a", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps(event, sort_keys=True) + "\n")
+
+
+def read_lines_gz(path: str, limit: int = MAX_INFLATED) -> list:
+    """A gzipped JSON-lines file, refused if it inflates past `limit`."""
+    with gzip.open(path, "rb") as fh:
+        raw = fh.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError(f"{path}: inflates past {limit} bytes")
+    return [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
 
 
 def all_events(data: str) -> list:
@@ -465,9 +521,56 @@ def all_events(data: str) -> list:
     if not os.path.isdir(folder):
         return out
     for name in sorted(os.listdir(folder)):
-        with open(os.path.join(folder, name), encoding="utf-8") as fh:
+        path = os.path.join(folder, name)
+        if name.endswith(".jsonl.gz"):
+            out.extend(read_lines_gz(path))
+            continue
+        with open(path, encoding="utf-8") as fh:
             out.extend(json.loads(line) for line in fh if line.strip())
     return out
+
+
+def close_events(data: str) -> int:
+    """Gzip every events file nothing more will be appended to. Returns how many.
+
+    Which files are closed is judged from the newest events file, not the
+    clock, so the same events give the same tree. The gzip is one member with
+    the lookup's fixed header and settings (gzip_member): the same text always
+    compresses to the same bytes, and anyone can rebuild it."""
+    folder = os.path.join(data, "events")
+    names = sorted(os.listdir(folder)) if os.path.isdir(folder) else []
+    periods = [m.group(1) for m in map(EVENTS_NAME.match, names) if m]
+    if not periods:
+        return 0
+    newest = max(p if len(p) == 10 else p + "-01" for p in periods)
+    newest_day = date.fromisoformat(newest)
+    closed = 0
+    for name in names:
+        m = EVENTS_NAME.match(name)
+        if not m or m.group(2):
+            continue
+        period = m.group(1)
+        if len(period) == 7:
+            done = period < newest[:7]
+        else:
+            done = (newest_day - date.fromisoformat(period)).days > EVENTS_OPEN_DAYS
+        if not done:
+            continue
+        path = os.path.join(folder, name)
+        with open(path, "rb") as fh:
+            text = fh.read()
+        gz = path + ".gz"
+        if os.path.exists(gz):
+            # Lines appended to a period after it was closed: one file again.
+            with gzip.open(gz, "rb") as fh:
+                earlier = fh.read(MAX_INFLATED + 1)
+            if len(earlier) > MAX_INFLATED:
+                raise ValueError(f"events/{name}.gz: inflates past {MAX_INFLATED} bytes")
+            text = earlier + text
+        _write(gz, gzip_member(text))
+        os.remove(path)
+        closed += 1
+    return closed
 
 
 def load_watchlist(data: str) -> list:
@@ -476,7 +579,13 @@ def load_watchlist(data: str) -> list:
 
 
 def fold(args: argparse.Namespace) -> int:
-    """Move incoming events into the monthly logs, once, in a stable order."""
+    """Move incoming events into the daily logs, once, in a stable order.
+
+    Each event is given its kind of change and its operator here, by the job
+    that runs nothing a server wrote, while both catalogues it names are
+    certainly in the tree (`retire` may later take the older one out). Until
+    2026-10-17 stats.json held those answers for every event, and grew with
+    every event; it now holds them only for the events from before."""
     folder = os.path.join(args.data, "incoming")
     events = []
     for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
@@ -484,8 +593,12 @@ def fold(args: argparse.Namespace) -> int:
         with open(path, encoding="utf-8") as fh:
             events.extend(json.loads(line) for line in fh if line.strip())
         os.remove(path)
+    for event in events:
+        event["kind"], event["operator"] = classify(args.data, event)
     append_events(args.data, events)
-    print(f"folded {len(events)} event(s)")
+    closed = close_events(args.data)
+    print(f"folded {len(events)} event(s)" + (f"; gzipped {closed} closed events file(s)"
+                                              if closed else ""))
     return 0
 
 
@@ -1050,9 +1163,16 @@ def index(data: str, events: list) -> dict:
             "from": e["from"], "to": e["to"], "published": e["published"],
             "grade": e["grade"], "changed": len(e["changed"]),
             "added": len(e["added"]), "removed": len(e["removed"])})
-    for entry in out.values():
+    for name, entry in out.items():
         entry["versions"].sort(key=lambda v: (v["published"], v["version"]))
         entry["events"].sort(key=lambda v: (v["published"], v["to"]))
+        entry["events_total"] = len(entry["events"])
+        if name.startswith(REMOTE_PREFIX):
+            # A hosted server lists the events that end at a reading the tree
+            # still holds, and how many it has had: listing every event made
+            # this file grow with time. npm servers list all (`updates`).
+            held = {v["version"] for v in entry["versions"]}
+            entry["events"] = [e for e in entry["events"] if e["to"] in held]
     return {"packages": out}
 
 
@@ -1065,6 +1185,156 @@ def index(data: str, events: list) -> dict:
 LOOKUP_PREFIX = 3
 
 
+def _fingerprints(body: dict) -> set[str] | None:
+    """The lockfile fingerprints of one catalogue, in either layout, or None
+    when its definitions are ones the digest refuses."""
+    from heldfast.probe import _parse_tools
+    if "entries" in body:
+        # The current layout lists each tool's fingerprint beside its digest.
+        return {e["fingerprint"] for e in body["entries"] if e.get("fingerprint")}
+    try:
+        tools = _parse_tools("feed", {"result": {"tools": body.get("tools") or []}})
+    except ValueError:
+        return None
+    return {t.fingerprint() for t in tools}
+
+
+def _seen_day(body: dict) -> str:
+    return str(body.get("published") or body.get("measured_at") or "")[:10]
+
+
+def retired_path(data: str, prefix: str) -> str:
+    if not re.match(r"^[0-9a-f]{%d}$" % LOOKUP_PREFIX, prefix):
+        raise ValueError(f"not a lookup prefix: {prefix!r}")
+    return os.path.join(data, "lookup", "retired", prefix + ".json")
+
+
+def read_retired(data: str) -> dict[str, dict]:
+    """fingerprint -> {"first_seen", "servers": set} for what retired
+    catalogues showed: the part of the lookup the tree no longer holds."""
+    out: dict[str, dict] = {}
+    folder = os.path.join(data, "lookup", "retired")
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if not name.endswith(".json"):
+            continue
+        with open(os.path.join(folder, name), encoding="utf-8") as fh:
+            for fp, row in (json.load(fh).get("tools") or {}).items():
+                out[fp] = {"first_seen": str(row.get("first_seen") or ""),
+                           "servers": set(row.get("servers") or [])}
+    return out
+
+
+def _merge_seen(seen: dict, fp: str, when: str, servers) -> None:
+    row = seen.setdefault(fp, {"first_seen": when, "servers": set()})
+    if when and (not row["first_seen"] or when < row["first_seen"]):
+        row["first_seen"] = when
+    row["servers"].update(servers)
+
+
+def retire(args: argparse.Namespace) -> int:
+    """Take the hosted catalogues past each server's newest HOSTED_KEEP out of
+    the tree, and the tool definitions no catalogue left names.
+
+    Why: a hosted server is read every day and every reading that differs is
+    a catalogue, so a tree that kept them all grew with time, past its own
+    limits, and on 2026-10-14 the feed stopped. Kept, so it grows with the
+    number of servers instead: every npm catalogue (`approve --from-feed`
+    pins any measured release), each hosted server's newest HOSTED_KEEP
+    readings (what `heldfast verify` reads), the reading each server's state
+    names, and every definition those name.
+
+    Nothing is lost. A retired catalogue stays in git history, in the
+    checkpointed commits it was part of and in the archives; and what it
+    showed -- each fingerprint, the first day seen, which servers -- is added
+    to lookup/retired/ first, so the lookup never forgets a definition.
+    Deterministic: the same tree gives the same tree.
+    """
+    data = args.data
+    retired = read_retired(data)
+    touched: set[str] = set()
+    gone_catalogues = 0
+    for pkg_dir, versions in _hosted_versions(data).items():
+        current = _state_version(data, pkg_dir)
+        keep = set(versions[-HOSTED_KEEP:]) | ({current} if current else set())
+        for version in versions:
+            if version in keep:
+                continue
+            body = _catalogue_at(data, pkg_dir, version, bodies=False)
+            prints = _fingerprints(body) if body is not None else None
+            if prints is None and body is not None:
+                # Definitions the digest refuses never reached the lookup
+                # either; there is nothing of it to carry.
+                prints = set()
+            for fp in prints or ():
+                _merge_seen(retired, fp, _seen_day(body), {body["package"]})
+                touched.add(fp[:LOOKUP_PREFIX])
+            for suffix in (".json", ".json.gz"):
+                path = os.path.join(data, "catalogues", pkg_dir, version + suffix)
+                if os.path.exists(path):
+                    os.remove(path)
+            gone_catalogues += 1
+        folder = os.path.join(data, "catalogues", pkg_dir)
+        if not os.listdir(folder):
+            os.rmdir(folder)
+    for prefix in sorted(touched):
+        rows = {fp: {"first_seen": r["first_seen"], "servers": sorted(r["servers"])}
+                for fp, r in sorted(retired.items()) if fp.startswith(prefix)}
+        _write(retired_path(data, prefix), _json_bytes({"prefix": prefix, "tools": rows}))
+    gone_tools = _drop_unnamed_tools(data)
+    print(f"retired {gone_catalogues} hosted catalogue(s) and {gone_tools} tool definition(s) "
+          f"no catalogue in the tree names; each hosted server keeps its newest {HOSTED_KEEP}")
+    return 0
+
+
+def _hosted_versions(data: str) -> dict[str, list[str]]:
+    """catalogues/ directory -> its versions oldest first, hosted servers only.
+    A hosted version is the reading's UTC time, so it sorts as it happened."""
+    out: dict[str, list[str]] = {}
+    for pkg_dir, version in catalogue_versions(data):
+        if pkg_dir.startswith(safe(REMOTE_PREFIX)):
+            out.setdefault(pkg_dir, []).append(version)
+    for versions in out.values():
+        versions.sort()
+    return out
+
+
+def _state_version(data: str, pkg_dir: str) -> str:
+    """The version a server's state names -- the reading the next one is
+    compared with -- read by the same directory name its catalogues use."""
+    path = os.path.join(data, "state", pkg_dir + ".json")
+    if not os.path.exists(path):
+        return ""
+    with open(path, encoding="utf-8") as fh:
+        return str(json.load(fh).get("version") or "")
+
+
+def _drop_unnamed_tools(data: str) -> int:
+    """Remove every tools/ file no catalogue and no state file names."""
+    named: set[str] = set()
+    for pkg_dir, version in catalogue_versions(data):
+        path = os.path.join(data, "catalogues", pkg_dir, version + ".json")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                named.update(e["digest"] for e in json.load(fh).get("tools") or []
+                             if isinstance(e, dict) and isinstance(e.get("digest"), str))
+    folder = os.path.join(data, "state")
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        with open(os.path.join(folder, name), encoding="utf-8") as fh:
+            tools = json.load(fh).get("tools") or {}
+        named.update(t if isinstance(t, str) else str((t or {}).get("digest") or "")
+                     for t in tools.values())
+    gone = 0
+    root = os.path.join(data, "tools")
+    for sub in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+        for name in sorted(os.listdir(os.path.join(root, sub))):
+            if name.endswith(".json") and name[:-len(".json")] not in named:
+                os.remove(os.path.join(root, sub, name))
+                gone += 1
+        if not os.listdir(os.path.join(root, sub)):
+            os.rmdir(os.path.join(root, sub))
+    return gone
+
+
 def lookup_buckets(data: str) -> dict[str, dict]:
     """Every tool definition the log has ever recorded, bucketed by fingerprint.
 
@@ -1075,29 +1345,21 @@ def lookup_buckets(data: str) -> dict[str, dict]:
     Each entry says when the log first saw that exact definition and on how
     many servers. Nothing in it changes day to day unless a new definition or
     a new server appears, so a quiet day rewrites no bucket.
-    """
-    from heldfast.probe import _parse_tools
 
-    seen: dict[str, dict] = {}
+    Built from the catalogues in the tree and from lookup/retired/, what the
+    catalogues `retire` took out of it showed, so a definition no longer in
+    the tree keeps its first day and its servers.
+    """
+    seen: dict[str, dict] = read_retired(data)
     for pkg_dir, version in catalogue_versions(data):
         body = _catalogue_at(data, pkg_dir, version, bodies=False)
         if body is None:
             continue
-        when = str(body.get("published") or body.get("measured_at") or "")[:10]
-        if "entries" in body:
-            # The current layout lists each tool's fingerprint beside its digest.
-            prints = {e["fingerprint"] for e in body["entries"] if e.get("fingerprint")}
-        else:
-            try:
-                tools = _parse_tools("feed", {"result": {"tools": body.get("tools") or []}})
-                prints = {t.fingerprint() for t in tools}
-            except ValueError:  # a schema the digest refuses; that server is skipped
-                continue
+        prints = _fingerprints(body)
+        if prints is None:  # a schema the digest refuses; that server is skipped
+            continue
         for fp in prints:
-            row = seen.setdefault(fp, {"first_seen": when, "servers": set()})
-            if when and (not row["first_seen"] or when < row["first_seen"]):
-                row["first_seen"] = when
-            row["servers"].add(body["package"])
+            _merge_seen(seen, fp, _seen_day(body), {body["package"]})
     buckets: dict[str, dict] = {}
     for fp in sorted(seen):
         bucket = buckets.setdefault(fp[:LOOKUP_PREFIX], {})
@@ -1208,17 +1470,38 @@ def write_lookup(data: str) -> int:
     for prefix, tools in buckets.items():
         _write(os.path.join(data, "lookup", prefix + ".json"),
                _json_bytes({"prefix": prefix, "tools": tools}))
+    # The whole record in 16 parts, by the first hex character of the
+    # fingerprint, each a complete record of its own in the all.json layout.
+    # One file grew towards MAX_LOOKUP_ALL by about 0.4 MB a day; a part
+    # reaches it at sixteen times the size. Clients from 2026-10-17 read these.
+    for shard in "0123456789abcdef":
+        part = {p: t for p, t in buckets.items() if p.startswith(shard)}
+        _write(os.path.join(data, "lookup", f"all-{shard}.json.gz"),
+               b"".join(gzip_member(p) for p in lookup_pieces(part)))
     pieces = lookup_pieces(buckets)
-    members = [gzip_member(p) for p in pieces]
+    plain = os.path.join(data, "lookup", "all.json")
     gz_path = os.path.join(data, "lookup", "all.json.gz")
-    warn_if_recompressed(gz_path, pieces, members)
-    _write(os.path.join(data, "lookup", "all.json"), b"".join(pieces))
-    # The same bytes gzipped, about a third of the size, which is what clients
-    # ask for first. The plain file stays for clients from before this.
-    _write(gz_path, b"".join(members))
+    if sum(map(len, pieces)) <= MAX_LOOKUP_ALL:
+        members = [gzip_member(p) for p in pieces]
+        warn_if_recompressed(gz_path, pieces, members)
+        _write(plain, b"".join(pieces))
+        # The same bytes gzipped, about a third of the size, which is what
+        # clients before the parts ask for first. The plain file is for the
+        # clients from before the gzip.
+        _write(gz_path, b"".join(members))
+    else:
+        # Past the bound every client shares: no longer written, rather than
+        # written and refused. A client from before the parts then finds no
+        # whole record and says so; `--lookup buckets` still works for it.
+        for path in (plain, gz_path):
+            if os.path.exists(path):
+                os.remove(path)
+        print(f"::warning::lookup/all.json is past {MAX_LOOKUP_ALL} bytes and is no longer "
+              f"written; lookup/all-<0-f>.json.gz hold the whole record (docs/LOOKUP.md)")
     _write(os.path.join(data, "lookup", "meta.json"), _json_bytes({
         "prefix_length": LOOKUP_PREFIX,
         "fingerprint": "the tool fingerprint of docs/LOCK.md, lowercase hex",
+        "parts": "all-<first hex character of the fingerprint>.json.gz",
         "tools": sum(len(t) for t in buckets.values()), "buckets": len(buckets)}))
     return sum(len(t) for t in buckets.values())
 
@@ -1306,26 +1589,40 @@ def churn_stats(data: str, events: list) -> dict:
     known_ops = previous.get("operator_of") or {}
     kinds: dict[str, str] = {}
     ops: dict[str, str] = {}
+    # Only events folded before 2026-10-17 lack their own answers; only they
+    # are kept in stats.json's two maps, which therefore stop growing.
+    legacy: set[str] = set()
     for e in events:
         key = operators.event_key(e)
+        if isinstance(e.get("kind"), str) and isinstance(e.get("operator"), str):
+            kinds[key], ops[key] = e["kind"], e["operator"]
+            continue
+        legacy.add(key)
         if key in known_kinds and key in known_ops:
             kinds[key], ops[key] = known_kinds[key], known_ops[key]
             continue
-        try:
-            before = read_catalogue(data, e["package"], e["from"])
-            after = read_catalogue(data, e["package"], e["to"])
-        except (OSError, ValueError, KeyError):
-            before = after = None
-        if before is None or after is None:
-            kinds[key] = "unclassified"
-            ops[key] = operators.operator(e["package"], None)
-            continue
-        named = lambda body: {str(t.get("name")): t for t in body.get("tools") or []
-                              if isinstance(t, dict)}
-        kinds[key] = operators.classify_event(named(before), named(after))
-        url = after.get("url") if e["package"].startswith(REMOTE_PREFIX) else None
-        ops[key] = operators.operator(e["package"], url if isinstance(url, str) else None)
-    return operators.tally(events, kinds, ops)
+        kinds[key], ops[key] = classify(data, e)
+    counted = operators.tally(events, kinds, ops)
+    counted["classified"] = {k: v for k, v in counted["classified"].items() if k in legacy}
+    counted["operator_of"] = {k: v for k, v in counted["operator_of"].items() if k in legacy}
+    return counted
+
+
+def classify(data: str, e: dict) -> tuple[str, str]:
+    """(kind of change, operator) of one event, from the two catalogues it names."""
+    import operators
+    try:
+        before = read_catalogue(data, e["package"], e["from"])
+        after = read_catalogue(data, e["package"], e["to"])
+    except (OSError, ValueError, KeyError):
+        before = after = None
+    if before is None or after is None:
+        return "unclassified", operators.operator(e["package"], None)
+    named = lambda body: {str(t.get("name")): t for t in body.get("tools") or []
+                          if isinstance(t, dict)}
+    url = after.get("url") if e["package"].startswith(REMOTE_PREFIX) else None
+    return (operators.classify_event(named(before), named(after)),
+            operators.operator(e["package"], url if isinstance(url, str) else None))
 
 
 OPERATORS_SHOWN = 12
@@ -1456,7 +1753,10 @@ def _check_file(full: str, rel: str) -> str | None:
             return None if isinstance(body, dict) and str(body.get("mediaType") or "") \
                 .startswith(SIGSTORE_MEDIA) else "not a Sigstore bundle"
         if rel.endswith(".json.gz"):
-            read_gz(full, MAX_LOOKUP_ALL if rel == "lookup/all.json.gz" else MAX_INFLATED)
+            read_gz(full, MAX_LOOKUP_ALL if rel.startswith("lookup/all") else MAX_INFLATED)
+            return None
+        if rel.endswith(".jsonl.gz"):
+            read_lines_gz(full)
             return None
         if rel.startswith("tools/"):
             return _check_tool(full, rel)
@@ -1499,7 +1799,7 @@ def verify(args: argparse.Namespace) -> int:
                 continue
             size = os.path.getsize(full)
             total += size
-            if size > (MAX_LOOKUP_ALL if rel.startswith("lookup/all.json") else MAX_FILE):
+            if size > (MAX_LOOKUP_ALL if rel.startswith("lookup/all") else MAX_FILE):
                 problems.append(f"{rel}: {size} bytes")
             why = _check_file(full, rel)
             if why:
@@ -1512,6 +1812,70 @@ def verify(args: argparse.Namespace) -> int:
         print(f"refused: {p}", file=sys.stderr)
     print(f"verify: {'refused' if problems else 'ok'} ({total} bytes)")
     return 1 if problems else 0
+
+
+# GitHub asks that a repository stay under 5 GB; past it, pushes may be refused.
+REPO_LIMIT = 5 * 1000 ** 3
+
+
+def capacity_rows(data: str, repo_bytes: int = 0) -> list[tuple[str, int, int]]:
+    """(what, bytes used, the limit it is held to) for every size bound the
+    feed has: the ones `verify` refuses a publish over, and GitHub's own."""
+    total, largest = 0, ("", 0)
+    for root, dirs, files in os.walk(data):
+        dirs[:] = [d for d in dirs if d != ".git"]
+        for name in files:
+            full = os.path.join(root, name)
+            rel = os.path.relpath(full, data).replace(os.sep, "/")
+            size = os.path.getsize(full)
+            total += size
+            if not rel.startswith("lookup/all") and size > largest[1]:
+                largest = (rel, size)
+    rows = [("the whole tree", total, MAX_TOTAL)]
+    if largest[0]:
+        rows.append((f"the largest file, {largest[0]}", largest[1], MAX_FILE))
+    plain = os.path.join(data, "lookup", "all.json")
+    if os.path.exists(plain):
+        rows.append(("lookup/all.json", os.path.getsize(plain), MAX_LOOKUP_ALL))
+    parts = []
+    for shard in "0123456789abcdef":
+        path = os.path.join(data, "lookup", f"all-{shard}.json.gz")
+        if os.path.exists(path):
+            with gzip.open(path, "rb") as fh:
+                parts.append((len(fh.read(MAX_LOOKUP_ALL + 1)), shard))
+    if parts:
+        size, shard = max(parts)
+        rows.append((f"the largest lookup part, lookup/all-{shard}.json.gz, inflated",
+                     size, MAX_LOOKUP_ALL))
+    folder = os.path.join(data, "events")
+    gz = [n for n in os.listdir(folder) if n.endswith(".gz")] if os.path.isdir(folder) else []
+    if gz:
+        inflated = []
+        for name in gz:
+            with gzip.open(os.path.join(folder, name), "rb") as fh:
+                inflated.append((len(fh.read(MAX_INFLATED + 1)), name))
+        size, name = max(inflated)
+        rows.append((f"the largest closed events file, events/{name}, inflated",
+                     size, MAX_INFLATED))
+    if repo_bytes:
+        rows.append(("the repository on GitHub, history included", repo_bytes, REPO_LIMIT))
+    return rows
+
+
+def capacity(args: argparse.Namespace) -> int:
+    """Every size bound, how full it is, and a warning for each past --warn.
+
+    `verify` refuses a publish that is over a bound, which is right, and is
+    how the feed stopped on 2026-10-14: nothing said the bound was near. This
+    says it while there are weeks left. Exit 1 when anything is past --warn."""
+    rows = capacity_rows(args.data, args.repo_bytes)
+    near = [(what, used, limit) for what, used, limit in rows if used >= args.warn * limit]
+    for what, used, limit in rows:
+        print(f"{used / limit:6.1%}  {what}: {used:,} of {limit:,} bytes")
+    for what, used, limit in near:
+        print(f"::warning::{what} is at {used / limit:.0%} of its limit "
+              f"({used:,} of {limit:,} bytes)")
+    return 1 if near else 0
 
 
 def _missing_tools(data: str) -> list[str]:
@@ -1658,7 +2022,7 @@ def admit(args: argparse.Namespace) -> int:
 # today.
 CHECKPOINTS = "checkpoints/"
 CHECKPOINT_FILE = re.compile(r"^checkpoints/(\d{4}-\d{2}-\d{2})\.json(\.ots|\.sigstore\.json)?$")
-EVENTS_FILE = re.compile(r"^events/\d{4}-\d{2}\.jsonl$")
+EVENTS_FILE = re.compile(r"^events/\d{4}-\d{2}(?:-\d{2})?\.jsonl(\.gz)?$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 MANIFEST_FORMAT = ("one line per file in feed_commit outside checkpoints/: the SHA-256 of "
                    "its bytes in lowercase hex, two spaces, its path, a line feed; sorted "
@@ -1719,7 +2083,10 @@ def _entries(files) -> tuple[list[tuple[bytes, str]], int]:
         if path.startswith(CHECKPOINTS):
             continue
         kept.append((path.encode("utf-8"), hashlib.sha256(body).hexdigest()))
-        if EVENTS_FILE.match(path):
+        m = EVENTS_FILE.match(path)
+        if m:
+            if m.group(1):
+                body = zlib.decompressobj(31).decompress(body, MAX_INFLATED + 1)
             events += sum(1 for line in body.splitlines() if line.strip())
     return sorted(kept), events
 
@@ -1973,7 +2340,18 @@ def main() -> int:
     n.add_argument("--feed-commit", required=True)
     n.add_argument("--manifest-sha256", required=True)
     n.add_argument("--checkpoint-sha256", required=True)
+    sub.add_parser("retire").add_argument("--data", required=True)
+    c = sub.add_parser("capacity")
+    c.add_argument("--data", required=True)
+    c.add_argument("--repo-bytes", type=int, default=0,
+                   help="the repository's size on GitHub, history included, if known")
+    c.add_argument("--warn", type=float, default=CAPACITY_WARN,
+                   help="the share of a limit that is reported (default 0.75)")
     args = ap.parse_args()
+    if args.command == "retire":
+        return retire(args)
+    if args.command == "capacity":
+        return capacity(args)
     return {"seed": seed, "sync": sync, "check": check, "check-remote": check_remote,
             "check-isolated": check_isolated, "fetch-one": fetch_one,
             "measure-one": measure_one,

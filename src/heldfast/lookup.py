@@ -145,17 +145,44 @@ def everything(feed: Feed) -> dict[str, dict]:
         cached = _cached(feed.commit)
         if cached is not None:
             return cached
-    url = f"{feed.base}/lookup/all.json.gz"
-    body = feedlock.get_json(url)
-    if body is None:
-        url = f"{feed.base}/lookup/all.json"
+    tools = _parts(feed)
+    if tools is None:
+        url = f"{feed.base}/lookup/all.json.gz"
         body = feedlock.get_json(url)
-    tools = body.get("tools") if isinstance(body, dict) else None
-    if not isinstance(tools, dict):
-        raise FeedError(f"{url}: not the lookup record")
+        if body is None:
+            url = f"{feed.base}/lookup/all.json"
+            body = feedlock.get_json(url)
+        tools = body.get("tools") if isinstance(body, dict) else None
+        if not isinstance(tools, dict):
+            raise FeedError(f"{url}: not the lookup record")
     if feed.commit:
         _keep(feed.commit, tools)
     return tools
+
+
+SHARDS = "0123456789abcdef"
+
+
+def _parts(feed: Feed) -> dict[str, dict] | None:
+    """The whole record from its 16 parts (lookup/all-<0-f>.json.gz), or None
+    for a feed from before them. The feed writes the parts because one file
+    would outgrow the bound every reader holds; each part is bounded alone.
+    All 16 are fetched, whatever is being looked for, so this still says
+    nothing about it."""
+    first = feedlock.get_json(f"{feed.base}/lookup/all-{SHARDS[0]}.json.gz")
+    if first is None:
+        return None
+    out: dict[str, dict] = {}
+    for shard in SHARDS:
+        url = f"{feed.base}/lookup/all-{shard}.json.gz"
+        body = first if shard == SHARDS[0] else feedlock.get_json(url)
+        tools = body.get("tools") if isinstance(body, dict) else None
+        if not isinstance(tools, dict):
+            raise FeedError(f"{url}: not a part of the lookup record")
+        if any(not isinstance(fp, str) or not fp.startswith(shard) for fp in tools):
+            raise FeedError(f"{url}: holds a fingerprint of another part")
+        out.update(tools)
+    return out
 
 
 def seen(fingerprints: list[str], feed: Feed,

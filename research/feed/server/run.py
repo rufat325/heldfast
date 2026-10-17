@@ -13,7 +13,7 @@ Phases, each its own command so each can run as its own user:
             no credential in it; what a shard changed is collected as its
             upload, exactly as the Actions job uploads an artifact
   publish   admit each shard's upload with the code from this checkout
-            (never from anything a shard wrote), verify, fold, render,
+            (never from anything a shard wrote), verify, fold, retire, render,
             verify the whole feed, commit; on a daily run, write the day's
             checkpoint. --push to push
   anchor    stamp the checkpoint with OpenTimestamps and upgrade pending
@@ -197,8 +197,11 @@ def publish(args: argparse.Namespace) -> None:
     watch("verify", "--data", incoming)
     shutil.copytree(incoming, feed, dirs_exist_ok=True)
     watch("fold", "--data", feed)
+    watch("retire", "--data", feed)
     watch("render", "--data", feed)
     watch("verify", "--data", feed, "--complete")
+    # How full the size bounds are; a warning is printed, never fatal.
+    subprocess.run([sys.executable, WATCH, "capacity", "--data", feed])
     git(feed, "add", "-A")
     if subprocess.run(["git", "-C", feed, "diff", "--cached", "--quiet"]).returncode:
         git(feed, "-c", "user.name=heldfast feed", "-c", "user.email=feed@heldfast.invalid",

@@ -31,12 +31,22 @@ whether you are looking at the same thing as everyone else.
 **The whole record** (`lookup/all.json`, the default for `verify`). One file,
 every fingerprint the log has seen. The client searches it locally. Whoever
 serves it learns that someone downloaded the record, and nothing about which
-tools or servers they have. It is about 19 MB today and grows as new
+tools or servers they have. It was about 32 MB on 2026-10-14 and grows as new
 definitions are logged. The same bytes are published gzipped as
 `lookup/all.json.gz`, about a third of the size, which is what `verify` asks
 for first. It keeps what it downloaded in your cache directory under the feed
 commit it read, since a commit's content never changes: `verify` against an
 unchanged feed downloads nothing.
+
+**In 16 parts** (`lookup/all-0.json.gz` to `lookup/all-f.json.gz`), each the
+whole record for fingerprints starting with that hex character, in the same
+layout. heldfast from 2026-10-17 asks for the parts first, all sixteen,
+whatever it is looking for, so they reveal no more than the single file. They
+exist because the single file grows by about 0.4 MB a day towards the 90 MB
+every reader refuses past; each part is held to that bound alone. While the
+single file fits it is still written, for earlier clients; past it, it is no
+longer written, and an earlier client finds no whole record and says so
+(`--lookup buckets` still works for it).
 
 **`all.json.gz` is a run of gzip members, not one.** It is the plain file
 compressed in pieces: the first line, one member for each bucket's lines, and
@@ -117,7 +127,10 @@ fingerprint from a live `tools/list` is the one part with rules to follow:
 ## What it is built from, and its limits
 
 - **Published daily** by the feed's publishing job, from every catalogue it
-  holds. A bucket, and a line of the whole record, changes only when a new
+  has held: those in the tree, and those `retire` took out of it, which it
+  writes to `lookup/retired/` first (the fingerprints, the first day, the
+  servers). So a definition no longer in the tree keeps its date and its
+  count. A bucket, and a line of the whole record, changes only when a new
   definition or a new server appears, so the files are stable and cache well.
 - **Coverage is the registry's.** Servers listed in the official MCP registry:
   npm packages with a stdio transport, and hosted servers that answer without
